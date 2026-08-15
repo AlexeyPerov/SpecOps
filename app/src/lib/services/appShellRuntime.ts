@@ -69,6 +69,11 @@ import { readConsoleHeightPreference } from "./consoleTabPrefs";
 import { externalFileWatcherSyncKey, truncateWatchedPaths, watchedPathsFromState } from "./appShellHelpers";
 import { loadWorkspacePreferences } from "./workspacePreferences";
 import { openDroppedPath } from "./openDroppedPath";
+import type {
+  OpenActivePathResult,
+  OpenPathActivationOptions,
+} from "./openActivePath";
+import { fileDragActive } from "./fileDragOverlay";
 
 const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 const DOCK_NEW_WINDOW_EVENT = "spec-ops/dock/new-window";
@@ -98,7 +103,10 @@ export function normalizeFileWatcherKind(raw: unknown): FileWatcherEventKind {
 export interface AppShellRuntimeOptions {
   notify: (message: string) => void;
   runCommand: (commandId: AppCommandId) => void;
-  openAndActivatePath: (path: string) => Promise<void>;
+  openAndActivatePath: (
+    path: string,
+    options?: OpenPathActivationOptions,
+  ) => Promise<OpenActivePathResult | void>;
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
   restoreWorkspaceSession: (
     normalizedRoot: string,
@@ -204,6 +212,23 @@ async function startAppShellRuntimeInner(
       await openDroppedPath(droppedPath, options.openAndActivatePath, options.notify);
     }
   }
+
+  // Register the drag-drop listener before everything else: a failure in any
+  // later listener registration tears the whole runtime down, and file drops
+  // are the one input channel whose loss is completely invisible to the user.
+  cleanupCallbacks.push(
+    await currentWindow.onDragDropEvent(async (event) => {
+      const payload = event.payload;
+      if (payload.type === "enter" || payload.type === "over") {
+        fileDragActive.set(true);
+        return;
+      }
+      fileDragActive.set(false);
+      if (payload.type === "drop") {
+        await openDroppedPaths(payload.paths);
+      }
+    }),
+  );
 
   // Register window/dock listeners sequentially so each unlisten is pushed
   // into cleanupCallbacks before the next IPC round-trip. A batch Promise.all
@@ -385,14 +410,6 @@ async function startAppShellRuntimeInner(
     await initializeLogging();
   });
 
-  const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
-    if (event.payload.type !== "drop") {
-      return;
-    }
-    await openDroppedPaths(event.payload.paths);
-  });
-  cleanupCallbacks.push(unlistenDragDrop);
-
   await runSafeStartupPhase("mark-window-active", async () => {
     // Skip the backup write here: this informational update is immediately
     // followed by restore-session, and the next real session mutation (e.g.
@@ -543,7 +560,17 @@ async function startAppShellRuntimeInner(
   const unlistenSelectTab = await listen<{ path: string }>(
     WINDOW_EVENT_SELECT_TAB_FOR_PATH,
     async (event) => {
-      selectTabForNormalizedPath(event.payload.path);
+      if (selectTabForNormalizedPath(event.payload.path)) {
+        return;
+      }
+      // Registry desync: this window owns the claim but no longer has the tab
+      // (e.g. it was closed without releasing). Open the file here instead of
+      // letting the routed open vanish without any feedback.
+      try {
+        await options.openAndActivatePath(event.payload.path);
+      } catch (error: unknown) {
+        options.notify(`Failed to open routed file: ${getErrorMessage(error)}`);
+      }
     },
   );
   cleanupCallbacks.push(unlistenSelectTab);

@@ -12,7 +12,7 @@ import {
   openedFileEncoding,
   requestOpenPath,
 } from "./openFileGate";
-import { shouldGateFileOpenBySize } from "./largeFileOpen";
+import { shouldGateDroppedFileBySize, shouldGateFileOpenBySize } from "./largeFileOpen";
 import { appState } from "../state/appState";
 import { syncRecentFiles } from "./recentFilesSync";
 import { getErrorMessage } from "../commands/commandErrors";
@@ -26,6 +26,18 @@ export type OpenActivePathResult =
   | { kind: "pending_confirm"; path: string }
   | { kind: "missing"; path: string }
   | { kind: "failed"; path: string; reason: string };
+
+/**
+ * Activation options shared by the open entry points.
+ * - `bypassLargeFileGate`: drag-and-drop is an explicit user gesture, so the
+ *   large-file confirm threshold does not apply (a hard ceiling still does —
+ *   see `DROP_OPEN_HARD_MAX_BYTES`).
+ * - `revealInTree`: reserved for tree reveal after opening.
+ */
+export interface OpenPathActivationOptions {
+  bypassLargeFileGate?: boolean;
+  revealInTree?: boolean;
+}
 
 function getMaxOpenWithoutConfirmBytes(): number {
   return appState.getSnapshot().settings.externalFiles.maxOpenWithoutConfirmBytes;
@@ -67,6 +79,7 @@ function moveExistingDocumentToPane(documentId: string, paneId: string): void {
 export async function openActivePath(
   path: string,
   windowId: string,
+  options: OpenPathActivationOptions = {},
 ): Promise<OpenActivePathResult> {
   try {
     const gateResult = await requestOpenPath(path, windowId);
@@ -79,9 +92,15 @@ export async function openActivePath(
       return { kind: "existing", path: gateResult.path };
     }
 
-    const maxOpenWithoutConfirmBytes = getMaxOpenWithoutConfirmBytes();
     const fingerprint = await statDiskFingerprint(path);
-    if (shouldGateFileOpenBySize(path, fingerprint.sizeBytes, maxOpenWithoutConfirmBytes)) {
+    const sizeGated = options.bypassLargeFileGate
+      ? shouldGateDroppedFileBySize(path, fingerprint.sizeBytes)
+      : shouldGateFileOpenBySize(
+          path,
+          fingerprint.sizeBytes,
+          getMaxOpenWithoutConfirmBytes(),
+        );
+    if (sizeGated) {
       await completeLargePendingOpen(path, fingerprint, windowId);
       return { kind: "pending_confirm", path: normalizePathSync(path) };
     }

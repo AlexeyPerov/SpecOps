@@ -74,7 +74,7 @@ export interface OverlayHostHandlersDeps {
   /** Switch markdown view mode (delegates to layout handlers). */
   setMarkdownViewMode: (mode: "edit" | "split" | "preview") => void;
   /** Open a path through the gated open pipeline (project-search result jump). */
-  openAndActivatePath: (path: string) => Promise<void>;
+  openAndActivatePath: (path: string) => Promise<unknown>;
 
   // --- Project search setters ---
   setProjectSearchResults: (results: ProjectSearchResult[]) => void;

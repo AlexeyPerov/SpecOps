@@ -1,10 +1,10 @@
 import { emitTo } from "@tauri-apps/api/event";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { WebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { appState } from "../state/appState";
 import type { ContextId, DiskFingerprint } from "../domain/contracts";
 import { allTabs, isFileTab } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
-import { claimOpenFile } from "./openFileRegistry";
+import { claimOpenFile, pruneOpenFileRegistryWindows } from "./openFileRegistry";
 import { initializeDocumentDiskState } from "./externalFileChanges";
 import type { FileContentKind } from "./fileContentKind";
 import type { OpenedFile } from "./fileSystem";
@@ -58,7 +58,16 @@ export async function requestOpenPath(
   // Atomically reserve unowned paths before file I/O. A separate registry read
   // followed by a later claim allowed two windows to race and both open the
   // same file; claimOpenFile now returns the conflicting owner when present.
-  const owner = await claimOpenFile(normalized, windowId, "");
+  let owner = await claimOpenFile(normalized, windowId, "");
+
+  // A claim left behind by a window that no longer exists (crash, force quit)
+  // must not silently swallow the open: verify the owner is live before
+  // redirecting, and take over locally when it is not.
+  if (owner && !(await WebviewWindow.getByLabel(owner.windowId))) {
+    const liveWindows = await getAllWebviewWindows();
+    await pruneOpenFileRegistryWindows(liveWindows.map((entry) => entry.label));
+    owner = await claimOpenFile(normalized, windowId, "");
+  }
 
   if (owner) {
     await redirectToOwnerWindow(normalized, owner.windowId);

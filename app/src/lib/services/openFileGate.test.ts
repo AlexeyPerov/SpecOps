@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { emitTo } from "@tauri-apps/api/event";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { WebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { allTabs, getSessionSelectedTabId, getSessionTabs } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { WINDOW_EVENT_SELECT_TAB_FOR_PATH } from "./windowManager";
@@ -9,7 +9,7 @@ import {
   requestOpenPath,
   selectTabForNormalizedPath,
 } from "./openFileGate";
-import { claimOpenFile } from "./openFileRegistry";
+import { claimOpenFile, pruneOpenFileRegistryWindows } from "./openFileRegistry";
 import { initializeDocumentDiskState } from "./externalFileChanges";
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -20,10 +20,12 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({
   WebviewWindow: {
     getByLabel: vi.fn(),
   },
+  getAllWebviewWindows: vi.fn(),
 }));
 
 vi.mock("./openFileRegistry", () => ({
   claimOpenFile: vi.fn().mockResolvedValue(null),
+  pruneOpenFileRegistryWindows: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("./externalFileChanges", () => ({
@@ -39,17 +41,23 @@ vi.mock("./diskFingerprint", async (importOriginal) => {
 });
 
 const claimOpenFileMock = vi.mocked(claimOpenFile);
+const pruneOpenFileRegistryWindowsMock = vi.mocked(pruneOpenFileRegistryWindows);
 const initializeDocumentDiskStateMock = vi.mocked(initializeDocumentDiskState);
 const emitToMock = vi.mocked(emitTo);
 const getByLabelMock = vi.mocked(WebviewWindow.getByLabel);
+const getAllWebviewWindowsMock = vi.mocked(getAllWebviewWindows);
 
 describe("requestOpenPath", () => {
   beforeEach(() => {
     appState.resetAppState();
     claimOpenFileMock.mockReset();
     claimOpenFileMock.mockResolvedValue(null);
+    pruneOpenFileRegistryWindowsMock.mockReset();
+    pruneOpenFileRegistryWindowsMock.mockResolvedValue(undefined);
     emitToMock.mockClear();
     getByLabelMock.mockReset();
+    getAllWebviewWindowsMock.mockReset();
+    getAllWebviewWindowsMock.mockResolvedValue([]);
   });
 
   it("redirects to the owning window for cross-window paths", async () => {
@@ -66,6 +74,24 @@ describe("requestOpenPath", () => {
     expect(emitToMock).toHaveBeenCalledWith("win-b", WINDOW_EVENT_SELECT_TAB_FOR_PATH, {
       path: "/tmp/shared.txt",
     });
+    expect(pruneOpenFileRegistryWindowsMock).not.toHaveBeenCalled();
+  });
+
+  it("takes over the claim when the owning window no longer exists", async () => {
+    claimOpenFileMock
+      .mockResolvedValueOnce({ windowId: "win-dead", documentId: "doc-9" })
+      .mockResolvedValueOnce(null);
+    getByLabelMock.mockResolvedValue(null);
+    getAllWebviewWindowsMock.mockResolvedValue([{ label: "win-a" } as never]);
+
+    await expect(requestOpenPath("/tmp/orphaned.txt", "win-a")).resolves.toEqual({
+      kind: "needs_read",
+      path: "/tmp/orphaned.txt",
+      switchedToNotepad: false,
+    });
+    expect(pruneOpenFileRegistryWindowsMock).toHaveBeenCalledWith(["win-a"]);
+    expect(claimOpenFileMock).toHaveBeenCalledTimes(2);
+    expect(emitToMock).not.toHaveBeenCalled();
   });
 
   it("reuses an existing document in the same window", async () => {

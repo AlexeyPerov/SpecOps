@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window. The editor legitimately needs to read and write anywhere under $HOME, so the allow scopes stay broad; the deny lists remove the credential material a text editor has no reason to touch (private keys, cloud and registry tokens, keychains) and the auto-executing files a write to which would amount to code execution (shell rc files, launch agents, git config). Tauri applies deny before allow and merges fs plugin scopes, but the rules are repeated per permission so each grant is auditable on its own. Files people do hand-edit (~/.ssh/config, ~/.npmrc, ~/.aws/config) are deliberately left open.",
+  "description": "Capability for the main window. Reads follow explicit user gestures (file picker, drag-and-drop, app-icon opens) that can target any path the OS allows, so read/stat scopes cover the whole disk; writes stay under $HOME. The deny lists remove the credential material a text editor has no reason to touch (private keys, cloud and registry tokens, keychains) and the auto-executing files a write to which would amount to code execution (shell rc files, launch agents, git config). Tauri applies deny before allow and merges fs plugin scopes, but the rules are repeated per permission so each grant is auditable on its own. Files people do hand-edit (~/.ssh/config, ~/.npmrc, ~/.aws/config) are deliberately left open.",
   "windows": ["*"],
   "permissions": [
     "core:default",
@@ -9,7 +9,7 @@
     "fs:default",
     {
       "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }],
+      "allow": [{ "path": "**" }],
       "deny": [
         { "path": "$HOME/.ssh/id_*" },
         { "path": "$HOME/.ssh/*_rsa" },
@@ -32,7 +32,7 @@
     },
     {
       "identifier": "fs:allow-read-file",
-      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }],
+      "allow": [{ "path": "**" }],
       "deny": [
         { "path": "$HOME/.ssh/id_*" },
         { "path": "$HOME/.ssh/*_rsa" },
@@ -55,7 +55,7 @@
     },
     {
       "identifier": "fs:allow-read-dir",
-      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }],
+      "allow": [{ "path": "**" }],
       "deny": [{ "path": "$HOME/.gnupg/**" }, { "path": "$HOME/Library/Keychains/**" }]
     },
     {
@@ -134,7 +134,7 @@
     },
     {
       "identifier": "fs:allow-stat",
-      "allow": [{ "path": "$HOME/**" }, { "path": "$APPDATA/**" }]
+      "allow": [{ "path": "**" }]
     },
     "log:default",
     "opener:default",

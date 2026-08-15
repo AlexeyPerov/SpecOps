@@ -221,6 +221,56 @@ describe("openActivePath", () => {
     expect(completeOpenPathMock).not.toHaveBeenCalled();
   });
 
+  it("reads past the confirm threshold when the gate is bypassed (drag-and-drop)", async () => {
+    requestOpenPathMock.mockResolvedValue({
+      kind: "needs_read",
+      path: FILE_PATH,
+      switchedToNotepad: false,
+    });
+    // Well above the default 1 MiB confirm threshold.
+    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 64 * 1024 * 1024 });
+    openPathMock.mockResolvedValue({
+      path: FILE_PATH,
+      content: "bulk",
+      sizeBytes: 64 * 1024 * 1024,
+      contentKind: "text",
+      lineEnding: "lf",
+      hasBom: false,
+      fingerprint: { mtimeMs: 2, sizeBytes: 64 * 1024 * 1024 },
+    });
+    completeOpenPathMock.mockResolvedValue("doc-drop");
+
+    const result = await openActivePath(FILE_PATH, WINDOW_ID, {
+      bypassLargeFileGate: true,
+    });
+
+    expect(result).toEqual({ kind: "opened", path: FILE_PATH });
+    expect(openPathMock).toHaveBeenCalledWith(FILE_PATH);
+    expect(completeLargePendingOpenMock).not.toHaveBeenCalled();
+  });
+
+  it("still gates bypassed opens above the hard ceiling", async () => {
+    requestOpenPathMock.mockResolvedValue({
+      kind: "needs_read",
+      path: FILE_PATH,
+      switchedToNotepad: false,
+    });
+    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 600 * 1024 * 1024 });
+    completeLargePendingOpenMock.mockResolvedValue("doc-pending");
+
+    const result = await openActivePath(FILE_PATH, WINDOW_ID, {
+      bypassLargeFileGate: true,
+    });
+
+    expect(result).toEqual({ kind: "pending_confirm", path: FILE_PATH });
+    expect(openPathMock).not.toHaveBeenCalled();
+    expect(completeLargePendingOpenMock).toHaveBeenCalledWith(
+      FILE_PATH,
+      { mtimeMs: 1, sizeBytes: 600 * 1024 * 1024 },
+      WINDOW_ID,
+    );
+  });
+
   it("prunes missing file from recents and returns missing", async () => {
     appState.replaceRecentFiles(["/tmp/old.txt", FILE_PATH]);
     requestOpenPathMock.mockResolvedValue({

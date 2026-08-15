@@ -74,7 +74,7 @@
     notify: (message: string) => void;
     runCommand: (commandId: AppCommandId) => void;
     setMarkdownViewMode: (mode: "edit" | "split" | "preview") => void;
-    openAndActivatePath: (path: string) => Promise<void>;
+    openAndActivatePath: (path: string) => Promise<unknown>;
     /**
      * Session-browsing hooks. Optional: the entry point is hidden while no
      * registered runtime exposes native session browsing through the host.

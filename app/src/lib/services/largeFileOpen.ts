@@ -37,3 +37,17 @@ export function shouldGateFileOpenBySize(
   }
   return exceedsOpenWithoutConfirmLimit(sizeBytes, maxOpenWithoutConfirmBytes);
 }
+
+/**
+ * Drag-and-drop opens skip the user's confirm threshold — the drop itself is
+ * the explicit gesture — but a hard ceiling still catches pathological
+ * multi-gigabyte files that would stall the editor if loaded wholesale.
+ */
+export const DROP_OPEN_HARD_MAX_BYTES = 512 * 1024 * 1024;
+
+export function shouldGateDroppedFileBySize(filePath: string, sizeBytes: number): boolean {
+  if (isImagePathForOpenGate(filePath)) {
+    return false;
+  }
+  return exceedsOpenWithoutConfirmLimit(sizeBytes, DROP_OPEN_HARD_MAX_BYTES);
+}

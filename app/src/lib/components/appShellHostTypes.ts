@@ -8,7 +8,11 @@
  * constructing the factory bundles itself.
  */
 
-import type { ContextId } from "../../domain/contracts";
+import type { ContextId } from "../domain/contracts";
+import type {
+  OpenActivePathResult,
+  OpenPathActivationOptions,
+} from "../services/openActivePath";
 
 export interface AppShellHostApi {
   runCommand: (commandId: string) => void | Promise<void>;
@@ -16,8 +20,8 @@ export interface AppShellHostApi {
   onTabActivated: (tabId: string) => Promise<void>;
   openAndActivatePath: (
     path: string,
-    options?: { revealInTree?: boolean },
-  ) => Promise<void>;
+    options?: OpenPathActivationOptions,
+  ) => Promise<OpenActivePathResult | void>;
   consumeOpenedPaths: () => string[];
   restoreWorkspaceSession: (
     workspaceRoot: string,
@@ -26,7 +30,7 @@ export interface AppShellHostApi {
   loadProjectTreeRoot: () => Promise<void>;
   notifyProjectTreeFilesystemChange: (
     path: string,
-    kind: import("../../services/fileWatcher").FileWatcherEventKind,
+    kind: import("../services/fileWatcher").FileWatcherEventKind,
   ) => void;
   setupLayoutObserver: () => void;
   disconnectLayoutObserver: () => void;

@@ -2,7 +2,9 @@
   import { onDestroy, onMount, untrack } from "svelte";
   import AppShellHost from "../lib/components/AppShellHost.svelte";
   import type { AppShellHostBound } from "../lib/components/appShellHostTypes";
+  import FileDropOverlay from "../lib/components/FileDropOverlay.svelte";
   import OverlayHost from "../lib/components/overlays/OverlayHost.svelte";
+  import ToastOverlay from "../lib/components/ToastOverlay.svelte";
   import {
     activeViewKindInActivePane,
     isSessionTabActiveInActivePane,
@@ -1086,3 +1088,6 @@
   getEditorWorkbench={() => editorWorkbench}
   getEditorTools={() => editorTools}
 />
+
+<FileDropOverlay />
+<ToastOverlay />

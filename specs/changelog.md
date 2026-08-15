@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-08-15 23:25 MSK — Fix drag-and-drop file opening: reads limited to $HOME, silent cross-window no-ops, 1 MiB confirm stubs, invisible errors
+
+Drag-and-drop almost never opened files because four independent gates sat in
+the drop path (`onDragDropEvent` → `openDroppedPath` → `openActivePath`), and
+every failure surfaced only as easy-to-miss status-bar text, so each one looked
+like a silent no-op:
+
+- **fs scope rejected any path outside `$HOME`/`$APPDATA`** — `stat` (the very
+  first call on the drop path) failed for `/tmp`, `/Volumes`, `/var/folders`
+  (browser/mail temp files) etc. Read-type permissions (`fs:allow-stat`,
+  `fs:allow-read-file`, `fs:allow-read-text-file`, `fs:allow-read-dir`) now
+  allow `**`: reads follow explicit user gestures (picker, drop, app-icon
+  open) that can target any path the OS allows, while the credential deny
+  lists (ssh keys, keychains, cloud tokens) and the write-under-$HOME policy
+  are unchanged.
+- **Stale cross-window claims swallowed opens silently** — if
+  `open-files.json` credited a closed/crashed window with the path, the drop
+  "redirected" into the void: `emitTo` went nowhere and the owner-side
+  `SELECT_TAB_FOR_PATH` handler ignored a missing tab. Now the dropping window
+  verifies the owner is live, prunes dead-window claims and takes the claim
+  locally; the owner-side handler falls back to opening the file itself on
+  registry desync.
+- **Large-file confirm gate (default 1 MiB) turned most real drops into
+  "pending confirm" stubs.** Drops now bypass the user's confirm threshold —
+  the drop itself is the explicit gesture — with a hard ceiling
+  (`DROP_OPEN_HARD_MAX_BYTES`, 512 MiB) still landing oversized files as
+  confirm stubs. Pickers/tree/recent keep the old threshold.
+- **Failures were invisible.** New minimal toast bus (`toastBus.ts` +
+  `ToastOverlay.svelte`): failed/missing dropped files and inaccessible
+  dropped workspaces now raise a visible error toast; the status bar keeps its
+  informational line.
+- **Drop feedback:** `onDragDropEvent` now handles `enter`/`over`/`leave`
+  (previously only `drop`), driving a `FileDropOverlay.svelte` full-window
+  highlight ("Drop to open files") via a `fileDragActive` store.
+- Robustness/cleanup: the drag-drop listener registers **first** in the
+  runtime startup chain (a failure in any later listener used to leave the
+  window without drop handling for the whole session); removed the dead
+  duplicate `openDroppedPath` loop in the page handlers; `openAndActivatePath`
+  now threads `OpenPathActivationOptions` and returns its
+  `OpenActivePathResult` so the drop path can react to failures. Fixed
+  pre-existing broken relative imports in `appShellHostTypes.ts` (its
+  `../../domain`/`../../services` paths never resolved).
+- Tests: dropped-file gate bypass + hard ceiling, dead-owner claim takeover,
+  error toasts for failed/missing/vanished drops and blocked workspaces,
+  toast bus stack behaviour.
+
 ## 2026-08-15 23:12 MSK — Fix Find-in-Project: results wiped/cancelled, picker insta-close, stuck Searching; add project-panel search button
 
 The workspace-switch effect in `+page.svelte` called

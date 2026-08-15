@@ -16,8 +16,9 @@ import {
   describeOpenActivePathResult,
   isSuccessfulOpenActivePathResult,
   openActivePath,
+  type OpenActivePathResult,
+  type OpenPathActivationOptions,
 } from "./openActivePath";
-import { openDroppedPath } from "./openDroppedPath";
 import { logDiagnostic } from "./logging";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { SettingsDialogTab } from "./settingsDialogUi";
@@ -103,15 +104,13 @@ export interface AppShellFileHandlersDeps {
 }
 
 export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
-  async function openAndActivatePath(path: string): Promise<void> {
-    const result = await openActivePath(path, deps.getCurrentWindowId());
+  async function openAndActivatePath(
+    path: string,
+    options?: OpenPathActivationOptions,
+  ): Promise<OpenActivePathResult> {
+    const result = await openActivePath(path, deps.getCurrentWindowId(), options);
     deps.notify(describeOpenActivePathResult(result));
-  }
-
-  async function openDroppedPaths(paths: string[]): Promise<void> {
-    for (const droppedPath of paths) {
-      await openDroppedPath(droppedPath, openAndActivatePath, deps.notify);
-    }
+    return result;
   }
 
   /**
@@ -199,7 +198,6 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
 
   return {
     openAndActivatePath,
-    openDroppedPaths,
     consumeOpenedPaths,
     onTabActivated,
   };
@@ -300,12 +298,15 @@ export interface AppShellMountDeps {
   startAppShellRuntime: (options: {
     notify: (message: string) => void;
     runCommand: (commandId: AppCommandId) => void;
-    openAndActivatePath: (path: string) => Promise<void>;
+    openAndActivatePath: (
+      path: string,
+      options?: OpenPathActivationOptions,
+    ) => Promise<OpenActivePathResult | void>;
     consumeOpenedPaths: (paths: string[]) => Promise<void>;
     restoreWorkspaceSession: (workspaceRoot: string) => Promise<void>;
     loadProjectTreeRoot: () => Promise<void>;
     onFilesystemChange: (path: string) => void;
-    setConsoleHeightPx: (heightPx: number) => void;
+    setConsoleHeightPx: (height: number) => void;
   }) => Promise<{
     cleanup: () => void;
     syncExternalFileWatcher: (state: AppDomainState) => Promise<void>;
@@ -313,7 +314,10 @@ export interface AppShellMountDeps {
   }>;
   notify: (message: string) => void;
   runCommand: (commandId: AppCommandId) => void;
-  openAndActivatePath: (path: string) => Promise<void>;
+  openAndActivatePath: (
+    path: string,
+    options?: OpenPathActivationOptions,
+  ) => Promise<OpenActivePathResult | void>;
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
   restoreWorkspaceSession: (workspaceRoot: string) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;

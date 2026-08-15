@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026-08-15 10:05 MSK — Phase F: Sessions UX through the Agent Host; foundation milestone 01 complete
+
+Workspace Sessions is now fully runtime-neutral: the UI, state, and send
+pipeline drive the supervised Agent Host through the phase-E Tauri bridge, and
+every provider-prefixed session field is gone from common code. **Breaking
+sessions-state reset** — persisted session indexes and thread files with the
+old provider-prefixed fields no longer decode; per repo policy there is no
+migration (the store starts clean).
+
+- **Neutral session binding (F-01):** `SessionIndexEntry` /
+  `ChatThreadMetadata` / the `chatStore` link API / the persistence codec use
+  `runtimeId` + `nativeSessionId` + `modelId` + `shareUrl` + `parentSessionId`
+  (+ `selectedModeId`, `runtimeId` on thread metadata). The runtime binding is
+  immutable: re-linking a bound session to another runtime or native session is
+  rejected — create a new session instead.
+- **Host-backed send pipeline (F-03):** `chatSendPipeline` no longer constructs
+  a workspace backend or the legacy sidecar. It lazily starts the supervised
+  host (one cached start), creates or resumes the native binding, streams
+  `turn.send` events through `foldSessionEvent` into the live transcript,
+  replies to permission/question prompts through the host, cancels via
+  `turn.cancel`, and maps typed host errors to user-facing copy. Retry logic,
+  queue/steer, attachments, and prompt history are unchanged.
+- **Neutral Sessions UI (F-02/F-03):** the composer gains a runtime label +
+  neutral model/mode pickers fed by host catalogs (with explanatory
+  loading/empty/error states); the panel header shows the session runtime and
+  Agent Host health, plus a host-restart recovery action. Lifecycle actions
+  without a host protocol method (fork / revert / share / summarize / export /
+  external session browsing) are hidden; rename stays local-store. Sidecar-fed
+  UI glue is deleted (todo/diff panels, slash-command and mention pickers,
+  agent/provider catalog picker, `session.messages` hydration) and the
+  session-list "Import" entry point is hidden.
+- **Regression + docs gate (F-04):** new tests cover store binding
+  immutability, the host send pipeline against a mocked client (create /
+  resume / stream / permission / cancel), the neutral persistence round-trip,
+  and a phase-F absence guard (no provider-prefixed session field and no
+  vendor SDK import in common code). Architecture + user docs now describe
+  Sessions only; the OpenCode integration guides moved to
+  `specs/archive/ops-postponed/docs/`.
+- **Milestone 01 → Done** in the milestone README, execution-plan index, phase
+  F plan, and roadmap; phase 02 (Claude adapter) is unblocked against the
+  stable host/adapter contract.
+
+Deferred cleanup (documented in the phase F plan): the Sessions dev gate still
+lives under `settings.opencode` / the OpenCode settings surface; renaming it to
+a neutral sessions gate lands with the settings-surface cleanup. The legacy
+workspace backend + sidecar remain untouched as the phase-04 adapter candidate.
+
+
 ## 2026-08-12 10:45 MSK — Phase E: Tauri supervision and process-tree cleanup
 
 The Agent Host is now a resilient, observable, fully reaped application child.

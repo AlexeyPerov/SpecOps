@@ -1,7 +1,7 @@
 # <img src="app/static/favicon.png" alt="" width="32" height="32" align="top"> SpecOps
 
 Desktop workspace for notes, specs, and project files — with a built-in editor
-and optional **OpenCode**-powered workspace sessions (beta). Built with
+and **workspace sessions** for coding-agent runtimes (dev preview). Built with
 [Tauri](https://tauri.app/) and [SvelteKit](https://kit.svelte.dev/).
 
 > Under active development. APIs, settings, and on-disk formats may change without migration.
@@ -17,8 +17,7 @@ and optional **OpenCode**-powered workspace sessions (beta). Built with
 - **Version Control** — per-workspace git tab (history, branches, tags, changes, fetch/pull/push) via system `git`
 - **Themes**, **multi-window**, **image** preview
 - **Console** — resizable bottom panel with logs
-- **Workspace sessions (beta)** — OpenCode-powered conversations with tools, permissions, and streaming; off by default, enable under Settings → Dev; see [`docs/beta/`](./docs/beta/)
-- **Chat (beta)** — experimental HTTP chat context, off by default; see [`docs/beta/`](./docs/beta/)
+- **Workspace sessions (dev preview)** — coding-agent conversations with tools, permissions, questions, and streaming, driven through a supervised local Agent Host; off by default, enable under **Settings → Dev**
 
 ## Screenshots
 
@@ -31,31 +30,27 @@ and optional **OpenCode**-powered workspace sessions (beta). Built with
 - **Releases** — download macOS / Windows installers from [GitHub Releases](https://github.com/AlexeyPerov/spec-ops/releases) (published when a semver tag is pushed; see [CI releases](#ci-releases)).
 - **From source** — see [Development](#development) below.
 
-## Workspace sessions (OpenCode)
+## Workspace sessions
 
-SpecOps is the UI; **OpenCode** runs models, tools, and session logic. Configure providers and API keys in OpenCode — not in SpecOps HTTP settings.
+One **Sessions** surface per workspace: create independent sessions, pick a
+model and mode, and chat with a coding-agent runtime. Sessions bind to their
+runtime for life; turns, tools, permissions, questions, and cancellation all
+flow through one supervised local **Agent Host** (the WebView never loads agent
+SDKs or spawns runtimes).
 
-| Context | Runtime | Configure models / keys |
-| --- | --- | --- |
-| Workspace sessions | OpenCode (sidecar or URL) | OpenCode (`/connect`, `opencode.json`, `auth.json`) |
-| Chat (beta) — `chat-http` (internal context id) | OpenAI-compatible HTTP (off by default) | Enable at **Settings → Dev → Enable Chat (beta)**, then configure **Settings → Dev → Providers** |
+Currently the deterministic **dev runtime** is registered (no external
+dependencies — it exercises the full session lifecycle end to end). Real
+runtime adapters — Claude, Codex, OpenCode, Cursor — arrive per the
+[roadmap](./specs/ops/roadmap.md).
 
 ### Quick start
 
-1. **Install OpenCode** (dev builds expect `opencode` on `PATH`; release builds bundle a sidecar):
-   ```sh
-   curl -fsSL https://opencode.ai/install | bash
-   ```
-2. **Open a workspace folder** in SpecOps (activity rail → add folder).
-3. SpecOps starts the OpenCode sidecar **lazily** — on the first **Send** in a session tab, or via **Settings → Workspaces → OpenCode → Check connection**. File editing does not require OpenCode. Disable workspace sessions under **Settings → Workspaces → OpenCode → Use OpenCode for workspace sessions** to use the folder as a plain editor.
-4. **Connect a provider** in OpenCode (TUI `/connect`, or see [docs/opencode-integration.md](./docs/opencode-integration.md)).
-5. In SpecOps: **Refresh model list** (Settings → Workspaces → OpenCode), then pick agent / provider / model in the session composer.
-6. Use the **Sessions** sidebar: create a session, send a prompt. Tool calls and permission prompts appear in the chat panel.
-
-**Sidecar (default)** — port `4096` by default (**Settings → Workspaces → OpenCode → Sidecar port**). **URL mode** — run `opencode serve` yourself and point SpecOps at the base URL.
-
-Troubleshooting, provider examples (OpenRouter, GLM Coding Plan), and integration details: **[docs/opencode-integration.md](./docs/opencode-integration.md)**.  
-Chat (beta): **[docs/beta/chat-http-providers.md](./docs/beta/chat-http-providers.md)**.
+1. **Open a workspace folder** in SpecOps (activity rail → add folder).
+2. Enable sessions under **Settings → Dev → Enable workspace sessions**.
+3. Use the **Sessions** sidebar: create a session, pick a model/mode in the
+   composer, and send a prompt. The Agent Host starts lazily on first send;
+   permission and question prompts appear in the chat panel, and a stuck host
+   can be restarted from the session header.
 
 ## What is planned
 
@@ -116,9 +111,7 @@ npm run tauri dev
 
 ## Build
 
-From the `app/` directory after installing dependencies, ensure the matching
-OpenCode sidecar binary exists (see
-[`app/src-tauri/binaries/README.md`](./app/src-tauri/binaries/README.md)), then:
+From the `app/` directory after installing dependencies, then:
 
 ```sh
 npm run tauri build
@@ -156,10 +149,7 @@ Before tagging, keep these version fields in sync:
 
 | Doc | Audience |
 | --- | --- |
-| [docs/README.md](./docs/README.md) | Index — users vs contributors |
-| [docs/opencode-integration.md](./docs/opencode-integration.md) | Workspace sessions / OpenCode setup |
 | [docs/architecture.md](./docs/architecture.md) | Codebase map for contributors |
-| [docs/beta/](./docs/beta/) | Experimental Chat (HTTP) lane |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to contribute |
 | [AGENTS.md](./AGENTS.md) | Rules for coding agents working in this repo |
 

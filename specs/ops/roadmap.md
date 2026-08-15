@@ -259,7 +259,7 @@ must be documented when implementation lands.
 
 | Phase | Goal | Scope | Execution plans |
 |-------|------|-------|-----------------|
-| **01** | Remove Chat; generic session domain; Agent Host and protocol | [Scope](./01-foundation-agent-host/README.md) | [Index](./01-foundation-agent-host/execution-plan.md) |
+| **01** — Done | Remove Chat; generic session domain; Agent Host and protocol | [Scope](./01-foundation-agent-host/README.md) | [Index](./01-foundation-agent-host/execution-plan.md) |
 | **02** | Claude adapter and first production runtime | [Scope](./02-claude-adapter/README.md) | [Index](./02-claude-adapter/execution-plan.md) |
 | **03** | Codex adapter and OpenAI/ChatGPT auth flows | [Scope](./03-codex-adapter/README.md) | [Index](./03-codex-adapter/execution-plan.md) |
 | **04** | Move the existing OpenCode integration behind Agent Host | [Scope](./04-opencode-adapter/README.md) | [Index](./04-opencode-adapter/execution-plan.md) |
@@ -322,6 +322,7 @@ The roadmap is complete when:
 
 | Date | Change |
 |------|--------|
+| 2026-08-15 | Milestone 01 (Sessions foundation and Agent Host) marked Done; phase 02 (Claude adapter) unblocked |
 | 2026-08-11 | Replaced Chat/Cloud/per-workspace backend roadmap with unified per-session Claude → Codex → OpenCode → Cursor direction |
 | 2026-06-09 | Former roadmap swapped OpenCode and Cursor Cloud phases |
 | 2026-06-04 | Former multi-lane roadmap created |

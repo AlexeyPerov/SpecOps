@@ -1,6 +1,6 @@
 # 01 — Sessions foundation and Agent Host
 
-**Status:** Planned  
+**Status:** Done (2026-08-15)  
 **Date:** 2026-08-11  
 **Main doc (SSOT):** [`../roadmap.md`](../roadmap.md)  
 **Execution plan:** [`execution-plan.md`](execution-plan.md)  
@@ -34,7 +34,7 @@ without any provider-specific type or process leaking into common frontend code.
 | AS01-C | Adapter core, extensions, capabilities, fake runtime | Done (Phase C) |
 | AS01-D | Bundled Agent Host and versioned protocol | Done (Phase D) |
 | AS01-E | Tauri host/process supervision | Done (Phase E) |
-| AS01-F | Unified Sessions UX and foundation exit | Partial legacy UI |
+| AS01-F | Unified Sessions UX and foundation exit | Done (Phase F) |
 
 ## Outcome
 
@@ -73,7 +73,7 @@ without any provider-specific type or process leaking into common frontend code.
 
 ### Definition of done — docs
 
-- [ ] Active architecture and user docs describe workspace Sessions only.
-- [ ] Removed Chat/Cloud docs are archived or deleted as appropriate.
-- [ ] Changelog entry appended in [`../../changelog.md`](../../changelog.md).
-- [ ] Exit criteria manually reviewed before phase 02 starts.
+- [x] Active architecture and user docs describe workspace Sessions only.
+- [x] Removed Chat/Cloud docs are archived or deleted as appropriate.
+- [x] Changelog entry appended in [`../../changelog.md`](../../changelog.md).
+- [x] Exit criteria manually reviewed before phase 02 starts.

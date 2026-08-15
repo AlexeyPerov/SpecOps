@@ -11,13 +11,15 @@ SpecOps is a desktop workspace app for specs, notes, and project files. The UI i
 | `app/src/lib/domain/` | Shared types and pure helpers (`contracts.ts` barrel over `document.ts`, `workspace.ts`, `settings.ts`, `chat.ts`, `commands.ts`, `persistence.ts`) |
 | `app/src/lib/state/` | Writable stores and domain orchestration (`appState`, `chatStore`) |
 | `app/src/lib/services/` | I/O, persistence, platform, file watching, session |
-| `app/src/lib/ai/` | Workspace session send pipeline, OpenCode backend, transcript stream-part reducers |
+| `app/src/lib/ai/` | Workspace session send pipeline, transcript stream-part reducers, composer helpers |
+| `app/src/lib/session/` | Runtime-neutral session domain: binding, events, transcript, persistence codecs, host client |
+| `app/host/` | Bundled Agent Host (Node, versioned JSON-RPC over stdio) owning runtime adapters |
 | `app/src/lib/git/` | Version Control (system `git` via Tauri) — independent of OpenCode |
 | `app/src/lib/editor/` | Editor helpers (e.g. minimap extension) |
 | `app/src/lib/components/` | UI components (including `Git*` panels) |
 | `app/src/lib/commands/` | Menu and keyboard command registry |
-| `app/src-tauri/` | Rust: file watcher, git subprocess, macOS open-with, logging plugins |
-| `docs/` | Stable product / integration docs (this folder) — see [README.md](./README.md) |
+| `app/src-tauri/` | Rust: Agent Host supervision + IPC bridge, file watcher, git subprocess, macOS open-with, logging plugins |
+| `docs/` | Stable product docs (this folder) |
 | `specs/` | Product specs, execution plans, changelog (development material) |
 | `CONTRIBUTING.md` / `AGENTS.md` | Human and agent contribution rules |
 
@@ -55,7 +57,7 @@ flowchart TB
   end
   subgraph ai [AI layer]
     Send[sendChatMessage / chatSendPipeline]
-    Backend[workspaceAgentBackend]
+    HostClient[agentHostClient via agentHostRuntime]
   end
   subgraph io [Services]
     FS[fileSystem / Tauri FS]
@@ -64,18 +66,31 @@ flowchart TB
     ChatDisk[chatPersistence]
   end
   subgraph native [Tauri Rust]
+    Supervisor[agent_host supervision]
     Watcher[file_watcher]
     Events[opened-paths events]
   end
+  Host[Agent Host (app/host)]
+  Fake[fake runtime adapter]
   Page --> Components
   Components --> State
   State --> Send
-  Send --> Backend
+  Send --> HostClient
+  HostClient --> Supervisor
+  Supervisor --> Host
+  Host --> Fake
   State --> io
   io --> native
 ```
 
-Most product logic lives in TypeScript. Rust is intentionally thin: watch paths, enqueue files opened from the OS, and plugin wiring.
+Most product logic lives in TypeScript. The WebView never spawns, connects to,
+or imports the Agent Host or any vendor SDK — turns flow through the Tauri
+supervision bridge (`agent_host_*` commands, `specops/agent-host/event`
+notifications) into the bundled host, which owns adapters (currently the
+deterministic fake runtime; real adapters arrive in phases 02–05). The legacy
+`ai/backends/workspaceAgentBackend` remains only as the phase-04 adapter
+candidate. Rust stays otherwise thin: watch paths, enqueue files opened from
+the OS, and plugin wiring.
 
 ## Domain model
 
@@ -97,13 +112,13 @@ Each context has a **`ContextSnapshot`**: `documents[]` and `session` (tabs, sel
 
 File open/save flows go through `appState` and services (`fileSystem`, `openFileGate`, `externalFileChanges`).
 
-### Workspace sessions (workspace-scoped)
+### Workspace sessions (the AI surface)
 
-- One **session** per conversation; many sessions per workspace. (OpenCode **agent** = persona/config only — see [opencode-integration.md](./opencode-integration.md).)
-- **`chatStore`** holds in-memory threads keyed by workspace root path.
+- One **session** per conversation; many sessions per workspace. The standalone HTTP Chat (beta) context is removed.
+- Each session binds immutably to one runtime (`runtimeId` + `nativeSessionId`; `modelId`/`modeId` restore hints). Switching runtime means creating a new session.
+- **`chatStore`** holds in-memory threads keyed by workspace root path; the neutral binding lives on the session index entry.
+- Turns run through the Agent Host client (`lib/session/host/` + `services/agentHostRuntime.ts`): create/resume the native session, stream runtime-neutral `SessionEvent`s folded into the transcript model.
 - Threads persist under the app data dir (see [Persistence](#persistence)).
-
-Workspace sessions use the OpenCode backend — see [opencode-integration.md](./opencode-integration.md). The standalone HTTP Chat (beta) context is removed.
 
 ## State layer
 
@@ -133,15 +148,15 @@ Implementation is split into colocated modules under `app/src/lib/state/appState
 
 Workspace-scoped sessions:
 
-- Session index, per-session `ChatThreadSnapshot`, runtime (generating, last error)
-- Access preflight (`runAccessPreflight`) — OpenCode backend readiness + workspace path readability
-- The standalone HTTP Chat context and its provider/model switching are removed; only workspace (OpenCode) sessions remain. Phase B replaces this store with a runtime-neutral session domain.
+- Session index (with the runtime-neutral native binding), per-session `ChatThreadSnapshot`, runtime (generating, last error)
+- Access preflight (`runAccessPreflight`) — workspace path readability
+- The standalone HTTP Chat context and its provider/model switching are removed; only workspace sessions remain, driven by the runtime-neutral session domain (`lib/session/`).
 
 Implementation is split into colocated modules under `app/src/lib/state/chatStore/`:
 
 | Module | Role |
 | --- | --- |
-| `sessions.ts` | Session index, drafts, titles, CRUD, hydration |
+| `sessions.ts` | Session index, drafts, titles, CRUD, hydration, immutable native binding |
 | `threads.ts` | Slice composer; delegates to `threadMessages.ts`, `threadMetadata.ts` |
 | `runtime.ts` | Generation state, placeholders, retry, cancel |
 | `access.ts` | Preflight, access loss messages, workspace readiness wiring |
@@ -151,11 +166,12 @@ Implementation is split into colocated modules under `app/src/lib/state/chatStor
 ## Send pipeline (high level)
 
 1. UI calls `sendChatMessage` / `retryLastChatTurn` (`app/src/lib/ai/sendChatMessage.ts`).
-2. Validates OpenCode is enabled, workspace read access, and model availability via the OpenCode catalog.
-3. Appends the user message; begins the turn; ensures the OpenCode session link.
-4. Streams `workspaceAgentBackend` events into the assistant placeholder (deltas, reasoning, subtasks, steps, tool calls, permissions, questions); compacts and persists when complete.
+2. Validates the sessions dev gate, workspace read access, and resolves model/mode from thread metadata.
+3. Appends the user message; begins the turn; lazily starts the supervised Agent Host (one cached `agent_host_start`).
+4. Resolves the neutral binding (`chatStore.getSessionLink`) — `session.create` on first send, `session.resume` afterwards — then streams `turn.send` events through the host client, folding `SessionEvent`s into the assistant placeholder (deltas, reasoning, subtasks, steps, tool calls); permission/question prompts reply through the host; cancel goes through `turn.cancel`.
+5. Compacts and persists when complete. Host/transport failures map to typed user-facing copy; a crash-looped host can be restarted from the session header.
 
-The HTTP provider path (registry, connections, model catalogs, SSE) was removed in Phase A; runtime adapters arrive in Phase C behind the Agent Host.
+The HTTP provider path (registry, connections, model catalogs, SSE) was removed in Phase A. The legacy OpenCode sidecar path is retained only as the phase-04 adapter candidate and no longer serves sessions.
 
 ## Commands and menus
 
@@ -186,10 +202,11 @@ Session and chat writes are debounced. The project **does not** add backward-com
 
 - Plugins: dialog, fs, log, opener
 - **`file_watcher`** — sync watch paths with frontend
+- **`agent_host`** — Agent Host supervision (`agent_host_start/stop/restart/status/request`), versioned JSON-RPC over stdio, process-tree cleanup, crash-loop breaker; host notifications forwarded on `specops/agent-host/event`
 - **`git`** — system `git` subprocess layer for Version Control (askpass, cancel, commit helpers)
 - macOS **`RunEvent::Opened`** — open files/folders from Finder; emits `spec-ops/app/opened-paths`
 
-Custom commands include `take_pending_opened_paths`, `sync_file_watcher_paths`, and the `git::*` command set.
+Custom commands include `take_pending_opened_paths`, `sync_file_watcher_paths`, the `agent_host::*` command set, and the `git::*` command set.
 
 ## UI composition
 
@@ -227,7 +244,8 @@ Chat panel subcomponents:
 | Component | Role |
 | --- | --- |
 | `ChatMessageList.svelte` | Message rendering, review sections, system events, compaction notice |
-| `ChatComposer.svelte` | Draft input, send/retry, OpenCode agent/provider/model selectors, mentions, slash commands |
+| `ChatComposer.svelte` | Draft input, send/retry, queue/steer, attachments, prompt history |
+| `SessionCatalogPicker.svelte` | Runtime label + neutral model/mode selectors from host catalogs (explanatory disabled states) |
 | `ChatBlockedState.svelte` | Workspace access blocked UI |
 
 Tab bar: `TabBarContextMenu.svelte`, `tabDragController.ts` (reorder / tear-off).
@@ -259,7 +277,7 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 | --- | --- |
 | New persisted field | `contracts.ts` → normalize in store/service → tests |
 | New menu action | `AppCommandId` + `registry.ts` + handler in `+page.svelte` or `appState` |
-| Workspace session / OpenCode | `workspaceAgentBackend.ts`, `chatStore`, `opencodeSidecar.ts` |
+| Workspace session / runtime | `lib/session/` domain, `services/agentHostRuntime.ts`, `chatStore`, `ai/chatSendPipeline.ts` |
 | Version Control / git | `app/src/lib/git/`, `Git*` components; keep **zero** OpenCode coupling |
 | File on disk | `services/fileSystem.ts` or Tauri FS; keep paths normalized via `diskFingerprint` / workspace paths helpers |
 
@@ -279,8 +297,6 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 
 ### Related docs
 
-- [README.md](./README.md) — docs index (users vs contributors)
-- [opencode-integration.md](./opencode-integration.md) — workspace sessions / OpenCode
 - [../README.md](../README.md) — product scope and dev commands
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
 - [`../specs/text-editor-parity-v3/README.md`](../specs/text-editor-parity-v3/README.md) — current public editor roadmap

@@ -1,7 +1,7 @@
 # 01 — Execution plan index
 
 **Date:** 2026-08-11  
-**Status:** Planned  
+**Status:** Done (2026-08-15)  
 **Milestone scope:** [`README.md`](README.md)  
 **Roadmap:** [`../roadmap.md`](../roadmap.md)
 

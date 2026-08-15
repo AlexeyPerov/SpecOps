@@ -47,7 +47,7 @@ node scripts/check-markdown-links.mjs
 
 | Audience | Start here |
 | --- | --- |
-| Users / setup | [docs/README.md](./docs/README.md), [docs/opencode-integration.md](./docs/opencode-integration.md) |
+| Users / setup | [README.md](./README.md) |
 | Codebase map | [docs/architecture.md](./docs/architecture.md) |
 | Agent rules | [AGENTS.md](./AGENTS.md) |
 

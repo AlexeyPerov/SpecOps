@@ -1,13 +1,13 @@
 # 01 — Phase F: Sessions UX integration and foundation exit
 
 **Date:** 2026-08-11  
-**Status:** In progress — host-client foundation landed; legacy-type purge remains  
+**Status:** Done (2026-08-15)  
 **Prerequisites:** Phases A–E Done  
 **Scope:** [`README.md`](README.md)  
 **Index:** [`execution-plan.md`](execution-plan.md)  
 **Goal:** Deliver the runtime-neutral Sessions vertical slice through the fake host.
 
-## Progress (2026-08-12)
+## Progress
 
 - **Phase E Done** — Tauri supervision + IPC bridge + process-tree cleanup
   (`app/src-tauri/src/agent_host.rs`, commands `agent_host_*`, event
@@ -17,50 +17,43 @@
   auth / catalogs / sessions / turns / replies / health), and a turn reducer
   that folds runtime-neutral `SessionEvent`s into the existing
   `ChatMessage` part/tool model. 10 unit tests.
+- **Phase F legacy purge landed (2026-08-15):**
+  - **F-01** — `SessionIndexEntry` / `ChatThreadMetadata` / `chatStore` link
+    API / persistence codec are runtime-neutral (`runtimeId` /
+    `nativeSessionId` / `modelId` / `shareUrl` / `parentSessionId` /
+    `selectedModeId`); the store enforces immutable runtime bindings.
+    Breaking sessions-state reset (no migration, per repo policy).
+  - **F-03** — the send pipeline drives the supervised Agent Host client
+    (`services/agentHostRuntime.ts`: lazy start, create/resume binding,
+    `turn.send` folding, permission/question replies, cancel, host-restart
+    recovery); agent handlers keep only host-supported lifecycle actions;
+    Sessions UI (sidebar / panel / composer) renders runtime, model, mode,
+    host health, and turn status with explanatory states for unavailable
+    catalogs; sidecar-fed UI glue (todo/diff panels, slash/mention pickers,
+    agent/provider catalog picker, message hydration, session-list import
+    entry) is removed or hidden.
+  - **F-02** — model/mode selection before the first send through host
+    catalogs; the runtime binding is fixed per session (no runtime switching
+    UI; "new session" is the path to another runtime).
+  - **F-04** — store binding-immutability tests, host-pipeline unit tests
+    with mocked client bindings, neutral persistence round-trip, phase-F
+    neutrality absence guard (no provider-prefixed session field, no vendor
+    SDK import in common code); architecture docs rewritten for Sessions-only;
+    OpenCode integration docs archived; changelog records the breaking reset.
 
-## Remaining (full legacy purge — the bulk of F)
+## Follow-up cleanup (documented, not blocking)
 
-The existing workspace Sessions UI is deeply OpenCode-coupled. The host client
-is ready to drive it, but the common code still carries provider-prefixed state
-and constructs the OpenCode backend directly. Finishing F requires:
-
-- **F-01 — Normalize domain/store/codec:** drop the `opencode*` fields from
-  `SessionIndexEntry` / `ChatThreadMetadata` (`app/src/lib/domain/chat.ts`) onto
-  the neutral phase-B binding (`runtimeId` / `nativeSessionId` / `modelId` /
-  `shareUrl` / `parentSessionId`); rewire the `chatStore` link API
-  (`sessions.ts` `SessionLinkPatch` → neutral binding), the `threadHelpers` /
-  `threadMetadata` metadata picks, and the persistence codec
-  (`chatPersistenceCodec.ts`). Cascade: `+page.svelte`, `closeTabInPane.ts`,
-  `documentTabsSlice.ts`, `sessionSnapshotSanitizer.ts`, `SessionsSidebar`,
-  `ChatPanel`, `ChatComposer`, `workspaceAgentSession.ts`,
-  `workspaceAgentHydration.ts`.
-- **F-03 — Rewire the send pipeline** (`chatSendPipeline.ts`) to drive turns
-  through `createAgentHostClient().sendTurn` + `foldSessionEvent`, replacing the
-  `createWorkspaceAgentBackend("opencode", …)` + `streamEvents` construction.
-  Re-route the agent lifecycle handlers (`appShellAgentHandlers.ts`) —
-  reconcile/rename/fork/revert/share/summarize/export — to capability-gated
-  host actions (the fake runtime advertises `fork` only; revert/share/summarize
-  hide when unsupported).
-- **F-02 — Session creation flow:** runtime → model → mode via host discovery +
-  catalogs; immutable binding after creation; "New session with…" replaces
-  runtime switching; explanatory states for unavailable catalogs/capabilities.
-- **F-04 — Regression + docs gate:** Chat/Cloud absence guard (no `opencode*`
-  session field, no `@opencode-ai/sdk` import in common UI), neutral
-  persistence round-trip, E2E fake lifecycle through the host, non-AI suites
-  green, architecture docs, breaking changelog, milestone 01 → Done.
-
-The `WorkspaceAgentBackend` / OpenCode sidecar code is intentionally left
-intact as the phase-04 adapter candidate; the purge removes its use from
-**common** UI/state/pipeline only.
-
-## Agent handoff boundary
-
-Own common Sessions UI/state integration, capability-aware actions, end-to-end
-fake-runtime coverage, and milestone exit. Do not add a real adapter.
+- The Sessions dev gate still lives under `settings.opencode` /
+  **Settings → Workspaces → OpenCode** (OpenCode settings panels and sidecar
+  health UI remain as the phase-04 adapter-candidate surface). Renaming the
+  gate to a neutral `settings.sessions` surface is deferred cleanup.
+- `ai/backends/workspaceAgentBackend`, the opencode backend helpers, and
+  `src-tauri/src/opencode_sidecar.rs` remain untouched as the phase-04
+  adapter candidate.
 
 ## Tasks
 
-### AS01-F-01 — Normalize Sessions naming and state
+### AS01-F-01 — Normalize Sessions naming and state [DONE]
 
 Replace provider-specific labels, gates, ids, and stores in the workspace
 session browser/header/composer with common runtime/session terminology.
@@ -68,7 +61,7 @@ session browser/header/composer with common runtime/session terminology.
 **Acceptance:** Common UI code contains no provider-prefixed session field and
 renders runtime, model, mode, health, status, and capabilities.
 
-### AS01-F-02 — Implement session creation and immutable binding
+### AS01-F-02 — Implement session creation and immutable binding [DONE]
 
 Add runtime → model → mode → optional-settings creation flow. After creation,
 replace runtime switching with “New session with…”.
@@ -76,7 +69,7 @@ replace runtime switching with “New session with…”.
 **Acceptance:** Runtime binding cannot mutate; unavailable capabilities and
 catalogs have explanatory states.
 
-### AS01-F-03 — Connect lifecycle and capability actions
+### AS01-F-03 — Connect lifecycle and capability actions [DONE]
 
 Wire fake create/resume/send/stream/cancel, permissions/questions, restart
 recovery, persistence, and capability-gated actions through Tauri and host.
@@ -84,7 +77,7 @@ recovery, persistence, and capability-gated actions through Tauri and host.
 **Acceptance:** The complete fake lifecycle works without direct host access or
 provider types in frontend state.
 
-### AS01-F-04 — Foundation regression and docs gate
+### AS01-F-04 — Foundation regression and docs gate [DONE]
 
 Add UI/state/end-to-end tests, Chat/Cloud absence guards, non-AI regressions,
 architecture docs, breaking changelog entry, and milestone status updates.

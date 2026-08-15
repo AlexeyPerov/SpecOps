@@ -109,8 +109,6 @@
     syncWorkspaceContextEffect,
   } from "../lib/services/appShellEffects";
   import { flushThemePersistence } from "../lib/state/appState/themeController";
-  import { refreshSessionTodos, clearSessionTodos } from "../lib/ai/opencodeTodoStore";
-  import { refreshSessionDiffs, clearSessionDiffs } from "../lib/ai/opencodeDiffStore";
   import {
     clearOpencodeCatalog,
   } from "../lib/ai/opencodeCatalog";
@@ -277,34 +275,16 @@
   const workspaceSessions = $derived($chatSessionIndex);
   const selectedSessionId = $derived($chatActiveSessionId);
   /**
-   * M2 — active agent's OpenCode session link for the chat header badges and
-   * session-action gating. Resolved off the agent index (already reactive)
-   * rather than reading the session index imperatively.
+   * Active workspace session's index entry — resolved off the reactive
+   * session index rather than reading the store imperatively.
    */
   const activeSessionEntry = $derived(
     workspaceSessions.find((agent) => agent.id === selectedSessionId) ?? null,
   );
-  const activeShareUrl = $derived(activeSessionEntry?.opencodeShareUrl ?? null);
-  const activeParentSessionId = $derived(
-    activeSessionEntry?.opencodeParentSessionId ?? null,
-  );
-  /** M5-T1 — linked session id for the active agent (scopes session.todo). */
-  const activeOpencodeSessionId = $derived(
-    activeSessionEntry?.opencodeSessionId ?? null,
-  );
+  /** Native session id for the active session (host binding link). */
+  const activeNativeSessionId = $derived(activeSessionEntry?.nativeSessionId ?? null);
   const opencodeMode = $derived($appSettings.opencode.mode);
 
-  /**
-   * M5-T1 — TODO panel toggle. Agent-scoped: only rendered when a workspace
-   * agent tab with a linked OpenCode session is active. Auto-refresh of
-   * `session.todo` is driven by the `todowrite` tool-event effect below.
-   *
-   * (L14: stays on the page — the panel is rendered by AppShell and its
-   * auto-refresh effect couples to retained snapshot state.)
-   */
-  let todoPanelOpen = $state(false);
-  /** M5-T2 — diff viewer panel toggle (agent-scoped, like the TODO panel). */
-  let diffPanelOpen = $state(false);
   /**
    * M5-T3 — workspace git status (file.status) for the project-tree badges.
    * One reactive store per workspace; cleared on workspace switch.
@@ -426,7 +406,7 @@
   const openSessionIds = $derived(
     new Set(
       workspaceSessions
-        .map((agent) => agent.opencodeSessionId)
+        .map((agent) => agent.nativeSessionId)
         .filter((id): id is string => Boolean(id)),
     ),
   );
@@ -566,14 +546,6 @@
 
   function notify(message: string): void {
     statusMessage = message;
-  }
-
-  function handleToggleTodoPanel(): void {
-    todoPanelOpen = !todoPanelOpen;
-  }
-
-  function handleToggleDiffPanel(): void {
-    diffPanelOpen = !diffPanelOpen;
   }
 
   function handleFileDropPaneChange(paneId: string | null): void {
@@ -942,68 +914,6 @@
   });
 
   /**
-   * M5-T1 — TODO panel auto-refresh. Loads `session.todo` when the panel is
-   * open for a linked agent session, re-fetches whenever the active session
-   * changes, and re-fetches after each completed turn (the agent may have
-   * emitted a `todowrite`). Stale per-session cache is cleared when the
-   * active agent session changes so closed sessions don't linger.
-   */
-  let lastTodoScopeKey = $state<string | null>(null);
-  $effect(() => {
-    runtimeReady;
-    activeWorkspaceRoot;
-    activeOpencodeSessionId;
-    todoPanelOpen;
-    session.lastActiveSessionId;
-    const isGenerating = chatStore.getRuntimeState().isGenerating;
-    void isGenerating;
-
-    const root = activeWorkspaceRoot;
-    const sessionId = activeOpencodeSessionId;
-    const scopeKey = root && sessionId ? `${root}|${sessionId}` : null;
-
-    // Clear cache for the previously-active session when the scope changes.
-    if (lastTodoScopeKey && lastTodoScopeKey !== scopeKey) {
-      const [prevRoot, prevSession] = lastTodoScopeKey.split("|");
-      if (prevRoot && prevSession) {
-        clearSessionTodos(prevRoot, prevSession);
-        clearSessionDiffs(prevRoot, prevSession);
-      }
-    }
-    lastTodoScopeKey = scopeKey;
-
-    if (!runtimeReady || !todoPanelOpen || !root || !sessionId) {
-      return;
-    }
-    void refreshSessionTodos({ workspaceRootPath: root, sessionId });
-  });
-
-  /**
-   * M5-T2 — diff viewer auto-refresh. Loads `session.diff` when the panel is
-   * open for a linked agent session, re-fetches on session change and after
-   * each completed turn (file changes land once the agent finishes editing).
-   */
-  $effect(() => {
-    runtimeReady;
-    activeWorkspaceRoot;
-    activeOpencodeSessionId;
-    diffPanelOpen;
-    session.lastActiveSessionId;
-    const isGenerating = chatStore.getRuntimeState().isGenerating;
-    void isGenerating;
-
-    if (!runtimeReady || !diffPanelOpen) {
-      return;
-    }
-    const root = activeWorkspaceRoot;
-    const sessionId = activeOpencodeSessionId;
-    if (!root || !sessionId) {
-      return;
-    }
-    void refreshSessionDiffs({ workspaceRootPath: root, sessionId });
-  });
-
-  /**
    * M5-T3 — project-tree file-status badges. Refreshes `file.status` when the
    * workspace changes and after each completed turn (the agent's edits land
    * on disk once the turn finishes). Stale per-workspace cache is cleared on
@@ -1101,9 +1011,6 @@
   {documents}
   {activeDocument}
   {activeMessages}
-  {activeOpencodeSessionId}
-  activeShareUrl={activeShareUrl ?? null}
-  activeParentSessionId={activeParentSessionId ?? null}
   {activeWorkspaceRoot}
   {documentView}
   {workspaceLayout}
@@ -1127,10 +1034,6 @@
   {openSessionIds}
   opencodeEnabled={$appSettings.opencode.enabled}
   canOpenLogsPanel={$appSettings.logSettings.canOpenLogsPanel}
-  {todoPanelOpen}
-  {diffPanelOpen}
-  onToggleTodoPanel={handleToggleTodoPanel}
-  onToggleDiffPanel={handleToggleDiffPanel}
   onFileDropPaneChange={handleFileDropPaneChange}
   {editorWorkbench}
   {editorTools}
@@ -1150,7 +1053,7 @@
   bind:this={overlayHost}
   activeWorkspaceRoot={activeWorkspaceRoot}
   activeDocumentMarkdownViewMode={activeDocument?.markdownViewMode}
-  activeOpencodeSessionId={activeOpencodeSessionId}
+  activeNativeSessionId={activeNativeSessionId}
   activeMessages={activeMessages}
   openSessionIds={openSessionIds}
   editorLayoutActivePaneId={session.editorLayout.activePaneId}
@@ -1164,10 +1067,6 @@
   runCommand={(commandId) => appShellHost?.api.runCommand(commandId)}
   setMarkdownViewMode={(mode) => appShellHost?.api.setMarkdownViewMode(mode)}
   openAndActivatePath={(path) => appShellHost?.api.openAndActivatePath(path) ?? Promise.resolve()}
-  handleListWorkspaceSessions={(options) =>
-    appShellHost?.api.handleListWorkspaceSessions(options) ?? Promise.resolve()}
-  handleOpenExternalSession={(sessionId) =>
-    appShellHost?.api.handleOpenExternalSession(sessionId) ?? Promise.resolve()}
   getWorkspaceFileCatalogRegistry={() => workspaceFileCatalogRegistry}
   getEditorWorkbench={() => editorWorkbench}
   getEditorTools={() => editorTools}

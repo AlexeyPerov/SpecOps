@@ -102,7 +102,7 @@ export interface AppShellRuntimeOptions {
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
   restoreWorkspaceSession: (
     normalizedRoot: string,
-    options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
+    options?: { preferCachedIndex?: boolean },
   ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
   onFilesystemChange?: (path: string, kind: FileWatcherEventKind) => void;
@@ -431,7 +431,7 @@ async function startAppShellRuntimeInner(
       const normalizedRoot = normalizePathSync(restoredWorkspaceRoot);
       void ensureWorkspaceReadAccess(normalizedRoot);
       chatStore.setActiveWorkspaceRoot(normalizedRoot);
-      await options.restoreWorkspaceSession(normalizedRoot, { skipOpencodeReconcile: true });
+      await options.restoreWorkspaceSession(normalizedRoot, { preferCachedIndex: true });
       return;
     }
     chatStore.setActiveWorkspaceRoot(null);

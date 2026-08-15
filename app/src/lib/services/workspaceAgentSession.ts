@@ -81,48 +81,6 @@ export function resolveRestoredActiveSession(
   return { activeSessionId: null, shouldFocusSessionTab: false };
 }
 
-export interface SessionMapping {
-  sessionId: string;
-  opencodeSessionId: string;
-  modelId?: string;
-  providerId?: string;
-}
-
-export function mappedSessionForId(
-  sessions: readonly SessionIndexEntry[],
-  sessionId: string,
-): SessionMapping | null {
-  const entry = sessions.find((candidate) => candidate.id === sessionId);
-  if (!entry?.opencodeSessionId) {
-    return null;
-  }
-  return {
-    sessionId,
-    opencodeSessionId: entry.opencodeSessionId,
-    modelId: entry.opencodeModelId,
-    providerId: entry.opencodeProviderId,
-  };
-}
-
-export function isSessionMappingValid(
-  mapping: SessionMapping | null,
-  existingSessionIds: ReadonlySet<string>,
-): boolean {
-  return mapping !== null && existingSessionIds.has(mapping.opencodeSessionId);
-}
-
-export function reconcileSessionMapping(input: {
-  mapping: SessionMapping | null;
-  existingSessionIds: ReadonlySet<string>;
-  createdSessionId: string;
-}): { sessionId: string; shouldReplaceMapping: boolean } {
-  const { mapping, existingSessionIds, createdSessionId } = input;
-  if (mapping && existingSessionIds.has(mapping.opencodeSessionId)) {
-    return { sessionId: mapping.opencodeSessionId, shouldReplaceMapping: false };
-  }
-  return { sessionId: createdSessionId, shouldReplaceMapping: true };
-}
-
 /** When last-active session is gone, avoid leaving a session tab selected in the tab bar. */
 export function selectedTabAfterMissingLastSession(
   openTabs: readonly TabState[],

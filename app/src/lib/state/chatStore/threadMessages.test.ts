@@ -84,7 +84,7 @@ describe("chatStore", () => {
     });
 
     const metadataUpdated = chatStore.updateThreadMetadata(
-      { selectedModelId: "gpt-4", opencodeAgentId: "build", summary: "brief summary" },
+      { selectedModelId: "fake-model", selectedModeId: "default", summary: "brief summary" },
       "2026-05-25T00:00:02.000Z",
     );
 
@@ -94,8 +94,8 @@ describe("chatStore", () => {
     expect(chatStore.getMetadata()).toEqual({
       sessionId: "session-1",
       threadId: "session-1",
-      selectedModelId: "gpt-4",
-      opencodeAgentId: "build",
+      selectedModelId: "fake-model",
+      selectedModeId: "default",
       createdAt: "2026-05-25T00:00:00.000Z",
       updatedAt: "2026-05-25T00:00:02.000Z",
       summary: "brief summary",
@@ -106,7 +106,7 @@ describe("chatStore", () => {
     chatStore.setActiveWorkspaceRoot("/work/a");
 
     const updated = chatStore.updateThreadMetadata(
-      { opencodeAgentId: "build" },
+      { selectedModeId: "default" },
       "2026-05-26T00:00:00.000Z",
     );
 
@@ -115,7 +115,7 @@ describe("chatStore", () => {
     expect(chatStore.getMetadata()).toEqual({
       sessionId: "session-1",
       threadId: "session-1",
-      opencodeAgentId: "build",
+      selectedModeId: "default",
       createdAt: "2026-05-26T00:00:00.000Z",
       updatedAt: "2026-05-26T00:00:00.000Z",
     });
@@ -190,7 +190,7 @@ describe("chatStore", () => {
       metadata: {
         sessionId: "agent-b",
         threadId: "agent-b",
-        opencodeAgentId: "build",
+        selectedModeId: "default",
         createdAt: "2026-05-25T00:00:03.000Z",
         updatedAt: "2026-05-25T00:00:03.000Z",
       },
@@ -213,7 +213,7 @@ describe("chatStore", () => {
 
     chatStore.setActiveSessionId("agent-b");
     expect(chatStore.getMessages().map((message) => message.id)).toEqual(["b-1"]);
-    expect(chatStore.getMetadata()?.opencodeAgentId).toBe("build");
+    expect(chatStore.getMetadata()?.selectedModeId).toBe("default");
   });
 
   it("loads workspace agents from index and thread files", async () => {

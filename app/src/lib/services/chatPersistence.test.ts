@@ -120,15 +120,15 @@ describe("agent thread snapshot codec", () => {
     expect(decoded).toEqual(snapshot);
   });
 
-  it("round-trips opencodeAgentId and opencodeProviderId metadata", () => {
+  it("round-trips neutral selectedModeId and runtimeId metadata", () => {
     const snapshot: ChatSessionThreadFileSnapshot = {
       version: 1,
       thread: {
         ...sampleThread(),
         metadata: {
           ...sampleThread().metadata,
-          opencodeAgentId: "build",
-          opencodeProviderId: "anthropic",
+          selectedModeId: "plan",
+          runtimeId: "fake",
         },
       },
     };
@@ -356,9 +356,9 @@ describe("workspace agents index codec", () => {
           id: AGENT_ID,
           title: "hello",
           lastUsedAt: "2026-05-25T00:00:01.000Z",
-          opencodeSessionId: "sess-1",
-          opencodeModelId: "gpt-4o-mini",
-          opencodeProviderId: "opencode",
+          runtimeId: "fake",
+          nativeSessionId: "fake-native-1",
+          modelId: "fake-model",
         },
       ],
     };
@@ -367,7 +367,7 @@ describe("workspace agents index codec", () => {
     expect(decodeWorkspaceSessionsIndexSnapshot(encoded)).toEqual(snapshot);
   });
 
-  it("drops invalid opencode mapping metadata from corrupted entries", () => {
+  it("drops invalid native binding metadata from corrupted entries", () => {
     const raw = JSON.stringify({
       version: 1,
       sessions: [
@@ -375,7 +375,7 @@ describe("workspace agents index codec", () => {
           id: AGENT_ID,
           title: "hello",
           lastUsedAt: "2026-05-25T00:00:01.000Z",
-          opencodeSessionId: 123,
+          nativeSessionId: 123,
         },
       ],
     });

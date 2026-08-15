@@ -59,12 +59,8 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
   if (!isRecord(value)) {
     return null;
   }
-  // M16: the conversation id field is now `sessionId` (renamed from `agentId`).
-  // Tolerate the legacy key so a half-migrated thread file still decodes.
-  const sessionIdValue =
-    typeof value.sessionId === "string" ? value.sessionId : value.agentId;
   if (
-    typeof sessionIdValue !== "string" ||
+    typeof value.sessionId !== "string" ||
     typeof value.threadId !== "string" ||
     typeof value.createdAt !== "string" ||
     typeof value.updatedAt !== "string"
@@ -86,14 +82,14 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
   if (value.selectedModelId !== undefined && typeof value.selectedModelId !== "string") {
     return null;
   }
-  if (value.opencodeAgentId !== undefined && typeof value.opencodeAgentId !== "string") {
+  if (value.selectedModeId !== undefined && typeof value.selectedModeId !== "string") {
     return null;
   }
-  if (value.opencodeProviderId !== undefined && typeof value.opencodeProviderId !== "string") {
+  if (value.runtimeId !== undefined && typeof value.runtimeId !== "string") {
     return null;
   }
   return {
-    sessionId: sessionIdValue,
+    sessionId: value.sessionId,
     threadId: value.threadId,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
@@ -102,8 +98,8 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
     lastCompactedAt: value.lastCompactedAt,
     compactedMessageCount: value.compactedMessageCount,
     selectedModelId: value.selectedModelId,
-    opencodeAgentId: value.opencodeAgentId,
-    opencodeProviderId: value.opencodeProviderId,
+    selectedModeId: value.selectedModeId,
+    runtimeId: value.runtimeId,
   };
 }
 
@@ -372,22 +368,19 @@ function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
   if (value.isDraft !== undefined && typeof value.isDraft !== "boolean") {
     return null;
   }
-  if (value.opencodeSessionId !== undefined && typeof value.opencodeSessionId !== "string") {
+  if (value.runtimeId !== undefined && typeof value.runtimeId !== "string") {
     return null;
   }
-  if (value.opencodeModelId !== undefined && typeof value.opencodeModelId !== "string") {
+  if (value.nativeSessionId !== undefined && typeof value.nativeSessionId !== "string") {
     return null;
   }
-  if (value.opencodeProviderId !== undefined && typeof value.opencodeProviderId !== "string") {
+  if (value.modelId !== undefined && typeof value.modelId !== "string") {
     return null;
   }
-  if (value.opencodeShareUrl !== undefined && typeof value.opencodeShareUrl !== "string") {
+  if (value.shareUrl !== undefined && typeof value.shareUrl !== "string") {
     return null;
   }
-  if (
-    value.opencodeParentSessionId !== undefined &&
-    typeof value.opencodeParentSessionId !== "string"
-  ) {
+  if (value.parentSessionId !== undefined && typeof value.parentSessionId !== "string") {
     return null;
   }
   return {
@@ -395,11 +388,11 @@ function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
     title: value.title,
     lastUsedAt: value.lastUsedAt,
     isDraft: value.isDraft,
-    opencodeSessionId: value.opencodeSessionId,
-    opencodeModelId: value.opencodeModelId,
-    opencodeProviderId: value.opencodeProviderId,
-    opencodeShareUrl: value.opencodeShareUrl,
-    opencodeParentSessionId: value.opencodeParentSessionId,
+    runtimeId: value.runtimeId,
+    nativeSessionId: value.nativeSessionId,
+    modelId: value.modelId,
+    shareUrl: value.shareUrl,
+    parentSessionId: value.parentSessionId,
   };
 }
 

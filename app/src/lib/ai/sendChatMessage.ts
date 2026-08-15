@@ -6,7 +6,7 @@ import {
   executeProviderTurn,
   persistSessionThreadOnce,
   resolveSendTarget,
-  validateOpencodeBackendSend,
+  validateAgentHostSend,
   type ChatSendContextOptions,
   type SendChatMessageResult,
 } from "./chatSendPipeline";
@@ -54,26 +54,26 @@ export async function sendChatMessage(
   }
   persistSessionThreadOnce(target.root, target.activeSessionId);
 
+  // Dev feature gate for Sessions (renaming `settings.opencode` → a neutral
+  // sessions gate is tracked as follow-up cleanup).
   if (!isOpencodeEnabled(appState.getSnapshot().settings.opencode)) {
     chatStore.removeMessage(userMessage.id, target.activeSessionId, target.root);
     abortTurn(target.activeSessionId, target.root);
     return { ok: false, reason: "provider_unavailable", message: OPENCODE_DISABLED_MESSAGE };
   }
 
-  const opencodeValidation = await validateOpencodeBackendSend(
-    target.root,
-    target.activeSessionId,
-  );
-  if (!opencodeValidation.ok) {
+  const validation = await validateAgentHostSend(target.root, target.activeSessionId);
+  if (!validation.ok) {
     chatStore.removeMessage(userMessage.id, target.activeSessionId, target.root);
     abortTurn(target.activeSessionId, target.root);
-    return opencodeValidation;
+    return validation;
   }
   return executeProviderTurn({
     root: target.root,
     activeSessionId: target.activeSessionId,
     turnId,
-    modelId: opencodeValidation.modelId,
+    modelId: validation.modelId,
+    modeId: validation.modeId,
     ...(options?.context ? { context: options.context } : {}),
   });
 }

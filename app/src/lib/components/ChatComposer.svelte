@@ -1,30 +1,8 @@
 <script lang="ts">
-  import type { ChatMessage } from "../domain/contracts";
   import { chatStore } from "../state/chatStore";
   import { createComposerSendActions, persistActiveThreadSnapshot } from "../ai/composerSendActions";
-  import type { OpencodeCatalogState } from "../ai/opencodeCatalog";
-  import WorkspaceCatalogPicker from "./WorkspaceCatalogPicker.svelte";
-  import SlashCommandPopover from "./SlashCommandPopover.svelte";
-  import MentionPicker from "./MentionPicker.svelte";
+  import SessionCatalogPicker from "./SessionCatalogPicker.svelte";
   import AttachmentTray from "./AttachmentTray.svelte";
-  import {
-    buildSlashReplacement,
-    filterCommands,
-    getOpencodeCommands,
-    refreshOpencodeCommands,
-    shouldTriggerSlashPopover,
-  } from "../ai/backends/opencodeCommands";
-  import {
-    buildMentionReplacement,
-    filterMentionAgents,
-    mentionTokenForAgent,
-    mentionTokenForFile,
-    searchMentionFiles,
-    shouldTriggerMentionPicker,
-    type MentionAgentEntry,
-    type MentionFileEntry,
-    type MentionToken,
-  } from "../ai/backends/opencodeSearch";
   import {
     buildSendContext,
     inferAttachmentMime,
@@ -41,7 +19,9 @@
     nextHistoryUp,
     type PromptHistoryStore,
   } from "../services/promptHistory";
-  import type { OpencodeAgentEntry, OpencodeCommandEntry } from "../ai/backends/workspaceAgentBackend";
+  import type {
+    SessionCatalogSnapshot,
+  } from "../services/agentHostRuntime";
   import type { ChatQueueMode } from "../ai/chatSendPipeline";
   import "../styles/chat-composer.css";
 
@@ -54,17 +34,17 @@
     isBlocked: boolean;
     isGenerating: boolean;
     canRetryLastTurn: boolean;
-    activeModel: string;
-    threadMessages: ChatMessage[];
-    activeSessionId?: string | null;
     workspaceRootPath: string;
     composerError: ComposerError | null;
-    opencodeCatalog?: OpencodeCatalogState | null;
-    activeOpencodeAgentId?: string;
-    activeOpencodeProviderId?: string;
+    /** Neutral runtime/model/mode catalog for the session's fixed runtime. */
+    runtimeId: string;
+    runtimeLabel: string;
+    catalog: SessionCatalogSnapshot;
+    activeModelId: string;
+    activeModeId: string;
     /**
-     * Aborts the running workspace-agent turn (M3-T5 steer mode). Optional —
-     * when omitted, steer falls back to plain queueing.
+     * Aborts the running turn (steer mode). Optional — when omitted, steer
+     * falls back to plain queueing.
      */
     onAbortTurn?: () => void;
     onInlineError?: (message: string) => void;
@@ -74,14 +54,13 @@
     isBlocked,
     isGenerating,
     canRetryLastTurn,
-    activeModel,
-    threadMessages,
-    activeSessionId = null,
     workspaceRootPath,
     composerError,
-    opencodeCatalog = null,
-    activeOpencodeAgentId = "",
-    activeOpencodeProviderId = "",
+    runtimeId,
+    runtimeLabel,
+    catalog,
+    activeModelId,
+    activeModeId,
     onAbortTurn,
     onInlineError = () => {},
   }: Props = $props();
@@ -90,23 +69,8 @@
   let submitInFlight = $state(false);
   let retrying = $state(false);
 
-  // --- M3 composer state -------------------------------------------------
-  // Popover / mention picker state. Visible flag is recomputed on every
-  // caret change; activeIndex tracks keyboard navigation within the popover.
   let textareaEl: HTMLTextAreaElement | null = null;
-  let caret = $state(0);
 
-  let slashState = $state<{ open: boolean; query: string }>({ open: false, query: "" });
-  let slashActiveIndex = $state(0);
-
-  let mentionState = $state<{ open: boolean; query: string }>({ open: false, query: "" });
-  let mentionActiveIndex = $state(0);
-  let mentionFiles = $state<MentionFileEntry[]>([]);
-  let mentionFilesLoading = $state(false);
-  let mentionFilesError = $state<string | null>(null);
-  let mentionSearchTimer: ReturnType<typeof setTimeout> | null = null;
-
-  let mentions = $state<MentionToken[]>([]);
   let attachments = $state<ComposerAttachment[]>([]);
   let attachmentCounter = 0;
 
@@ -118,29 +82,7 @@
   let queueMode = $state<ChatQueueMode>("queue");
   let lastWorkspaceForHistory = "";
 
-  const commandCatalog = $derived(getOpencodeCommands(workspaceRootPath));
-  const filteredCommands = $derived(
-    slashState.open ? filterCommands(commandCatalog.commands, slashState.query) : [],
-  );
-  const filteredAgents = $derived(
-    mentionState.open ? filterMentionAgents(opencodeCatalog?.agents ?? [], mentionState.query) : [],
-  );
-  // Combined length used for keyboard navigation across files + agents.
-  const mentionTotalRows = $derived(mentionFiles.length + filteredAgents.length);
-
-  const hasAttachmentsOrMentions = $derived(attachments.length > 0 || mentions.length > 0);
   const queuedItems = $derived(queueSnapshot.items);
-
-  // --- M3 effects --------------------------------------------------------
-  // Load slash commands once per workspace.
-  $effect(() => {
-    if (workspaceRootPath.length === 0) {
-      return;
-    }
-    // Track workspaceRootPath as a dependency.
-    workspaceRootPath;
-    void refreshOpencodeCommands(workspaceRootPath);
-  });
 
   // Load prompt history once per workspace.
   $effect(() => {
@@ -155,43 +97,6 @@
       historyStore = store;
       historyIndex = -1;
     });
-  });
-
-  // Debounced file search for the mention picker.
-  $effect(() => {
-    if (!mentionState.open) {
-      if (mentionSearchTimer) {
-        clearTimeout(mentionSearchTimer);
-        mentionSearchTimer = null;
-      }
-      return;
-    }
-    const query = mentionState.query;
-    if (mentionSearchTimer) {
-      clearTimeout(mentionSearchTimer);
-    }
-    mentionSearchTimer = setTimeout(() => {
-      mentionSearchTimer = null;
-      if (query.trim().length === 0) {
-        mentionFiles = [];
-        mentionFilesLoading = false;
-        mentionFilesError = null;
-        return;
-      }
-      mentionFilesLoading = true;
-      void searchMentionFiles({ workspaceRootPath, query, limit: 20 })
-        .then((result) => {
-          mentionFiles = result.files;
-          mentionFilesError = result.status === "error" ? "File search failed." : null;
-        })
-        .catch(() => {
-          mentionFiles = [];
-          mentionFilesError = "File search failed.";
-        })
-        .finally(() => {
-          mentionFilesLoading = false;
-        });
-    }, 180);
   });
 
   // Drain queue-mode prompts once a running turn completes. Watches the
@@ -222,11 +127,6 @@
     });
   });
 
-  const availableModels = $derived(
-    opencodeCatalog?.status === "loaded" && opencodeCatalog.models.length > 0
-      ? opencodeCatalog.models.map((model) => model.id)
-      : [],
-  );
   const isModelSelectionDisabled = $derived(isGenerating || submitInFlight || retrying);
   const isSendDisabled = $derived(
     isBlocked ||
@@ -245,28 +145,8 @@
   );
   const generationStatus = $derived(isGenerating ? "Generating response…" : "");
 
-  function selectOpencodeAgent(agentId: string): void {
-    if (agentId === activeOpencodeAgentId || isModelSelectionDisabled) {
-      return;
-    }
-    const updated = chatStore.updateThreadMetadata({ opencodeAgentId: agentId });
-    if (updated) {
-      persistActiveThreadSnapshot();
-    }
-  }
-
-  function selectOpencodeProvider(providerId: string): void {
-    if (providerId === activeOpencodeProviderId || isModelSelectionDisabled) {
-      return;
-    }
-    const updated = chatStore.updateThreadMetadata({ opencodeProviderId: providerId });
-    if (updated) {
-      persistActiveThreadSnapshot();
-    }
-  }
-
   function selectModel(nextModelId: string): void {
-    if (nextModelId === activeModel || isModelSelectionDisabled) {
+    if (nextModelId === activeModelId || isModelSelectionDisabled) {
       return;
     }
     const updated = chatStore.updateThreadMetadata({ selectedModelId: nextModelId });
@@ -275,18 +155,15 @@
     }
   }
 
-  // Default the selected model to the first catalog entry once.
-  $effect(() => {
-    if (isModelSelectionDisabled) {
+  function selectMode(nextModeId: string): void {
+    if (nextModeId === activeModeId || isModelSelectionDisabled) {
       return;
     }
-    if (!activeModel && availableModels.length > 0) {
-      const updated = chatStore.updateThreadMetadata({ selectedModelId: availableModels[0] });
-      if (updated) {
-        persistActiveThreadSnapshot();
-      }
+    const updated = chatStore.updateThreadMetadata({ selectedModeId: nextModeId });
+    if (updated) {
+      persistActiveThreadSnapshot();
     }
-  });
+  }
 
   const { submitMessage, retryLastTurn } = createComposerSendActions({
     getDraft: () => draft,
@@ -306,85 +183,6 @@
     getIsRetryDisabled: () => isRetryDisabled,
     onInlineError: (message) => onInlineError(message),
   });
-
-  function updateCaret(): void {
-    if (textareaEl) {
-      caret = textareaEl.selectionStart ?? draft.length;
-    }
-  }
-
-  function refreshTriggers(): void {
-    const slash = shouldTriggerSlashPopover(draft, caret);
-    if (slash.trigger !== slashState.open || slash.query !== slashState.query) {
-      slashState = { open: slash.trigger, query: slash.query };
-      slashActiveIndex = 0;
-    }
-    const mention = shouldTriggerMentionPicker(draft, caret);
-    if (mention.trigger !== mentionState.open || mention.query !== mentionState.query) {
-      mentionState = { open: mention.trigger, query: mention.query };
-      mentionActiveIndex = 0;
-    }
-  }
-
-  function handleInput(): void {
-    updateCaret();
-    refreshTriggers();
-    // Reset history navigation whenever the user types fresh content.
-    if (historyIndex !== -1) {
-      historyIndex = -1;
-    }
-  }
-
-  function applySlashCommand(command: OpencodeCommandEntry): void {
-    const { value, caret: nextCaret } = buildSlashReplacement({
-      value: draft,
-      caret,
-      template: command.template,
-    });
-    draft = value;
-    caret = nextCaret;
-    slashState = { open: false, query: "" };
-    slashActiveIndex = 0;
-    queueMicrotask(() => {
-      if (textareaEl) {
-        textareaEl.focus();
-        textareaEl.setSelectionRange(caret, caret);
-      }
-    });
-  }
-
-  function applyFileMention(file: MentionFileEntry): void {
-    const token = mentionTokenForFile(file.path);
-    insertMentionToken(token);
-  }
-
-  function applyAgentMention(agent: MentionAgentEntry): void {
-    const token = mentionTokenForAgent(agent.id, agent.name);
-    insertMentionToken(token);
-  }
-
-  function insertMentionToken(token: MentionToken): void {
-    const { value, caret: nextCaret } = buildMentionReplacement({
-      value: draft,
-      caret,
-      token,
-    });
-    draft = value;
-    caret = nextCaret;
-    mentions = [...mentions, token];
-    mentionState = { open: false, query: "" };
-    mentionActiveIndex = 0;
-    queueMicrotask(() => {
-      if (textareaEl) {
-        textareaEl.focus();
-        textareaEl.setSelectionRange(caret, caret);
-      }
-    });
-  }
-
-  function removeMention(token: MentionToken): void {
-    mentions = mentions.filter((entry) => entry !== token);
-  }
 
   function handleAddFiles(files: File[]): void {
     const next: ComposerAttachment[] = [];
@@ -436,8 +234,7 @@
     draft = prompt;
     queueMicrotask(() => {
       if (textareaEl) {
-        caret = prompt.length;
-        textareaEl.setSelectionRange(caret, caret);
+        textareaEl.setSelectionRange(prompt.length, prompt.length);
       }
     });
     return true;
@@ -456,8 +253,7 @@
     draft = prompt ?? "";
     queueMicrotask(() => {
       if (textareaEl) {
-        caret = draft.length;
-        textareaEl.setSelectionRange(caret, caret);
+        textareaEl.setSelectionRange(draft.length, draft.length);
       }
     });
     return true;
@@ -496,7 +292,7 @@
     if (content.length === 0) {
       return false;
     }
-    const context = buildSendContext({ mentions, attachments });
+    const context = buildSendContext({ mentions: [], attachments });
     if (queueMode === "steer") {
       // Interrupt + append: abort the running turn, then send the new prompt
       // immediately. Cleanup runs in the onAfterSend hook of submitMessage.
@@ -505,10 +301,8 @@
       // store flips isGenerating asynchronously once the turn state clears).
       const prompt = content;
       const ctx = context;
-      const snapshotMentions = mentions;
       const snapshotAttachments = attachments;
       draft = "";
-      mentions = [];
       attachments = [];
       queueMicrotask(() => {
         void submitMessage({
@@ -526,7 +320,6 @@
                 }
               }
             });
-            void snapshotMentions;
           },
         });
       });
@@ -537,7 +330,6 @@
       return false;
     }
     draft = "";
-    mentions = [];
     attachments.forEach((attachment) => {
       if (attachment.url.startsWith("blob:")) {
         try {
@@ -549,8 +341,6 @@
     });
     attachments = [];
     historyIndex = -1;
-    slashState = { open: false, query: "" };
-    mentionState = { open: false, query: "" };
     refreshQueue();
     return true;
   }
@@ -559,13 +349,12 @@
     if (tryEnqueueOrSteer()) {
       return;
     }
-    const context = buildSendContext({ mentions, attachments });
+    const context = buildSendContext({ mentions: [], attachments });
     await submitMessage({
       ...(context ? { context } : {}),
       onAfterSend: (prompt) => {
         historyStore?.record(prompt);
         historyIndex = -1;
-        mentions = [];
         attachments.forEach((attachment) => {
           if (attachment.url.startsWith("blob:")) {
             try {
@@ -581,77 +370,20 @@
   }
 
   function handleComposerKeydown(event: KeyboardEvent): void {
-    // Slash popover navigation takes precedence when open.
-    if (slashState.open && filteredCommands.length > 0) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        slashActiveIndex = (slashActiveIndex + 1) % filteredCommands.length;
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        slashActiveIndex =
-          (slashActiveIndex - 1 + filteredCommands.length) % filteredCommands.length;
-        return;
-      }
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        const command = filteredCommands[slashActiveIndex];
-        if (command) {
-          applySlashCommand(command);
-        }
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        slashState = { open: false, query: "" };
-        return;
-      }
-    }
-    // Mention picker navigation.
-    if (mentionState.open && mentionTotalRows > 0) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        mentionActiveIndex = (mentionActiveIndex + 1) % mentionTotalRows;
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        mentionActiveIndex =
-          (mentionActiveIndex - 1 + mentionTotalRows) % mentionTotalRows;
-        return;
-      }
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        if (mentionActiveIndex < mentionFiles.length) {
-          const file = mentionFiles[mentionActiveIndex];
-          if (file) {
-            applyFileMention(file);
-          }
-        } else {
-          const agent = filteredAgents[mentionActiveIndex - mentionFiles.length];
-          if (agent) {
-            applyAgentMention(agent);
-          }
-        }
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        mentionState = { open: false, query: "" };
-        return;
-      }
-    }
     // Prompt history: arrow-up at start of input cycles back; arrow-down
     // at end cycles forward. Only trigger when the caret is at the boundary.
     if (event.key === "ArrowUp" && !event.shiftKey) {
-      if (caret === 0 && cycleHistoryUp()) {
+      if (textareaEl && textareaEl.selectionStart === 0 && cycleHistoryUp()) {
         event.preventDefault();
         return;
       }
     }
     if (event.key === "ArrowDown" && !event.shiftKey) {
-      if (caret === draft.length && cycleHistoryDown()) {
+      if (
+        textareaEl &&
+        textareaEl.selectionStart === draft.length &&
+        cycleHistoryDown()
+      ) {
         event.preventDefault();
         return;
       }
@@ -678,7 +410,7 @@
         <span class="chat-queued-prompts-label">
           Queued ({queuedItems.length})
         </span>
-        <div class="chat-queued-prompts-mode" role="group" aria-label="Queue mode">
+        <div class="chat-queued-mode" role="group" aria-label="Queue mode">
           <button
             type="button"
             class={`chat-queued-mode-btn${queueMode === "queue" ? " is-active" : ""}`}
@@ -731,23 +463,6 @@
     onAddFiles={handleAddFiles}
     onRemove={handleRemoveAttachment}
   />
-  {#if mentions.length > 0}
-    <ul class="chat-mentions-tray" role="group" aria-label="Mentions">
-      {#each mentions as token (token.display)}
-        <li class="chat-mention-chip">
-          <span class="chat-mention-chip-text">{token.display}</span>
-          <button
-            type="button"
-            class="chat-mention-chip-remove"
-            aria-label={`Remove ${token.display}`}
-            onclick={() => removeMention(token)}
-          >
-            ✕
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
   <div class="chat-input-wrap">
     <textarea
       class="chat-input"
@@ -757,49 +472,20 @@
       placeholder="Message session"
       aria-label="Chat message"
       onkeydown={handleComposerKeydown}
-      oninput={handleInput}
-      onclick={updateCaret}
-      onkeyup={updateCaret}
       disabled={composerDisabled}
     ></textarea>
-    {#if slashState.open}
-      <div class="chat-composer-popover">
-        <SlashCommandPopover
-          commands={filteredCommands}
-          activeIndex={slashActiveIndex}
-          loading={commandCatalog.status === "loading"}
-          errorMessage={commandCatalog.status === "error" ? commandCatalog.lastErrorMessage : null}
-          onSelect={applySlashCommand}
-          onHover={(index) => (slashActiveIndex = index)}
-        />
-      </div>
-    {/if}
-    {#if mentionState.open}
-      <div class="chat-composer-popover">
-        <MentionPicker
-          files={mentionFiles}
-          agents={filteredAgents}
-          activeIndex={mentionActiveIndex}
-          loading={mentionFilesLoading}
-          errorMessage={mentionFilesError}
-          onSelectFile={applyFileMention}
-          onSelectAgent={applyAgentMention}
-          onHover={(index) => (mentionActiveIndex = index)}
-        />
-      </div>
-    {/if}
   </div>
   <div class="chat-composer-actions">
     <div class="chat-composer-toolbar">
-      <WorkspaceCatalogPicker
-        catalog={opencodeCatalog}
-        activeAgentId={activeOpencodeAgentId}
-        activeProviderId={activeOpencodeProviderId}
-        activeModelId={activeModel}
+      <SessionCatalogPicker
+        {runtimeId}
+        {runtimeLabel}
+        {catalog}
+        activeModelId={activeModelId}
+        activeModeId={activeModeId}
         disabled={isModelSelectionDisabled}
-        onSelectAgent={selectOpencodeAgent}
-        onSelectProvider={selectOpencodeProvider}
-        onSelectModel={(value) => selectModel(value)}
+        onSelectModel={selectModel}
+        onSelectMode={selectMode}
       />
     </div>
     <div class="chat-composer-controls">

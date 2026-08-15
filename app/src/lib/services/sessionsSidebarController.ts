@@ -14,12 +14,8 @@ export type SessionsSidebarControllerDeps = {
   onToggleCollapsed: (next: boolean) => void;
   onNewSession: () => void;
   onDeleteSession: (sessionId: string) => void;
-  /** M2-T1: rename — delegated to the handler (prompts + backend call). */
+  /** Rename — delegated to the handler (prompt + local-store update). */
   onRenameSession: (sessionId: string) => void | Promise<void>;
-  /** M2-T5: share — delegated to the handler. */
-  onShareSession: (sessionId: string) => void | Promise<void>;
-  /** M2-T7: export — delegated to the handler. */
-  onExportSession: (sessionId: string) => void | Promise<void>;
 };
 
 export function clampSessionsSidebarWidth(next: number): number {
@@ -113,19 +109,9 @@ export function createSessionsSidebarController(deps: SessionsSidebarControllerD
     deps.onDeleteSession(sessionId);
   }
 
-  /** M2-T1 — delegates to the handler which prompts + calls OpenCode. */
+  /** Delegates to the handler which prompts + updates the local store. */
   function renameSession(sessionId: string): void | Promise<void> {
     return deps.onRenameSession(sessionId);
-  }
-
-  /** M2-T5 — delegates to the handler which shares + copies the URL. */
-  function shareSession(sessionId: string): void | Promise<void> {
-    return deps.onShareSession(sessionId);
-  }
-
-  /** M2-T7 — delegates to the handler which builds + saves the markdown. */
-  function exportSession(sessionId: string): void | Promise<void> {
-    return deps.onExportSession(sessionId);
   }
 
   return {
@@ -136,7 +122,5 @@ export function createSessionsSidebarController(deps: SessionsSidebarControllerD
     handleNewSessionClick,
     confirmDeleteSession,
     renameSession,
-    shareSession,
-    exportSession,
   };
 }

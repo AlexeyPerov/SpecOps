@@ -6,7 +6,7 @@ import {
   findLastUserMessage,
   getLastRetryError,
   resolveSendTarget,
-  validateOpencodeBackendSend,
+  validateAgentHostSend,
   type ChatSendContextOptions,
   type ChatTurnSuccessResult,
   type SendChatMessageFailureReason,
@@ -53,9 +53,9 @@ export async function retryLastChatTurn(
     return { ok: false, reason: "provider_unavailable", message: OPENCODE_DISABLED_MESSAGE };
   }
 
-  const opencodeValidation = await validateOpencodeBackendSend(target.root, target.activeSessionId);
-  if (!opencodeValidation.ok) {
-    return opencodeValidation;
+  const validation = await validateAgentHostSend(target.root, target.activeSessionId);
+  if (!validation.ok) {
+    return validation;
   }
 
   const previousError = getLastRetryError(target.activeSessionId);
@@ -71,7 +71,8 @@ export async function retryLastChatTurn(
     root: target.root,
     activeSessionId: target.activeSessionId,
     turnId,
-    modelId: opencodeValidation.modelId,
+    modelId: validation.modelId,
+    modeId: validation.modeId,
     previousError,
   });
 }

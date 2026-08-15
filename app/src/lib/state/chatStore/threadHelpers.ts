@@ -14,9 +14,9 @@ export function cloneThread(thread: ChatThreadSnapshot | null): ChatThreadSnapsh
 }
 
 /**
- * Creates metadata for a new workspace session thread. Workspace threads store
- * OpenCode-only selection state (agent/provider/model); runtime binding is
- * owned by the session domain (phase B).
+ * Creates metadata for a new workspace session thread. Workspace threads carry
+ * the per-thread model/mode selection; the runtime binding itself is owned by
+ * the session index entry (phase B binding).
  */
 export function createThreadMetadata(
   sessionId: string,
@@ -35,7 +35,7 @@ export function applyMetadataPatch(
   patch: Partial<
     Pick<
       ChatThreadMetadata,
-      "summary" | "selectedModelId" | "opencodeAgentId" | "opencodeProviderId"
+      "summary" | "selectedModelId" | "selectedModeId" | "runtimeId"
     >
   >,
   updatedAt: string,

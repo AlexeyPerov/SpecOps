@@ -116,10 +116,10 @@ export interface ChatThreadMetadata {
   compactedMessageCount?: number;
   /** Per-thread selected model; omitted until explicitly set. */
   selectedModelId?: string;
-  /** Selected OpenCode agent (persona) for workspace threads (e.g. plan, build). */
-  opencodeAgentId?: string;
-  /** Selected OpenCode provider for workspace threads. */
-  opencodeProviderId?: string;
+  /** Per-thread selected mode (autonomy level); omitted until explicitly set. */
+  selectedModeId?: string;
+  /** Runtime this thread's session is bound to (immutable after first link). */
+  runtimeId?: string;
 }
 
 /** One persisted workspace session conversation (messages + per-session settings). */
@@ -134,16 +134,16 @@ export interface SessionIndexEntry {
   lastUsedAt: string;
   /** Session-only drafts are not written to disk until first user message. */
   isDraft?: boolean;
-  /** Linked OpenCode session for this workspace session tab (phase 3 runtime). */
-  opencodeSessionId?: string;
-  /** Last model used with the linked OpenCode session (restore hint). */
-  opencodeModelId?: string;
-  /** Last provider/runtime hint paired with the linked OpenCode session. */
-  opencodeProviderId?: string;
-  /** Public share URL when the linked session has been shared (M2-T5). */
-  opencodeShareUrl?: string;
-  /** OpenCode session this one was forked from, if any (M2-T3). */
-  opencodeParentSessionId?: string;
+  /** Runtime this session is bound to; immutable once a native link exists. */
+  runtimeId?: string;
+  /** Native session id on the bound runtime for this workspace session tab. */
+  nativeSessionId?: string;
+  /** Last model used with the linked native session (restore hint). */
+  modelId?: string;
+  /** Public share URL when the linked session has been shared. */
+  shareUrl?: string;
+  /** Native session this one was forked from, if any. */
+  parentSessionId?: string;
 }
 
 /** Per-workspace session list only — no conversation payload. */

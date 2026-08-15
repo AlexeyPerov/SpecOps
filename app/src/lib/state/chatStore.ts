@@ -44,6 +44,8 @@ export {
   resetSessionHydrationForTests,
 };
 
+export type { SessionBinding } from "./chatStore/sessions";
+
 const initialState: ChatStoreState = {
   activeChatScopeKey: null,
   workspaces: {},

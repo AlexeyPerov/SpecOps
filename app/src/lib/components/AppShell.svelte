@@ -19,8 +19,6 @@
   import ProjectPanel from "./ProjectPanel.svelte";
   import SessionsSidebar from "./SessionsSidebar.svelte";
   import ChatPanel from "./ChatPanel.svelte";
-  import TodoPanel from "./TodoPanel.svelte";
-  import DiffViewerPanel from "./DiffViewerPanel.svelte";
   import ProjectSearchPanel from "./ProjectSearchPanel.svelte";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { ProjectTreeNode } from "../services/projectTree";
@@ -84,14 +82,8 @@
     onSelectSession: (sessionId: string) => void;
     onNewSession: () => void;
     onDeleteSession: (sessionId: string) => void | Promise<void>;
-    /** M2-T1: rename the agent tab + linked session. */
+    /** Rename the agent tab (local store only). */
     onRenameSession?: (sessionId: string) => void | Promise<void>;
-    /** M2-T5: copy a public share URL for the linked session. */
-    onShareSession?: (sessionId: string) => void | Promise<void>;
-    /** M2-T7: export the transcript to a Markdown file. */
-    onExportSession?: (sessionId: string) => void | Promise<void>;
-    /** M2-T2: open the unified per-workspace session list panel. */
-    onOpenSessions?: () => void | Promise<void>;
   }
 
   export interface AppShellProjectTreeProps {
@@ -197,23 +189,8 @@
     onOpenFileInPane: (filePath: string, paneId: string) => void | Promise<void>;
     fileDropTargetPaneId?: string | null;
     onFileDropPaneChange?: (paneId: string | null) => void;
-    /** M2-T3: fork the active session from a message into a new tab. */
-    onForkSession?: (messageId?: string) => void | Promise<void>;
-    /** M2-T4: revert the active session to a message in place (undo). */
-    onRevertSession?: (messageId?: string) => void | Promise<void>;
-    /** M2-T4: restore a reverted session in place (redo). */
-    onUnrevertSession?: () => void | Promise<void>;
-    /** M2-T5: share / unshare the active session. */
-    onShareSession?: () => void | Promise<void>;
-    onUnshareSession?: () => void | Promise<void>;
-    /** M2-T6: generate / refresh the session summary. */
-    onSummarizeSession?: () => void | Promise<void>;
-    /** M2-T7: export the active transcript to Markdown. */
-    onExportSession?: () => void | Promise<void>;
-    /** M2-T5: current share URL for the active session, if any. */
-    activeShareUrl?: string | null;
-    /** M2-T3: parent session id, if the active session is a fork. */
-    activeParentSessionId?: string | null;
+    /** Restart the supervised agent host (crash/stuck recovery). */
+    onRestartRuntime?: () => void | Promise<void>;
   }
 
   export interface AppShellStatusBarProps {
@@ -327,30 +304,11 @@
     onCancel: () => void;
   }
 
-  /**
-   * M5-T1 — agent TODO panel. Shown as a right-side rail when a workspace
-   * agent tab with a linked OpenCode session is active. `open` toggles it;
-   * `workspaceRootPath` + `sessionId` scope the `session.todo` fetch.
-   */
-  export interface AppShellTodoPanelProps {
-    open: boolean;
-    workspaceRootPath: string | null;
-    sessionId: string | null;
-    onToggle?: () => void;
-    onJumpToMessage?: () => void;
-  }
 
   /**
    * M5-T2 — agent diff viewer panel. Same scoping rules as the TODO panel;
    * `onOpenFile` lets a row open the file in the editor.
    */
-  export interface AppShellDiffPanelProps {
-    open: boolean;
-    workspaceRootPath: string | null;
-    sessionId: string | null;
-    onToggle?: () => void;
-    onOpenFile?: (filePath: string) => void;
-  }
 
   /**
    * M1.2 — Quick Open file picker props. The picker reuses the shared
@@ -410,8 +368,6 @@
     overlays,
     sessionListPanel,
     addMultipleWorkspaces,
-    todoPanel,
-    diffPanel,
     timelineDialog,
     quickOpen,
     commandPalette,
@@ -436,8 +392,6 @@
     overlays: AppShellOverlayProps;
     sessionListPanel?: AppShellSessionListPanelProps;
     addMultipleWorkspaces?: AppShellAddMultipleWorkspacesProps;
-    todoPanel?: AppShellTodoPanelProps;
-    diffPanel?: AppShellDiffPanelProps;
     timelineDialog?: AppShellTimelineDialogProps;
     quickOpen?: AppShellQuickOpenProps;
     commandPalette?: AppShellCommandPaletteProps;
@@ -534,14 +488,6 @@
 
   function handleActivePaneElement(element: HTMLElement | null): void {
     editorPaneEl = element;
-  }
-
-  function handleToggleTodoPanel(): void {
-    todoPanel?.onToggle?.();
-  }
-
-  function handleToggleDiffPanel(): void {
-    diffPanel?.onToggle?.();
   }
 
   function handleDeleteSession(sessionId: string): void {
@@ -709,9 +655,6 @@
         onNewSession={sessionsSidebar.onNewSession}
         onDeleteSession={handleDeleteSession}
         onRenameSession={sessionsSidebar.onRenameSession}
-        onShareSession={sessionsSidebar.onShareSession}
-        onExportSession={sessionsSidebar.onExportSession}
-        onOpenSessions={sessionsSidebar.onOpenSessions}
       />
     {/if}
     <section class="editor-shell" bind:this={editorShellEl}>
@@ -767,22 +710,7 @@
               onUntitledTitleRefresh={editor.onUntitledTitleRefresh}
               onScrollTopChange={editor.onScrollTopChange}
               onDeleteSessionFromChat={editor.onDeleteSessionFromChat}
-              onForkSession={editor.onForkSession}
-              onRevertSession={editor.onRevertSession}
-              onUnrevertSession={editor.onUnrevertSession}
-              onShareSession={editor.onShareSession}
-              onUnshareSession={editor.onUnshareSession}
-              onSummarizeSession={editor.onSummarizeSession}
-              onExportSession={editor.onExportSession}
-              activeShareUrl={editor.activeShareUrl}
-              activeParentSessionId={editor.activeParentSessionId}
-              canToggleTodoPanel={Boolean(todoPanel)}
-              todoPanelOpen={Boolean(todoPanel?.open)}
-              onToggleTodoPanel={handleToggleTodoPanel}
-              canToggleDiffPanel={Boolean(diffPanel)}
-              diffPanelOpen={Boolean(diffPanel?.open)}
-              onToggleDiffPanel={handleToggleDiffPanel}
-              onOpenTimeline={timelineDialog?.onToggle ?? overlays.onOpenTimeline}
+              onRestartRuntime={editor.onRestartRuntime}
               onGoToLine={editor.onGoToLine}
               notify={editor.notify}
             />
@@ -818,20 +746,6 @@
         onOpenFileInPane={projectTree.onOpenFileInPane ?? null}
         onFileDropPaneChange={handleProjectFileDropPaneChange}
         notify={projectTree.notify}
-      />
-    {/if}
-    {#if diffPanel?.open && diffPanel.workspaceRootPath && diffPanel.sessionId}
-      <DiffViewerPanel
-        workspaceRootPath={diffPanel.workspaceRootPath}
-        sessionId={diffPanel.sessionId}
-        onOpenFile={diffPanel.onOpenFile}
-      />
-    {/if}
-    {#if todoPanel?.open && todoPanel.workspaceRootPath && todoPanel.sessionId}
-      <TodoPanel
-        workspaceRootPath={todoPanel.workspaceRootPath}
-        sessionId={todoPanel.sessionId}
-        onJumpToMessage={todoPanel.onJumpToMessage}
       />
     {/if}
   </div>

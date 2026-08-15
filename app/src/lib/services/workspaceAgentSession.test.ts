@@ -5,10 +5,7 @@ import {
   sessionExistsInIndex,
   findNextOpenSessionTabAfterClose,
   flattenSidebarSessions,
-  isSessionMappingValid,
-  mappedSessionForId,
   nextSidebarSessionId,
-  reconcileSessionMapping,
   openSessionTabIds,
   resolveRestoredActiveSession,
   selectedTabAfterMissingLastSession,
@@ -110,64 +107,5 @@ describe("workspaceAgentSession", () => {
     expect(sessionExistsInIndex(index, "agent-b")).toBe(false);
   });
 
-  it("returns mapped opencode session metadata for an agent", () => {
-    const index: SessionIndexEntry[] = [
-      {
-        id: "agent-a",
-        title: "A",
-        lastUsedAt: "2026-05-28T12:00:00.000Z",
-        opencodeSessionId: "sess-1",
-        opencodeModelId: "gpt-4o-mini",
-        opencodeProviderId: "opencode",
-      },
-    ];
-    expect(mappedSessionForId(index, "agent-a")).toEqual({
-      sessionId: "agent-a",
-      opencodeSessionId: "sess-1",
-      modelId: "gpt-4o-mini",
-      providerId: "opencode",
-    });
-    expect(mappedSessionForId(index, "missing")).toBeNull();
-  });
-
-  it("validates mapping presence against known session ids", () => {
-    const known = new Set(["sess-1"]);
-    expect(
-      isSessionMappingValid(
-        { sessionId: "agent-a", opencodeSessionId: "sess-1" },
-        known,
-      ),
-    ).toBe(true);
-    expect(
-      isSessionMappingValid(
-        { sessionId: "agent-a", opencodeSessionId: "sess-2" },
-        known,
-      ),
-    ).toBe(false);
-    expect(isSessionMappingValid(null, known)).toBe(false);
-  });
-
-  it("reconciles missing mapping to deterministic replacement session", () => {
-    const known = new Set(["sess-1"]);
-    expect(
-      reconcileSessionMapping({
-        mapping: { sessionId: "agent-a", opencodeSessionId: "sess-1" },
-        existingSessionIds: known,
-        createdSessionId: "sess-created",
-      }),
-    ).toEqual({
-      sessionId: "sess-1",
-      shouldReplaceMapping: false,
-    });
-    expect(
-      reconcileSessionMapping({
-        mapping: { sessionId: "agent-a", opencodeSessionId: "sess-missing" },
-        existingSessionIds: known,
-        createdSessionId: "sess-created",
-      }),
-    ).toEqual({
-      sessionId: "sess-created",
-      shouldReplaceMapping: true,
-    });
-  });
 });
+

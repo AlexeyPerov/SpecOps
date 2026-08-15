@@ -1,20 +1,25 @@
-import type {
-  WorkspaceAgentSendAttachment,
-  WorkspaceAgentSendContext,
-} from "./backends/workspaceAgentBackend";
-import type { MentionToken } from "./backends/opencodeSearch";
+import type { ChatSendContext, ChatSendContextAttachment } from "./chatSendPipeline";
 
 /**
- * Pure helpers for assembling the composer's per-send context payload (M3).
+ * Pure helpers for assembling the composer's per-send context payload.
  *
  * The composer keeps a draft string plus a list of mention tokens and an
- * attachment tray. On send these are merged into a single
- * `WorkspaceAgentSendContext` that flows through `chatSendPipeline` →
- * `backend.send` → the OpenCode prompt `parts`.
+ * attachment tray. On send these are merged into a single runtime-neutral
+ * {@link ChatSendContext} that flows through `chatSendPipeline` → the Agent
+ * Host `turn.send` request.
  *
  * Mention tokens encode the kind (`@file:` / `@agent:`) so the assembler can
  * route each mention to the right context field.
  */
+
+/** Token shape the composer stores per inserted mention. */
+export interface MentionToken {
+  kind: "file" | "agent";
+  /** `@file:path/to/file.ts` or `@agent:name`. */
+  display: string;
+  /** Raw value without the `@kind:` prefix (the path or the agent id). */
+  value: string;
+}
 
 /** A single file attachment held in the composer tray before send. */
 export interface ComposerAttachment {
@@ -22,7 +27,7 @@ export interface ComposerAttachment {
   id: string;
   filename: string;
   mime: string;
-  /** Object URL or absolute file URL — forwarded to OpenCode as the `url`. */
+  /** Object URL or absolute file URL — forwarded to the runtime as `url`. */
   url: string;
   /** `true` for image mimes so the tray renders a thumbnail. */
   isImage: boolean;
@@ -53,7 +58,7 @@ export function isImageMime(mime: string): boolean {
 }
 
 /** Infers a mime from a `File.type` / extension. Falls back to
- * `application/octet-stream` so OpenCode always gets a non-empty `mime`. */
+ * `application/octet-stream` so the runtime always gets a non-empty `mime`. */
 export function inferAttachmentMime(file: { type?: string; name?: string }): string {
   const trimmed = (file.type ?? "").trim().toLowerCase();
   if (trimmed.length > 0) {
@@ -102,7 +107,7 @@ export function inferAttachmentMime(file: { type?: string; name?: string }): str
 export function buildSendContext(input: {
   mentions: readonly MentionToken[];
   attachments: readonly ComposerAttachment[];
-}): WorkspaceAgentSendContext | undefined {
+}): ChatSendContext | undefined {
   const mentions = input.mentions;
   const attachments = input.attachments;
   const filePaths: string[] = [];
@@ -118,7 +123,7 @@ export function buildSendContext(input: {
       agentNames.push(value);
     }
   }
-  const sendAttachments: WorkspaceAgentSendAttachment[] = attachments
+  const sendAttachments: ChatSendContextAttachment[] = attachments
     .filter((attachment) => attachment.url.trim().length > 0 && attachment.mime.trim().length > 0)
     .map((attachment) => ({
       mime: attachment.mime.trim(),
@@ -131,7 +136,7 @@ export function buildSendContext(input: {
   if (filePaths.length === 0 && agentNames.length === 0 && sendAttachments.length === 0) {
     return undefined;
   }
-  const context: WorkspaceAgentSendContext = {};
+  const context: ChatSendContext = {};
   if (filePaths.length > 0) {
     context.filePaths = filePaths;
   }

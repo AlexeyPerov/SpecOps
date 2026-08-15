@@ -29,14 +29,8 @@
     onSelectSession?: (sessionId: string) => void;
     onNewSession?: () => void;
     onDeleteSession?: (sessionId: string) => void;
-    /** M2-T1: rename the session tab + linked session. */
+    /** Rename the session tab (local store only). */
     onRenameSession?: (sessionId: string) => void | Promise<void>;
-    /** M2-T5: copy a public share URL for the linked session. */
-    onShareSession?: (sessionId: string) => void | Promise<void>;
-    /** M2-T7: export the transcript to a Markdown file. */
-    onExportSession?: (sessionId: string) => void | Promise<void>;
-    /** M2-T2: open the unified per-workspace session list panel. */
-    onOpenSessions?: () => void | Promise<void>;
   }
 
   let {
@@ -51,9 +45,6 @@
     onNewSession = () => {},
     onDeleteSession = () => {},
     onRenameSession = () => {},
-    onShareSession = () => {},
-    onExportSession = () => {},
-    onOpenSessions = () => {},
   }: Props = $props();
 
   let searchQuery = $state("");
@@ -76,8 +67,6 @@
     onNewSession: () => onNewSession(),
     onDeleteSession: (id) => onDeleteSession(id),
     onRenameSession: (id) => onRenameSession(id),
-    onShareSession: (id) => onShareSession(id),
-    onExportSession: (id) => onExportSession(id),
   });
 
   $effect(() => {
@@ -148,37 +137,6 @@
     void sidebarController.renameSession(sessionId);
   }
 
-  function handleShareFromContextMenu(): void {
-    if (!contextMenu) {
-      return;
-    }
-    const sessionId = contextMenu.sessionId;
-    closeContextMenu();
-    void sidebarController.shareSession(sessionId);
-  }
-
-  function handleExportFromContextMenu(): void {
-    if (!contextMenu) {
-      return;
-    }
-    const sessionId = contextMenu.sessionId;
-    closeContextMenu();
-    void sidebarController.exportSession(sessionId);
-  }
-
-  /**
-   * Whether the context-menu target has a linked OpenCode session. Actions
-   * that require a server-side session (share / export) are hidden for draft
-   * sessions and chat-http chats that have no link yet. Rename is always shown.
-   */
-  let contextMenuHasSessionLink = $derived.by(() => {
-    if (!contextMenu) {
-      return false;
-    }
-    return Boolean(
-      sessions.find((session) => session.id === contextMenu?.sessionId)?.opencodeSessionId,
-    );
-  });
 </script>
 
 <aside
@@ -230,16 +188,6 @@
 
   {#if !collapsed}
     <div class="sessions-sidebar-body">
-      {#if onOpenSessions}
-        <button
-          class="sessions-sidebar-button sessions-sidebar-import"
-          type="button"
-          onclick={() => onOpenSessions()}
-          title="Browse all OpenCode sessions for this workspace, including ones not opened here yet"
-        >
-          Import
-        </button>
-      {/if}
       <label class="sessions-search-field">
         <span class="sessions-search-label">{`Search ${entryPluralLabel}`}</span>
         <input
@@ -296,24 +244,6 @@
     >
       Rename {entrySingularLabel}
     </button>
-    {#if contextMenuHasSessionLink}
-      <button
-        class="sessions-context-item"
-        type="button"
-        role="menuitem"
-        onclick={handleShareFromContextMenu}
-      >
-        Copy share link
-      </button>
-      <button
-        class="sessions-context-item"
-        type="button"
-        role="menuitem"
-        onclick={handleExportFromContextMenu}
-      >
-        Export transcript…
-      </button>
-    {/if}
     <button
       class="sessions-context-item sessions-context-item-danger"
       type="button"

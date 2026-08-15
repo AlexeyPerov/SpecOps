@@ -1,7 +1,7 @@
 import { sendChatMessage, retryLastChatTurn } from "./sendChatMessage";
 import { chatStore } from "../state/chatStore";
 import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
-import type { WorkspaceAgentSendContext } from "./backends/workspaceAgentBackend";
+import type { ChatSendContext } from "./chatSendPipeline";
 
 export function persistActiveThreadSnapshot(): void {
   const root = chatStore.getActiveChatScopeKey();
@@ -30,12 +30,12 @@ export interface ComposerSendActionsDeps {
 }
 
 /**
- * Extra options the composer can pass per-send (M3). Mention/attachment
- * context is forwarded into the workspace-agent backend; `onAfterSend` lets
- * the composer record the sent prompt in history regardless of send result.
+ * Extra options the composer can pass per-send. Mention/attachment context is
+ * forwarded into the host turn request; `onAfterSend` lets the composer record
+ * the sent prompt in history regardless of send result.
  */
 export interface ComposerSendOptions {
-  context?: WorkspaceAgentSendContext;
+  context?: ChatSendContext;
   onAfterSend?: (prompt: string) => void;
 }
 

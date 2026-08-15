@@ -12,10 +12,10 @@ export const WORKSPACE_ACCESS_LOST_MESSAGE =
   "Workspace file access was lost. Chat is paused until access is restored.";
 
 export const OPENCODE_DISABLED_MESSAGE =
-  "OpenCode is disabled for workspace sessions. Enable it in Settings → Workspaces → OpenCode to use sessions.";
+  "Workspace sessions are disabled. Enable them in Settings → Workspaces to use sessions.";
 
 export const OPENCODE_DISABLED_RECOVERY =
-  "Open Settings → Workspaces → OpenCode and turn on Use OpenCode for workspace sessions.";
+  "Open Settings → Workspaces and turn on workspace sessions.";
 
 export const PROVIDER_REQUEST_FAILURE_MESSAGE = "The assistant could not finish this response.";
 
@@ -39,8 +39,8 @@ export function getAccessBlockedCopy(reason: WorkspaceAccessReason): ChatBlocked
     case WorkspaceAccessReason.MissingProviderConfig:
       return {
         title: WORKSPACE_ACCESS_BLOCKED_TITLE,
-        message: "Finish OpenCode setup before sending messages.",
-        recoveryHint: "Open Settings → Workspaces → OpenCode to complete setup.",
+        message: "Finish session setup before sending messages.",
+        recoveryHint: "Open Settings → Workspaces to complete session setup.",
       };
     case WorkspaceAccessReason.ProviderUnsupported:
       return {

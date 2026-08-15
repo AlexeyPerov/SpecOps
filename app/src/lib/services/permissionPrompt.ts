@@ -1,4 +1,4 @@
-import type { WorkspacePermissionReply } from "../ai/backends/workspaceAgentBackend";
+import type { PermissionReply } from "../session/events";
 
 export interface PermissionPromptRequest {
   permissionId: string;
@@ -7,7 +7,7 @@ export interface PermissionPromptRequest {
 }
 
 export type PermissionPromptResult =
-  | { reply: Exclude<WorkspacePermissionReply, "reject"> }
+  | { reply: Exclude<PermissionReply, "reject"> }
   | { reply: "reject" };
 
 type PermissionPromptRunner = (request: PermissionPromptRequest) => Promise<PermissionPromptResult>;

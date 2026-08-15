@@ -64,7 +64,7 @@ export interface SyncSessionTabEffectInput {
   lastChatScopeKey: string | null;
   restoreWorkspaceSession: (
     workspaceRoot: string,
-    options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
+    options?: { preferCachedIndex?: boolean },
   ) => Promise<void>;
   setLastChatScopeKey: (key: string | null) => void;
   /**
@@ -130,7 +130,6 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
     chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
     const restoreStartedAt = nowMs();
     void restoreWorkspaceSession(normalizedWorkspaceRoot, {
-      skipOpencodeReconcile: !isSessionTabActive,
       preferCachedIndex: !isSessionTabActive,
     })
       .then(() =>
@@ -139,7 +138,6 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
           durationMs: elapsedMs(restoreStartedAt),
           workspaceRoot: normalizedWorkspaceRoot,
           isSessionTabActive,
-          skipOpencodeReconcile: !isSessionTabActive,
           preferCachedIndex: !isSessionTabActive,
           ok: true,
         }),
@@ -150,7 +148,6 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
           durationMs: elapsedMs(restoreStartedAt),
           workspaceRoot: normalizedWorkspaceRoot,
           isSessionTabActive,
-          skipOpencodeReconcile: !isSessionTabActive,
           preferCachedIndex: !isSessionTabActive,
           ok: false,
         });

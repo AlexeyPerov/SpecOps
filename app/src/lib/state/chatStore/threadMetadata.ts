@@ -8,7 +8,7 @@ import { getOrCreateWorkspaceState, patchWorkspaceState, threadForSession } from
 type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => void;
 
 type ThreadMetadataPatch = Partial<
-  Pick<ChatThreadMetadata, "summary" | "selectedModelId" | "opencodeAgentId" | "opencodeProviderId">
+  Pick<ChatThreadMetadata, "summary" | "selectedModelId" | "selectedModeId" | "runtimeId">
 >;
 
 export function createThreadMetadataSlice(deps: {

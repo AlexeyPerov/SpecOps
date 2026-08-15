@@ -1,39 +1,39 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { chatStore } from "../chatStore";
 
-describe("chatStore opencode workspace metadata", () => {
+describe("chatStore neutral workspace metadata", () => {
   beforeEach(() => {
     chatStore.reset();
     chatStore.setActiveWorkspaceRoot("/work/a");
   });
 
-  it("stores opencodeAgentId via updateThreadMetadata", () => {
-    expect(chatStore.getMetadata()?.opencodeAgentId).toBeUndefined();
-    const updated = chatStore.updateThreadMetadata({ opencodeAgentId: "build" });
+  it("stores selectedModeId via updateThreadMetadata", () => {
+    expect(chatStore.getMetadata()?.selectedModeId).toBeUndefined();
+    const updated = chatStore.updateThreadMetadata({ selectedModeId: "plan" });
     expect(updated).toBe(true);
-    expect(chatStore.getMetadata()?.opencodeAgentId).toBe("build");
+    expect(chatStore.getMetadata()?.selectedModeId).toBe("plan");
   });
 
-  it("stores opencodeProviderId via updateThreadMetadata", () => {
-    expect(chatStore.getMetadata()?.opencodeProviderId).toBeUndefined();
-    const updated = chatStore.updateThreadMetadata({ opencodeProviderId: "anthropic" });
+  it("stores runtimeId via updateThreadMetadata", () => {
+    expect(chatStore.getMetadata()?.runtimeId).toBeUndefined();
+    const updated = chatStore.updateThreadMetadata({ runtimeId: "fake" });
     expect(updated).toBe(true);
-    expect(chatStore.getMetadata()?.opencodeProviderId).toBe("anthropic");
+    expect(chatStore.getMetadata()?.runtimeId).toBe("fake");
   });
 
-  it("updates opencodeAgentId independently from opencodeProviderId", () => {
-    chatStore.updateThreadMetadata({ opencodeAgentId: "plan", opencodeProviderId: "openai" });
-    chatStore.updateThreadMetadata({ opencodeAgentId: "build" });
-    expect(chatStore.getMetadata()?.opencodeAgentId).toBe("build");
-    expect(chatStore.getMetadata()?.opencodeProviderId).toBe("openai");
+  it("updates selectedModeId independently from selectedModelId", () => {
+    chatStore.updateThreadMetadata({ selectedModelId: "fake-model", selectedModeId: "default" });
+    chatStore.updateThreadMetadata({ selectedModeId: "plan" });
+    expect(chatStore.getMetadata()?.selectedModelId).toBe("fake-model");
+    expect(chatStore.getMetadata()?.selectedModeId).toBe("plan");
   });
 
-  it("preserves opencode fields alongside existing metadata", () => {
-    chatStore.updateThreadMetadata({ selectedModelId: "claude-4" });
-    chatStore.updateThreadMetadata({ opencodeAgentId: "build", opencodeProviderId: "anthropic" });
+  it("preserves neutral fields alongside existing metadata", () => {
+    chatStore.updateThreadMetadata({ selectedModelId: "fake-model" });
+    chatStore.updateThreadMetadata({ selectedModeId: "plan", runtimeId: "fake" });
     const meta = chatStore.getMetadata();
-    expect(meta?.selectedModelId).toBe("claude-4");
-    expect(meta?.opencodeAgentId).toBe("build");
-    expect(meta?.opencodeProviderId).toBe("anthropic");
+    expect(meta?.selectedModelId).toBe("fake-model");
+    expect(meta?.selectedModeId).toBe("plan");
+    expect(meta?.runtimeId).toBe("fake");
   });
 });

@@ -21,7 +21,7 @@ export interface AppShellHostApi {
   consumeOpenedPaths: () => string[];
   restoreWorkspaceSession: (
     workspaceRoot: string,
-    options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
+    options?: { preferCachedIndex?: boolean },
   ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
   notifyProjectTreeFilesystemChange: (
@@ -38,10 +38,6 @@ export interface AppShellHostApi {
   toggleConsole: () => void;
   applyResponsiveLayoutRules: () => void;
   setMarkdownViewMode: (mode: "edit" | "split" | "preview") => void;
-  handleListWorkspaceSessions: (
-    options?: { search?: string; limit?: number },
-  ) => Promise<unknown[]>;
-  handleOpenExternalSession: (sessionId: string) => Promise<void>;
 }
 
 /** Bound host instance captured via `bind:this`. */

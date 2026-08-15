@@ -27,7 +27,6 @@
   import { collectPaneElementsFromDom } from "./paneDropTargets";
   import { activeViewKindInActivePane } from "./editorRouting";
   import { appState } from "../state/appState";
-  import { chatStore } from "../state/chatStore";
   import type {
     ChatMessage,
     ContextId,
@@ -79,27 +78,6 @@
     status: "",
   };
 
-  /**
-   * Resolves a workspace-relative path (e.g. from an OpenCode diff payload)
-   * to an absolute path. Passes absolute paths through unchanged so callers
-   * can mix both shapes safely. (Was inline in +page.svelte; lives here now
-   * that the diff-panel "open file" action is wired through AppShellHost.)
-   */
-  function resolveWorkspaceRelativePath(
-    workspaceRoot: string | null,
-    relativePath: string,
-  ): string {
-    const trimmed = relativePath.trim();
-    if (!workspaceRoot || trimmed.length === 0) {
-      return trimmed;
-    }
-    if (trimmed.startsWith("/")) {
-      return trimmed;
-    }
-    const root = workspaceRoot.replace(/\/+$/, "");
-    return `${root}/${trimmed}`;
-  }
-
   // Re-export so +page.svelte can `import type { AppShellHostBound }`.
   export type { AppShellHostBound } from "./appShellHostTypes";
 
@@ -142,9 +120,6 @@
     documents: DocumentState[];
     activeDocument: DocumentState | undefined;
     activeMessages: readonly ChatMessage[];
-    activeOpencodeSessionId: string | null;
-    activeShareUrl: string | null;
-    activeParentSessionId: string | null;
     activeWorkspaceRoot: string | null;
     documentView: AppShellDocumentView;
     workspaceLayout: WorkspaceLayoutState;
@@ -171,12 +146,6 @@
     // --- Settings-derived flags ---
     opencodeEnabled: boolean;
     canOpenLogsPanel: boolean;
-
-    // --- Todo / diff panels (page-owned booleans + toggle callbacks) ---
-    todoPanelOpen: boolean;
-    diffPanelOpen: boolean;
-    onToggleTodoPanel: () => void;
-    onToggleDiffPanel: () => void;
 
     // --- fileDropTargetPaneId setter (page-owned state) ---
     onFileDropPaneChange: (paneId: string | null) => void;
@@ -234,9 +203,6 @@
     documents,
     activeDocument,
     activeMessages,
-    activeOpencodeSessionId,
-    activeShareUrl,
-    activeParentSessionId,
     activeWorkspaceRoot,
     documentView,
     workspaceLayout,
@@ -259,10 +225,6 @@
     openSessionIds,
     opencodeEnabled,
     canOpenLogsPanel,
-    todoPanelOpen,
-    diffPanelOpen,
-    onToggleTodoPanel,
-    onToggleDiffPanel,
     onFileDropPaneChange,
     editorWorkbench,
     editorTools,
@@ -454,8 +416,6 @@
     toggleConsole: layoutHandlers.toggleConsole,
     applyResponsiveLayoutRules: layoutHandlers.applyResponsiveLayoutRules,
     setMarkdownViewMode: layoutHandlers.setMarkdownViewMode,
-    handleListWorkspaceSessions: agentHandlers.handleListWorkspaceSessions,
-    handleOpenExternalSession: agentHandlers.handleOpenExternalSession,
   };
 
   export { api };
@@ -572,14 +532,6 @@
     appState.reorderWorkspaces(fromIndex, toIndex);
   }
 
-  function handleSessionsShareSession(sessionId: string): void {
-    void agentHandlers.handleShareSession(sessionId);
-  }
-
-  function handleOpenSessionList(): void {
-    overlayHost?.api.openOverlay("sessionList");
-  }
-
   function handleProjectTreeGetPaneElements(): ReturnType<typeof collectPaneElementsFromDom> {
     return collectPaneElementsFromDom();
   }
@@ -609,55 +561,6 @@
     onFileDropPaneChange(paneId);
   }
 
-  function handleForkSession(messageId?: string): void {
-    const sessionId = chatStore.getActiveSessionId();
-    if (sessionId) {
-      void agentHandlers.handleForkSession(sessionId, messageId);
-    }
-  }
-
-  function handleRevertSession(messageId?: string): void {
-    const sessionId = chatStore.getActiveSessionId();
-    if (sessionId) {
-      void agentHandlers.handleRevertSession(sessionId, messageId);
-    }
-  }
-
-  function handleUnrevertSession(): void {
-    const sessionId = chatStore.getActiveSessionId();
-    if (sessionId) {
-      void agentHandlers.handleUnrevertSession(sessionId);
-    }
-  }
-
-  function handleShareActiveSession(): void {
-    const sessionId = chatStore.getActiveSessionId();
-    if (sessionId) {
-      void agentHandlers.handleShareSession(sessionId);
-    }
-  }
-
-  function handleUnshareActiveSession(): void {
-    const sessionId = chatStore.getActiveSessionId();
-    if (sessionId) {
-      void agentHandlers.handleUnshareSession(sessionId);
-    }
-  }
-
-  function handleSummarizeActiveSession(): void {
-    const sessionId = chatStore.getActiveSessionId();
-    if (sessionId) {
-      void agentHandlers.handleSummarizeSession(sessionId);
-    }
-  }
-
-  function handleExportActiveSession(): void {
-    const sessionId = chatStore.getActiveSessionId();
-    if (sessionId) {
-      void agentHandlers.handleExportSession(sessionId);
-    }
-  }
-
   function handleWorkspaceContextMenuMoveUp(): void {
     workspaceContextMenuActions.move("up");
   }
@@ -666,13 +569,8 @@
     workspaceContextMenuActions.move("down");
   }
 
-  function handleOpenTimeline(): void {
-    overlayHost?.api.openOverlay("timeline");
-  }
-
-  function handleDiffPanelOpenFile(filePath: string): void {
-    const resolved = resolveWorkspaceRelativePath(activeWorkspaceRoot, filePath);
-    void projectTreeHandlers.handleOpenProjectTreeFile(resolved);
+  function handleRestartRuntime(): void {
+    void agentHandlers.handleRestartAgentHost();
   }
 </script>
 
@@ -740,9 +638,6 @@
     onNewSession: agentHandlers.handleNewSession,
     onDeleteSession: agentHandlers.handleDeleteSession,
     onRenameSession: agentHandlers.handleRenameSession,
-    onShareSession: handleSessionsShareSession,
-    onExportSession: agentHandlers.handleExportSession,
-    onOpenSessions: handleOpenSessionList,
   }}
   projectTree={{
     workspaceRoot: activeWorkspaceRoot,
@@ -822,15 +717,7 @@
     onDeleteSessionFromChat: agentHandlers.handleDeleteSessionFromChat,
     onGoToLine: editorHandlers.runGoToLine,
     notify,
-    onForkSession: handleForkSession,
-    onRevertSession: handleRevertSession,
-    onUnrevertSession: handleUnrevertSession,
-    onShareSession: handleShareActiveSession,
-    onUnshareSession: handleUnshareActiveSession,
-    onSummarizeSession: handleSummarizeActiveSession,
-    onExportSession: handleExportActiveSession,
-    activeShareUrl,
-    activeParentSessionId,
+    onRestartRuntime: handleRestartRuntime,
   }}
   statusBar={{
     statusPath: documentView.statusPath,
@@ -854,20 +741,7 @@
   }}
   overlays={{
     notify,
-    onOpenTimeline: handleOpenTimeline,
-  }}
-  todoPanel={{
-    open: todoPanelOpen && Boolean(activeWorkspaceRoot) && Boolean(activeOpencodeSessionId),
-    workspaceRootPath: activeWorkspaceRoot,
-    sessionId: activeOpencodeSessionId,
-    onToggle: onToggleTodoPanel,
-  }}
-  diffPanel={{
-    open: diffPanelOpen && Boolean(activeWorkspaceRoot) && Boolean(activeOpencodeSessionId),
-    workspaceRootPath: activeWorkspaceRoot,
-    sessionId: activeOpencodeSessionId,
-    onToggle: onToggleDiffPanel,
-    onOpenFile: handleDiffPanelOpenFile,
+    onOpenTimeline: undefined,
   }}
   timelineDialog={undefined}
   quickOpen={undefined}

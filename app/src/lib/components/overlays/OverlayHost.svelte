@@ -57,7 +57,7 @@
   interface Props {
     activeWorkspaceRoot: string | null;
     activeDocumentMarkdownViewMode: "edit" | "split" | "preview" | undefined;
-    activeOpencodeSessionId: string | null;
+    activeNativeSessionId: string | null;
     activeMessages: readonly import("../../domain/contracts").ChatMessage[];
     /** OpenCode session ids already opened as agent tabs (sidebar index). */
     openSessionIds: ReadonlySet<string>;
@@ -75,10 +75,14 @@
     runCommand: (commandId: AppCommandId) => void;
     setMarkdownViewMode: (mode: "edit" | "split" | "preview") => void;
     openAndActivatePath: (path: string) => Promise<void>;
-    handleListWorkspaceSessions: (options: {
+    /**
+     * Session-browsing hooks. Optional: the entry point is hidden while no
+     * registered runtime exposes native session browsing through the host.
+     */
+    handleListWorkspaceSessions?: (options: {
       search?: string;
     }) => Promise<WorkspaceAgentSessionDetails[]>;
-    handleOpenExternalSession: (sessionId: string, title?: string) => Promise<void>;
+    handleOpenExternalSession?: (sessionId: string, title?: string) => Promise<void>;
     getWorkspaceFileCatalogRegistry: () => import("../../services/workspaceFileCatalogRegistry").WorkspaceFileCatalogRegistry;
     getEditorWorkbench: () => import("../../editor/editorWorkbenchRuntime").EditorWorkbenchRuntime;
     getEditorTools: () => import("../../editor/editorToolController").EditorToolController;
@@ -87,7 +91,7 @@
   let {
     activeWorkspaceRoot,
     activeDocumentMarkdownViewMode,
-    activeOpencodeSessionId,
+    activeNativeSessionId,
     activeMessages,
     openSessionIds,
     editorLayoutActivePaneId,
@@ -305,9 +309,14 @@
       sessionListSessions = sessions;
     },
     getSessionListSearch: () => sessionListSearch,
-    handleListWorkspaceSessions: (options) => handleListWorkspaceSessions(options),
+    handleListWorkspaceSessions: (options) =>
+      handleListWorkspaceSessions
+        ? handleListWorkspaceSessions(options)
+        : Promise.resolve([] as WorkspaceAgentSessionDetails[]),
     handleOpenExternalSession: (sessionId, title) =>
-      handleOpenExternalSession(sessionId, title),
+      handleOpenExternalSession
+        ? handleOpenExternalSession(sessionId, title)
+        : Promise.resolve(),
     setSessionListOpen: (open) => {
       sessionListOpen = open;
     },
@@ -666,7 +675,7 @@
   });
 
   const sessionListActiveSessionId = $derived(
-    activeOpencodeSessionId, // surfaced for the panel's "active" highlight
+    activeNativeSessionId, // surfaced for the panel's "active" highlight
   );
 
   // -------------------------------------------------------------------------

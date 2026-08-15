@@ -1,4 +1,5 @@
 import type { ChatThreadSnapshot, SessionIndexEntry } from "../../domain/contracts";
+import { isAgentRuntimeId, type AgentRuntimeId } from "../../session";
 import { draftEntryTitleForScope, deriveSessionTitle } from "../../services/chatSessions";
 import {
   deleteSessionPersistence,
@@ -177,53 +178,63 @@ export function patchSessionIndexEntry(
   return sessionIndex.map((entry) => (entry.id === sessionId ? nextEntry : entry));
 }
 
-export interface SessionLinkPatch {
-  opencodeSessionId?: string;
-  opencodeModelId?: string;
-  opencodeProviderId?: string;
-  opencodeShareUrl?: string;
-  opencodeParentSessionId?: string;
+/**
+ * Runtime-neutral link between a workspace session tab and its native session
+ * (phase B binding, persisted on the session index entry). `runtimeId` and
+ * `nativeSessionId` are immutable once set — switching runtime means creating
+ * a new session, never re-linking an existing one.
+ */
+export interface SessionBinding {
+  runtimeId: AgentRuntimeId;
+  nativeSessionId: string;
+  modelId?: string;
+  modeId?: string;
+  shareUrl?: string;
+  parentSessionId?: string;
 }
 
-function applySessionLinkPatch(
-  entry: SessionIndexEntry,
-  patch: SessionLinkPatch,
-): SessionIndexEntry {
-  const next: SessionIndexEntry = {
-    ...entry,
-    ...patch,
+function sessionBindingFromEntry(entry: SessionIndexEntry): SessionBinding | null {
+  if (!isAgentRuntimeId(entry.runtimeId) || !entry.nativeSessionId) {
+    return null;
+  }
+  return {
+    runtimeId: entry.runtimeId,
+    nativeSessionId: entry.nativeSessionId,
+    ...(entry.modelId ? { modelId: entry.modelId } : {}),
+    ...(entry.shareUrl ? { shareUrl: entry.shareUrl } : {}),
+    ...(entry.parentSessionId ? { parentSessionId: entry.parentSessionId } : {}),
   };
-  if (!next.opencodeSessionId) {
-    delete next.opencodeSessionId;
-    delete next.opencodeModelId;
-    delete next.opencodeProviderId;
-    delete next.opencodeShareUrl;
-    delete next.opencodeParentSessionId;
-    return next;
-  }
-  if (!next.opencodeModelId) {
-    delete next.opencodeModelId;
-  }
-  if (!next.opencodeProviderId) {
-    delete next.opencodeProviderId;
-  }
-  if (!next.opencodeShareUrl) {
-    delete next.opencodeShareUrl;
-  }
-  if (!next.opencodeParentSessionId) {
-    delete next.opencodeParentSessionId;
-  }
-  return next;
 }
 
-function didSessionLinkChange(entry: SessionIndexEntry, patch: SessionLinkPatch): boolean {
-  const next = applySessionLinkPatch(entry, patch);
+function applySessionBinding(
+  entry: SessionIndexEntry,
+  binding: SessionBinding | null,
+): SessionIndexEntry {
+  if (!binding || binding.nativeSessionId.trim().length === 0) {
+    const { runtimeId: _r, nativeSessionId: _n, modelId: _m, shareUrl: _s, parentSessionId: _p, ...rest } = entry;
+    return rest;
+  }
+  return {
+    ...entry,
+    runtimeId: binding.runtimeId,
+    nativeSessionId: binding.nativeSessionId,
+    ...(binding.modelId ? { modelId: binding.modelId } : {}),
+    ...(binding.shareUrl ? { shareUrl: binding.shareUrl } : {}),
+    ...(binding.parentSessionId ? { parentSessionId: binding.parentSessionId } : {}),
+  };
+}
+
+function didSessionBindingChange(
+  entry: SessionIndexEntry,
+  binding: SessionBinding | null,
+): boolean {
+  const next = applySessionBinding(entry, binding);
   return (
-    next.opencodeSessionId !== entry.opencodeSessionId ||
-    next.opencodeModelId !== entry.opencodeModelId ||
-    next.opencodeProviderId !== entry.opencodeProviderId ||
-    next.opencodeShareUrl !== entry.opencodeShareUrl ||
-    next.opencodeParentSessionId !== entry.opencodeParentSessionId
+    next.runtimeId !== entry.runtimeId ||
+    next.nativeSessionId !== entry.nativeSessionId ||
+    next.modelId !== entry.modelId ||
+    next.shareUrl !== entry.shareUrl ||
+    next.parentSessionId !== entry.parentSessionId
   );
 }
 
@@ -362,7 +373,7 @@ export function createSessionsSlice(deps: {
     getSessionLink(
       sessionId: string,
       rootOverride?: string | null,
-    ): SessionLinkPatch | null {
+    ): SessionBinding | null {
       const root = rootOverride ?? getActiveChatScopeKey();
       if (!root) {
         return null;
@@ -372,20 +383,22 @@ export function createSessionsSlice(deps: {
         return null;
       }
       const entry = findSessionIndexEntry(workspace, sessionId);
-      if (!entry || !entry.opencodeSessionId) {
+      if (!entry) {
         return null;
       }
-      return {
-        opencodeSessionId: entry.opencodeSessionId,
-        opencodeModelId: entry.opencodeModelId,
-        opencodeProviderId: entry.opencodeProviderId,
-        opencodeShareUrl: entry.opencodeShareUrl,
-        opencodeParentSessionId: entry.opencodeParentSessionId,
-      };
+      return sessionBindingFromEntry(entry);
     },
+    /**
+     * Link (or update) a session's native binding. The runtime and native
+     * session id are immutable once bound: passing a different `runtimeId` or
+     * `nativeSessionId` for an already-linked session is rejected (returns
+     * false) — create a new session to switch runtimes. Only the mutable hint
+     * fields (`modelId` / `shareUrl` / `parentSessionId`) may change, and
+     * passing `null` clears the link (used when a native session is gone).
+     */
     setSessionLink(
       sessionId: string,
-      patch: SessionLinkPatch,
+      binding: SessionBinding | null,
       rootOverride?: string | null,
     ): boolean {
       const root = rootOverride ?? getActiveChatScopeKey();
@@ -399,7 +412,22 @@ export function createSessionsSlice(deps: {
         if (!entry) {
           return nextState;
         }
-        if (!didSessionLinkChange(entry, patch)) {
+        if (binding && binding.nativeSessionId.trim().length > 0) {
+          if (!isAgentRuntimeId(binding.runtimeId)) {
+            // Unknown runtime ids are rejected outright.
+            return nextState;
+          }
+          if (
+            entry.runtimeId &&
+            entry.nativeSessionId &&
+            (binding.runtimeId !== entry.runtimeId ||
+              binding.nativeSessionId !== entry.nativeSessionId)
+          ) {
+            // Runtime binding is immutable — reject the re-link entirely.
+            return nextState;
+          }
+        }
+        if (!didSessionBindingChange(entry, binding)) {
           return nextState;
         }
         changed = true;
@@ -408,31 +436,20 @@ export function createSessionsSlice(deps: {
           sessionIndex: patchSessionIndexEntry(
             workspace.sessionIndex,
             sessionId,
-            applySessionLinkPatch(entry, patch),
+            applySessionBinding(entry, binding),
           ),
         });
       });
       return changed;
     },
     clearSessionLink(sessionId: string, rootOverride?: string | null): boolean {
-      return this.setSessionLink(
-        sessionId,
-        {
-          opencodeSessionId: "",
-          opencodeModelId: "",
-          opencodeProviderId: "",
-          opencodeShareUrl: "",
-          opencodeParentSessionId: "",
-        },
-        rootOverride,
-      );
+      return this.setSessionLink(sessionId, null, rootOverride);
     },
     /**
-     * Rename a session tab (M2-T1). Updates `title` and bumps `lastUsedAt` so
-     * the row re-sorts to the top of the sidebar. Returns false when the
-     * session isn't found or the trimmed title is empty. Does NOT call OpenCode
-     * — the caller (handler) is responsible for `session.update({ title })`
-     * and only invokes this once that succeeds.
+     * Rename a session tab. Updates `title` and bumps `lastUsedAt` so the row
+     * re-sorts to the top of the sidebar. Returns false when the session isn't
+     * found or the trimmed title is empty. Local-store only — the runtime is
+     * not involved (the host protocol has no session-rename method).
      */
     renameSession(sessionId: string, title: string, rootOverride?: string | null): boolean {
       const root = rootOverride ?? getActiveChatScopeKey();
@@ -469,65 +486,6 @@ export function createSessionsSlice(deps: {
         });
       });
       return renamed;
-    },
-    /**
-     * Create a fresh session tab linked to a (just-forked) OpenCode session
-     * (M2-T3). The new entry is non-draft and active so the UI opens it. The
-     * caller (handler) is responsible for calling `session.fork` first and
-     * passing the child session id + parent id here. Returns the new session id.
-     *
-     * `modelId` / `providerId` are inherited from the parent entry when not
-     * supplied, so the forked tab keeps the same model selection.
-     */
-    forkSession(
-      link: {
-        opencodeSessionId: string;
-        opencodeParentSessionId: string;
-        title?: string;
-        opencodeModelId?: string;
-        opencodeProviderId?: string;
-      },
-      rootOverride?: string | null,
-    ): string | null {
-      const root = rootOverride ?? getActiveChatScopeKey();
-      if (!root) {
-        return null;
-      }
-      const workspace = getSnapshot().workspaces[root];
-      if (!workspace) {
-        return null;
-      }
-      const parentEntry = workspace.sessionIndex.find(
-        (entry) => entry.opencodeSessionId === link.opencodeParentSessionId,
-      );
-      const modelId = link.opencodeModelId ?? parentEntry?.opencodeModelId;
-      const providerId = link.opencodeProviderId ?? parentEntry?.opencodeProviderId;
-      const title =
-        link.title?.trim() ||
-        (parentEntry ? `${parentEntry.title} (fork)` : "Forked session");
-      const sessionId = createSessionId();
-      const lastUsedAt = new Date().toISOString();
-      const entry: SessionIndexEntry = {
-        id: sessionId,
-        title,
-        lastUsedAt,
-        opencodeSessionId: link.opencodeSessionId,
-        opencodeParentSessionId: link.opencodeParentSessionId,
-        ...(modelId ? { opencodeModelId: modelId } : {}),
-        ...(providerId ? { opencodeProviderId: providerId } : {}),
-      };
-      update((state) => {
-        const ws = state.workspaces[root];
-        if (!ws) {
-          return state;
-        }
-        return patchWorkspaceState(state, root, {
-          ...ws,
-          activeSessionId: sessionId,
-          sessionIndex: [...ws.sessionIndex, entry],
-        });
-      });
-      return sessionId;
     },
     getWorkspaceSessionsState(root: string): WorkspaceSessionsState | null {
       const workspace = getSnapshot().workspaces[root];

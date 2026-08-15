@@ -85,22 +85,7 @@
     onUntitledTitleRefresh,
     onScrollTopChange,
     onDeleteSessionFromChat,
-    onForkSession,
-    onRevertSession,
-    onUnrevertSession,
-    onShareSession,
-    onUnshareSession,
-    onSummarizeSession,
-    onExportSession,
-    activeShareUrl = null,
-    activeParentSessionId = null,
-    canToggleTodoPanel = false,
-    todoPanelOpen = false,
-    onToggleTodoPanel,
-    canToggleDiffPanel = false,
-    diffPanelOpen = false,
-    onToggleDiffPanel,
-    onOpenTimeline,
+    onRestartRuntime,
     onGoToLine,
     notify,
   }: {
@@ -138,22 +123,7 @@
     onUntitledTitleRefresh: (documentId: string) => void;
     onScrollTopChange: (documentId: string, scrollTop: number) => void;
     onDeleteSessionFromChat: () => void | Promise<void>;
-    onForkSession?: (messageId?: string) => void | Promise<void>;
-    onRevertSession?: (messageId?: string) => void | Promise<void>;
-    onUnrevertSession?: () => void | Promise<void>;
-    onShareSession?: () => void | Promise<void>;
-    onUnshareSession?: () => void | Promise<void>;
-    onSummarizeSession?: () => void | Promise<void>;
-    onExportSession?: () => void | Promise<void>;
-    activeShareUrl?: string | null;
-    activeParentSessionId?: string | null;
-    canToggleTodoPanel?: boolean;
-    todoPanelOpen?: boolean;
-    onToggleTodoPanel?: () => void;
-    canToggleDiffPanel?: boolean;
-    diffPanelOpen?: boolean;
-    onToggleDiffPanel?: () => void;
-    onOpenTimeline?: () => void;
+    onRestartRuntime?: () => void | Promise<void>;
     onGoToLine: () => void;
     notify: (message: string) => void;
   } = $props();
@@ -544,22 +514,7 @@
   {:else if isSessionTabActive}
     <ChatPanel
       onDeleteSession={onDeleteSessionFromChat}
-      {onForkSession}
-      {onRevertSession}
-      {onUnrevertSession}
-      {onShareSession}
-      {onUnshareSession}
-      {onSummarizeSession}
-      {onExportSession}
-      {activeShareUrl}
-      {activeParentSessionId}
-      {canToggleTodoPanel}
-      {todoPanelOpen}
-      {onToggleTodoPanel}
-      {canToggleDiffPanel}
-      {diffPanelOpen}
-      {onToggleDiffPanel}
-      {onOpenTimeline}
+      {onRestartRuntime}
     />
   {:else if showDiffPreview}
     <DiffPreviewPane

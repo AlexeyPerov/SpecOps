@@ -1,39 +1,26 @@
-import type { ChatMessage, ChatMessagePart, ToolCallRecord } from "../domain/contracts";
+import type { ChatMessage } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore, type ChatTurnError } from "../state/chatStore";
 import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import {
-  WorkspaceAgentBackendError,
-  createWorkspaceAgentBackend,
-  type WorkspaceAgentSendContext,
-} from "./backends/workspaceAgentBackend";
+  DEFAULT_SESSION_RUNTIME_ID,
+  ensureAgentHostStarted,
+  getAgentHostClient,
+} from "../services/agentHostRuntime";
+import type { AgentHostClientError } from "../session/host/agentHostClient";
+import type { NativeSessionRef } from "../session/adapter";
+import type { PermissionReply } from "../session/events";
+import { asNativeSessionId, asSpecOpsTurnId, isAgentRuntimeId } from "../session";
+import type { SessionBinding } from "../state/chatStore/sessions";
+import { foldSessionEvent, initialTurnFoldState } from "../session/host/hostTurnReducer";
 import {
   formatRetryFailureNote,
+  PROVIDER_REQUEST_FAILURE_RECOVERY,
   WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
 } from "./chatErrorCopy";
-import {
-  applyToolCompleted,
-  applyToolProgress,
-  applyToolStarted,
-} from "./toolCallReducer";
-import {
-  applyReasoningDelta,
-  applyReasoningEnded,
-  applyStepFailed,
-  applyStepFinished,
-  applyStepStarted,
-  applySubtaskStarted,
-} from "./chatStreamParts";
 import { promptPermission } from "../services/permissionPrompt";
 import { promptQuestion } from "../services/questionPrompt";
-import type { WorkspacePermissionReply } from "./backends/workspaceAgentBackend";
 import { ensureWorkspaceReadAccess } from "../services/fileSystem";
-import { resolveOpencodeModelFallback } from "./opencodeCatalog";
-import { isOpencodeEnabled } from "../services/opencodeSettings";
-import { ensureOpencodeSidecar } from "../services/opencodeSidecarEnsure";
-import {
-  OPENCODE_DISABLED_MESSAGE,
-} from "./chatErrorCopy";
 
 export type SendChatMessageFailureReason =
   | "empty"
@@ -56,37 +43,33 @@ export type SendChatMessageResult =
   | ChatTurnSuccessResult
   | { ok: false; reason: SendChatMessageFailureReason; message: string };
 
-type OpencodeBackendSendValidation = {
-  ok: true;
-  modelId: string;
-};
+/**
+ * Runtime-neutral per-send context assembled by the composer (mentions +
+ * attachments) and forwarded with the host `turn.send` request.
+ */
+export interface ChatSendContextAttachment {
+  mime: string;
+  filename?: string;
+  url: string;
+}
 
-type ProviderSendValidationFailure = {
-  ok: false;
-  reason: SendChatMessageFailureReason;
-  message: string;
-};
-
-type ChatSendTargetFailure = {
-  ok: false;
-  reason: Extract<SendChatMessageFailureReason, "no_workspace" | "no_session">;
-  message: string;
-};
-
-type ChatSendTargetSuccess = {
-  ok: true;
-  root: string;
-  activeSessionId: string;
-};
+export interface ChatSendContext {
+  /** File paths mentioned via `@file:…`. */
+  filePaths?: string[];
+  /** Agent names mentioned via `@agent:…`. */
+  agentNames?: string[];
+  /** File attachments (drag-and-drop / file picker). */
+  attachments?: ChatSendContextAttachment[];
+}
 
 export interface ChatSendContextOptions {
-  /** Composer-assembled mentions / attachments (M3-T1..T3). */
-  context?: WorkspaceAgentSendContext;
-  /** Delivery mode for prompts sent while a turn is running (M3-T5). */
+  /** Composer-assembled mentions / attachments. */
+  context?: ChatSendContext;
+  /** Delivery mode for prompts sent while a turn is running. */
   queueMode?: ChatQueueMode;
 }
 
-/** How a prompt sent while a turn is running is handled (M3-T5). */
+/** How a prompt sent while a turn is running is handled. */
 export type ChatQueueMode = "queue" | "steer";
 
 class TurnCancelledError extends Error {
@@ -131,31 +114,46 @@ export function persistSessionThreadOnce(scopeKey: string, sessionId: string): v
   });
 }
 
-export function abortTurn(sessionId: string, workspaceRoot?: string | null): void {
-  chatStore.completeTurn(sessionId, workspaceRoot);
+function toNativeRef(binding: SessionBinding): NativeSessionRef {
+  return {
+    runtimeId: binding.runtimeId,
+    nativeSessionId: asNativeSessionId(binding.nativeSessionId),
+    ...(binding.modelId ? { modelId: binding.modelId } : {}),
+    ...(binding.modeId ? { modeId: binding.modeId } : {}),
+  };
 }
 
-async function abortWorkspaceBackendSession(input: {
-  root: string;
-  activeSessionId: string;
-  backend: ReturnType<typeof createWorkspaceAgentBackend>;
-}): Promise<void> {
-  const link = chatStore.getSessionLink(input.activeSessionId, input.root);
-  const opencodeSessionId = link?.opencodeSessionId?.trim() ?? "";
-  if (!opencodeSessionId) {
+/**
+ * Abort the running turn for a session: clears the local turn runtime state
+ * (which also drops the assistant placeholder) and asks the host to cancel the
+ * native turn. The send loop observes the cancellation (turn event stream ends
+ * with `turn.cancelled`) and returns its cancelled result.
+ */
+export function abortTurn(sessionId: string, workspaceRoot?: string | null): void {
+  const root = workspaceRoot ?? chatStore.getActiveChatScopeKey();
+  if (!root) {
     return;
   }
-  try {
-    await input.backend.abortSession({
-      workspaceRootPath: input.root,
-      sessionId: opencodeSessionId,
-    });
-  } catch (error: unknown) {
-    if (error instanceof WorkspaceAgentBackendError && error.code === "notFound") {
-      return;
-    }
-    throw error;
+  const runtime = chatStore.getRuntimeState(sessionId, root);
+  const turnId = runtime.activeTurnId;
+  chatStore.cancelSessionGeneration(root, sessionId);
+  if (!turnId) {
+    return;
   }
+  const binding = chatStore.getSessionLink(sessionId, root);
+  if (!binding) {
+    return;
+  }
+  void getAgentHostClient()
+    .cancelTurn({
+      native: toNativeRef(binding),
+      turnId: asSpecOpsTurnId(turnId),
+      reason: "user",
+    })
+    .catch(() => {
+      // Best-effort: the store state is already cleared; a host that already
+      // ended the turn (or died) must not surface an error here.
+    });
 }
 
 function assertTurnStillActive(root: string, sessionId: string, turnId: string): void {
@@ -221,7 +219,9 @@ function createRetryFailureNote(turnId: string, previousError: ChatTurnError): C
 export function resolveSendTarget(
   action: "send" | "retry",
   sessionId?: string,
-): ChatSendTargetFailure | ChatSendTargetSuccess {
+):
+  | { ok: false; reason: "no_workspace" | "no_session"; message: string }
+  | { ok: true; root: string; activeSessionId: string } {
   const root = chatStore.getActiveChatScopeKey();
   if (!root) {
     return {
@@ -245,17 +245,29 @@ export function resolveSendTarget(
 }
 
 export function beginTurn(activeSessionId: string): string | null {
-  const turnId = `turn-${Date.now()}`;
+  const turnId = `turn-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
   if (!chatStore.beginTurn(turnId, activeSessionId)) {
     return null;
   }
   return turnId;
 }
 
-export async function validateOpencodeBackendSend(
+export interface AgentHostSendValidation {
+  ok: true;
+  modelId: string;
+  modeId: string;
+}
+
+/**
+ * Preflight a host-backed send: the workspace must be readable and the
+ * session's model/mode selection resolves from the thread metadata (selected
+ * at creation or via the composer pickers) falling back to the persisted
+ * native binding.
+ */
+export async function validateAgentHostSend(
   root: string,
   activeSessionId: string,
-): Promise<OpencodeBackendSendValidation | ProviderSendValidationFailure> {
+): Promise<AgentHostSendValidation | { ok: false; reason: SendChatMessageFailureReason; message: string }> {
   const workspaceAccess = await ensureWorkspaceReadAccess(root);
   if (workspaceAccess !== "ready") {
     return {
@@ -264,88 +276,106 @@ export async function validateOpencodeBackendSend(
       message: WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
     };
   }
-  const preferredModelId = chatStore.getMetadata(activeSessionId)?.selectedModelId?.trim() ?? null;
-  const catalogModelId = resolveOpencodeModelFallback(root, preferredModelId);
-  const modelId = catalogModelId ?? preferredModelId ?? "";
-  return { ok: true, modelId };
+  const metadata = chatStore.getMetadata(activeSessionId);
+  const binding = chatStore.getSessionLink(activeSessionId, root);
+  const modelId = metadata?.selectedModelId?.trim() || binding?.modelId || "";
+  const modeId = metadata?.selectedModeId?.trim() || binding?.modeId || "";
+  return { ok: true, modelId, modeId };
 }
 
 export function getLastRetryError(activeSessionId: string): ChatTurnError | null {
   return chatStore.getRuntimeState(activeSessionId).lastError;
 }
 
-function toWorkspaceBackendErrorMessage(error: unknown): string {
-  if (error instanceof WorkspaceAgentBackendError) {
-    if (error.code === "authFailure") {
-      return "OpenCode authentication failed. Check OpenCode settings and retry.";
+/** Maps host-transport and adapter failures onto user-facing copy. */
+function toHostTurnErrorMessage(error: unknown): string {
+  const hostError = error as Partial<AgentHostClientError> | null;
+  if (hostError && typeof hostError.kind === "string") {
+    switch (hostError.kind) {
+      case "notRunning":
+      case "launchFailure":
+      case "initializeTimeout":
+        return "The agent host could not be started. Retry in a moment.";
+      case "crashLoop":
+        return "The agent host keeps crashing and was stopped. Restart it before retrying.";
+      case "hostExited":
+      case "shuttingDown":
+        return "The agent host exited unexpectedly. Retry to continue the session.";
+      case "protocolVersionMismatch":
+        return "The agent host speaks an unsupported protocol version. Update the app.";
+      case "requestTimeout":
+        return "The runtime took too long to respond. Retry the turn.";
+      case "protocol":
+      case "io":
+      case "nodeMissing":
+      case "hostPathMissing":
+        return typeof hostError.message === "string" && hostError.message.trim().length > 0
+          ? hostError.message.trim()
+          : "The agent host request failed.";
     }
-    if (error.code === "invalidDirectory") {
-      return "OpenCode rejected this workspace directory. Reopen the workspace and retry.";
-    }
-    if (error.code === "serverUnavailable") {
-      return "OpenCode server is unavailable. Check sidecar/server health and retry.";
-    }
-    if (error.code === "notFound") {
-      return "OpenCode session was not found. Retry to start a new session.";
-    }
-    return error.message.trim() || "OpenCode request failed.";
   }
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message.trim();
   }
-  return "OpenCode request failed.";
+  return "The agent request failed.";
 }
 
-async function ensureWorkspaceAgentSessionId(input: {
+/** Resolve (or create) the session's native binding through the host. */
+async function ensureNativeBinding(input: {
   root: string;
   activeSessionId: string;
   modelId: string;
-  providerId?: string;
-}): Promise<{ backend: ReturnType<typeof createWorkspaceAgentBackend>; opencodeSessionId: string }> {
-  const backend = createWorkspaceAgentBackend("opencode", {
-    resolveRuntimeConfig: async () => {
-      const { mode, baseUrl, sidecarPort } = appState.getSnapshot().settings.opencode;
-      return { mode, baseUrl, sidecarPort };
-    },
+  modeId: string;
+}): Promise<SessionBinding> {
+  const { root, activeSessionId, modelId, modeId } = input;
+  const client = getAgentHostClient();
+  const existing = chatStore.getSessionLink(activeSessionId, root);
+  if (existing) {
+    // Resume so a host restart mid-session recovers the native session before
+    // the next turn (the fake adapter adopts known ids; real adapters reconnect).
+    const native = await client.resumeSession({
+      native: toNativeRef(existing),
+      workspaceRootPath: root,
+    });
+    const binding: SessionBinding = {
+      runtimeId: native.runtimeId,
+      nativeSessionId: native.nativeSessionId,
+      modelId: modelId || existing.modelId,
+      ...(modeId ? { modeId } : existing.modeId ? { modeId: existing.modeId } : {}),
+      ...(existing.shareUrl ? { shareUrl: existing.shareUrl } : {}),
+      ...(existing.parentSessionId ? { parentSessionId: existing.parentSessionId } : {}),
+    };
+    chatStore.setSessionLink(activeSessionId, binding, root);
+    return binding;
+  }
+  const metadataRuntimeId = chatStore.getMetadata(activeSessionId)?.runtimeId?.trim() ?? "";
+  const runtimeId = isAgentRuntimeId(metadataRuntimeId)
+    ? metadataRuntimeId
+    : DEFAULT_SESSION_RUNTIME_ID;
+  const native = await client.createSession({
+    runtimeId,
+    workspaceRootPath: root,
+    ...(modelId ? { modelId } : {}),
+    ...(modeId ? { modeId } : {}),
   });
-  const existingLink = chatStore.getSessionLink(input.activeSessionId, input.root);
-  let opencodeSessionId = existingLink?.opencodeSessionId?.trim() ?? "";
-  if (opencodeSessionId) {
-    const existingSession = await backend.getSession({
-      workspaceRootPath: input.root,
-      sessionId: opencodeSessionId,
-    });
-    if (!existingSession) {
-      opencodeSessionId = "";
-    }
-  }
-  if (!opencodeSessionId) {
-    const title = chatStore.getSessionTitle(input.activeSessionId) ?? undefined;
-    const createdSession = await backend.createSession({
-      workspaceRootPath: input.root,
-      title,
-    });
-    opencodeSessionId = createdSession.id;
-  }
-  chatStore.setSessionLink(
-    input.activeSessionId,
-    {
-      opencodeSessionId,
-      opencodeModelId: input.modelId.trim() ? input.modelId : undefined,
-      opencodeProviderId: input.providerId?.trim() || undefined,
-    },
-    input.root,
-  );
-  return { backend, opencodeSessionId };
+  const binding: SessionBinding = {
+    runtimeId: native.runtimeId,
+    nativeSessionId: native.nativeSessionId,
+    modelId: native.modelId ?? (modelId || undefined),
+    ...(modeId ? { modeId } : native.modeId ? { modeId: native.modeId } : {}),
+  };
+  chatStore.setSessionLink(activeSessionId, binding, root);
+  return binding;
 }
 
 export async function executeProviderTurn(params: {
   root: string;
   activeSessionId: string;
   turnId: string;
-  modelId: string;
+  modelId?: string;
+  modeId?: string;
   previousError?: ChatTurnError | null;
-  context?: WorkspaceAgentSendContext;
+  context?: ChatSendContext;
 }): Promise<SendChatMessageResult> {
   const { root, activeSessionId, turnId, previousError } = params;
   const thread = chatStore.getActiveThreadSnapshot(activeSessionId);
@@ -381,143 +411,35 @@ export async function executeProviderTurn(params: {
   const assistantMessage = createAssistantPlaceholder(turnId);
   chatStore.appendMessage(assistantMessage, { sessionId: activeSessionId, skipCompaction: true });
   let hasScheduledStreamingPersistence = false;
-  let backend: ReturnType<typeof createWorkspaceAgentBackend> | null = null;
-  let opencodeSessionId: string | null = null;
 
   try {
-    // M13.5 — lazy sidecar. The Send path is the primary spawn trigger; the
-    // ensure call may take a few hundred ms (port check + process spawn) but
-    // returns immediately from the Rust IPC perspective. Backend methods
-    // below then proceed against the (now-running) sidecar.
-    const settings = appState.getSnapshot().settings;
-    if (settings.opencode.enabled && settings.opencode.mode === "sidecar") {
-      const ensured = await ensureOpencodeSidecar({
-        intent: "send",
-        directory: root,
-        port: settings.opencode.sidecarPort,
-      });
-      if (!ensured || ensured.status.health === "error") {
-        throw new WorkspaceAgentBackendError({
-          code: "serverUnavailable",
-          message:
-            ensured?.status.lastError?.message ??
-            "Failed to start OpenCode sidecar.",
-        });
-      }
-    }
-    const threadMetadata = chatStore.getMetadata(activeSessionId);
-    const modelFromThread = threadMetadata?.selectedModelId?.trim() ?? "";
-    const modelId = modelFromThread || params.modelId;
-    const providerId = threadMetadata?.opencodeProviderId?.trim() || undefined;
-    // OpenCode agent (persona) for this workspace session (e.g. plan, build).
-    const opencodeAgentId = threadMetadata?.opencodeAgentId?.trim() || undefined;
-    const resolved = await ensureWorkspaceAgentSessionId({
+    // Lazy host start: the send path is the primary spawn trigger. Concurrent
+    // sends share one start promise; a failed start clears the cache so the
+    // next turn retries.
+    await ensureAgentHostStarted();
+
+    const metadata = chatStore.getMetadata(activeSessionId);
+    const modelId = metadata?.selectedModelId?.trim() || params.modelId || "";
+    const modeId = metadata?.selectedModeId?.trim() || params.modeId || "";
+    const binding = await ensureNativeBinding({
       root,
       activeSessionId,
       modelId,
-      providerId,
+      modeId,
     });
-    backend = resolved.backend;
-    opencodeSessionId = resolved.opencodeSessionId;
-    const run = await backend.send({
-      prompt: userMessage.content,
-      workspaceRootPath: root,
-      sessionId: opencodeSessionId,
-      model: modelId || undefined,
-      agent: opencodeAgentId,
-      provider: providerId,
-      ...(params.context ? { context: params.context } : {}),
-    });
+    const native = toNativeRef(binding);
+    const client = getAgentHostClient();
 
-    let accumulated = "";
-    let toolCalls: ToolCallRecord[] = [];
-    // Live-stream structured parts (M8-T1): reasoning / subtask / step parts
-    // accumulate on the active assistant message as the corresponding stream
-    // events arrive, so they render during the turn — not only after M1-T3
-    // `session.messages` hydration on tab reopen.
-    let parts: ChatMessagePart[] = [];
-    let hasFlushedParts = false;
-    const flushParts = (): void => {
-      if (parts.length === 0) {
-        return;
-      }
-      chatStore.updateMessageParts(assistantMessage.id, parts, activeSessionId, root);
-    };
-    for await (const event of backend.streamEvents({
+    let fold = initialTurnFoldState();
+    for await (const event of client.sendTurn({
+      turnId: asSpecOpsTurnId(turnId),
+      native,
       workspaceRootPath: root,
-      sessionId: run.sessionId,
+      prompt: userMessage.content,
+      ...(params.context ? { context: params.context as unknown as Record<string, unknown> } : {}),
     })) {
       if (!chatStore.isGenerationTurnActive(root, activeSessionId, turnId)) {
         throw new TurnCancelledError();
-      }
-      if (event.type === "message.delta") {
-        accumulated += event.delta;
-        chatStore.updateMessageContent(assistantMessage.id, accumulated, activeSessionId, root);
-        if (!hasScheduledStreamingPersistence) {
-          hasScheduledStreamingPersistence = true;
-          persistSessionThreadOnce(root, activeSessionId);
-        }
-        continue;
-      }
-      if (event.type === "message.completed") {
-        accumulated = event.message || accumulated;
-        chatStore.updateMessageContent(assistantMessage.id, accumulated, activeSessionId, root);
-        // Flush the accumulated structured parts once on completion so the
-        // final message carries them idempotently (no end-of-turn
-        // `listMessages` re-hydration — the live path is the single source).
-        if (!hasFlushedParts) {
-          hasFlushedParts = true;
-          flushParts();
-        }
-        continue;
-      }
-      if (event.type === "reasoning.delta") {
-        parts = applyReasoningDelta(parts, event);
-        flushParts();
-        continue;
-      }
-      if (event.type === "reasoning.ended") {
-        parts = applyReasoningEnded(parts, event);
-        flushParts();
-        continue;
-      }
-      if (event.type === "subtask.started") {
-        parts = applySubtaskStarted(parts, event);
-        flushParts();
-        continue;
-      }
-      if (event.type === "step.started") {
-        parts = applyStepStarted(parts, event);
-        flushParts();
-        continue;
-      }
-      if (event.type === "step.finished") {
-        parts = applyStepFinished(parts, event);
-        flushParts();
-        continue;
-      }
-      if (event.type === "step.failed") {
-        parts = applyStepFailed(parts, event);
-        flushParts();
-        continue;
-      }
-      if (event.type === "tool.started") {
-        toolCalls = applyToolStarted(toolCalls, event);
-        chatStore.updateMessageToolCalls(assistantMessage.id, toolCalls, activeSessionId, root);
-        continue;
-      }
-      if (event.type === "tool.completed") {
-        toolCalls = applyToolCompleted(toolCalls, event);
-        chatStore.updateMessageToolCalls(assistantMessage.id, toolCalls, activeSessionId, root);
-        continue;
-      }
-      if (event.type === "tool.progress") {
-        toolCalls = applyToolProgress(toolCalls, event);
-        chatStore.updateMessageToolCalls(assistantMessage.id, toolCalls, activeSessionId, root);
-        continue;
-      }
-      if (event.type === "run.failed") {
-        throw new Error(event.message);
       }
       if (event.type === "permission.requested") {
         assertTurnStillActive(root, activeSessionId, turnId);
@@ -527,30 +449,20 @@ export async function executeProviderTurn(params: {
           sessionId: activeSessionId,
           turnId,
           pending: promptPermission({
-            permissionId: event.permissionId,
-            label: event.label,
-            payload: event.payload,
+            permissionId: event.request.permissionId,
+            label: event.request.label,
+            payload: event.request.payload,
           }),
         }).finally(() => {
           chatStore.setWaitingForPermission(activeSessionId, false, root);
         });
         assertTurnStillActive(root, activeSessionId, turnId);
-        try {
-          await backend.replyPermission({
-            workspaceRootPath: root,
-            sessionId: run.sessionId,
-            requestId: event.permissionId,
-            reply: result.reply as WorkspacePermissionReply,
-          });
-        } catch (replyError: unknown) {
-          if (
-            replyError instanceof WorkspaceAgentBackendError &&
-            replyError.code === "notFound"
-          ) {
-            break;
-          }
-          throw replyError;
-        }
+        await client.replyPermission({
+          native,
+          turnId: asSpecOpsTurnId(turnId),
+          permissionId: event.request.permissionId,
+          reply: result.reply as PermissionReply,
+        });
         continue;
       }
       if (event.type === "question.requested") {
@@ -561,51 +473,64 @@ export async function executeProviderTurn(params: {
           sessionId: activeSessionId,
           turnId,
           pending: promptQuestion({
-            questionId: event.questionId,
-            prompt: event.prompt,
-            choices: event.choices,
-            payload: event.payload,
+            questionId: event.request.questionId,
+            prompt: event.request.prompt,
+            choices: [...(event.request.choices ?? [])],
+            payload: event.request.payload,
           }),
         }).finally(() => {
           chatStore.setWaitingForQuestion(activeSessionId, false, root);
         });
         assertTurnStillActive(root, activeSessionId, turnId);
-        try {
-          if (result.type === "reply") {
-            await backend.replyQuestion({
-              workspaceRootPath: root,
-              sessionId: run.sessionId,
-              requestId: event.questionId,
-              answers: result.answers,
-            });
-          } else {
-            await backend.rejectQuestion({
-              workspaceRootPath: root,
-              sessionId: run.sessionId,
-              requestId: event.questionId,
-            });
-          }
-        } catch (replyError: unknown) {
-          if (
-            replyError instanceof WorkspaceAgentBackendError &&
-            replyError.code === "notFound"
-          ) {
-            break;
-          }
-          throw replyError;
+        if (result.type === "reply") {
+          await client.replyQuestion({
+            native,
+            turnId: asSpecOpsTurnId(turnId),
+            questionId: event.request.questionId,
+            answer: result.answers.map((choice) => choice.join(", ")).join("\n"),
+          });
+        } else {
+          // Question rejected — cancel the turn (the runtime is blocked on us).
+          await client.cancelTurn({
+            native,
+            turnId: asSpecOpsTurnId(turnId),
+            reason: "user",
+          });
+          throw new TurnCancelledError();
         }
         continue;
       }
+      if (event.type === "turn.failed") {
+        throw new Error(event.message);
+      }
+      if (event.type === "turn.cancelled") {
+        throw new TurnCancelledError();
+      }
+
+      const next = foldSessionEvent(fold, event);
+      if (next.content !== fold.content) {
+        chatStore.updateMessageContent(assistantMessage.id, next.content, activeSessionId, root);
+        if (!hasScheduledStreamingPersistence) {
+          hasScheduledStreamingPersistence = true;
+          persistSessionThreadOnce(root, activeSessionId);
+        }
+      }
+      if (next.parts !== fold.parts && next.parts.length > 0) {
+        chatStore.updateMessageParts(assistantMessage.id, next.parts, activeSessionId, root);
+      }
+      if (next.toolCalls !== fold.toolCalls && next.toolCalls.length > 0) {
+        chatStore.updateMessageToolCalls(assistantMessage.id, next.toolCalls, activeSessionId, root);
+      }
+      fold = next;
     }
 
     assertTurnStillActive(root, activeSessionId, turnId);
-    chatStore.updateMessageContent(assistantMessage.id, accumulated, activeSessionId, root);
-    // Final idempotent flush for turns that ended without an explicit
-    // `message.completed` (e.g. `run.completed` after the last delta) but that
-    // still accumulated structured parts mid-stream.
-    if (!hasFlushedParts) {
-      hasFlushedParts = true;
-      flushParts();
+    chatStore.updateMessageContent(assistantMessage.id, fold.content, activeSessionId, root);
+    if (fold.parts.length > 0) {
+      chatStore.updateMessageParts(assistantMessage.id, fold.parts, activeSessionId, root);
+    }
+    if (fold.toolCalls.length > 0) {
+      chatStore.updateMessageToolCalls(assistantMessage.id, fold.toolCalls, activeSessionId, root);
     }
     chatStore.compactActiveThread(activeSessionId);
     chatStore.completeTurn(activeSessionId, root);
@@ -613,20 +538,28 @@ export async function executeProviderTurn(params: {
     return { ok: true, turnId, assistantMessageId: assistantMessage.id, sessionId: activeSessionId };
   } catch (error) {
     if (isTurnCancelledError(error)) {
-      if (backend && opencodeSessionId) {
-        await abortWorkspaceBackendSession({
-          root,
-          activeSessionId,
-          backend,
-        });
+      // Make sure the native turn is cancelled even when the loop noticed the
+      // cancellation through the store rather than a host event.
+      const binding = chatStore.getSessionLink(activeSessionId, root);
+      if (binding) {
+        await getAgentHostClient()
+          .cancelTurn({
+            native: toNativeRef(binding),
+            turnId: asSpecOpsTurnId(turnId),
+            reason: "user",
+          })
+          .catch(() => {
+            // Already terminal on the host side — nothing to do.
+          });
       }
+      chatStore.completeTurn(activeSessionId, root);
       return { ok: false, reason: "generating", message: "Response was cancelled." };
     }
     chatStore.removeMessage(assistantMessage.id, activeSessionId, root);
     if (previousError) {
       chatStore.removeMessage(`retry-note-${turnId}`, activeSessionId, root);
     }
-    const message = toWorkspaceBackendErrorMessage(error);
+    const message = toHostTurnErrorMessage(error);
     chatStore.failTurn({ message, code: "provider_error" }, turnId, activeSessionId, root);
     persistSessionThreadOnce(root, activeSessionId);
     return { ok: false, reason: "provider_error", message };

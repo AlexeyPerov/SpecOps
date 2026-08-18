@@ -62,7 +62,7 @@ export async function requestOpenPath(
 
   if (owner) {
     await redirectToOwnerWindow(normalized, owner.windowId);
-    return { kind: "redirected", path: normalized, ownerWindowId: owner.windowId };
+    return { kind: "redirected", path, ownerWindowId: owner.windowId };
   }
 
   const restricted = isFileContextRestricted();
@@ -81,7 +81,7 @@ export async function requestOpenPath(
     if (migratedDocumentId) {
       appState.touchRecentFile(path);
       await claimOpenFile(path, windowId, migratedDocumentId);
-      return { kind: "existing", path: normalized, documentId: migratedDocumentId };
+      return { kind: "existing", path, documentId: migratedDocumentId };
     }
   }
 
@@ -91,7 +91,7 @@ export async function requestOpenPath(
     appState.selectOrReopenTabForDocument(existingLocal.documentId);
     appState.touchRecentFile(path);
     await claimOpenFile(path, windowId, existingLocal.documentId);
-    return { kind: "existing", path: normalized, documentId: existingLocal.documentId };
+    return { kind: "existing", path, documentId: existingLocal.documentId };
   }
 
   let switchedToNotepad = false;

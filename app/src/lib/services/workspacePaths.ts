@@ -1,4 +1,4 @@
-import { normalizePathSync } from "./diskFingerprint";
+import { normalizePathForStorage, normalizePathSync } from "./diskFingerprint";
 import { appState } from "../state/appState";
 
 /**
@@ -57,6 +57,14 @@ function normalizePathForContainment(path: string): string {
   return normalized;
 }
 
+function normalizePathPreservingCase(path: string): string {
+  let normalized = collapsePathSegments(normalizePathForStorage(path));
+  while (normalized.length > 1 && normalized.endsWith("/")) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
+
 /**
  * Path routing contract:
  * - Returns true for root itself and any descendant path under the same root
@@ -79,7 +87,12 @@ export function workspaceRelativePath(filePath: string, workspaceRoot: string): 
   if (!normalizedPath.startsWith(`${normalizedRoot}/`)) {
     return null;
   }
-  return normalizedPath.slice(normalizedRoot.length + 1);
+  // Containment was decided on the case-folded comparison keys; slice the
+  // case-preserving form (same segment layout) so the returned string keeps
+  // the real on-disk casing instead of the comparison casing.
+  const displayPath = normalizePathPreservingCase(filePath);
+  const displayRoot = normalizePathPreservingCase(workspaceRoot);
+  return displayPath.slice(displayRoot.length + 1);
 }
 
 export function ensureNotepadForOutsidePath(path: string): {

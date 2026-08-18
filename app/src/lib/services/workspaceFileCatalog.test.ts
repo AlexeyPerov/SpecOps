@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWorkspaceFileCatalog } from "./workspaceFileCatalog";
+import { normalizePathSync } from "./diskFingerprint";
 import type { EnumerateOpenableFilesResult } from "./workspaceTraversal";
 
 function deferred<T>() {
@@ -58,6 +59,28 @@ describe("createWorkspaceFileCatalog", () => {
     expect(snap.partialErrors).toEqual(["/ws/locked"]);
     expect(catalog.getOpenablePaths()).toHaveLength(2);
     expect(enumerate).toHaveBeenCalledTimes(1);
+    catalog.dispose();
+  });
+
+  it("preserves path casing in entries while folding the comparison key", async () => {
+    const enumerate = vi.fn(async () => ({
+      paths: ["/Users/Me/Ws/Src/App.ts"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    const catalog = createWorkspaceFileCatalog({ enumerate });
+    catalog.setWorkspaceRoot("/Users/Me/Ws");
+    catalog.ensureReady();
+    await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
+
+    const snap = catalog.getSnapshot();
+    expect(snap.entries[0]).toMatchObject({
+      absolutePath: "/Users/Me/Ws/Src/App.ts",
+      relativePath: "Src/App.ts",
+      basename: "App.ts",
+      directory: "/Users/Me/Ws/Src",
+    });
+    expect(snap.entries[0]!.key).toBe(normalizePathSync("/Users/Me/Ws/Src/App.ts"));
     catalog.dispose();
   });
 

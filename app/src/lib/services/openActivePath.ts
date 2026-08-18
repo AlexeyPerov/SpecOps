@@ -3,7 +3,11 @@ import {
   findTabOwner,
   isFileTab,
 } from "../domain/contracts";
-import { isFileMissingError, normalizePathSync, statDiskFingerprint } from "./diskFingerprint";
+import {
+  isFileMissingError,
+  normalizePathForStorage,
+  statDiskFingerprint,
+} from "./diskFingerprint";
 import { openPath } from "./fileSystem";
 import {
   completeLargePendingOpen,
@@ -83,7 +87,7 @@ export async function openActivePath(
     const fingerprint = await statDiskFingerprint(path);
     if (shouldGateFileOpenBySize(path, fingerprint.sizeBytes, maxOpenWithoutConfirmBytes)) {
       await completeLargePendingOpen(path, fingerprint, windowId);
-      return { kind: "pending_confirm", path: normalizePathSync(path) };
+      return { kind: "pending_confirm", path: normalizePathForStorage(path) };
     }
 
     const opened = await openPath(path);
@@ -136,7 +140,7 @@ export async function openActivePathInPane(
     const fingerprint = await statDiskFingerprint(path);
     if (shouldGateFileOpenBySize(path, fingerprint.sizeBytes, maxOpenWithoutConfirmBytes)) {
       await completeLargePendingOpen(path, fingerprint, windowId);
-      return { kind: "pending_confirm", path: normalizePathSync(path) };
+      return { kind: "pending_confirm", path: normalizePathForStorage(path) };
     }
 
     const opened = await openPath(path);

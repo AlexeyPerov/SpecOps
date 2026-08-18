@@ -5,7 +5,7 @@
 
 import { readDir, type DirEntry } from "@tauri-apps/plugin-fs";
 import { isOpenableFilePath } from "../editor/editorLanguage";
-import { normalizePathSync } from "./diskFingerprint";
+import { normalizePathForStorage, normalizePathSync } from "./diskFingerprint";
 
 export const SKIPPED_DIRECTORY_NAMES = new Set([
   ".git",
@@ -64,20 +64,29 @@ export function joinDirectoryPath(directoryPath: string, name: string): string {
   return `${base}/${name}`;
 }
 
+/**
+ * Slash-normalized workspace root with original casing preserved — used as the
+ * traversal root and for display forms. Case-fold only when comparing paths
+ * (see `normalizePathSync`).
+ */
 export function normalizeWorkspaceRoot(rootPath: string): string {
-  return normalizePathSync(rootPath).replace(/[\\/]+$/, "");
+  return normalizePathForStorage(rootPath).replace(/[\\/]+$/, "");
 }
 
 export function relativePathFromRoot(absolutePath: string, workspaceRoot: string): string {
-  const normalizedRoot = normalizeWorkspaceRoot(workspaceRoot);
-  const normalizedPath = normalizePathSync(absolutePath);
-  if (normalizedPath === normalizedRoot) {
+  const root = normalizeWorkspaceRoot(workspaceRoot);
+  const path = normalizePathForStorage(absolutePath);
+  const compareRoot = normalizePathSync(root);
+  const comparePath = normalizePathSync(path);
+  if (comparePath === compareRoot) {
     return "";
   }
-  if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
-    return normalizedPath.slice(normalizedRoot.length + 1);
+  if (comparePath.startsWith(`${compareRoot}/`)) {
+    // Slice the case-preserving form (same segment layout as the folded key)
+    // so displayed relative paths keep the real on-disk casing.
+    return path.slice(root.length + 1);
   }
-  return normalizedPath;
+  return path;
 }
 
 export interface EnumerateOpenableFilesOptions {

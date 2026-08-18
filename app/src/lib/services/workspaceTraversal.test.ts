@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   joinDirectoryPath,
+  normalizeWorkspaceRoot,
   relativePathFromRoot,
   shouldSkipDirectoryEntry,
   shouldSkipFileEntry,
@@ -21,5 +22,11 @@ describe("workspaceTraversal policy", () => {
     expect(relativePathFromRoot("/ws/src/a.ts", "/ws")).toBe("src/a.ts");
     expect(relativePathFromRoot("/ws", "/ws")).toBe("");
     expect(joinDirectoryPath("/ws/", "a.ts")).toBe("/ws/a.ts");
+  });
+
+  it("preserves path casing while still matching case-insensitively", () => {
+    expect(normalizeWorkspaceRoot("/Users/Me/Ws/")).toBe("/Users/Me/Ws");
+    expect(relativePathFromRoot("/Users/Me/Ws/Src/A.ts", "/Users/Me/Ws")).toBe("Src/A.ts");
+    expect(relativePathFromRoot("/users/me/ws/Src/A.ts", "/Users/Me/Ws")).toBe("Src/A.ts");
   });
 });

@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-08-18 16:11 MSK — Stop lowercasing paths in Copy Path / Copy Relative Path
+
+- Copy Path and Copy Relative Path (tab menu and project-tree menu) no longer
+  return lowercased strings on macOS/Windows: case folding now happens only in
+  comparison keys, never in paths stored, displayed, or copied.
+- `workspacePaths.workspaceRelativePath`: containment is still decided on the
+  case-folded comparison keys, but the returned slice now comes from the
+  case-preserving normalized form, so the copied relative path keeps the real
+  on-disk casing.
+- `workspaceTraversal`: `normalizeWorkspaceRoot` now preserves casing (it feeds
+  the traversal root and display forms); `relativePathFromRoot` compares
+  case-insensitively but slices the case-preserving path, so picker/search
+  relative paths keep their casing too.
+- `workspaceFileCatalog`: entries keep the original casing in
+  `absolutePath`/`relativePath`/`basename`/`directory`; only the dedup `key` is
+  case-folded. Files opened via Quick Open / project search therefore store the
+  real path on the document, which is what Copy Path copies. Watcher-driven
+  incremental `create` adds take the raw watcher path so they keep casing as
+  well; root-containment checks inside the catalog now fold both sides.
+- `openFileGate.requestOpenPath` returns the original (un-folded) path for
+  `redirected`/`existing` results, so recents and "Switched to…" notifications
+  keep the real casing; `openActivePath` reports large-file
+  `pending_confirm` paths without folding.
+- Tests: casing-preservation cases added in `workspacePaths.test.ts`,
+  `workspaceTraversal.test.ts`, and `workspaceFileCatalog.test.ts`.
+
 ## 2026-08-11 22:35 MSK — Stop project-tree refresh/expand after drag-drop move
 
 - Dragging a file/folder to another folder in the project pane no longer makes

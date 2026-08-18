@@ -55,6 +55,14 @@ describe("workspaceRelativePath", () => {
   it("returns null when .. escapes the workspace root", () => {
     expect(workspaceRelativePath("/Users/me/ws/../secrets/a.txt", "/Users/me/ws")).toBeNull();
   });
+
+  it("preserves the original casing of the relative path", () => {
+    expect(workspaceRelativePath("/Users/Me/Ws/Src/Main.ts", "/Users/Me/Ws")).toBe("Src/Main.ts");
+  });
+
+  it("still matches when root and path casing differ", () => {
+    expect(workspaceRelativePath("/users/me/ws/Src/Main.ts", "/Users/Me/Ws")).toBe("Src/Main.ts");
+  });
 });
 
 describe("ensureNotepadForOutsidePath", () => {

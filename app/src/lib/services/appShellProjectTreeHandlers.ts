@@ -19,6 +19,8 @@ import { promptEntryName } from "./entryNamePrompt";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { createProjectTreeController } from "./projectTreeController";
 import type { FileWatcherEventKind } from "./fileWatcher";
+import type { ContextId } from "../domain/contracts";
+import { normalizePathSync } from "./diskFingerprint";
 
 export interface AppShellProjectTreeHandlersDeps {
   getActiveWorkspaceRoot: () => string | null;
@@ -112,6 +114,17 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     notify(describeOpenActivePathResult(result));
   }
 
+  async function handleOpenProjectTreeFileInContext(
+    path: string,
+    contextId: ContextId,
+  ): Promise<void> {
+    if (contextId === "chat-http" || contextId === "chat-cloud") {
+      return;
+    }
+    await handleOpenProjectTreeFile(path);
+    appState.moveFileTabToContext(normalizePathSync(path), contextId);
+  }
+
   async function refreshProjectTree(): Promise<void> {
     onBeforeProjectTreeRefresh?.();
     await deps.projectTreeController.refreshProjectTree(
@@ -183,49 +196,57 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     await afterProjectTreeMutation(sourcePath, result.path, destDirPath);
   }
 
-  async function handleNewProjectFile(parentDirPath: string): Promise<void> {
+  async function handleNewProjectFile(
+    parentDirPath: string,
+    requestedName?: string,
+  ): Promise<boolean> {
     const activeWorkspaceRoot = getActiveWorkspaceRoot();
     if (!activeWorkspaceRoot) {
-      return;
+      return false;
     }
-    const name = await promptEntryName({
+    const name = requestedName ?? await promptEntryName({
       title: "New file name",
       defaultValue: "untitled.txt",
       confirmLabel: "Create",
     });
     if (name === null) {
-      return;
+      return false;
     }
     const result = await createProjectFile(activeWorkspaceRoot, parentDirPath, name);
     if (!result.ok) {
       notify(result.reason);
-      return;
+      return false;
     }
     notify(`Created ${name}`);
     await afterProjectTreeMutation(result.path);
     await handleOpenProjectTreeFile(result.path);
+    return true;
   }
 
-  async function handleNewProjectFolder(parentDirPath: string): Promise<void> {
+  async function handleNewProjectFolder(
+    parentDirPath: string,
+    requestedName?: string,
+  ): Promise<boolean> {
     const activeWorkspaceRoot = getActiveWorkspaceRoot();
     if (!activeWorkspaceRoot) {
-      return;
+      return false;
     }
-    const name = await promptEntryName({
+    const name = requestedName ?? await promptEntryName({
       title: "New folder name",
       defaultValue: "New Folder",
       confirmLabel: "Create",
     });
     if (name === null) {
-      return;
+      return false;
     }
     const result = await createProjectFolder(activeWorkspaceRoot, parentDirPath, name);
     if (!result.ok) {
       notify(result.reason);
-      return;
+      return false;
     }
     notify(`Created folder ${name}`);
     await afterProjectTreeMutation(result.path);
+    return true;
   }
 
   async function handleRenameProjectEntry(
@@ -302,6 +323,7 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     handleToggleProjectTreeDirectory,
     handleOpenProjectTreeFile,
     handleOpenProjectTreeFileInPane,
+    handleOpenProjectTreeFileInContext,
     refreshProjectTree,
     notifyProjectTreeFilesystemChange,
     handleMoveProjectTreeEntry,

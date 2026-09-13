@@ -80,7 +80,7 @@
   let replaceInputEl: HTMLInputElement | null = $state(null);
 
   /** Navigation and replacement are disabled when the query is blank or invalid. */
-  const canSearch = $derived(query.trim().length > 0 && !queryError);
+  const canSearch = $derived(query.length > 0 && !queryError);
   const canReplace = $derived(canSearch && results.length > 0);
 
   function clampHeight(next: number): number {

@@ -690,18 +690,34 @@
   }
   function setProjectSearchQuery(value: string): void {
     projectSearchQuery = value;
+    projectSearchGeneration += 1;
+    projectSearchResults = [];
+    projectSearchStatus = "";
+    projectSearchRunning = false;
   }
   function setProjectSearchReplace(value: string): void {
     projectSearchReplace = value;
   }
   function setProjectSearchCaseSensitive(value: boolean): void {
     projectSearchCaseSensitive = value;
+    projectSearchGeneration += 1;
+    projectSearchResults = [];
+    projectSearchStatus = "";
+    projectSearchRunning = false;
   }
   function setProjectSearchWholeWord(value: boolean): void {
     projectSearchWholeWord = value;
+    projectSearchGeneration += 1;
+    projectSearchResults = [];
+    projectSearchStatus = "";
+    projectSearchRunning = false;
   }
   function setProjectSearchRegex(value: boolean): void {
     projectSearchRegex = value;
+    projectSearchGeneration += 1;
+    projectSearchResults = [];
+    projectSearchStatus = "";
+    projectSearchRunning = false;
   }
   function setProjectSearchHeight(heightPx: number): void {
     projectSearchHeightPx = heightPx;

@@ -105,6 +105,7 @@
       string,
       import("../ai/backends/workspaceAgentBackend").OpencodeFileChangeStatus
     > | null;
+    markdownPaths?: readonly string[];
     collapsed: boolean;
     panelWidthPx: number;
     onRefresh: () => void | Promise<void>;
@@ -114,8 +115,8 @@
     onToggleDirectory: (path: string) => void | Promise<void>;
     onOpenFile: (path: string) => void | Promise<void>;
     onMoveEntry: (sourcePath: string, destDirPath: string) => Promise<void>;
-    onNewFile: (parentDirPath: string) => void | Promise<void>;
-    onNewFolder: (parentDirPath: string) => void | Promise<void>;
+    onNewFile: (parentDirPath: string, name: string) => Promise<boolean>;
+    onNewFolder: (parentDirPath: string, name: string) => Promise<boolean>;
     onRenameEntry: (path: string, kind: ProjectTreeNode["kind"]) => void | Promise<void>;
     onDeleteEntry: (path: string, kind: ProjectTreeNode["kind"]) => void | Promise<void>;
     /** Phase 6 — live editor pane elements for file→pane DnD hit-testing. */
@@ -124,6 +125,8 @@
     onOpenFileInPane?: (filePath: string, paneId: string) => void | Promise<void>;
     /** Phase 6 — reports the hovered pane during a file drag (for affordance). */
     onFileDropPaneChange?: (paneId: string | null) => void;
+    onOpenFileInContext?: (filePath: string, contextId: ContextId) => void | Promise<void>;
+    onMarkdownFilterEnable?: () => void;
     notify: (message: string) => void;
   }
 
@@ -421,6 +424,7 @@
     headingJump,
     bookmarkList,
     snippetInsert,
+    compactNotepad = false,
     onConsoleHeightCommit,
     consoleOpen = false,
     consoleHeightPx = $bindable(0),
@@ -447,6 +451,7 @@
     headingJump?: AppShellHeadingJumpProps;
     bookmarkList?: AppShellBookmarkListProps;
     snippetInsert?: AppShellSnippetInsertProps;
+    compactNotepad?: boolean;
     onConsoleHeightCommit: () => void;
     consoleOpen?: boolean;
     consoleHeightPx?: number;
@@ -568,16 +573,16 @@
     void sessionsSidebar.onDeleteSession(sessionId);
   }
 
-  function handleProjectMoveEntry(sourcePath: string, destDirPath: string): void {
-    void projectTree.onMoveEntry(sourcePath, destDirPath);
+  async function handleProjectMoveEntry(sourcePath: string, destDirPath: string): Promise<void> {
+    await projectTree.onMoveEntry(sourcePath, destDirPath);
   }
 
-  function handleProjectNewFile(parent: string): void {
-    void projectTree.onNewFile(parent);
+  async function handleProjectNewFile(parent: string, name: string): Promise<boolean> {
+    return projectTree.onNewFile(parent, name);
   }
 
-  function handleProjectNewFolder(parent: string): void {
-    void projectTree.onNewFolder(parent);
+  async function handleProjectNewFolder(parent: string, name: string): Promise<boolean> {
+    return projectTree.onNewFolder(parent, name);
   }
 
   function handleProjectRenameEntry(
@@ -695,10 +700,10 @@
   }
 </script>
 
-<main class="shell">
+<main class="shell" class:shell-compact-notepad={compactNotepad}>
   <TitleBar />
   <div class="shell-main-row" bind:this={shellMainRowEl}>
-    {#if activityRail.show}
+    {#if activityRail.show && !compactNotepad}
       <ActivityRail
         workspaces={activityRail.workspaces}
         activeContextId={activityRail.activeContextId}
@@ -717,7 +722,7 @@
         onSelectNotepadTab={activityRail.onSelectNotepadTab}
       />
     {/if}
-    {#if sessionsSidebar.show}
+    {#if sessionsSidebar.show && !compactNotepad}
       <SessionsSidebar
         sessions={sessionsSidebar.sessions}
         activeSessionId={sessionsSidebar.activeSessionId}
@@ -814,7 +819,7 @@
         </div>
       {/each}
     </section>
-    {#if projectTree.workspaceRoot}
+    {#if projectTree.workspaceRoot && !compactNotepad}
       <ProjectPanel
         workspaceRoot={projectTree.workspaceRoot}
         rootNodes={projectTree.state.rootNodes}
@@ -823,6 +828,7 @@
         loadingPaths={projectTree.state.loadingPaths}
         activeFilePath={projectTree.activeFilePath}
         statusByPath={projectTree.statusByPath ?? null}
+        markdownPaths={projectTree.markdownPaths ?? []}
         showHidden={projectTree.state.showHidden}
         collapsed={projectTree.collapsed}
         panelWidthPx={projectTree.panelWidthPx}
@@ -839,18 +845,20 @@
         onDeleteEntry={handleProjectDeleteEntry}
         getPaneElements={projectTree.getPaneElements ? handleProjectGetPaneElements : emptyPaneElements}
         onOpenFileInPane={projectTree.onOpenFileInPane ?? null}
+        onOpenFileInContext={projectTree.onOpenFileInContext}
+        onMarkdownFilterEnable={projectTree.onMarkdownFilterEnable}
         onFileDropPaneChange={handleProjectFileDropPaneChange}
         notify={projectTree.notify}
       />
     {/if}
-    {#if diffPanel?.open && diffPanel.workspaceRootPath && diffPanel.sessionId}
+    {#if !compactNotepad && diffPanel?.open && diffPanel.workspaceRootPath && diffPanel.sessionId}
       <DiffViewerPanel
         workspaceRootPath={diffPanel.workspaceRootPath}
         sessionId={diffPanel.sessionId}
         onOpenFile={diffPanel.onOpenFile}
       />
     {/if}
-    {#if todoPanel?.open && todoPanel.workspaceRootPath && todoPanel.sessionId}
+    {#if !compactNotepad && todoPanel?.open && todoPanel.workspaceRootPath && todoPanel.sessionId}
       <TodoPanel
         workspaceRootPath={todoPanel.workspaceRootPath}
         sessionId={todoPanel.sessionId}
@@ -859,6 +867,7 @@
     {/if}
   </div>
 
+  {#if !compactNotepad}
   <div class="bottom-panel">
     {#if projectSearch?.open}
       <ProjectSearchPanel
@@ -1028,6 +1037,7 @@
       {/if}
     </footer>
   </div>
+  {/if}
 </main>
 
 <EntryNamePrompt onNotify={overlays.notify} />

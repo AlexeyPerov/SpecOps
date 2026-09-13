@@ -201,6 +201,7 @@ describe("refreshDocumentFromDiskIfNeeded", () => {
       content: "",
       sizeBytes: 100,
       contentKind: "image",
+      fingerprint: { mtimeMs: 1, sizeBytes: 100 },
     });
 
     const legacy = await refreshDocumentFromDiskIfNeeded(baseDocument(), isMissing);

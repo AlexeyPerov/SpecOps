@@ -243,7 +243,7 @@ function editorSurfaceTheme(): Extension {
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "var(--color-text-primary)",
     },
-    ".cm-selectionBackground, .cm-content ::selection": {
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
       backgroundColor: "var(--color-selection, rgba(48, 100, 180, 0.3))",
     },
     ".cm-minimap-gutter": {

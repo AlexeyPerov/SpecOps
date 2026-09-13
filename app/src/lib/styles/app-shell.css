@@ -7,6 +7,22 @@
   overflow: hidden;
 }
 
+.shell-compact-notepad .shell-main-row {
+  grid-template-columns: minmax(var(--editor-min-width), 1fr);
+}
+
+.shell-compact-notepad .editor-shell {
+  grid-column: 1;
+}
+
+.shell-compact-notepad .markdown-mode-bar {
+  display: none;
+}
+
+.shell-compact-notepad .editor-pane {
+  padding: 0;
+}
+
 .shell-main-row {
   min-height: 0;
   height: 100%;

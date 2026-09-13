@@ -31,6 +31,23 @@ describe("appState tabs and selection", () => {
     expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-2");
   });
 
+  it("moves an open file tab to a dropped-on workspace context", () => {
+    const documentId = appState.openFileInTab("/tmp/shared.txt", "hello");
+    const workspaceId = appState.addWorkspace("/tmp/workspace");
+    expect(workspaceId).not.toBeNull();
+
+    expect(appState.moveFileTabToContext("/tmp/shared.txt", workspaceId!)).toBe(documentId);
+
+    const snapshot = appState.getSnapshot();
+    expect(snapshot.contexts.activeContextId).toBe(workspaceId);
+    expect(snapshot.contexts.notepad.documents.some((doc) => doc.id === documentId)).toBe(false);
+    const workspace = snapshot.contexts.workspaces.find((entry) => entry.id === workspaceId)!;
+    expect(workspace.snapshot.documents.some((doc) => doc.id === documentId)).toBe(true);
+    expect(allTabs(workspace.snapshot.session.editorLayout).some(
+      (tab) => isFileTab(tab) && tab.documentId === documentId,
+    )).toBe(true);
+  });
+
   it("selectTab ignores unknown tab ids", () => {
     appState.selectTab("tab-missing");
     expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-1");
@@ -651,4 +668,3 @@ describe("appState tabs and selection", () => {
     expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-3");
   });
 });
-

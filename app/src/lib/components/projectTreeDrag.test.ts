@@ -6,6 +6,7 @@ import {
 } from "./projectTreeDrag";
 import type { ProjectTreeNode } from "../services/projectTree";
 import type { PaneDropTargetElements } from "./paneDropTargets";
+import type { ContextId } from "../domain/contracts";
 
 function fileNode(path: string): ProjectTreeNode {
   return { kind: "file", path, name: path.split("/").pop() ?? path };
@@ -21,6 +22,8 @@ function createController(options: {
   getDropTargetElements?: () => HTMLElement[];
   onOpenFileInPane?: (filePath: string, paneId: string) => void | Promise<void>;
   onMove?: (sourcePath: string, destDirPath: string) => Promise<void>;
+  getContextDropTargetElements?: () => HTMLElement[];
+  onOpenFileInContext?: (filePath: string, contextId: ContextId) => void | Promise<void>;
 } = {}) {
   let state: ProjectTreeDragState | null = null;
   const notify = vi.fn();
@@ -31,6 +34,8 @@ function createController(options: {
     getPaneElements: options.getPaneElements,
     getDropTargetElements: options.getDropTargetElements,
     onOpenFileInPane: options.onOpenFileInPane,
+    getContextDropTargetElements: options.getContextDropTargetElements,
+    onOpenFileInContext: options.onOpenFileInContext,
     onStateChange: (next) => {
       state = next;
     },
@@ -154,6 +159,44 @@ describe("projectTreeDrag — file→pane drop (Phase 6)", () => {
     expect(accepted).toBe(false);
     // No state change emitted on right-button → state stays at its initial null.
     expect(getState()?.sourcePath ?? null).toBeNull();
+  });
+});
+
+describe("projectTreeDrag — file→context drop", () => {
+  it("opens a dragged file in the targeted workspace context", async () => {
+    const target = document.createElement("button");
+    target.dataset.fileDropContext = "ws-2";
+    target.getBoundingClientRect = () => ({
+      left: 40, top: 40, right: 80, bottom: 80, width: 40, height: 40,
+      x: 40, y: 40, toJSON: () => ({}),
+    }) as DOMRect;
+    const onOpenFileInContext = vi.fn();
+    const { controller } = createController({
+      getContextDropTargetElements: () => [target],
+      onOpenFileInContext,
+    });
+    dragPastThreshold(controller, fileNode("/root/a.txt"));
+    controller.handlePointerMove({ pointerId: 1, clientX: 60, clientY: 60 } as PointerEvent);
+    expect(await controller.finishDrop()).toBe(true);
+    expect(onOpenFileInContext).toHaveBeenCalledWith("/root/a.txt", "ws-2");
+  });
+
+  it("never treats a dragged directory as a context-open candidate", async () => {
+    const target = document.createElement("button");
+    target.dataset.fileDropContext = "notepad";
+    target.getBoundingClientRect = () => ({
+      left: 40, top: 40, right: 80, bottom: 80, width: 40, height: 40,
+      x: 40, y: 40, toJSON: () => ({}),
+    }) as DOMRect;
+    const onOpenFileInContext = vi.fn();
+    const { controller } = createController({
+      getContextDropTargetElements: () => [target],
+      onOpenFileInContext,
+    });
+    dragPastThreshold(controller, dirNode("/root/folder"));
+    controller.handlePointerMove({ pointerId: 1, clientX: 60, clientY: 60 } as PointerEvent);
+    expect(await controller.finishDrop()).toBe(false);
+    expect(onOpenFileInContext).not.toHaveBeenCalled();
   });
 });
 

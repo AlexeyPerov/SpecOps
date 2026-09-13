@@ -129,7 +129,7 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
 
   function buildProjectSearchQuery(state: ProjectSearchQueryState): SearchQuery {
     return createSearchQuery({
-      text: state.text.trim(),
+      text: state.text,
       replacement: state.replacement,
       caseSensitive: state.caseSensitive,
       wholeWord: state.wholeWord,
@@ -153,11 +153,13 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
     }
     deps.setProjectSearchRunning(true);
     deps.setProjectSearchStatus("Searching…");
+    const generation = deps.bumpProjectSearchGeneration();
     const registry = deps.getWorkspaceFileCatalogRegistry();
     registry.ensureReady();
     await registry.waitForReady();
-    // Invalidate any in-flight search so stale results never land.
-    const generation = deps.bumpProjectSearchGeneration();
+    if (generation !== deps.getProjectSearchGeneration()) {
+      return;
+    }
     try {
       const outcome = await searchInProject(root, query, {
         files: registry.getActive()?.getOpenablePaths() ?? undefined,
@@ -175,12 +177,14 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       deps.setProjectSearchResults(results);
       const files = results.length;
       const matches = totalMatchCount(results);
+      const skipped = (outcome.skippedLarge ?? 0) + (outcome.skippedUnreadable ?? 0);
+      const skippedSuffix = skipped > 0 ? `; ${skipped} file(s) skipped` : "";
       deps.setProjectSearchStatus(
         matches === 0
-          ? "No results"
+          ? `No results${skipped > 0 ? ` (${skipped} file(s) skipped)` : ""}`
           : `${matches} result${matches === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"}${
               outcome.truncated ? " (capped — refine the search to see all matches)" : ""
-            }`,
+            }${skippedSuffix}`,
       );
     } catch (error: unknown) {
       if (generation === deps.getProjectSearchGeneration()) {
@@ -533,7 +537,7 @@ export function computeProjectSearchQueryError(query: string, regex: boolean): s
     return "";
   }
   try {
-    void new RegExp(query.trim());
+    void new RegExp(query);
     return "";
   } catch (error: unknown) {
     return error instanceof Error ? error.message : "Invalid regular expression.";

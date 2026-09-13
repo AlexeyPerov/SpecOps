@@ -159,6 +159,74 @@ export function createTabTransferSlice(deps: {
   const { update, getSnapshot, closeTabForce } = deps;
 
   return {
+    moveFileTabToContext(normalizedPath: string, targetContextId: ContextId): string | null {
+      let movedDocumentId: string | null = null;
+      update((state) => {
+        if (targetContextId === "chat-http" || targetContextId === "chat-cloud") {
+          return state;
+        }
+        const contexts = [
+          { id: "notepad" as ContextId, snapshot: state.contexts.notepad },
+          ...state.contexts.workspaces.map((entry) => ({ id: entry.id, snapshot: entry.snapshot })),
+        ];
+        const target = contexts.find((entry) => entry.id === targetContextId);
+        const source = contexts.find((entry) =>
+          Boolean(findFileTabForNormalizedPath(entry.snapshot, normalizedPath)),
+        );
+        if (!target || !source) {
+          return state;
+        }
+        const sourceMatch = findFileTabForNormalizedPath(source.snapshot, normalizedPath);
+        if (!sourceMatch) {
+          return state;
+        }
+        movedDocumentId = sourceMatch.documentId;
+        if (source.id === target.id) {
+          return selectTabInternal(
+            {
+              ...state,
+              contexts: { ...state.contexts, activeContextId: targetContextId },
+              editor: { ...state.editor, previewMode: "editor" },
+            },
+            sourceMatch.tabId,
+          );
+        }
+
+        const targetMatch = findFileTabForNormalizedPath(target.snapshot, normalizedPath);
+        const nextSource = removeFileTabFromSnapshot(
+          source.snapshot,
+          sourceMatch.tabId,
+          sourceMatch.documentId,
+          source.snapshot.session.lastActiveWindowId,
+        );
+        const nextTarget = targetMatch
+          ? target.snapshot
+          : addFileTabWithDocument(target.snapshot, sourceMatch.document, nextTabId());
+        const replaceContext = (id: ContextId, snapshot: ContextSnapshot): AppDomainState["contexts"] => ({
+          ...state.contexts,
+          notepad: id === "notepad" ? snapshot : state.contexts.notepad,
+          workspaces: state.contexts.workspaces.map((entry) =>
+            entry.id === id ? { ...entry, snapshot } : entry,
+          ),
+        });
+        let nextContexts = replaceContext(source.id, nextSource);
+        nextContexts = {
+          ...nextContexts,
+          notepad: target.id === "notepad" ? nextTarget : nextContexts.notepad,
+          workspaces: nextContexts.workspaces.map((entry) =>
+            entry.id === target.id ? { ...entry, snapshot: nextTarget } : entry,
+          ),
+          activeContextId: targetContextId,
+        };
+        const nextState = {
+          ...state,
+          contexts: nextContexts,
+          editor: { ...state.editor, previewMode: "editor" as const },
+        };
+        return targetMatch ? selectTabInternal(nextState, targetMatch.tabId) : nextState;
+      });
+      return movedDocumentId;
+    },
     migrateNotepadFileTabToWorkspace(
       normalizedPath: string,
       workspaceContextId: ContextId,

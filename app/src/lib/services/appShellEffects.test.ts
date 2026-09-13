@@ -504,7 +504,7 @@ describe("syncWorkspaceFileCatalogEffect", () => {
     syncWorkspaceFileCatalogEffect({
       activeWorkspaceRoot: "/repo",
       isChatHttpActive: false,
-      registry: { setActiveRoot, ensureReady },
+      registry: { setActiveRoot },
     });
     expect(setActiveRoot).toHaveBeenCalledTimes(1);
     expect(setActiveRoot).toHaveBeenCalledWith("/repo");

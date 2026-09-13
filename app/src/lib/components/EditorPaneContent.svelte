@@ -606,7 +606,6 @@
             <MarkdownEditorPane
               markdownEnabled={
                 entryView.isMarkdownDocument &&
-                entry.document.content.length > 0 &&
                 !entry.document.fileMissing
               }
               content={entry.document.content}

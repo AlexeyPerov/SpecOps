@@ -73,9 +73,20 @@ export function validateEntryName(name: string): string | null {
   return null;
 }
 
-export function isBlockedProjectTreeDirectory(dirPath: string): boolean {
+export function isBlockedProjectTreeDirectory(
+  dirPath: string,
+  workspaceRoot?: string,
+): boolean {
   const normalized = normalizePathSync(dirPath).replace(/\/+$/, "");
-  const segments = normalized.split("/").filter(Boolean);
+  const normalizedRoot = workspaceRoot
+    ? normalizePathSync(workspaceRoot).replace(/\/+$/, "")
+    : null;
+  const relative =
+    normalizedRoot &&
+    (normalized === normalizedRoot || normalized.startsWith(`${normalizedRoot}/`))
+      ? normalized.slice(normalizedRoot.length + (normalized === normalizedRoot ? 0 : 1))
+      : normalized;
+  const segments = relative.split("/").filter(Boolean);
   for (const segment of segments) {
     if (segment.startsWith(".")) {
       return true;
@@ -141,7 +152,7 @@ export async function createProjectFile(
   if (!isPathUnderRoot(parentDirPath, workspaceRoot)) {
     return { ok: false, reason: "Parent folder is outside the workspace." };
   }
-  if (isBlockedProjectTreeDirectory(parentDirPath)) {
+  if (isBlockedProjectTreeDirectory(parentDirPath, workspaceRoot)) {
     return { ok: false, reason: "Cannot create files in this folder." };
   }
   const targetPath = await join(parentDirPath, name.trim());
@@ -177,7 +188,7 @@ export async function replaceInProjectFile(
   if (!isPathUnderRoot(filePath, workspaceRoot)) {
     return { ok: false, reason: "File is outside the workspace.", count: 0 };
   }
-  if (isBlockedProjectTreeDirectory(filePath)) {
+  if (isBlockedProjectTreeDirectory(parentDirectory(filePath), workspaceRoot)) {
     return { ok: false, reason: "Cannot modify files in this folder.", count: 0 };
   }
   // Read raw bytes and strict-decode, mirroring the open-file path (C5). A
@@ -261,7 +272,7 @@ export async function createProjectFolder(
   if (!isPathUnderRoot(parentDirPath, workspaceRoot)) {
     return { ok: false, reason: "Parent folder is outside the workspace." };
   }
-  if (isBlockedProjectTreeDirectory(parentDirPath)) {
+  if (isBlockedProjectTreeDirectory(parentDirPath, workspaceRoot)) {
     return { ok: false, reason: "Cannot create folders in this folder." };
   }
   const targetPath = await join(parentDirPath, name.trim());

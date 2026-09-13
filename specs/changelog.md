@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-09-13 21:47 MSK — Refine secondary windows, project files, search, and drag-drop
+
+- Secondary windows now complete confirmed closes with a direct window teardown,
+  avoiding the intercepted close-request loop that left individual windows open.
+  A secondary window showing Notepad now keeps only the title area, tab strip,
+  and editor; workspace rails, panels, Markdown controls, and the status/bottom
+  area are omitted.
+- CodeMirror selection styling now overrides its focused-selection rule, keeping
+  selected text legible in dark themes. Markdown edit/split/preview controls are
+  limited to actual Markdown documents and remain available for empty `.md`
+  files, while no-document and non-Markdown views do not show them.
+- Project search now preserves whitespace queries, cancels stale results when
+  query options change, produces stable result ordering, reports unreadable or
+  oversized skipped files, and prevents Replace All from acting on an obsolete
+  result set. Project replacement now evaluates blocked directories relative to
+  the workspace root rather than rejecting safe workspaces under dot-prefixed
+  ancestor paths.
+- Every project-tree context menu can start file or folder creation. The project
+  header has a root-create `+` menu and the blank area below the tree opens the
+  same root menu. Creation uses an in-tree, focused name placeholder: Enter
+  commits to disk, while Escape or focus loss cancels without creating anything.
+- Added a `.md` project-panel filter that loads the workspace catalog and shows
+  only Markdown files plus their ancestor folders.
+- Files from the project tree or the operating system can be dropped onto the
+  Notepad or workspace rail icons to open/move the tab in that context. Chat
+  contexts are deliberately excluded and valid targets show a hover affordance.
+- Cleared the full type-check backlog in affected legacy tests and host API
+  declarations. Stabilized platform-specific Git null-device handling and
+  Markdown-outline reactive refreshes found by the full test run.
+- Verification: `npm run check`, all 3,391 Vitest tests, and `npm run build`.
+
 ## 2026-08-18 16:11 MSK — Stop lowercasing paths in Copy Path / Copy Relative Path
 
 - Copy Path and Copy Relative Path (tab menu and project-tree menu) no longer

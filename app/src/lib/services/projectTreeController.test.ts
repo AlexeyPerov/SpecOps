@@ -311,7 +311,7 @@ describe("createProjectTreeController", () => {
   });
 
   it("ignores a slower root load from a previous workspace after a switch", async () => {
-    let resolveUnity: ((nodes: ProjectTreeNode[]) => void) | null = null;
+    let resolveUnity: (nodes: ProjectTreeNode[]) => void = () => {};
     const loadDirectoryChildrenFn = vi.fn(async (workspaceRoot: string) => {
       if (workspaceRoot === "/unity") {
         return await new Promise<ProjectTreeNode[]>((resolve) => {
@@ -337,7 +337,7 @@ describe("createProjectTreeController", () => {
     const afterNotes = snapshots[snapshots.length - 1];
     expect(afterNotes.rootNodes.map((node) => node.path)).toEqual(["/notes/archero"]);
 
-    resolveUnity?.([makeNode("hub", "/unity/hub", "directory")]);
+    resolveUnity([makeNode("hub", "/unity/hub", "directory")]);
     await unityLoad;
 
     const afterStale = snapshots[snapshots.length - 1];

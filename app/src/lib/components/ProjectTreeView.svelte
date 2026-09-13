@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
+  import type { ContextId } from "../domain/contracts";
   import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import {
     flattenProjectTree,
@@ -29,9 +30,12 @@
   interface Props {
     nodes?: ProjectTreeNode[];
     workspaceRoot?: string;
-    expandedPaths?: Set<string>;
-    childrenByPath?: Map<string, ProjectTreeNode[]>;
-    loadingPaths?: Set<string>;
+    expandedPaths?: ReadonlySet<string>;
+    childrenByPath?: ReadonlyMap<string, ProjectTreeNode[]>;
+    loadingPaths?: ReadonlySet<string>;
+    draft?: { kind: "file" | "directory"; parentDirPath: string; defaultValue: string } | null;
+    onCommitDraft?: (name: string) => Promise<boolean>;
+    onCancelDraft?: () => void;
     activeFilePath?: string | null;
     /** M5-T3 — absolute path → git change status, for badges. */
     statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
@@ -47,6 +51,7 @@
     onOpenFileInPane?: (filePath: string, paneId: string) => void | Promise<void>;
     /** Phase 6 — reports the hovered pane id during a file drag (for affordance). */
     onFileDropPaneChange?: (paneId: string | null) => void;
+    onOpenFileInContext?: (filePath: string, contextId: ContextId) => void | Promise<void>;
   }
 
   let {
@@ -55,6 +60,9 @@
     expandedPaths = emptySet<string>(),
     childrenByPath = emptyMap<string, ProjectTreeNode[]>(),
     loadingPaths = emptySet<string>(),
+    draft = null,
+    onCommitDraft = async () => false,
+    onCancelDraft = () => {},
     activeFilePath = null,
     statusByPath = null,
     onToggleDirectory = () => {},
@@ -66,6 +74,7 @@
     getPaneElements = () => [],
     onOpenFileInPane,
     onFileDropPaneChange = () => {},
+    onOpenFileInContext,
   }: Props = $props();
 
   let ignoreNextActivation = false;
@@ -76,6 +85,7 @@
     sourceKind: null,
     dropTargetPath: null,
     dropPaneId: null,
+    dropContextId: null,
     didDrag: false,
     startX: 0,
     startY: 0,
@@ -93,6 +103,10 @@
     notify: (message) => notify(message),
     getPaneElements: () => getPaneElements(),
     onOpenFileInPane: (filePath, paneId) => onOpenFileInPane?.(filePath, paneId),
+    getContextDropTargetElements: () =>
+      Array.from(document.querySelectorAll<HTMLElement>("[data-file-drop-context]")),
+    onOpenFileInContext: (filePath, contextId) =>
+      onOpenFileInContext?.(filePath, contextId),
     // Directory-row elements for coordinate-based folder drop-target
     // hit-testing. `pointerenter`/`pointerleave` on sibling rows are suppressed
     // by the implicit pointer capture of an active mouse drag, so the controller
@@ -209,6 +223,56 @@
     flattenProjectTree(nodes, expandedPaths, childrenByPath, loadingPaths),
   );
 
+  type DisplayRow = ProjectTreeRow | { kind: "draft"; depth: number };
+  const displayRows = $derived.by<DisplayRow[]>(() => {
+    if (!draft) return rows;
+    const next: DisplayRow[] = [...rows];
+    if (draft.parentDirPath === workspaceRoot) {
+      next.unshift({ kind: "draft", depth: 0 });
+      return next;
+    }
+    const parentIndex = rows.findIndex(
+      (row) => row.kind === "node" && row.node.path === draft.parentDirPath,
+    );
+    const parent = parentIndex >= 0 ? rows[parentIndex] : null;
+    const depth = parent?.kind === "node" ? parent.depth + 1 : 0;
+    next.splice(parentIndex >= 0 ? parentIndex + 1 : 0, 0, { kind: "draft", depth });
+    return next;
+  });
+
+  let draftValue = $state("");
+  let committingDraft = $state(false);
+  $effect(() => {
+    draftValue = draft?.defaultValue ?? "";
+  });
+
+  function focusDraftInput(node: HTMLInputElement): void {
+    queueMicrotask(() => {
+      node.focus();
+      node.select();
+    });
+  }
+
+  async function handleDraftKeydown(event: KeyboardEvent): Promise<void> {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onCancelDraft();
+      return;
+    }
+    if (event.key !== "Enter" || committingDraft) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const name = draftValue.trim();
+    if (!name) return;
+    committingDraft = true;
+    try {
+      await onCommitDraft(name);
+    } finally {
+      committingDraft = false;
+    }
+  }
+
   let listEl = $state<HTMLElement | null>(null);
   let scrollParent = $state<HTMLElement | null>(null);
   let scrollTop = $state(0);
@@ -281,7 +345,7 @@
   });
 
   const visibleRange = $derived.by(() => {
-    const total = rows.length;
+    const total = displayRows.length;
     if (!scrollParent || total <= VIRTUALIZE_ROW_THRESHOLD) {
       return { start: 0, end: total };
     }
@@ -294,7 +358,7 @@
     return { start, end };
   });
 
-  const visibleRows = $derived(rows.slice(visibleRange.start, visibleRange.end));
+  const visibleRows = $derived(displayRows.slice(visibleRange.start, visibleRange.end));
   // Spacers sit in the same CSS grid as rows, so each spacer also contributes
   // one `gap`. Subtract that gap so windowed scroll height matches the
   // unwindowed list (F72).
@@ -304,7 +368,7 @@
       : 0,
   );
   const bottomPadPx = $derived.by(() => {
-    const remaining = rows.length - visibleRange.end;
+    const remaining = displayRows.length - visibleRange.end;
     if (remaining <= 0) {
       return 0;
     }
@@ -331,7 +395,7 @@
       lastRevealedPath = path;
       return;
     }
-    const index = rows.findIndex(
+    const index = displayRows.findIndex(
       (row) => row.kind === "node" && row.node.path === path,
     );
     if (index < 0) {
@@ -371,8 +435,21 @@
     {#if topPadPx > 0}
       <li class="project-tree-spacer" style={`height:${topPadPx}px`} aria-hidden="true"></li>
     {/if}
-    {#each visibleRows as row (projectTreeRowKey(row))}
-      {#if row.kind === "loading"}
+    {#each visibleRows as row (row.kind === "draft" ? "draft" : projectTreeRowKey(row))}
+      {#if row.kind === "draft"}
+        <li class="project-tree-draft" style={`--node-depth:${row.depth}`} data-tree-row>
+          <span class="project-tree-chevron"></span>
+          {#if draft?.kind === "directory"}<DirectoryIcon />{:else}<FileIcon />{/if}
+          <input
+            use:focusDraftInput
+            bind:value={draftValue}
+            aria-label={draft?.kind === "directory" ? "New folder name" : "New file name"}
+            disabled={committingDraft}
+            onkeydown={handleDraftKeydown}
+            onblur={() => { if (!committingDraft) onCancelDraft(); }}
+          />
+        </li>
+      {:else if row.kind === "loading"}
         <li
           class="project-tree-loading"
           style={`--node-depth:${row.depth}`}
@@ -465,6 +542,27 @@
     font-size: var(--font-size-status);
     padding: 0 var(--space-8);
     padding-left: calc(var(--space-8) + var(--node-depth, 1) * var(--tree-indent));
+  }
+
+  .project-tree-draft {
+    min-height: 21px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding-left: calc(var(--space-2) + var(--node-depth) * var(--tree-indent));
+  }
+
+  .project-tree-draft input {
+    min-width: 0;
+    flex: 1;
+    height: 20px;
+    border: 1px solid var(--color-focus-ring);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    font: inherit;
+    padding: 0 var(--space-3);
+    outline: none;
   }
 
   .project-tree-row {

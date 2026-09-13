@@ -78,7 +78,6 @@
 
   const menuTarget = $derived(contextMenu?.target ?? null);
   const isFile = $derived(menuTarget?.node?.kind === "file");
-  const isDirectory = $derived(menuTarget?.node?.kind === "directory");
   const hasNode = $derived(menuTarget?.node !== null && menuTarget?.node !== undefined);
   const nodePath = $derived(menuTarget?.node?.path ?? null);
   const parentDirPath = $derived(menuTarget?.parentDirPath ?? "");
@@ -167,8 +166,7 @@
         Open
       </button>
     {/if}
-    {#if isDirectory || !hasNode}
-      <button
+    <button
         class="project-tree-context-item"
         type="button"
         role="menuitem"
@@ -179,8 +177,8 @@
         }}
       >
         New File…
-      </button>
-      <button
+    </button>
+    <button
         class="project-tree-context-item"
         type="button"
         role="menuitem"
@@ -191,8 +189,7 @@
         }}
       >
         New Folder…
-      </button>
-    {/if}
+    </button>
     {#if hasNode && nodePath}
       <div class="ui-rule" role="separator"></div>
       <button

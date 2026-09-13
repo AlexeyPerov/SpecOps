@@ -51,6 +51,12 @@ describe("computeFileMatches", () => {
     expect(matches[1].lineText).toBe("beta gamma");
   });
 
+  it("searches literal whitespace without trimming the query", () => {
+    const matches = computeFileMatches("a  b", lit("  "));
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ from: 1, to: 3 });
+  });
+
   it("respects case sensitivity", () => {
     const content = "Foo foo FOO";
     expect(computeFileMatches(content, lit("foo"))).toHaveLength(3);
@@ -192,5 +198,20 @@ describe("searchInProject (P03-08-30 concurrency)", () => {
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(outcome.results).toHaveLength(0);
+    expect(outcome.skippedLarge).toBe(1);
+  });
+
+  it("reports unreadable files and returns results in stable path order", async () => {
+    readTextFileMock.mockImplementation(async (path: string | URL) => {
+      if (String(path).endsWith("bad.ts")) throw new Error("denied");
+      return "foo";
+    });
+    const outcome = await searchInProject("/ws", lit("foo"), {
+      files: ["/ws/z.ts", "/ws/bad.ts", "/ws/a.ts"],
+    });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.skippedUnreadable).toBe(1);
+    expect(outcome.results.map((result) => result.path)).toEqual(["/ws/a.ts", "/ws/z.ts"]);
   });
 });

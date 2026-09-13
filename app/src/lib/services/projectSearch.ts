@@ -75,6 +75,8 @@ export type ProjectSearchOutcome =
       results: ProjectSearchResult[];
       /** True when the search stopped early at {@link MAX_SEARCH_TOTAL_MATCHES}. */
       truncated?: boolean;
+      skippedLarge?: number;
+      skippedUnreadable?: number;
     }
   | { ok: false; reason: string };
 
@@ -152,6 +154,8 @@ export async function searchInProject(
   let totalMatches = 0;
   let truncated = false;
   let aborted = false;
+  let skippedLarge = 0;
+  let skippedUnreadable = 0;
 
   await mapWithConcurrency(files, PROJECT_SEARCH_CONCURRENCY, async (path) => {
     if (aborted) {
@@ -169,9 +173,11 @@ export async function searchInProject(
     try {
       const info = await stat(path);
       if (Number(info.size) > MAX_SEARCH_FILE_BYTES) {
+        skippedLarge += 1;
         return;
       }
     } catch {
+      skippedUnreadable += 1;
       return;
     }
     if (aborted) {
@@ -181,6 +187,7 @@ export async function searchInProject(
     try {
       content = await readTextFile(path);
     } catch {
+      skippedUnreadable += 1;
       return;
     }
     if (aborted) {
@@ -209,5 +216,6 @@ export async function searchInProject(
     results.push({ path, matches });
     totalMatches += matches.length;
   });
-  return { ok: true, results, truncated };
+  results.sort((a, b) => a.path.localeCompare(b.path));
+  return { ok: true, results, truncated, skippedLarge, skippedUnreadable };
 }

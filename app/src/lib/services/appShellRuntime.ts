@@ -1,7 +1,7 @@
 import { emit, emitTo, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { AppCommandId, AppDomainState } from "../domain/contracts";
+import type { AppCommandId, AppDomainState, ContextId } from "../domain/contracts";
 import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
 import { appState, setThemeSaveErrorNotifier } from "../state/appState";
 import { subscribeSystemColorScheme } from "../state/appState/themeController";
@@ -102,6 +102,7 @@ export interface AppShellRuntimeOptions {
   notify: (message: string) => void;
   runCommand: (commandId: AppCommandId) => void;
   openAndActivatePath: (path: string) => Promise<void>;
+  openDroppedPathsInContext?: (paths: string[], contextId: ContextId) => Promise<void>;
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
   restoreWorkspaceSession: (
     normalizedRoot: string,
@@ -398,7 +399,26 @@ async function startAppShellRuntimeInner(
   });
 
   const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
-    if (event.payload.type !== "drop") {
+    if (event.payload.type === "leave") {
+      document.querySelectorAll(".file-drop-context-hover").forEach((element) => {
+        element.classList.remove("file-drop-context-hover");
+      });
+      return;
+    }
+    const scaleFactor = await currentWindow.scaleFactor();
+    const target = document
+      .elementFromPoint(event.payload.position.x / scaleFactor, event.payload.position.y / scaleFactor)
+      ?.closest<HTMLElement>("[data-file-drop-context]") ?? null;
+    document.querySelectorAll(".file-drop-context-hover").forEach((element) => {
+      element.classList.remove("file-drop-context-hover");
+    });
+    if (event.payload.type === "over") {
+      target?.classList.add("file-drop-context-hover");
+      return;
+    }
+    const contextId = target?.dataset.fileDropContext as ContextId | undefined;
+    if (contextId && options.openDroppedPathsInContext) {
+      await options.openDroppedPathsInContext(event.payload.paths, contextId);
       return;
     }
     await openDroppedPaths(event.payload.paths);

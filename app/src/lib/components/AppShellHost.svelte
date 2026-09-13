@@ -122,7 +122,7 @@
 
     // --- Editor chrome (L15 leaf selectors) ---
     activityRailWidthPx: number;
-    editorPreviewMode: MarkdownViewMode;
+    editorPreviewMode: "editor" | "markdown" | "diff";
     editorWrapLines: boolean;
     editorZoomPercent: number;
     editorCursorLine: number;
@@ -446,6 +446,7 @@
     handleKeydown: commandHandlers.handleKeydown,
     onTabActivated: fileHandlers.onTabActivated,
     openAndActivatePath: fileHandlers.openAndActivatePath,
+    openDroppedPathsInContext: fileHandlers.openDroppedPathsInContext,
     consumeOpenedPaths: fileHandlers.consumeOpenedPaths,
     restoreWorkspaceSession: agentHandlers.restoreWorkspaceSession,
     ensureChatHttpSessionTab: agentHandlers.ensureChatHttpSessionTab,
@@ -690,6 +691,7 @@
   bind:workspaceContextMenuEl
   bind:consoleHeightPx
   {consoleOpen}
+  compactNotepad={currentWindowId !== "main" && activeContextId === "notepad"}
   onConsoleHeightCommit={layoutHandlers.persistConsoleHeightNow}
   projectSearch={{
     open: psPanel.open,
@@ -757,6 +759,7 @@
     state: projectTreeControllerState,
     activeFilePath: documentView.activeDocumentPath,
     statusByPath: fileStatusByPath,
+    markdownPaths: quickOpenCatalogSnapshot.entries.map((entry) => entry.absolutePath),
     collapsed: !showProjectPanel,
     panelWidthPx: workspaceLayout.projectPanelWidthPx,
     onRefresh: projectTreeHandlers.refreshProjectTree,
@@ -772,6 +775,8 @@
     onDeleteEntry: projectTreeHandlers.handleDeleteProjectEntry,
     getPaneElements: handleProjectTreeGetPaneElements,
     onOpenFileInPane: projectTreeHandlers.handleOpenProjectTreeFileInPane,
+    onOpenFileInContext: projectTreeHandlers.handleOpenProjectTreeFileInContext,
+    onMarkdownFilterEnable: () => workspaceFileCatalogRegistry.ensureReady(),
     onFileDropPaneChange: handleProjectTreeFileDropPaneChange,
     notify,
   }}

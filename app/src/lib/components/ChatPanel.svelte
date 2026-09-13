@@ -88,7 +88,7 @@
     formatChatProviderLabel,
   } from "../ai/providers/selection";
   import { validateLocalModelSelection } from "../ai/providers/capabilityChecker";
-  import { CHAT_HTTP_CONTEXT_ID, type ChatModeId } from "../domain/contracts";
+  import { CHAT_HTTP_CONTEXT_ID } from "../domain/contracts";
   import { appState } from "../state/appState";
   import {
     chatAccessState,

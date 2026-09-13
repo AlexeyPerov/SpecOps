@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import type { EditorHost, EditorHostIdentity, MarkdownHeadingSnapshot } from "../types/editor";
   import { filterMarkdownHeadings } from "../editor/markdownHeadings";
@@ -126,7 +126,7 @@
     void documentId;
     void paneId;
     clearOutline();
-    refreshFromHost();
+    untrack(refreshFromHost);
     let interval: ReturnType<typeof setInterval> | null = null;
     let visibilityHandler: (() => void) | null = null;
     // P03-08-23: only poll while the document is visible. The outline parse

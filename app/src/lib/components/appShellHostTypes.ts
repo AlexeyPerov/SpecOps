@@ -8,17 +8,17 @@
  * constructing the factory bundles itself.
  */
 
-import type { ContextId } from "../../domain/contracts";
+import type { AppCommandId, ContextId } from "../domain/contracts";
+import type { FileWatcherEventKind } from "../services/fileWatcher";
+import type { WorkspaceAgentSessionDetails } from "../ai/backends/workspaceAgentBackend";
 
 export interface AppShellHostApi {
-  runCommand: (commandId: string) => void | Promise<void>;
+  runCommand: (commandId: AppCommandId) => void;
   handleKeydown: (event: KeyboardEvent) => void;
   onTabActivated: (tabId: string) => Promise<void>;
-  openAndActivatePath: (
-    path: string,
-    options?: { revealInTree?: boolean },
-  ) => Promise<void>;
-  consumeOpenedPaths: () => string[];
+  openAndActivatePath: (path: string) => Promise<void>;
+  openDroppedPathsInContext: (paths: string[], contextId: ContextId) => Promise<void>;
+  consumeOpenedPaths: (paths: string[]) => Promise<void>;
   restoreWorkspaceSession: (
     workspaceRoot: string,
     options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
@@ -27,7 +27,7 @@ export interface AppShellHostApi {
   loadProjectTreeRoot: () => Promise<void>;
   notifyProjectTreeFilesystemChange: (
     path: string,
-    kind: import("../../services/fileWatcher").FileWatcherEventKind,
+    kind?: FileWatcherEventKind,
   ) => void;
   setupLayoutObserver: () => void;
   disconnectLayoutObserver: () => void;
@@ -41,8 +41,8 @@ export interface AppShellHostApi {
   setMarkdownViewMode: (mode: "edit" | "split" | "preview") => void;
   handleListWorkspaceSessions: (
     options?: { search?: string; limit?: number },
-  ) => Promise<unknown[]>;
-  handleOpenExternalSession: (sessionId: string) => Promise<void>;
+  ) => Promise<WorkspaceAgentSessionDetails[]>;
+  handleOpenExternalSession: (sessionId: string, title?: string) => Promise<void>;
 }
 
 /** Bound host instance captured via `bind:this`. */

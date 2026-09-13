@@ -254,6 +254,7 @@
   {#if expanded}
     <button
       class={`rail-workspace-card ${activeContextId === "notepad" ? "rail-workspace-card-active" : ""}`}
+      data-file-drop-context="notepad"
       type="button"
       aria-label="Notepad"
       onclick={() => onSelectContext("notepad")}
@@ -295,6 +296,7 @@
     <HoverTooltip label="Notepad">
       <button
         class={`rail-button rail-button-notepad ${activeContextId === "notepad" ? "rail-button-active" : ""}`}
+        data-file-drop-context="notepad"
         type="button"
         aria-label="Notepad"
         onclick={() => onSelectContext("notepad")}
@@ -353,6 +355,7 @@
         >
           <button
             class={`rail-workspace-card ${activeContextId === workspace.id ? "rail-workspace-card-active" : ""}`}
+            data-file-drop-context={workspace.id}
             data-workspace-id={workspace.id}
             type="button"
             aria-label={`Workspace ${workspaceName(workspace)}`}
@@ -398,6 +401,7 @@
         >
           <button
             class={`rail-button rail-button-workspace ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
+            data-file-drop-context={workspace.id}
             data-workspace-id={workspace.id}
             type="button"
             aria-label={`Workspace ${workspaceName(workspace)}`}
@@ -494,6 +498,12 @@
   .activity-rail-dragging,
   .activity-rail-resizing {
     user-select: none;
+  }
+
+  :global([data-file-drop-context].file-drop-context-hover) {
+    outline: 1px solid var(--color-accent);
+    outline-offset: -1px;
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
   }
 
   /* Expanded rail behaves like a column panel: left-aligned content, room for

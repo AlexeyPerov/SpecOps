@@ -628,9 +628,12 @@
       startAppShellRuntime,
       notify,
       runCommand: (commandId) => appShellHost?.api.runCommand(commandId),
-      openAndActivatePath: (path, options) =>
-        appShellHost?.api.openAndActivatePath(path, options) ?? Promise.resolve(),
-      consumeOpenedPaths: () => appShellHost?.api.consumeOpenedPaths() ?? [],
+      openAndActivatePath: (path) =>
+        appShellHost?.api.openAndActivatePath(path) ?? Promise.resolve(),
+      openDroppedPathsInContext: (paths, contextId) =>
+        appShellHost?.api.openDroppedPathsInContext(paths, contextId) ?? Promise.resolve(),
+      consumeOpenedPaths: (paths) =>
+        appShellHost?.api.consumeOpenedPaths(paths) ?? Promise.resolve(),
       restoreWorkspaceSession: (root, options) =>
         appShellHost?.api.restoreWorkspaceSession(root, options) ?? Promise.resolve(),
       loadProjectTreeRoot: () => appShellHost?.api.loadProjectTreeRoot() ?? Promise.resolve(),
@@ -1213,7 +1216,7 @@
   setMarkdownViewMode={(mode) => appShellHost?.api.setMarkdownViewMode(mode)}
   openAndActivatePath={(path) => appShellHost?.api.openAndActivatePath(path) ?? Promise.resolve()}
   handleListWorkspaceSessions={(options) =>
-    appShellHost?.api.handleListWorkspaceSessions(options) ?? Promise.resolve()}
+    appShellHost?.api.handleListWorkspaceSessions(options) ?? Promise.resolve([])}
   handleOpenExternalSession={(sessionId) =>
     appShellHost?.api.handleOpenExternalSession(sessionId) ?? Promise.resolve()}
   getWorkspaceFileCatalogRegistry={() => workspaceFileCatalogRegistry}

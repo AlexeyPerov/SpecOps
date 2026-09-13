@@ -5,6 +5,7 @@
   import type { ProjectTreeNode } from "../services/projectTree";
   import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import type { PaneDropTargetElements } from "./paneDropTargets";
+  import type { ContextId } from "../domain/contracts";
   import {
     DEFAULT_PROJECT_PANEL_WIDTH_PX,
     MAX_PANEL_WIDTH_PX,
@@ -21,6 +22,7 @@
     expandedPaths?: ReadonlySet<string>;
     childrenByPath?: ReadonlyMap<string, ProjectTreeNode[]>;
     loadingPaths?: ReadonlySet<string>;
+    markdownPaths?: readonly string[];
     activeFilePath?: string | null;
     /** M5-T3 — git change status badges (absolute path → status). */
     statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
@@ -34,8 +36,8 @@
     onToggleDirectory?: (path: string) => void;
     onOpenFile?: (path: string) => void;
     onMoveEntry?: (sourcePath: string, destDirPath: string) => Promise<void>;
-    onNewFile?: (parentDirPath: string) => void;
-    onNewFolder?: (parentDirPath: string) => void;
+    onNewFile?: (parentDirPath: string, name: string) => Promise<boolean>;
+    onNewFolder?: (parentDirPath: string, name: string) => Promise<boolean>;
     onRenameEntry?: (path: string, kind: ProjectTreeNode["kind"]) => void;
     onDeleteEntry?: (path: string, kind: ProjectTreeNode["kind"]) => void;
     notify?: (message: string) => void;
@@ -47,6 +49,8 @@
       | null;
     /** Phase 6 — reports the hovered pane during a file drag (for affordance). */
     onFileDropPaneChange?: (paneId: string | null) => void;
+    onOpenFileInContext?: (filePath: string, contextId: ContextId) => void | Promise<void>;
+    onMarkdownFilterEnable?: () => void;
   }
 
   let {
@@ -55,6 +59,7 @@
     expandedPaths = emptySet<string>(),
     childrenByPath = emptyMap<string, ProjectTreeNode[]>(),
     loadingPaths = emptySet<string>(),
+    markdownPaths = [],
     activeFilePath = null,
     statusByPath = null,
     showHidden = false,
@@ -67,20 +72,62 @@
     onToggleDirectory = () => {},
     onOpenFile = () => {},
     onMoveEntry = async () => {},
-    onNewFile = () => {},
-    onNewFolder = () => {},
+    onNewFile = async () => false,
+    onNewFolder = async () => false,
     onRenameEntry = () => {},
     onDeleteEntry = () => {},
     notify = () => {},
     getPaneElements = () => [],
     onOpenFileInPane = null,
     onFileDropPaneChange = () => {},
+    onOpenFileInContext,
+    onMarkdownFilterEnable = () => {},
   }: Props = $props();
 
   let panelBodyEl = $state<HTMLDivElement | null>(null);
   let contextMenuComponent = $state<ProjectTreeContextMenu | undefined>(undefined);
   let displayWidth = $state(DEFAULT_PROJECT_PANEL_WIDTH_PX);
   let isResizing = $state(false);
+  let markdownOnly = $state(false);
+  let draft = $state<{
+    kind: "file" | "directory";
+    parentDirPath: string;
+    defaultValue: string;
+  } | null>(null);
+
+  const markdownFilePaths = $derived(
+    markdownPaths.filter((path) => path.toLowerCase().endsWith(".md")),
+  );
+  const markdownDirectoryPaths = $derived.by(() => {
+    const dirs = new Set<string>();
+    for (const filePath of markdownFilePaths) {
+      let cursor = filePath.replace(/[/\\][^/\\]+$/, "");
+      while (cursor && cursor !== workspaceRoot) {
+        dirs.add(cursor);
+        const parent = cursor.replace(/[/\\][^/\\]+$/, "");
+        if (parent === cursor) break;
+        cursor = parent;
+      }
+    }
+    return dirs;
+  });
+
+  function filterNodes(nodes: readonly ProjectTreeNode[]): ProjectTreeNode[] {
+    if (!markdownOnly) return [...nodes];
+    return nodes.filter((node) =>
+      node.kind === "file"
+        ? node.path.toLowerCase().endsWith(".md")
+        : markdownDirectoryPaths.has(node.path),
+    );
+  }
+
+  const visibleRootNodes = $derived(filterNodes(rootNodes));
+  const visibleChildrenByPath = $derived.by(() => {
+    if (!markdownOnly) return childrenByPath;
+    const next = new Map<string, ProjectTreeNode[]>();
+    for (const [path, nodes] of childrenByPath) next.set(path, filterNodes(nodes));
+    return next;
+  });
 
   function basename(path: string): string {
     const normalized = path.replaceAll("\\", "/");
@@ -189,6 +236,23 @@
       node.kind === "directory" ? node.path : node.path.replace(/[/\\][^/\\]+$/, "") || workspaceRoot;
     openContextMenu(event, { node, parentDirPath });
   }
+
+  function startDraft(kind: "file" | "directory", parentDirPath: string): void {
+    draft = {
+      kind,
+      parentDirPath,
+      defaultValue: kind === "directory" ? "New Folder" : markdownOnly ? "untitled.md" : "untitled.txt",
+    };
+  }
+
+  async function commitDraft(name: string): Promise<boolean> {
+    if (!draft) return false;
+    const created = draft.kind === "file"
+      ? await onNewFile(draft.parentDirPath, name)
+      : await onNewFolder(draft.parentDirPath, name);
+    if (created) draft = null;
+    return created;
+  }
 </script>
 
 <aside
@@ -208,9 +272,26 @@
   <header class="project-panel-header">
     {#if !collapsed}
       <div class="project-panel-title" title={workspaceRoot}>{basename(workspaceRoot)}</div>
+      <button
+        class="btn btn-sm btn-ghost project-panel-add"
+        type="button"
+        title="Create in project root"
+        aria-label="Create file or folder"
+        onclick={(event) => openContextMenu(event, { node: null, parentDirPath: workspaceRoot })}
+      >+</button>
       <button class="btn btn-sm btn-ghost" type="button" onclick={onRefresh} title="Refresh tree">
         <RefreshIcon size={14} />
       </button>
+      <button
+        class={`btn btn-sm btn-ghost ${markdownOnly ? "project-panel-filter-active" : ""}`}
+        type="button"
+        aria-pressed={markdownOnly}
+        title={markdownOnly ? "Show all files" : "Show Markdown files only"}
+        onclick={() => {
+          markdownOnly = !markdownOnly;
+          if (markdownOnly) onMarkdownFilterEnable();
+        }}
+      >.md</button>
       <button
         class="btn btn-sm btn-ghost"
         type="button"
@@ -239,10 +320,10 @@
       oncontextmenu={handleContextMenuRoot}
     >
       <ProjectTreeView
-        nodes={rootNodes}
+        nodes={visibleRootNodes}
         {workspaceRoot}
         {expandedPaths}
-        {childrenByPath}
+        childrenByPath={visibleChildrenByPath}
         {loadingPaths}
         {activeFilePath}
         {statusByPath}
@@ -255,7 +336,12 @@
         {getPaneElements}
         onOpenFileInPane={onOpenFileInPane ?? undefined}
         {onFileDropPaneChange}
+        {onOpenFileInContext}
+        {draft}
+        onCommitDraft={commitDraft}
+        onCancelDraft={() => (draft = null)}
       />
+      <div class="project-panel-create-area" aria-hidden="true"></div>
     </div>
   {/if}
 </aside>
@@ -264,8 +350,8 @@
   bind:this={contextMenuComponent}
   {workspaceRoot}
   onOpenFile={onOpenFile}
-  onNewFile={onNewFile}
-  onNewFolder={onNewFolder}
+  onNewFile={(parent) => startDraft("file", parent)}
+  onNewFolder={(parent) => startDraft("directory", parent)}
   onRename={onRenameEntry}
   onDelete={onDeleteEntry}
 />
@@ -330,9 +416,21 @@
     color: var(--color-text-primary);
   }
 
+  .project-panel-filter-active {
+    color: var(--color-text-primary) !important;
+    background: var(--color-pressed) !important;
+  }
+
   .project-panel-body {
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .project-panel-create-area {
+    min-height: 28px;
+    flex: 1 0 28px;
   }
 </style>

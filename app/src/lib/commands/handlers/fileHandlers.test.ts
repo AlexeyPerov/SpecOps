@@ -414,6 +414,7 @@ describe("file.open command", () => {
       content: "hello",
       sizeBytes: 5,
       contentKind: "text",
+      fingerprint: { mtimeMs: 1, sizeBytes: 5 },
     });
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
@@ -435,7 +436,7 @@ describe("file.open command", () => {
         lineEnding: "lf",
         hasBom: false,
       },
-      undefined,
+      { mtimeMs: 1, sizeBytes: 5 },
     );
     expect(notify).toHaveBeenCalledWith("Opened /tmp/open.txt");
   });

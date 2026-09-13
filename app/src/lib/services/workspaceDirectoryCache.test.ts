@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createWorkspaceDirectoryCache } from "./workspaceDirectoryCache";
+import type { DirEntry } from "@tauri-apps/plugin-fs";
 
 describe("createWorkspaceDirectoryCache", () => {
   it("memoizes readDir results by normalized path", async () => {
@@ -17,10 +18,10 @@ describe("createWorkspaceDirectoryCache", () => {
   });
 
   it("coalesces concurrent readDir calls for the same path", async () => {
-    let resolveRead!: (value: unknown[]) => void;
+    let resolveRead!: (value: DirEntry[]) => void;
     const readDirFn = vi.fn(
       () =>
-        new Promise<unknown[]>((resolve) => {
+        new Promise<DirEntry[]>((resolve) => {
           resolveRead = resolve;
         }),
     );

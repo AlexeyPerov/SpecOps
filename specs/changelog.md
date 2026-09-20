@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-20 — Hide Markdown view controls for empty and non-Markdown files
+
+- The edit/split/preview control is now rendered only for non-empty Markdown
+  documents. Empty Markdown documents stay in edit mode so typing the first
+  character makes the view controls available, while non-Markdown tabs no
+  longer expose Markdown-only actions.
+
 ## 2026-09-13 21:47 MSK — Refine secondary windows, project files, search, and drag-drop
 
 - Secondary windows now complete confirmed closes with a direct window teardown,

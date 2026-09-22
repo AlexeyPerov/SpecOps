@@ -10,3 +10,6 @@ node_modules
 !.env.example
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Build output of the host bundle (no sources tracked here)
+/host/

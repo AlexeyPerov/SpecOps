@@ -367,6 +367,14 @@ export interface SyncProjectTreeWatcherEffectInput {
   openWorkspaceRoots?: readonly string[];
   projectTreeController: ProjectTreeController;
   loadProjectTreeRoot: () => Promise<void>;
+  /**
+   * Quiet revalidation of the tree that a workspace switch just brought up.
+   * Entering a workspace served from the controller's in-memory cache shows a
+   * snapshot taken when it was last active, so it is re-listed in the
+   * background; a cold load is already authoritative and the controller's own
+   * throttle drops the redundant pass.
+   */
+  revalidateProjectTree?: () => Promise<void>;
 }
 
 export interface SyncOpencodeSidecarEffectInput {
@@ -720,6 +728,7 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
     openWorkspaceRoots,
     projectTreeController,
     loadProjectTreeRoot,
+    revalidateProjectTree,
   } = input;
 
   // Gate on workspace presence and chat-http overlay — not tab/session selection.
@@ -740,7 +749,11 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
   const rootKey = normalizePathSync(activeWorkspaceRoot);
   if (rootKey !== lastProjectTreeRootKey) {
     lastProjectTreeRootKey = rootKey;
-    void loadProjectTreeRoot();
+    void loadProjectTreeRoot().then(() => {
+      // Only meaningful when the root came back from the controller cache; a
+      // cold load seeds the revalidation throttle, so this resolves to a no-op.
+      void revalidateProjectTree?.();
+    });
   }
 
   if (runtimeReady) {

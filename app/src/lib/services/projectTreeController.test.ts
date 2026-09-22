@@ -617,3 +617,135 @@ describe("createProjectTreeController", () => {
     }
   });
 });
+
+describe("revalidateProjectTree", () => {
+  function makeTree(files: Record<string, ProjectTreeNode[]>) {
+    return vi.fn(async (workspaceRoot: string, directoryPath: string) => {
+      if (workspaceRoot !== "/repo") {
+        return [];
+      }
+      return files[directoryPath] ?? [];
+    });
+  }
+
+  async function loadExpandedTree(
+    loadDirectoryChildrenFn: ReturnType<typeof makeTree>,
+    snapshots: ProjectTreeControllerState[],
+    deps: Parameters<typeof createProjectTreeController>[1] = {},
+  ) {
+    const controller = createProjectTreeController((state) => snapshots.push(state), {
+      loadDirectoryChildrenFn,
+      ...deps,
+    });
+    await controller.loadProjectTreeRoot({
+      workspaceRoot: "/repo",
+      isSessionTabActive: false,
+    });
+    await controller.handleToggleProjectTreeDirectory("/repo", "/repo/src");
+    return controller;
+  }
+
+  it("publishes nothing when no listing changed", async () => {
+    const snapshots: ProjectTreeControllerState[] = [];
+    const loadDirectoryChildrenFn = makeTree({
+      "/repo": [makeNode("src", "/repo/src", "directory")],
+      "/repo/src": [makeNode("main.ts", "/repo/src/main.ts", "file")],
+    });
+    const controller = await loadExpandedTree(loadDirectoryChildrenFn, snapshots);
+    const publishCountBefore = snapshots.length;
+
+    const changed = await controller.revalidateProjectTree("/repo", { force: true });
+
+    expect(changed).toBe(false);
+    expect(snapshots.length).toBe(publishCountBefore);
+  });
+
+  it("re-lists the root and expanded folders and publishes once on a real change", async () => {
+    const snapshots: ProjectTreeControllerState[] = [];
+    const listings: Record<string, ProjectTreeNode[]> = {
+      "/repo": [makeNode("src", "/repo/src", "directory")],
+      "/repo/src": [makeNode("main.ts", "/repo/src/main.ts", "file")],
+    };
+    const loadDirectoryChildrenFn = makeTree(listings);
+    const controller = await loadExpandedTree(loadDirectoryChildrenFn, snapshots);
+    const publishCountBefore = snapshots.length;
+
+    listings["/repo/src"] = [
+      makeNode("main.ts", "/repo/src/main.ts", "file"),
+      makeNode("added.ts", "/repo/src/added.ts", "file"),
+    ];
+    const changed = await controller.revalidateProjectTree("/repo", { force: true });
+
+    expect(changed).toBe(true);
+    expect(snapshots.length - publishCountBefore).toBe(1);
+    const lastState = snapshots[snapshots.length - 1];
+    expect(lastState.childrenByPath.get("/repo/src")?.map((node) => node.name)).toEqual([
+      "main.ts",
+      "added.ts",
+    ]);
+    // The expansion survives: the tree is patched, never rebuilt.
+    expect(lastState.expandedPaths.has("/repo/src")).toBe(true);
+  });
+
+  it("drops cached listings for the directories it is about to re-read", async () => {
+    const snapshots: ProjectTreeControllerState[] = [];
+    const invalidateDirectoryCache = vi.fn();
+    const loadDirectoryChildrenFn = makeTree({
+      "/repo": [makeNode("src", "/repo/src", "directory")],
+      "/repo/src": [],
+    });
+    const controller = await loadExpandedTree(loadDirectoryChildrenFn, snapshots, {
+      invalidateDirectoryCache,
+    });
+
+    await controller.revalidateProjectTree("/repo", { force: true });
+
+    expect(invalidateDirectoryCache).toHaveBeenCalledWith(["/repo", "/repo/src"]);
+  });
+
+  it("throttles automatic passes and skips the one right after a cold load", async () => {
+    const snapshots: ProjectTreeControllerState[] = [];
+    const loadDirectoryChildrenFn = makeTree({
+      "/repo": [makeNode("src", "/repo/src", "directory")],
+      "/repo/src": [],
+    });
+    const controller = await loadExpandedTree(loadDirectoryChildrenFn, snapshots);
+    loadDirectoryChildrenFn.mockClear();
+
+    // The root was just loaded from disk, so the automatic pass is a no-op.
+    expect(await controller.revalidateProjectTree("/repo")).toBe(false);
+    expect(loadDirectoryChildrenFn).not.toHaveBeenCalled();
+  });
+
+  it("ignores roots that are not the loaded one", async () => {
+    const snapshots: ProjectTreeControllerState[] = [];
+    const loadDirectoryChildrenFn = makeTree({
+      "/repo": [makeNode("src", "/repo/src", "directory")],
+      "/repo/src": [],
+    });
+    const controller = await loadExpandedTree(loadDirectoryChildrenFn, snapshots);
+    loadDirectoryChildrenFn.mockClear();
+
+    expect(await controller.revalidateProjectTree("/other", { force: true })).toBe(false);
+    expect(loadDirectoryChildrenFn).not.toHaveBeenCalled();
+  });
+
+  it("keeps the loaded children while a manual refresh re-lists them", async () => {
+    const snapshots: ProjectTreeControllerState[] = [];
+    const loadDirectoryChildrenFn = makeTree({
+      "/repo": [makeNode("src", "/repo/src", "directory")],
+      "/repo/src": [makeNode("main.ts", "/repo/src/main.ts", "file")],
+    });
+    const controller = await loadExpandedTree(loadDirectoryChildrenFn, snapshots);
+    const publishCountBefore = snapshots.length;
+
+    await controller.refreshProjectTree("/repo", false);
+
+    // No publish during the refresh ever exposed an emptied `childrenByPath`,
+    // which is what made the panel collapse and lose its scroll position.
+    const clearedChildren = snapshots
+      .slice(publishCountBefore)
+      .filter((state) => state.childrenByPath.size === 0);
+    expect(clearedChildren).toEqual([]);
+  });
+});

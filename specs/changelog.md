@@ -1,11 +1,109 @@
 # Changelog
 
+## 2026-09-22 17:06 MSK — Notepad rail card, Open in New Window, project-tree refresh fixes
+
+- The expanded activity rail's Notepad card no longer prints a "Notepad"
+  heading — the avatar icon already names it. Its labels start at the top of
+  the rail, and it lists up to three of the most recently opened Notepad files
+  (previously one) as a vertical list instead of a wrapped stat row. The card's
+  64px minimum height is gone, so it grows with the list rather than reserving
+  space for it.
+- Added **Open in New Window** to the file-tab context menu. The file moves to a
+  freshly created window rather than being duplicated: a path may be open in
+  exactly one window (`openFileRegistry` owns that invariant, and two windows
+  editing one buffer would race on save), so the source tab closes once the new
+  window has adopted it. A dirty tab is prompted for first and a failed transfer
+  leaves the tab in place. The entry is enabled only for Notepad tabs, matching
+  the existing tab drag-out policy. `moveTabToNewWindow` now raises the new
+  window again after the transfer completes, so it ends up in front with the
+  file already open.
+- Fixed the project panel not reflecting changes — neither the user's own moves,
+  creates, renames and deletes nor external ones. `projectTreeController` mixed
+  two path forms: `childrenByPath` / `expandedPaths` are keyed exactly as the
+  tree rows are, but the reload paths keyed them by the case-folded comparison
+  form. On macOS and Windows those differ for any path with an uppercase
+  segment — with `/Users/...`, every path — so:
+  - `directoriesToRefreshForChange` matched a folded parent against the raw
+    expanded set, found nothing, and dropped the change;
+  - `reloadDirectories` stored fresh listings under folded keys that no row
+    reads, and rebuilt root rows from a folded root, re-spelling every row path;
+  - `expandedAncestorPathsForFile` returned folded ancestors, so revealing the
+    active file expanded folders the tree could not match.
+  Each of these now folds only for comparison and keeps the tree's own spelling
+  for tree state.
+- `reloadDirectories` also drops the shared directory-listing cache for the
+  directories it is about to re-read. Without that it re-read the very listing
+  the change had invalidated, concluded nothing had moved, and — having marked
+  those directories fresh — suppressed the watcher flush that would have
+  corrected it.
+- Expanding a folder whose children are already in memory now re-lists it
+  quietly in the background and applies the result only if it differs. A
+  collapsed folder is not covered by the focus/workspace-switch revalidation
+  passes, so its cached children could be arbitrarily old.
+- Tests: `projectTreeCaseFolding.test.ts` covers the four cases above with the
+  platform mocked as case-insensitive (the default test platform is
+  case-sensitive, which is why none of this was caught); tab-menu gating covered
+  in `tabContextMenuActions.test.ts`.
+- Verification: `npm run check`, all 3,423 Vitest tests, and `npm run build`.
+
+## 2026-09-20 — Copy workspace root path
+
+- Added **Copy Path** to the activity-rail workspace context menu. The action
+  copies the selected workspace's root-folder path to the clipboard without
+  switching the active workspace.
+
 ## 2026-09-20 — Hide Markdown view controls for empty and non-Markdown files
 
 - The edit/split/preview control is now rendered only for non-empty Markdown
   documents. Empty Markdown documents stay in edit mode so typing the first
   character makes the view controls available, while non-Markdown tabs no
   longer expose Markdown-only actions.
+
+## 2026-09-14 14:40 MSK — Live project-tree refresh, preview tabs, path git log
+
+- The project tree now revalidates itself when the window regains focus, when a
+  workspace is switched to, and when the panel is expanded again — not only on
+  manual refresh and startup. `projectTreeController.revalidateProjectTree`
+  re-lists the root plus the currently expanded folders with bounded
+  concurrency, compares each listing against the one on screen, and applies (and
+  publishes) only real differences, so an unchanged tree costs a few directory
+  reads and zero re-renders. Passes are throttled (2 s), de-duplicated while one
+  is in flight, skipped while the panel is collapsed, and skipped right after a
+  cold load, which already read from disk. The shared directory cache is
+  invalidated for exactly the directories a pass is about to re-read.
+- Manual refresh no longer rebuilds the tree. It runs the same pass with
+  `force`, so `childrenByPath` is never emptied — the rows, the expansion, and
+  the scroll position all survive a refresh.
+- The project panel no longer jumps after a delete, move, or refresh: the
+  reveal-active-file effect now runs only when the active file actually changes
+  (retrying across tree updates until its row exists) instead of on every tree
+  publish, and a scroll offset the browser clamped away while the list was
+  briefly shorter is restored.
+- Project-pane spacing moved into `tokens.css` as `--project-tree-*` (padding,
+  per-depth indent, row padding, icon gap, row height, row spacing). The indent
+  went from 4px to 10px. `ProjectTreeView` reads the row height and row spacing
+  back at runtime for its virtualization math, so those values can be retuned in
+  one place with no code change.
+- Single-clicking a file in the project tree now opens it as a **transient
+  (preview) tab**, rendered in italics: the next single click reuses the slot and
+  closes the previous preview instead of stacking tabs. A preview is promoted to
+  an ordinary tab as soon as the user acts on the file — an edit, a user-driven
+  caret or selection move, a double click on the row or the tab, dragging the
+  tab, or reopening the file through an explicit route (Quick Open, a menu, a
+  pane drop). A preview holding unsaved edits or a pin is promoted rather than
+  closed, and tabs restored from a session snapshot are never transient.
+- Added **Git Log…** to the project-tree context menu (files and folders) and
+  the file-tab context menu. It opens a popup at the click point listing the
+  commits that touch that path (subject, short sha, author, relative date) with
+  "Load more"; picking a commit opens Version Control on it, including when that
+  view is already mounted. `queryCommits` accepts `paths` (literal pathspecs)
+  and `follow`, and the popup runs with the `versionControl` git scope because
+  it is user-initiated.
+- The editor text column now has flexible side margins: it is centred once the
+  editor is wider than `--editor-text-max-width` (1200px) and hugs the gutter
+  below that. Long lines still scroll horizontally, and `none` restores the
+  previous always-left-aligned layout.
+- Verification: `npm run check`, all 3,416 Vitest tests, and `npm run build`.
 
 ## 2026-09-13 21:47 MSK — Refine secondary windows, project files, search, and drag-drop
 

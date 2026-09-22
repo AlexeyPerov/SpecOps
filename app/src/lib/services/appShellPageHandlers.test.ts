@@ -61,6 +61,7 @@ function createMountDeps(
     consumeOpenedPaths: vi.fn(async () => {}),
     restoreWorkspaceSession: vi.fn(async () => {}),
     loadProjectTreeRoot: vi.fn(async () => {}),
+    revalidateProjectTree: vi.fn(async () => {}),
     notifyProjectTreeFilesystemChange: vi.fn(),
     setConsoleHeightPx: vi.fn(),
     setRuntimeSyncExternalFileWatcher: vi.fn(),

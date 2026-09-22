@@ -10,6 +10,7 @@ import {
   canCopyTabPath,
   canDeleteTabFile,
   canOpenNearbyFiles,
+  canOpenTabInNewWindow,
   canRenameTab,
   canRevealTabInFileManager,
   collectTabOpenPaths,
@@ -137,6 +138,16 @@ describe("tabContextMenuActions", () => {
     expect(canCopyRelativePath("/tmp/ws/a.txt", "/tmp/ws")).toBe(true);
     expect(canCopyRelativePath("/tmp/outside.txt", "/tmp/ws")).toBe(false);
     expect(canCopyRelativePath("/tmp/ws/a.txt", null)).toBe(false);
+  });
+
+  it("offers open-in-new-window only for Notepad file tabs", () => {
+    const tab = tabs()[0];
+
+    expect(canOpenTabInNewWindow(tab, true)).toBe(true);
+    // A workspace tab belongs to its workspace context; transfers land in the
+    // receiving window's Notepad, so the entry stays off there.
+    expect(canOpenTabInNewWindow(tab, false)).toBe(false);
+    expect(canOpenTabInNewWindow(null, true)).toBe(false);
   });
 
   it("enables rename only for on-disk tabs that are not missing", () => {

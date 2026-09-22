@@ -39,7 +39,12 @@ import {
   documentWithOpenedFilePayload,
   inferLanguage,
 } from "./documentHelpers";
-import { canCreateFileTabs, reopenTabForDocument, selectTabInternal } from "./tabHelpers";
+import {
+  canCreateFileTabs,
+  promoteTransientTabInLayout,
+  reopenTabForDocument,
+  selectTabInternal,
+} from "./tabHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
@@ -429,6 +434,19 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
               };
             }
           }
+          // Editing a previewed file is the clearest "I want to keep this"
+          // signal there is: promote its transient tab. A no-op (same layout
+          // reference) for the ordinary tabs every other keystroke targets.
+          const promotedLayout = promoteTransientTabInLayout(
+            nextCtx.session.editorLayout,
+            documentId,
+          );
+          if (promotedLayout !== nextCtx.session.editorLayout) {
+            nextCtx = {
+              ...nextCtx,
+              session: { ...nextCtx.session, editorLayout: promotedLayout },
+            };
+          }
           return nextCtx;
         }),
       );
@@ -467,6 +485,19 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
                 session: { ...nextCtx.session, editorLayout: nextLayout },
               };
             }
+          }
+          // Editing a previewed file is the clearest "I want to keep this"
+          // signal there is: promote its transient tab. A no-op (same layout
+          // reference) for the ordinary tabs every other keystroke targets.
+          const promotedLayout = promoteTransientTabInLayout(
+            nextCtx.session.editorLayout,
+            documentId,
+          );
+          if (promotedLayout !== nextCtx.session.editorLayout) {
+            nextCtx = {
+              ...nextCtx,
+              session: { ...nextCtx.session, editorLayout: promotedLayout },
+            };
           }
           return nextCtx;
         }),

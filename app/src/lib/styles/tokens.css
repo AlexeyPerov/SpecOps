@@ -41,11 +41,33 @@
   --statusbar-height: 25px;
   --console-height: 180px;
   --editor-content-padding-x: var(--space-8);
+
+  /* Editor text column. The space on either side of the text is flexible: the
+     column is centred inside the editor once the editor is wider than
+     `--editor-text-max-width`, and hugs the gutter below that width. Set the
+     max width to `none` for the classic always-left-aligned layout. Long lines
+     still scroll horizontally (CodeMirror sets a `min-width`, which wins). */
+  --editor-text-max-width: 1200px;
+  --editor-text-padding-x: var(--space-4);
   --settings-pane-width: 385px;
   --activity-rail-width: 48px;
   --editor-min-width: 400px;
   --project-panel-width: 276px;
-  --tree-indent: 4px;
+
+  /* Project pane metrics. Every indent/padding knob for the project tree lives
+     here so the pane's density is tuned in one place; `ProjectTreeView` reads
+     the row height and row spacing back at runtime for its virtualization
+     spacer math, so changing them here needs no code change. */
+  --project-tree-padding: var(--space-2);
+  /* Per-depth indent of a tree row. */
+  --project-tree-indent: 10px;
+  /* Horizontal padding inside a row, and the base offset depth is added to. */
+  --project-tree-row-padding-x: var(--space-2);
+  /* Gap between chevron, icon and label inside a row. */
+  --project-tree-row-gap: var(--space-3);
+  --project-tree-row-height: 19px;
+  /* Vertical gap between rows (the list's grid gap). */
+  --project-tree-row-spacing: 2px;
 
   --radius-sm: 6px;
   --radius-md: 10px;

@@ -68,6 +68,8 @@ describe("createWorkspaceContextMenuActions", () => {
   function createActions(options: {
     previousActiveContextId?: ContextId | null;
     loadProjectTreeRoot?: () => Promise<void>;
+    workspaceRootPath?: string | null;
+    writeClipboardText?: (text: string) => Promise<void>;
   } = {}) {
     let menu: WorkspaceContextMenuState | null = {
       workspaceId: "ws-1",
@@ -81,12 +83,14 @@ describe("createWorkspaceContextMenuActions", () => {
       },
       getMenuEl: () => null,
       getWorkspaceIds: () => ["ws-1"],
+      getWorkspaceRootPath: () => options.workspaceRootPath ?? "/tmp/workspace",
       getPreviousActiveContextId: () => options.previousActiveContextId ?? null,
       setPreviousActiveContextId: () => {},
       setConsoleOpen: () => {},
       setMarkdownViewMode: () => {},
       loadProjectTreeRoot: options.loadProjectTreeRoot ?? (async () => {}),
       notify: () => {},
+      writeClipboardText: options.writeClipboardText,
     });
     return { actions, getMenu: () => menu };
   }
@@ -100,6 +104,19 @@ describe("createWorkspaceContextMenuActions", () => {
     expect(appState.switchContext).toHaveBeenCalledWith("ws-1");
     expect(markWorkspaceLifecycleActive).toHaveBeenCalled();
     expect(appState.openOrFocusViewTab).toHaveBeenCalledWith("version-control");
+    expect(getMenu()).toBeNull();
+  });
+
+  it("copyPath copies the workspace root and closes the menu", async () => {
+    const writeClipboardText = vi.fn().mockResolvedValue(undefined);
+    const { actions, getMenu } = createActions({
+      workspaceRootPath: "/tmp/workspace-root",
+      writeClipboardText,
+    });
+
+    await actions.copyPath("ws-1");
+
+    expect(writeClipboardText).toHaveBeenCalledWith("/tmp/workspace-root");
     expect(getMenu()).toBeNull();
   });
 

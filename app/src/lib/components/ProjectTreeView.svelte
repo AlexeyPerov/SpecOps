@@ -41,6 +41,8 @@
     statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
     onToggleDirectory?: (path: string) => void;
     onOpenFile?: (path: string) => void;
+    /** Double click on a file row: keep its (preview) tab. */
+    onKeepFile?: (path: string) => void;
     onContextMenuRoot?: (event: MouseEvent) => void;
     onContextMenuNode?: (event: MouseEvent, node: ProjectTreeNode) => void;
     onMoveEntry?: (sourcePath: string, destDirPath: string) => Promise<void>;
@@ -67,6 +69,7 @@
     statusByPath = null,
     onToggleDirectory = () => {},
     onOpenFile = () => {},
+    onKeepFile = () => {},
     onContextMenuRoot = () => {},
     onContextMenuNode = () => {},
     onMoveEntry = async () => {},
@@ -192,6 +195,17 @@
     }
   }
 
+  /**
+   * Double click keeps the file: the preceding single click already opened it
+   * as the pane's preview tab, so this promotes that tab to an ordinary one.
+   */
+  function handleRowDoubleClick(row: Extract<ProjectTreeRow, { kind: "node" }>): void {
+    if (row.node.kind !== "file") {
+      return;
+    }
+    onKeepFile(row.node.path);
+  }
+
   function handleRowClick(row: Extract<ProjectTreeRow, { kind: "node" }>): void {
     if (row.node.kind === "directory") {
       if (!row.canExpand) {
@@ -214,10 +228,29 @@
   const VIRTUALIZE_ROW_THRESHOLD = 200;
   /** Extra rows rendered above/below the viewport to absorb measurement slop. */
   const OVERSCAN_ROWS = 12;
-  /** Fallback pitch (row height + list gap) until a real pair is measured. */
+  /**
+   * Fallback pitch (row height + list gap) used until either a real pair of
+   * rows is measured or the metric tokens are read off the list element.
+   */
   const FALLBACK_ROW_PITCH = 21;
-  /** Matches `--space-1` on `.project-tree-list` (F72 spacer correction). */
-  const LIST_GAP_PX = 2;
+  /** Fallback for `--project-tree-row-spacing` (F72 spacer correction). */
+  const FALLBACK_LIST_GAP_PX = 2;
+
+  /**
+   * Read one `px`-valued custom property off an element. The project-tree
+   * metrics live in `tokens.css` (`--project-tree-*`), and the windowing math
+   * needs their numeric values, so they are read back instead of being
+   * duplicated as constants here.
+   */
+  function readPxCustomProperty(
+    element: HTMLElement,
+    name: string,
+    fallback: number,
+  ): number {
+    const raw = getComputedStyle(element).getPropertyValue(name).trim();
+    const parsed = Number.parseFloat(raw);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  }
 
   const rows = $derived(
     flattenProjectTree(nodes, expandedPaths, childrenByPath, loadingPaths),
@@ -279,6 +312,7 @@
   let viewportHeight = $state(800);
   let listOffsetTop = $state(0);
   let rowPitch = $state(FALLBACK_ROW_PITCH);
+  let listGapPx = $state(FALLBACK_LIST_GAP_PX);
 
   function findScrollParent(el: HTMLElement): HTMLElement | null {
     let parent = el.parentElement;
@@ -335,12 +369,24 @@
     if (!el) {
       return;
     }
+    const gap = readPxCustomProperty(el, "--project-tree-row-spacing", FALLBACK_LIST_GAP_PX);
+    if (Math.abs(gap - listGapPx) > 0.5) {
+      listGapPx = gap;
+    }
     const rowEls = el.querySelectorAll<HTMLElement>("li[data-tree-row]");
     if (rowEls.length >= 2) {
       const pitch = rowEls[1].offsetTop - rowEls[0].offsetTop;
       if (pitch > 8 && Math.abs(pitch - rowPitch) > 0.5) {
         rowPitch = pitch;
       }
+      return;
+    }
+    // Fewer than two rows rendered (a short or freshly windowed list): derive
+    // the pitch from the metric tokens rather than the hardcoded fallback.
+    const tokenPitch =
+      readPxCustomProperty(el, "--project-tree-row-height", FALLBACK_ROW_PITCH - gap) + gap;
+    if (tokenPitch > 8 && Math.abs(tokenPitch - rowPitch) > 0.5) {
+      rowPitch = tokenPitch;
     }
   });
 
@@ -364,7 +410,7 @@
   // unwindowed list (F72).
   const topPadPx = $derived(
     visibleRange.start > 0
-      ? visibleRange.start * rowPitch - LIST_GAP_PX
+      ? visibleRange.start * rowPitch - listGapPx
       : 0,
   );
   const bottomPadPx = $derived.by(() => {
@@ -372,7 +418,7 @@
     if (remaining <= 0) {
       return 0;
     }
-    return remaining * rowPitch - LIST_GAP_PX;
+    return remaining * rowPitch - listGapPx;
   });
 
   // Reveal the active file even when its row is outside the rendered window
@@ -479,6 +525,7 @@
             title={row.node.path}
             style={`--node-depth:${row.depth}`}
             onclick={() => handleRowClick(row)}
+            ondblclick={() => handleRowDoubleClick(row)}
             oncontextmenu={(event) => onContextMenuNode(event, row.node)}
             onpointerdown={(event) => handlePointerDown(event, row.node)}
             onpointerenter={() => handlePointerEnter(row.node)}
@@ -515,7 +562,7 @@
 <style>
   .project-tree-view {
     min-height: 0;
-    padding: var(--space-2);
+    padding: var(--project-tree-padding);
   }
 
   .project-tree-view[data-dragging="true"] {
@@ -527,7 +574,7 @@
     margin: 0;
     padding: 0;
     display: grid;
-    gap: var(--space-1);
+    gap: var(--project-tree-row-spacing);
   }
 
   .project-tree-spacer {
@@ -540,16 +587,20 @@
     list-style: none;
     color: var(--color-text-secondary);
     font-size: var(--font-size-status);
-    padding: 0 var(--space-8);
-    padding-left: calc(var(--space-8) + var(--node-depth, 1) * var(--tree-indent));
+    padding: 0 var(--project-tree-row-padding-x);
+    padding-left: calc(
+      var(--project-tree-row-padding-x) + var(--node-depth, 1) * var(--project-tree-indent)
+    );
   }
 
   .project-tree-draft {
-    min-height: 21px;
+    min-height: calc(var(--project-tree-row-height) + 2px);
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    padding-left: calc(var(--space-2) + var(--node-depth) * var(--tree-indent));
+    gap: var(--project-tree-row-gap);
+    padding-left: calc(
+      var(--project-tree-row-padding-x) + var(--node-depth) * var(--project-tree-indent)
+    );
   }
 
   .project-tree-draft input {
@@ -567,18 +618,20 @@
 
   .project-tree-row {
     width: 100%;
-    min-height: 19px;
+    min-height: var(--project-tree-row-height);
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--project-tree-row-gap);
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--color-text-primary);
     font: inherit;
     text-align: left;
-    padding: 0 var(--space-2);
-    padding-left: calc(var(--space-2) + var(--node-depth) * var(--tree-indent));
+    padding: 0 var(--project-tree-row-padding-x);
+    padding-left: calc(
+      var(--project-tree-row-padding-x) + var(--node-depth) * var(--project-tree-indent)
+    );
   }
 
   .project-tree-row:hover {

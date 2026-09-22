@@ -9,6 +9,7 @@ import { runOpenInActiveContext } from "./fileContextPolicy";
 import { isPathUnderRoot, workspaceRelativePath } from "./workspacePaths";
 import { renameDocumentOnDisk } from "./documentRename";
 import { deleteProjectEntry } from "./projectFileOps";
+import { moveTabToNewWindow } from "./tabWindowTransfer";
 import {
   closeOtherTabsWithUnsavedPrompt,
   closeTabWithUnsavedPrompt,
@@ -114,6 +115,18 @@ export function canCopyRelativePath(
     return false;
   }
   return workspaceRelativePath(filePath, workspaceRoot) !== null;
+}
+
+/**
+ * Multi-window placement is a Notepad-only policy (a workspace tab belongs to
+ * its workspace context, and the receiving window adopts transfers into its own
+ * Notepad), so the menu entry is offered only for Notepad file tabs.
+ */
+export function canOpenTabInNewWindow(
+  tab: TabState | null,
+  isNotepadActive: boolean,
+): boolean {
+  return Boolean(tab && isFileTab(tab) && isNotepadActive);
 }
 
 export function canRenameTab(
@@ -283,6 +296,31 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
     deps.closeContextMenu();
   }
 
+  /**
+   * Hands the tab's file to a brand-new window and focuses it.
+   *
+   * The file moves rather than being duplicated: a path may be open in exactly
+   * one window (`openFileRegistry` owns that invariant, and two windows editing
+   * the same buffer would race on save), so the source tab is closed once the
+   * new window has adopted it. A dirty tab is prompted for first, and a failed
+   * transfer leaves the tab exactly where it is.
+   */
+  async function openContextTabInNewWindow(): Promise<void> {
+    const contextTab = deps.getContextTab();
+    deps.closeContextMenu();
+    if (!contextTab) {
+      return;
+    }
+    const opened = await moveTabToNewWindow({
+      tabId: contextTab.id,
+      sourceWindowId: deps.getWindowId(),
+      notify: deps.notify,
+    });
+    if (opened) {
+      deps.notify("Opened tab in a new window.");
+    }
+  }
+
   async function closeContextTabWithPrompt(): Promise<void> {
     const contextTab = deps.getContextTab();
     if (!contextTab) {
@@ -343,6 +381,7 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
   return {
     renameContextTab,
     deleteContextTabFile,
+    openContextTabInNewWindow,
     revealTabInFileManager,
     copyTabPath,
     copyTabRelativePath,

@@ -103,6 +103,10 @@
   import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
   import { shouldRunAutosaveBeforeGitOperations } from "../git/gitIntegrationGating";
   import { promptLocalChangesPull } from "../services/localChangesPullPrompt";
+  import {
+    subscribeVersionControlCommitRequests,
+    takePendingVersionControlCommit,
+  } from "../services/versionControlNavigation";
 
   /**
    * Per-workspace version control view, rendered as a chrome-less editor-pane
@@ -685,6 +689,15 @@
           probeStatus = "ready";
           repoRoot = result.repoRoot;
           isBareRepository = result.isBareRepository;
+          // A commit handed over by the project-tree / tab "Git Log" popup:
+          // land on it in History instead of the default view.
+          {
+            const handedOverSha = takePendingVersionControlCommit(result.repoRoot);
+            if (handedOverSha) {
+              activeSection = "history";
+              selectedCommitSha = handedOverSha;
+            }
+          }
           await loadRemotePicker(result.repoRoot, signal);
           if (isStale()) {
             return;
@@ -717,6 +730,19 @@
       resetRemotePicker();
     }
   }
+
+  // A commit handed over while this view is already mounted (its tab merely
+  // re-focused, so no probe runs) still has to land.
+  $effect(() => {
+    return subscribeVersionControlCommitRequests(() => {
+      const handedOverSha = takePendingVersionControlCommit(repoRoot);
+      if (!handedOverSha) {
+        return;
+      }
+      activeSection = "history";
+      selectedCommitSha = handedOverSha;
+    });
+  });
 
   $effect(() => {
     workspaceRootPath;

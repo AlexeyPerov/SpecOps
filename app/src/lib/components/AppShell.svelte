@@ -114,6 +114,8 @@
     onPanelWidthChange: (widthPx: number) => void;
     onToggleDirectory: (path: string) => void | Promise<void>;
     onOpenFile: (path: string) => void | Promise<void>;
+    /** Double click in the tree: keep the previewed file's tab. */
+    onKeepFile?: (path: string) => void | Promise<void>;
     onMoveEntry: (sourcePath: string, destDirPath: string) => Promise<void>;
     onNewFile: (parentDirPath: string, name: string) => Promise<boolean>;
     onNewFolder: (parentDirPath: string, name: string) => Promise<boolean>;
@@ -277,6 +279,7 @@
     onMoveDown: () => void;
     onOpenSettings: (workspaceId: ContextId) => void;
     onOpenVersionControl: (workspaceId: ContextId) => void;
+    onCopyPath: (workspaceId: ContextId) => void | Promise<void>;
     onCloseWorkspace: (workspaceId: ContextId) => void;
   }
 
@@ -838,6 +841,7 @@
         onPanelWidthChange={projectTree.onPanelWidthChange}
         onToggleDirectory={projectTree.onToggleDirectory}
         onOpenFile={projectTree.onOpenFile}
+        onKeepFile={projectTree.onKeepFile}
         onMoveEntry={handleProjectMoveEntry}
         onNewFile={handleProjectNewFile}
         onNewFolder={handleProjectNewFolder}
@@ -1107,6 +1111,20 @@
       Version Control
     </button>
     {/if}
+    <button
+      class="workspace-context-item"
+      type="button"
+      role="menuitem"
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (!workspaceContextMenu.menu) {
+          return;
+        }
+        void workspaceContextMenu.onCopyPath(workspaceContextMenu.menu.workspaceId);
+      }}
+    >
+      Copy Path
+    </button>
     <button
       class="workspace-context-item"
       type="button"

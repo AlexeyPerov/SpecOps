@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import "../styles/tab-context-menu.css";
   import type { DocumentState, TabState } from "../domain/contracts";
   import { isFileTab } from "../domain/contracts";
@@ -14,6 +15,7 @@
     canCopyTabPath,
     canDeleteTabFile,
     canOpenNearbyFiles,
+    canOpenTabInNewWindow,
     canRenameTab,
     canRevealTabInFileManager,
     createTabContextMenuHandlers,
@@ -22,6 +24,9 @@
   } from "../services/tabContextMenuActions";
   import TabBarNearbySubmenu from "./TabBarNearbySubmenu.svelte";
   import { clampFixedOverlayPosition } from "./clampFixedOverlayPosition";
+  import GitLogPopover from "./GitLogPopover.svelte";
+  import { isGitIntegrationEnabledInApp } from "../git/gitIntegrationGating";
+  import { openVersionControlAtCommit } from "../services/versionControlNavigation";
 
   const revealLabel = revealInFileManagerLabel();
 
@@ -41,6 +46,21 @@
 
   let contextMenu = $state<{ tabId: string; x: number; y: number } | null>(null);
   let contextMenuEl = $state<HTMLDivElement | null>(null);
+  let gitLogPopover = $state<GitLogPopover | undefined>(undefined);
+
+  function basename(path: string): string {
+    const parts = path.replaceAll("\\", "/").split("/");
+    return parts[parts.length - 1] || path;
+  }
+
+  function openCommitInVersionControl(sha: string, repoRoot: string): void {
+    openVersionControlAtCommit(
+      appState.getActiveContext().id,
+      repoRoot,
+      sha,
+      (message) => notify(message),
+    );
+  }
   let nearbySubmenuOpen = $state(false);
   let nearbyFiles = $state<NearbyTextFile[]>([]);
   let nearbyFilesLoading = $state(false);
@@ -105,6 +125,10 @@
     }
   }
 
+  onDestroy(() => {
+    gitLogPopover?.closeGitLog();
+  });
+
   async function loadNearbyFiles(tab: TabState): Promise<void> {
     nearbyFilesLoading = true;
     nearbyFiles = [];
@@ -128,6 +152,13 @@
   }
 
   const contextMenuCanReveal = $derived(canRevealTabInFileManager(contextMenuTab, documents));
+  /** Git Log needs git enabled and a tab backed by a real file on disk. */
+  const contextMenuGitLogPath = $derived.by(() => {
+    if (!isGitIntegrationEnabledInApp()) {
+      return null;
+    }
+    return contextMenuTabDoc?.filePath ?? null;
+  });
   const contextMenuCanRename = $derived(canRenameTab(contextMenuTab, contextMenuTabDoc));
   const contextMenuWorkspaceRoot = $derived(appState.getWorkspaceRoot());
   const contextMenuCanDelete = $derived(
@@ -137,6 +168,9 @@
   const contextMenuCanCloseTabsToLeft = $derived(canCloseTabsToLeft(openTabs, contextMenuTab));
   const contextMenuCanCloseTabsToRight = $derived(canCloseTabsToRight(openTabs, contextMenuTab));
   const contextMenuCanCloseMissingFileTabs = $derived(canCloseMissingFileTabs(openTabs, documents));
+  const contextMenuCanOpenInNewWindow = $derived(
+    canOpenTabInNewWindow(contextMenuTab, appState.isNotepadActive()),
+  );
   const contextMenuCanOpenNearby = $derived(canOpenNearbyFiles(contextMenuTabDoc));
   const contextMenuCanCopyPath = $derived(canCopyTabPath(contextMenuTabDoc));
   const contextMenuCanCopyRelativePath = $derived(
@@ -240,6 +274,26 @@
 
     <div class="ui-rule" role="separator"></div>
 
+    <button
+      class="tab-context-item"
+      type="button"
+      role="menuitem"
+      disabled={!contextMenuCanOpenInNewWindow}
+      title={contextMenuCanOpenInNewWindow
+        ? "Move this file into a new window"
+        : "Only Notepad tabs can be opened in another window"}
+      onpointerdown={(event) => {
+        event.stopPropagation();
+        if (contextMenuCanOpenInNewWindow) {
+          void menuHandlers.openContextTabInNewWindow();
+        }
+      }}
+    >
+      Open in New Window
+    </button>
+
+    <div class="ui-rule" role="separator"></div>
+
     <TabBarNearbySubmenu
       open={nearbySubmenuOpen}
       enabled={contextMenuCanOpenNearby}
@@ -290,6 +344,30 @@
       </button>
     {/if}
 
+    {#if contextMenuGitLogPath}
+      <div class="ui-rule" role="separator"></div>
+      <button
+        class="tab-context-item"
+        type="button"
+        role="menuitem"
+        onpointerdown={(event) => {
+          event.stopPropagation();
+          const path = contextMenuGitLogPath;
+          const anchor = contextMenu;
+          closeContextMenu();
+          if (path && anchor) {
+            // Anchor the popup where the context menu was opened.
+            gitLogPopover?.openGitLog(
+              new MouseEvent("contextmenu", { clientX: anchor.x, clientY: anchor.y }),
+              { path, isFile: true, label: basename(path) },
+            );
+          }
+        }}
+      >
+        Git Log…
+      </button>
+    {/if}
+
     {#if contextMenuCanRename}
       <div class="ui-rule" role="separator"></div>
       <button
@@ -337,3 +415,5 @@
     </button>
   </div>
 {/if}
+
+<GitLogPopover bind:this={gitLogPopover} onOpenCommit={openCommitInVersionControl} />

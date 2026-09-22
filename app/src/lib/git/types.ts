@@ -287,6 +287,16 @@ export interface QueryCommitsOptions {
   skip?: number;
   /** History scope; defaults to {@link DEFAULT_HISTORY_FILTER_MODE}. */
   filterMode?: HistoryFilterMode;
+  /**
+   * Restrict history to commits touching these paths (file or directory),
+   * passed to `git log` as literal pathspecs. Empty/omitted means whole repo.
+   */
+  paths?: readonly string[];
+  /**
+   * Follow a single file across renames (`git log --follow`). Git only accepts
+   * it with exactly one path, so it is ignored otherwise.
+   */
+  follow?: boolean;
 }
 
 /** Status letter from `git show --name-status` file rows. */

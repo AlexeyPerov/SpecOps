@@ -320,6 +320,7 @@ export interface AppShellMountDeps {
     consumeOpenedPaths: (paths: string[]) => Promise<void>;
     restoreWorkspaceSession: (workspaceRoot: string) => Promise<void>;
     loadProjectTreeRoot: () => Promise<void>;
+    revalidateProjectTree?: () => Promise<void>;
     onFilesystemChange: (path: string) => void;
     setConsoleHeightPx: (heightPx: number) => void;
   }) => Promise<{
@@ -337,6 +338,7 @@ export interface AppShellMountDeps {
     options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
   ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
+  revalidateProjectTree: () => Promise<void>;
   notifyProjectTreeFilesystemChange: (path: string, kind?: import("./fileWatcher").FileWatcherEventKind) => void;
   setConsoleHeightPx: (heightPx: number) => void;
   setRuntimeSyncExternalFileWatcher: (
@@ -390,6 +392,7 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
       consumeOpenedPaths: deps.consumeOpenedPaths,
       restoreWorkspaceSession: deps.restoreWorkspaceSession,
       loadProjectTreeRoot: deps.loadProjectTreeRoot,
+      revalidateProjectTree: deps.revalidateProjectTree,
       onFilesystemChange: deps.notifyProjectTreeFilesystemChange,
       setConsoleHeightPx: deps.setConsoleHeightPx,
     })

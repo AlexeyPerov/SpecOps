@@ -22,6 +22,11 @@ import { syncRecentFiles } from "./recentFilesSync";
 import { getErrorMessage } from "../commands/commandErrors";
 import { releasePendingOpenFile } from "./openFileRegistry";
 import { scheduleTabExternalCheck } from "./externalFileChanges";
+import {
+  captureActivePaneTransientTab,
+  completeTransientOpen,
+  promoteTransientTabForDocument,
+} from "./transientTabs";
 
 export type OpenActivePathResult =
   | { kind: "opened"; path: string }
@@ -68,10 +73,24 @@ function moveExistingDocumentToPane(documentId: string, paneId: string): void {
   appState.moveTabBetweenPanes(owner.pane.id, tab.id, paneId, target.tabs.length);
 }
 
+export interface OpenActivePathOptions {
+  /**
+   * Open as a transient ("preview") tab: it takes the active pane's preview
+   * slot, replacing the tab that held it, and is promoted to an ordinary tab as
+   * soon as the user acts on the file. Used by single clicks in the project
+   * tree. See `transientTabs.ts`.
+   */
+  transient?: boolean;
+}
+
 export async function openActivePath(
   path: string,
   windowId: string,
+  options: OpenActivePathOptions = {},
 ): Promise<OpenActivePathResult> {
+  const previousTransientTab = options.transient
+    ? captureActivePaneTransientTab()
+    : null;
   try {
     const gateResult = await requestOpenPath(path, windowId);
     if (gateResult.kind === "redirected") {
@@ -79,6 +98,12 @@ export async function openActivePath(
       return { kind: "redirected", path: gateResult.path };
     }
     if (gateResult.kind === "existing") {
+      if (!options.transient) {
+        // Reaching an already-open file through an explicit route (Quick Open,
+        // a menu, a search result) is a deliberate choice: if it is sitting in
+        // the preview slot, keep it.
+        promoteTransientTabForDocument(gateResult.documentId);
+      }
       scheduleExistingDocumentCheck(gateResult.documentId);
       return { kind: "existing", path: gateResult.path };
     }
@@ -86,12 +111,15 @@ export async function openActivePath(
     const maxOpenWithoutConfirmBytes = getMaxOpenWithoutConfirmBytes();
     const fingerprint = await statDiskFingerprint(path);
     if (shouldGateFileOpenBySize(path, fingerprint.sizeBytes, maxOpenWithoutConfirmBytes)) {
-      await completeLargePendingOpen(path, fingerprint, windowId);
+      const pendingDocumentId = await completeLargePendingOpen(path, fingerprint, windowId);
+      if (options.transient) {
+        completeTransientOpen(pendingDocumentId, previousTransientTab);
+      }
       return { kind: "pending_confirm", path: normalizePathForStorage(path) };
     }
 
     const opened = await openPath(path);
-    await completeOpenPath(
+    const documentId = await completeOpenPath(
       opened.path,
       opened.content,
       windowId,
@@ -99,6 +127,9 @@ export async function openActivePath(
       openedFileEncoding(opened),
       opened.fingerprint,
     );
+    if (options.transient) {
+      completeTransientOpen(documentId, previousTransientTab);
+    }
     return { kind: "opened", path: opened.path };
   } catch (error: unknown) {
     await releasePendingOpenFile(path, windowId);
@@ -131,6 +162,8 @@ export async function openActivePathInPane(
       return { kind: "redirected", path: gateResult.path };
     }
     if (gateResult.kind === "existing") {
+      // Dropping a file onto a pane is deliberate — never leave it previewed.
+      promoteTransientTabForDocument(gateResult.documentId);
       moveExistingDocumentToPane(gateResult.documentId, paneId);
       scheduleExistingDocumentCheck(gateResult.documentId);
       return { kind: "existing", path: gateResult.path };

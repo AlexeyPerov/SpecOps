@@ -39,6 +39,72 @@ export function openVersionControlForWorkspace(
   return true;
 }
 
+/**
+ * Commit the Version Control view should select when it next renders for this
+ * repository. Set by the "Git Log" popup so picking a commit there lands on it
+ * in the full view; consumed once, by the first view that asks for it.
+ */
+let pendingCommitSelection: { repoRoot: string; sha: string } | null = null;
+/**
+ * Mounted Version Control views. A view that is already open for the target
+ * repository never re-probes when its tab is re-focused, so it is notified
+ * directly instead of waiting for a probe to pick the handoff up.
+ */
+const commitSelectionListeners = new Set<() => void>();
+
+/** Subscribe a mounted Version Control view to commit handoffs. */
+export function subscribeVersionControlCommitRequests(listener: () => void): () => void {
+  commitSelectionListeners.add(listener);
+  return () => {
+    commitSelectionListeners.delete(listener);
+  };
+}
+
+/**
+ * Switch to the workspace's Version Control view with `sha` selected.
+ * `repoRoot` scopes the handoff so a view for another repository cannot pick
+ * up a selection meant for this one.
+ */
+export function openVersionControlAtCommit(
+  workspaceId: ContextId,
+  repoRoot: string,
+  sha: string,
+  notify?: (message: string) => void,
+): boolean {
+  pendingCommitSelection = { repoRoot, sha };
+  const opened = openVersionControlForWorkspace(workspaceId, notify);
+  if (!opened) {
+    pendingCommitSelection = null;
+    return false;
+  }
+  for (const listener of commitSelectionListeners) {
+    listener();
+  }
+  return true;
+}
+
+/**
+ * Take the pending commit selection for `repoRoot`, if any. Returns null when
+ * nothing is pending or the request was for a different repository.
+ */
+export function takePendingVersionControlCommit(repoRoot: string | null): string | null {
+  if (!pendingCommitSelection || !repoRoot) {
+    return null;
+  }
+  if (pendingCommitSelection.repoRoot !== repoRoot) {
+    return null;
+  }
+  const { sha } = pendingCommitSelection;
+  pendingCommitSelection = null;
+  return sha;
+}
+
+/** Test helper: drop any pending commit handoff and its listeners. */
+export function resetPendingVersionControlCommitForTests(): void {
+  pendingCommitSelection = null;
+  commitSelectionListeners.clear();
+}
+
 /** Opens Version Control for the active context (command / shortcut entry). */
 export function openVersionControlForActiveContext(
   notify?: (message: string) => void,

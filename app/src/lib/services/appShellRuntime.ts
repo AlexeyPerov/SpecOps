@@ -109,6 +109,12 @@ export interface AppShellRuntimeOptions {
     options?: { skipOpencodeReconcile?: boolean; preferCachedIndex?: boolean },
   ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
+  /**
+   * Quiet revalidation of the active workspace's project tree, run when this
+   * window regains focus. The controller throttles and diffs the pass, so an
+   * unchanged tree costs a few directory listings and no re-render.
+   */
+  revalidateProjectTree?: () => Promise<void>;
   onFilesystemChange?: (path: string, kind: FileWatcherEventKind) => void;
   syncProjectTreeWatcher?: (roots: readonly string[]) => Promise<void>;
   setConsoleHeightPx: (heightPx: number) => void;
@@ -533,6 +539,11 @@ async function startAppShellRuntimeInner(
     await markWindowActive(windowId);
     if (runtimeReady) {
       await runFocusExternalChecks();
+      // Changes made by other tools while this window was in the background
+      // (git checkout, a build, an editor elsewhere) may have arrived without a
+      // watcher event, or before the watcher was armed. Revalidating on focus
+      // closes that gap; it is throttled and publishes only on real diffs.
+      await options.revalidateProjectTree?.();
     }
   });
   cleanupCallbacks.push(unlistenFocusChanged);

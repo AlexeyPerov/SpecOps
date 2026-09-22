@@ -21,11 +21,13 @@ import { isGitIntegrationEnabled } from "../../services/gitIntegrationSettings";
 import {
   findDocumentByPath,
   findDocumentByPathInContext,
+  findDocumentContext,
   getActiveDocuments,
   getActiveSession,
   nextDocAndTabIds,
   nextTabId,
   patchActiveContext,
+  patchContextById,
 } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
 import { createDocumentContentSlice } from "./documentContentSlice";
@@ -36,6 +38,7 @@ import {
   closeTabsForce,
   closeTabsForceInContext,
   missingTabIdsToClose,
+  promoteTransientTabInLayout,
   reopenTabForDocument,
   tabIdsToCloseOtherThan,
   tabIdsToCloseToLeftOf,
@@ -221,6 +224,88 @@ export function createDocumentTabsLifecycleSlice(deps: {
         }
       }
       return null;
+    },
+    /**
+     * Mark (or unmark) a file tab as transient. Transient tabs are the
+     * single-click "preview" tabs opened from the project tree; see
+     * {@link FileTabState.transient}. Only one per pane is expected, so
+     * marking a tab transient clears the flag from its pane siblings.
+     */
+    setFileTabTransient(tabId: string, transient: boolean) {
+      update((state) =>
+        patchActiveContext(state, (ctx) => {
+          const owner = findTabOwner(ctx.session.editorLayout, tabId);
+          if (!owner || !isFileTab(owner.tab)) {
+            return ctx;
+          }
+          let changed = false;
+          const panes = ctx.session.editorLayout.panes.map((pane) => {
+            let paneChanged = false;
+            const tabs = pane.tabs.map((tab) => {
+              if (!isFileTab(tab)) {
+                return tab;
+              }
+              // The target tab takes the requested value. When it becomes the
+              // pane's preview, its pane siblings are cleared so a pane never
+              // holds two; clearing a flag must not disturb any other tab
+              // (promoting the outgoing preview would otherwise un-preview the
+              // incoming one). Other panes always keep their own.
+              const nextTransient =
+                tab.id === tabId
+                  ? transient
+                  : transient && pane.id === owner.pane.id
+                    ? false
+                    : Boolean(tab.transient);
+              if (Boolean(tab.transient) === nextTransient) {
+                return tab;
+              }
+              paneChanged = true;
+              const { transient: _previous, ...rest } = tab;
+              return nextTransient ? { ...rest, transient: true as const } : rest;
+            });
+            if (!paneChanged) {
+              return pane;
+            }
+            changed = true;
+            return { ...pane, tabs };
+          });
+          if (!changed) {
+            return ctx;
+          }
+          return {
+            ...ctx,
+            session: {
+              ...ctx.session,
+              editorLayout: { ...ctx.session.editorLayout, panes },
+            },
+          };
+        }),
+      );
+    },
+    /**
+     * Clear the transient flag from the tab showing `documentId` — the
+     * promotion path taken whenever the user acts on the file (edits it, moves
+     * the caret, saves, renames, pins, drags the tab). Targets the context that
+     * owns the document, which is not necessarily the active one (background
+     * contexts stay mounted and can receive edits).
+     */
+    promoteTransientTabForDocument(documentId: string) {
+      update((state) => {
+        const owner = findDocumentContext(state, documentId);
+        if (!owner) {
+          return state;
+        }
+        return patchContextById(state, owner.contextId, (ctx) => {
+          const nextLayout = promoteTransientTabInLayout(ctx.session.editorLayout, documentId);
+          if (nextLayout === ctx.session.editorLayout) {
+            return ctx;
+          }
+          return {
+            ...ctx,
+            session: { ...ctx.session, editorLayout: nextLayout },
+          };
+        });
+      });
     },
     reorderTabs(fromIndex: number, toIndex: number) {
       update((state) =>

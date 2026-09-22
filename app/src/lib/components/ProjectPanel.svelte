@@ -2,6 +2,11 @@
   import { onDestroy } from "svelte";
   import ProjectTreeView from "./ProjectTreeView.svelte";
   import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
+  import GitLogPopover from "./GitLogPopover.svelte";
+  import { isGitIntegrationEnabled } from "../services/gitIntegrationSettings";
+  import { openVersionControlAtCommit } from "../services/versionControlNavigation";
+  import { appState } from "../state/appState";
+  import { appSettings } from "../state/appStateSelectors";
   import type { ProjectTreeNode } from "../services/projectTree";
   import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import type { PaneDropTargetElements } from "./paneDropTargets";
@@ -35,6 +40,8 @@
     onPanelWidthChange?: (width: number) => void;
     onToggleDirectory?: (path: string) => void;
     onOpenFile?: (path: string) => void;
+    /** Double click on a file row: keep its (preview) tab. */
+    onKeepFile?: (path: string) => void;
     onMoveEntry?: (sourcePath: string, destDirPath: string) => Promise<void>;
     onNewFile?: (parentDirPath: string, name: string) => Promise<boolean>;
     onNewFolder?: (parentDirPath: string, name: string) => Promise<boolean>;
@@ -71,6 +78,7 @@
     onPanelWidthChange = () => {},
     onToggleDirectory = () => {},
     onOpenFile = () => {},
+    onKeepFile = () => {},
     onMoveEntry = async () => {},
     onNewFile = async () => false,
     onNewFolder = async () => false,
@@ -86,6 +94,7 @@
 
   let panelBodyEl = $state<HTMLDivElement | null>(null);
   let contextMenuComponent = $state<ProjectTreeContextMenu | undefined>(undefined);
+  let gitLogPopover = $state<GitLogPopover | undefined>(undefined);
   let displayWidth = $state(DEFAULT_PROJECT_PANEL_WIDTH_PX);
   let isResizing = $state(false);
   let markdownOnly = $state(false);
@@ -135,21 +144,65 @@
     return parts[parts.length - 1] || path;
   }
 
-  // Reveal the active file after the DOM patch, and re-run when the tree
-  // expands so auto-expanded ancestors make the row queryable (M74).
+  /** Last scroll offset the user was at, sampled before each tree re-render. */
+  let userScrollTop = 0;
+  /**
+   * Active file whose row has already been scrolled into view. Deliberately not
+   * reactive: the effect below both reads and writes it, and it exists purely
+   * to make that effect idempotent.
+   */
+  let revealedActivePath: string | null = null;
+
+  function handleBodyScroll(): void {
+    const body = panelBodyEl;
+    if (body) {
+      userScrollTop = body.scrollTop;
+    }
+  }
+
+  // Runs after every tree DOM patch (and when the active file changes).
+  //
+  // 1. Restores the scroll offset the browser clamped away. Deleting or moving
+  //    an entry re-renders the list, and while it is briefly shorter the
+  //    scroll container clamps `scrollTop` — which is what made the panel jump
+  //    to the top after a delete/move.
+  // 2. Reveals the active file only when it actually *changed*, retrying
+  //    across tree updates while its row is still missing (auto-expanded
+  //    ancestors land a tick later, M74). Revealing on every publish yanked
+  //    the panel back to the active file on unrelated tree updates.
   $effect(() => {
     const path = activeFilePath;
     const body = panelBodyEl;
     void rootNodes;
     void childrenByPath;
     void expandedPaths;
-    if (!body || !path) {
+    if (!body) {
+      return;
+    }
+    const maxScrollTop = Math.max(0, body.scrollHeight - body.clientHeight);
+    if (body.scrollTop < userScrollTop && maxScrollTop >= userScrollTop) {
+      body.scrollTop = userScrollTop;
+    } else {
+      userScrollTop = body.scrollTop;
+    }
+    if (!path) {
+      revealedActivePath = null;
+      return;
+    }
+    if (path === revealedActivePath) {
       return;
     }
     const node = body.querySelector<HTMLElement>(
       `[data-path="${CSS.escape(path)}"]`,
     );
-    node?.scrollIntoView({ block: "nearest" });
+    if (!node) {
+      // Not rendered yet (collapsed ancestor, or outside the virtualized
+      // window — ProjectTreeView reveals those). Retry on the next update.
+      return;
+    }
+    node.scrollIntoView({ block: "nearest" });
+    userScrollTop = body.scrollTop;
+    revealedActivePath = path;
   });
 
   $effect(() => {
@@ -202,7 +255,25 @@
     activeResizeTeardown?.();
     activeResizeTeardown = null;
     contextMenuComponent?.closeContextMenu();
+    gitLogPopover?.closeGitLog();
   });
+
+  // Reactive so toggling git integration in Settings updates the menu without
+  // a remount.
+  const gitEnabled = $derived(isGitIntegrationEnabled($appSettings.gitIntegration));
+
+  function showGitLog(event: MouseEvent, path: string, isFile: boolean): void {
+    gitLogPopover?.openGitLog(event, { path, isFile, label: basename(path) });
+  }
+
+  function openCommitInVersionControl(sha: string, repoRoot: string): void {
+    openVersionControlAtCommit(
+      appState.getActiveContext().id,
+      repoRoot,
+      sha,
+      (message) => notify(message),
+    );
+  }
 
   function openContextMenu(
     event: MouseEvent,
@@ -317,6 +388,7 @@
       role="region"
       aria-label="Project files"
       bind:this={panelBodyEl}
+      onscroll={handleBodyScroll}
       oncontextmenu={handleContextMenuRoot}
     >
       <ProjectTreeView
@@ -329,6 +401,7 @@
         {statusByPath}
         {onToggleDirectory}
         {onOpenFile}
+        {onKeepFile}
         onContextMenuRoot={handleContextMenuRoot}
         onContextMenuNode={handleContextMenuNode}
         {onMoveEntry}
@@ -349,12 +422,16 @@
 <ProjectTreeContextMenu
   bind:this={contextMenuComponent}
   {workspaceRoot}
+  {gitEnabled}
+  onShowGitLog={showGitLog}
   onOpenFile={onOpenFile}
   onNewFile={(parent) => startDraft("file", parent)}
   onNewFolder={(parent) => startDraft("directory", parent)}
   onRename={onRenameEntry}
   onDelete={onDeleteEntry}
 />
+
+<GitLogPopover bind:this={gitLogPopover} onOpenCommit={openCommitInVersionControl} />
 
 <style>
   .project-panel {

@@ -15,6 +15,10 @@
 
   interface Props {
     workspaceRoot?: string;
+    /** Opens the git-log popup for `path` at the menu's position. */
+    onShowGitLog?: (event: MouseEvent, path: string, isFile: boolean) => void;
+    /** False when git integration is off — the Git Log item is then hidden. */
+    gitEnabled?: boolean;
     onOpenFile?: (path: string) => void;
     onNewFile?: (parentDirPath: string) => void;
     onNewFolder?: (parentDirPath: string) => void;
@@ -24,6 +28,8 @@
 
   let {
     workspaceRoot = "",
+    onShowGitLog,
+    gitEnabled = false,
     onOpenFile = () => {},
     onNewFile = () => {},
     onNewFolder = () => {},
@@ -222,6 +228,32 @@
           Copy Relative Path
         </button>
       {/if}
+    {/if}
+    {#if hasNode && nodePath && gitEnabled && onShowGitLog}
+      <div class="ui-rule" role="separator"></div>
+      <button
+        class="project-tree-context-item"
+        type="button"
+        role="menuitem"
+        onpointerdown={(event) => {
+          event.stopPropagation();
+          const path = nodePath;
+          const isFile = nodeKind === "file";
+          const anchor = contextMenu;
+          closeContextMenu();
+          if (path && anchor) {
+            // Re-anchor the popup where the menu was opened, not where the
+            // item happened to be clicked.
+            onShowGitLog(
+              new MouseEvent("contextmenu", { clientX: anchor.x, clientY: anchor.y }),
+              path,
+              isFile,
+            );
+          }
+        }}
+      >
+        Git Log…
+      </button>
     {/if}
     {#if hasNode && nodePath && nodeKind}
       <div class="ui-rule" role="separator"></div>

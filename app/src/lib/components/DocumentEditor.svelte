@@ -5,6 +5,7 @@
   import { listEnabledMarkdownSnippetsMemoized } from "../editor/markdownSnippetSettings";
   import { appState } from "../state/appState";
   import type { ResolvedMarkdownSnippet } from "../domain/snippets";
+  import { promoteTransientTabForDocument } from "../services/transientTabs";
 
   /**
    * Stable empty array for the non-markdown path (P03-08-24a). Returning a new
@@ -73,6 +74,15 @@
     }
   }
 
+  /**
+   * The user moved the caret or changed the selection in this document —
+   * enough of a commitment to keep a previewed file, so its transient tab is
+   * promoted to an ordinary one.
+   */
+  function handleUserSelection(documentId: string): void {
+    promoteTransientTabForDocument(documentId);
+  }
+
   function handleScrollTopChange(documentId: string, nextScrollTop: number): void {
     if (appState.getSnapshot().contexts.activeContextId === contextId) {
       onScrollTopChange(documentId, nextScrollTop);
@@ -100,5 +110,6 @@
   {onStatusMessage}
   onDocumentDirty={handleDocumentDirty}
   onScrollTopChange={handleScrollTopChange}
+  onUserSelection={handleUserSelection}
   {visible}
 />

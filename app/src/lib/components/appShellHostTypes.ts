@@ -25,6 +25,7 @@ export interface AppShellHostApi {
   ) => Promise<void>;
   ensureChatHttpSessionTab: () => void | Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
+  revalidateProjectTree: () => Promise<void>;
   notifyProjectTreeFilesystemChange: (
     path: string,
     kind?: FileWatcherEventKind,

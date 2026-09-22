@@ -53,6 +53,16 @@ export interface FileTabState {
   pinned: boolean;
   /** When true, tab is omitted from the strip until the document has content. */
   stripHidden?: boolean;
+  /**
+   * Transient ("preview") tab: opened by a single click in the project tree and
+   * reused by the next such click, so browsing files does not pile up tabs.
+   * The flag is cleared — the tab becomes an ordinary one — as soon as the user
+   * does something with the file (edits it, moves the caret, saves, renames,
+   * pins, drags the tab, or double-clicks it). At most one transient tab exists
+   * per pane. Deliberately not restored from a session snapshot: a tab that
+   * survived a restart is one the user kept.
+   */
+  transient?: true;
 }
 
 export interface SessionTabState {
@@ -97,8 +107,16 @@ export function createFileTab(
   documentId: string,
   pinned = false,
   stripHidden = false,
+  transient = false,
 ): FileTabState {
-  return stripHidden ? { id, kind: "file", documentId, pinned, stripHidden: true } : { id, kind: "file", documentId, pinned };
+  const tab: FileTabState = { id, kind: "file", documentId, pinned };
+  if (stripHidden) {
+    tab.stripHidden = true;
+  }
+  if (transient) {
+    tab.transient = true;
+  }
+  return tab;
 }
 
 export function createSessionTab(id: string, sessionId: string, pinned = false): SessionTabState {

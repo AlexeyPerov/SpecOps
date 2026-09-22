@@ -376,6 +376,8 @@
     },
     getMenuEl: () => workspaceContextMenuEl,
     getWorkspaceIds: () => workspaces.map((workspace) => workspace.id),
+    getWorkspaceRootPath: (workspaceId) =>
+      workspaces.find((workspace) => workspace.id === workspaceId)?.rootPath ?? null,
     getPreviousActiveContextId: () => previousActiveContextId,
     setPreviousActiveContextId: (contextId) => {
       previousActiveContextId = contextId;
@@ -451,6 +453,7 @@
     restoreWorkspaceSession: agentHandlers.restoreWorkspaceSession,
     ensureChatHttpSessionTab: agentHandlers.ensureChatHttpSessionTab,
     loadProjectTreeRoot: projectTreeHandlers.loadProjectTreeRoot,
+    revalidateProjectTree: projectTreeHandlers.revalidateProjectTree,
     notifyProjectTreeFilesystemChange: projectTreeHandlers.notifyProjectTreeFilesystemChange,
     setupLayoutObserver: layoutHandlers.setupLayoutObserver,
     disconnectLayoutObserver: layoutHandlers.disconnectLayoutObserver,
@@ -764,10 +767,14 @@
     panelWidthPx: workspaceLayout.projectPanelWidthPx,
     onRefresh: projectTreeHandlers.refreshProjectTree,
     onToggleHidden: projectTreeHandlers.toggleProjectTreeHidden,
-    onToggleCollapsed: layoutHandlers.toggleProjectPanelCollapsed,
+    onToggleCollapsed: (next: boolean) => {
+      layoutHandlers.toggleProjectPanelCollapsed(next);
+      projectTreeHandlers.handleProjectPanelCollapsedChange(next);
+    },
     onPanelWidthChange: layoutHandlers.handleProjectPanelWidthChange,
     onToggleDirectory: projectTreeHandlers.handleToggleProjectTreeDirectory,
-    onOpenFile: projectTreeHandlers.handleOpenProjectTreeFile,
+    onOpenFile: projectTreeHandlers.handlePreviewProjectTreeFile,
+    onKeepFile: projectTreeHandlers.handleKeepProjectTreeFile,
     onMoveEntry: projectTreeHandlers.handleMoveProjectTreeEntry,
     onNewFile: projectTreeHandlers.handleNewProjectFile,
     onNewFolder: projectTreeHandlers.handleNewProjectFolder,
@@ -864,6 +871,7 @@
     onMoveDown: handleWorkspaceContextMenuMoveDown,
     onOpenSettings: workspaceContextMenuActions.openSettings,
     onOpenVersionControl: workspaceContextMenuActions.openVersionControl,
+    onCopyPath: workspaceContextMenuActions.copyPath,
     onCloseWorkspace: workspaceContextMenuActions.closeWorkspace,
   }}
   overlays={{

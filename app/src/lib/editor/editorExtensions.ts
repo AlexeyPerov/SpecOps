@@ -228,6 +228,13 @@ function editorSurfaceTheme(): Extension {
     },
     ".cm-content": {
       caretColor: "var(--color-text-primary)",
+      // The area on either side of the text is flexible: `auto` inline margins
+      // absorb whatever the editor is wider than the text column, so the text
+      // sits centred in a wide pane instead of pinned to the gutter. With
+      // `--editor-text-max-width: none` the column fills the pane as before.
+      maxWidth: "var(--editor-text-max-width, none)",
+      marginInline: "auto",
+      paddingInline: "var(--editor-text-padding-x, 4px)",
     },
     ".cm-gutters": {
       backgroundColor: "var(--color-surface-1)",

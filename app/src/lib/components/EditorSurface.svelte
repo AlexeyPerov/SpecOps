@@ -37,6 +37,8 @@
     onStatusMessage?: (message: string) => void;
     onDocumentDirty?: (nextContent: string) => void;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
+    /** User-driven caret/selection move; promotes a transient tab. */
+    onUserSelection?: (documentId: string) => void;
   }
 
   let {
@@ -58,6 +60,7 @@
     onStatusMessage = () => {},
     onDocumentDirty = () => {},
     onScrollTopChange = () => {},
+    onUserSelection = () => {},
   }: Props = $props();
 
   const workbench = getEditorWorkbenchRuntime();
@@ -77,6 +80,7 @@
       onStatusMessage: (message) => onStatusMessage(message),
       onDocumentDirty: (nextContent) => onDocumentDirty(nextContent),
       onScrollTopChange: (id, nextScrollTop) => onScrollTopChange(id, nextScrollTop),
+      onUserSelection: (id) => onUserSelection(id),
     });
     controller.update({
       content,

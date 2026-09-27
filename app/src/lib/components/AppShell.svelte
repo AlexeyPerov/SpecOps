@@ -105,7 +105,7 @@
       string,
       import("../ai/backends/workspaceAgentBackend").OpencodeFileChangeStatus
     > | null;
-    markdownPaths?: readonly string[];
+    markdownPaths?: readonly string[] | null;
     collapsed: boolean;
     panelWidthPx: number;
     onRefresh: () => void | Promise<void>;
@@ -831,7 +831,7 @@
         loadingPaths={projectTree.state.loadingPaths}
         activeFilePath={projectTree.activeFilePath}
         statusByPath={projectTree.statusByPath ?? null}
-        markdownPaths={projectTree.markdownPaths ?? []}
+        markdownPaths={projectTree.markdownPaths ?? null}
         showHidden={projectTree.state.showHidden}
         collapsed={projectTree.collapsed}
         panelWidthPx={projectTree.panelWidthPx}

@@ -762,7 +762,13 @@
     state: projectTreeControllerState,
     activeFilePath: documentView.activeDocumentPath,
     statusByPath: fileStatusByPath,
-    markdownPaths: quickOpenCatalogSnapshot.entries.map((entry) => entry.absolutePath),
+    // Null until the catalog has listed the workspace at least once (a rebuild
+    // keeps the previous entries), so the `.md` filter does not hide folders
+    // it simply has not seen yet.
+    markdownPaths:
+      quickOpenCatalogSnapshot.status === "ready" || quickOpenCatalogSnapshot.entries.length > 0
+        ? quickOpenCatalogSnapshot.entries.map((entry) => entry.absolutePath)
+        : null,
     collapsed: !showProjectPanel,
     panelWidthPx: workspaceLayout.projectPanelWidthPx,
     onRefresh: projectTreeHandlers.refreshProjectTree,

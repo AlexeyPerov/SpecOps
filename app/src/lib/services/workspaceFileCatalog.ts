@@ -168,6 +168,8 @@ export function createWorkspaceFileCatalog(
   let partialErrors: string[] = [];
   let errorMessage: string | null = null;
   let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
+  /** A watcher rebuild came due while an enumeration was still running. */
+  let rebuildAfterLoad = false;
   const listeners = new Set<() => void>();
 
   // Diagnostics counters for incremental invalidation. No file contents.
@@ -192,12 +194,33 @@ export function createWorkspaceFileCatalog(
     clearInvalidateTimer();
     invalidateTimer = setTimeout(() => {
       invalidateTimer = null;
-      if (!disposed && workspaceRoot) {
-        debouncedRebuilds += 1;
-        onBeforeRebuild?.(workspaceRoot);
-        beginEnumerate(workspaceRoot);
+      if (disposed || !workspaceRoot) {
+        return;
       }
+      // Never cancel an enumeration that is still running: on a large or busy
+      // workspace a steady trickle of watcher events would restart it forever
+      // and the catalog would never become ready. Rebuild once it finishes.
+      if (status === "loading") {
+        rebuildAfterLoad = true;
+        return;
+      }
+      runWatcherRebuild(workspaceRoot);
     }, invalidateDebounceMs);
+  }
+
+  function runWatcherRebuild(root: string): void {
+    debouncedRebuilds += 1;
+    onBeforeRebuild?.(root);
+    beginEnumerate(root);
+  }
+
+  /** Starts the rebuild deferred by {@link scheduleRebuild}, if one is pending. */
+  function flushRebuildAfterLoad(root: string): void {
+    if (!rebuildAfterLoad || disposed || workspaceRoot !== root) {
+      return;
+    }
+    rebuildAfterLoad = false;
+    runWatcherRebuild(root);
   }
 
   /** True when `path` is the root or nested under it (case-folded compare). */
@@ -278,6 +301,7 @@ export function createWorkspaceFileCatalog(
   function beginEnumerate(root: string): void {
     generation += 1;
     const gen = generation;
+    rebuildAfterLoad = false;
     status = "loading";
     errorMessage = null;
     emit();
@@ -298,6 +322,7 @@ export function createWorkspaceFileCatalog(
         status = "ready";
         errorMessage = null;
         emit();
+        flushRebuildAfterLoad(root);
       } catch (error: unknown) {
         if (disposed || gen !== generation) {
           return;
@@ -307,6 +332,7 @@ export function createWorkspaceFileCatalog(
         status = "error";
         errorMessage = error instanceof Error ? error.message : String(error);
         emit();
+        flushRebuildAfterLoad(root);
       }
     })();
   }

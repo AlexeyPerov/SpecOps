@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import ProjectTreeView from "./ProjectTreeView.svelte";
   import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
   import GitLogPopover from "./GitLogPopover.svelte";
@@ -19,6 +19,7 @@
   } from "../services/panelLayout";
   import { emptyMap, emptySet } from "../collections/emptyCollections";
   import { startPointerDrag } from "./pointerDrag";
+  import { normalizePathSync } from "../services/diskFingerprint";
   import RefreshIcon from "./icons/RefreshIcon.svelte";
 
   interface Props {
@@ -27,7 +28,13 @@
     expandedPaths?: ReadonlySet<string>;
     childrenByPath?: ReadonlyMap<string, ProjectTreeNode[]>;
     loadingPaths?: ReadonlySet<string>;
-    markdownPaths?: readonly string[];
+    /**
+     * Every openable file in the workspace, used by the `.md` filter to keep the
+     * folders that contain Markdown files. Null while the list is not known yet
+     * (still enumerating), so the filter keeps every folder instead of hiding
+     * nested Markdown files.
+     */
+    markdownPaths?: readonly string[] | null;
     activeFilePath?: string | null;
     /** M5-T3 — git change status badges (absolute path → status). */
     statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
@@ -66,7 +73,7 @@
     expandedPaths = emptySet<string>(),
     childrenByPath = emptyMap<string, ProjectTreeNode[]>(),
     loadingPaths = emptySet<string>(),
-    markdownPaths = [],
+    markdownPaths = null,
     activeFilePath = null,
     statusByPath = null,
     showHidden = false,
@@ -104,16 +111,20 @@
     defaultValue: string;
   } | null>(null);
 
-  const markdownFilePaths = $derived(
-    markdownPaths.filter((path) => path.toLowerCase().endsWith(".md")),
-  );
-  const markdownDirectoryPaths = $derived.by(() => {
+  /**
+   * Comparison keys of every folder that has a Markdown file somewhere below
+   * it, or null while the workspace file list is still loading.
+   */
+  const markdownDirectoryKeys = $derived.by(() => {
+    if (!markdownPaths) return null;
+    const rootKey = normalizePathSync(workspaceRoot);
     const dirs = new Set<string>();
-    for (const filePath of markdownFilePaths) {
-      let cursor = filePath.replace(/[/\\][^/\\]+$/, "");
-      while (cursor && cursor !== workspaceRoot) {
+    for (const filePath of markdownPaths) {
+      if (!filePath.toLowerCase().endsWith(".md")) continue;
+      let cursor = normalizePathSync(filePath).replace(/\/[^/]+$/, "");
+      while (cursor.length > rootKey.length && !dirs.has(cursor)) {
         dirs.add(cursor);
-        const parent = cursor.replace(/[/\\][^/\\]+$/, "");
+        const parent = cursor.replace(/\/[^/]+$/, "");
         if (parent === cursor) break;
         cursor = parent;
       }
@@ -121,12 +132,20 @@
     return dirs;
   });
 
+  $effect(() => {
+    // The file list backing the filter is per workspace: switching workspaces
+    // with the filter on must start enumerating the new one too.
+    void workspaceRoot;
+    if (markdownOnly) untrack(onMarkdownFilterEnable);
+  });
+
   function filterNodes(nodes: readonly ProjectTreeNode[]): ProjectTreeNode[] {
     if (!markdownOnly) return [...nodes];
+    const dirs = markdownDirectoryKeys;
     return nodes.filter((node) =>
       node.kind === "file"
         ? node.path.toLowerCase().endsWith(".md")
-        : markdownDirectoryPaths.has(node.path),
+        : !dirs || dirs.has(normalizePathSync(node.path)),
     );
   }
 
@@ -360,7 +379,6 @@
         title={markdownOnly ? "Show all files" : "Show Markdown files only"}
         onclick={() => {
           markdownOnly = !markdownOnly;
-          if (markdownOnly) onMarkdownFilterEnable();
         }}
       >.md</button>
       <button

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-09-27 12:08 MSK — `.md` filter keeps nested Markdown files
+
+- The project panel's `.md` filter hid every folder whenever the workspace file
+  list behind it had not been built yet, so only the Markdown files in the root
+  stayed visible. The list is now reported as "unknown" until the first
+  enumeration completes, and while it is unknown the filter keeps every folder
+  (files are still narrowed to `.md`). Once the list is in, only folders with a
+  Markdown file somewhere below them remain. Folder matching compares
+  case-folded paths.
+- Switching workspaces with the filter on now starts enumerating the new
+  workspace as well; previously only toggling the button did.
+- A watcher-driven catalog rebuild no longer cancels an enumeration that is
+  still running. On a large or busy workspace a steady trickle of file events
+  could restart it indefinitely, so the catalog (and with it the `.md` filter
+  and Quick Open) never became ready. The rebuild now runs once, right after
+  the current enumeration finishes.
+
 ## 2026-09-22 17:06 MSK — Notepad rail card, Open in New Window, project-tree refresh fixes
 
 - The expanded activity rail's Notepad card no longer prints a "Notepad"

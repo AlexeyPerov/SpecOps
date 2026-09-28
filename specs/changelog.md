@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-28 14:11 MSK — File catalog stays current for background workspaces
+
+- Folders created in a workspace while another workspace was active never
+  showed up under the project panel's `.md` filter (or in Quick Open) after
+  switching back. The watcher covers every open workspace, but its events
+  reached only the active workspace's file catalog, and returning to a
+  workspace reuses its cached catalog without re-enumerating. Watcher events
+  now go to every retained catalog; each ignores paths outside its own root.
+- The project panel's Refresh button now rebuilds the file catalog as well as
+  the tree, so a stale `.md` filter can be recovered by hand.
+
 ## 2026-09-27 12:08 MSK — `.md` filter keeps nested Markdown files
 
 - The project panel's `.md` filter hid every folder whenever the workspace file

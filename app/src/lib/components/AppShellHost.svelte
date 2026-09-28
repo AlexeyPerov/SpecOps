@@ -771,7 +771,12 @@
         : null,
     collapsed: !showProjectPanel,
     panelWidthPx: workspaceLayout.projectPanelWidthPx,
-    onRefresh: projectTreeHandlers.refreshProjectTree,
+    onRefresh: () => {
+      // The `.md` filter and Quick Open read the file catalog, not the tree
+      // listing, so an explicit refresh has to rebuild it as well.
+      workspaceFileCatalogRegistry.refresh();
+      return projectTreeHandlers.refreshProjectTree();
+    },
     onToggleHidden: projectTreeHandlers.toggleProjectTreeHidden,
     onToggleCollapsed: (next: boolean) => {
       layoutHandlers.toggleProjectPanelCollapsed(next);

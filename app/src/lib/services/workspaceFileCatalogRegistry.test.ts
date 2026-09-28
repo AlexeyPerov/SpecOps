@@ -97,7 +97,35 @@ describe("createWorkspaceFileCatalogRegistry", () => {
     expect(registry.getActiveDiagnostics()).toBeNull();
   });
 
-  it("routes watcher events only to the active catalog", async () => {
+  it("keeps an inactive cached catalog current with watcher events", async () => {
+    const enumerateImpl = vi.fn(async (root: string) => ({
+      paths: root.endsWith("ws-a") ? ["/ws-a/a.md"] : ["/ws-b/b.md"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    registry = createWorkspaceFileCatalogRegistry({
+      enumerate: enumerateImpl,
+      invalidateDebounceMs: 50,
+    });
+    activateCatalog(registry, "/ws-a");
+    await vi.waitFor(() =>
+      expect(registry.getActiveSnapshot().status).toBe("ready"),
+    );
+    activateCatalog(registry, "/ws-b");
+    await vi.waitFor(() =>
+      expect(registry.getActiveSnapshot().status).toBe("ready"),
+    );
+
+    // A file lands in /ws-a while /ws-b is active.
+    registry.notifyFilesystemChange("/ws-a/specs/new.md", "create");
+
+    activateCatalog(registry, "/ws-a");
+    const paths = registry.getActiveSnapshot().entries.map((e) => e.absolutePath);
+    expect(paths).toEqual(["/ws-a/a.md", "/ws-a/specs/new.md"]);
+    expect(enumerateImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("routes watcher events to the active catalog", async () => {
     const enumerate = makeEnumerate(["/ws/a.ts"]);
     registry = createWorkspaceFileCatalogRegistry({
       enumerate,

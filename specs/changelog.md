@@ -28,6 +28,25 @@
   and Quick Open) never became ready. The rebuild now runs once, right after
   the current enumeration finishes.
 
+## 2026-09-22 17:46 MSK — Draggable editor text column
+
+- The blank strip between the line-number gutter and the first character is
+  half of what the pane has spare around the centred text column, and it was
+  fixed at whatever `--editor-text-max-width` said (1200px). Hovering a text
+  editor now reveals a thin rule on the column's left edge; dragging it resizes
+  the column, and because the column stays centred, one pixel of pointer travel
+  moves the edge by one and changes the width by two. Double-clicking the rule
+  hands the column back to the app default.
+- The width is stored per document (`DocumentState.textColumnWidthPx`,
+  alongside `scrollTop` and `markdownViewMode`), so each tab keeps its own and
+  the value survives a session restore. `null` means "use the default".
+- The drag is clamped: never below 240px, and never past the space the pane
+  actually has (measured as the column plus both margins, so the gutter and the
+  minimap are accounted for without querying them). At full width the handle
+  stops flush with the gutter's right edge instead of straddling it, so it
+  cannot eat clicks on the line numbers, and it is hidden entirely when an
+  unwrapped long line has scrolled the column's edge behind the sticky gutter.
+
 ## 2026-09-22 17:06 MSK — Notepad rail card, Open in New Window, project-tree refresh fixes
 
 - The expanded activity rail's Notepad card no longer prints a "Notepad"

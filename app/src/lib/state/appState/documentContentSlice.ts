@@ -14,6 +14,7 @@ import {
   getSessionTabs,
   isFileTab,
   normalizeTabState,
+  normalizeTextColumnWidthPx,
   removeTabFromPane,
   revealFileTabsInLayout,
   setActivePaneInLayout,
@@ -719,6 +720,34 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
             }
             changed = true;
             return { ...documentState, scrollTop };
+          });
+          return changed ? { ...ctx, documents } : ctx;
+        }),
+      );
+    },
+    /**
+     * Persists the per-document text-column width set by dragging the column
+     * edge in the editor. `null` restores the app default. Context-aware
+     * because the drag can land on a surface parked in a non-active context.
+     */
+    setDocumentTextColumnWidthForContext(
+      contextId: ContextId,
+      documentId: string,
+      textColumnWidthPx: number | null,
+    ) {
+      const nextWidth = normalizeTextColumnWidthPx(textColumnWidthPx);
+      update((state) =>
+        patchContextById(state, contextId, (ctx) => {
+          let changed = false;
+          const documents = ctx.documents.map((documentState) => {
+            if (
+              documentState.id !== documentId ||
+              (documentState.textColumnWidthPx ?? null) === nextWidth
+            ) {
+              return documentState;
+            }
+            changed = true;
+            return { ...documentState, textColumnWidthPx: nextWidth };
           });
           return changed ? { ...ctx, documents } : ctx;
         }),

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSessionTab, createFileTab, getSessionSelectedTabId, isSessionTab, tabDocumentId } from "../../domain/contracts";
+import { createSessionTab, createFileTab, getSessionSelectedTabId, isSessionTab, MIN_TEXT_COLUMN_WIDTH_PX, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
 import {
@@ -229,5 +229,43 @@ describe("appState external file fields", () => {
     appState.setDocumentMarkdownViewMode("doc-2", "preview");
     const document = appState.getActiveDocuments().find((doc) => doc.id === "doc-2");
     expect(document?.markdownViewMode).toBe("preview");
+  });
+
+  it("setDocumentTextColumnWidthForContext stores a clamped per-document width", () => {
+    appState.openFileInTab("/tmp/wide.txt", "body");
+    const contextId = activeContextId();
+
+    appState.setDocumentTextColumnWidthForContext(contextId, "doc-2", 900);
+    expect(
+      appState.getActiveDocuments().find((doc) => doc.id === "doc-2")?.textColumnWidthPx,
+    ).toBe(900);
+
+    // Below the floor the column stops being usable, so it is pinned there.
+    appState.setDocumentTextColumnWidthForContext(contextId, "doc-2", 10);
+    expect(
+      appState.getActiveDocuments().find((doc) => doc.id === "doc-2")?.textColumnWidthPx,
+    ).toBe(MIN_TEXT_COLUMN_WIDTH_PX);
+
+    // Null is the "use the app default" sentinel, not a width.
+    appState.setDocumentTextColumnWidthForContext(contextId, "doc-2", null);
+    expect(
+      appState.getActiveDocuments().find((doc) => doc.id === "doc-2")?.textColumnWidthPx,
+    ).toBeNull();
+  });
+
+  it("applies a text-column width to a parked context without touching the active one", () => {
+    const workspaceId = appState.addWorkspace("/tmp/column-workspace")!;
+    appState.switchContext(workspaceId);
+    const workspaceDocumentId = appState.getActiveDocuments()[0]!.id;
+    appState.switchContext("notepad");
+
+    appState.setDocumentTextColumnWidthForContext(workspaceId, workspaceDocumentId, 720);
+
+    const snapshot = appState.getSnapshot();
+    const parkedDocument = snapshot.contexts.workspaces.find(
+      (workspace) => workspace.id === workspaceId,
+    )?.snapshot.documents[0];
+    expect(parkedDocument?.textColumnWidthPx).toBe(720);
+    expect(snapshot.contexts.notepad.documents[0]?.textColumnWidthPx ?? null).toBeNull();
   });
 });

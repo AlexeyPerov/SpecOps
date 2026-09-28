@@ -622,6 +622,7 @@
               {showFoldGutter}
               {autoClosePairs}
               {autoSuggest}
+              textColumnWidthPx={entry.document.textColumnWidthPx ?? null}
               markdownHtml={isEntryActive ? activePreviewHtml : ""}
               storedMarkdownViewMode={entry.document.markdownViewMode ?? "edit"}
               canFitSplit={canFitMarkdownSplit}

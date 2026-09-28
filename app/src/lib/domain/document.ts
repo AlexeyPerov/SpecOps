@@ -44,6 +44,35 @@ export interface DocumentState extends DocumentIdentity {
   fileMissing: boolean;
   scrollTop: number;
   markdownViewMode: MarkdownViewMode;
+  /**
+   * Per-document width of the centred text column, in CSS px. `null`/absent
+   * means "use the app default" (`--editor-text-max-width`). Set by dragging
+   * the column's edge handle in the editor; the free space either side of the
+   * text follows from it, since the column stays centred.
+   */
+  textColumnWidthPx?: number | null;
+}
+
+/**
+ * Bounds for {@link DocumentState.textColumnWidthPx}. The floor keeps the
+ * column wide enough to stay editable; the ceiling is generous enough that any
+ * realistic monitor hits the pane edge (which clamps it) before this.
+ */
+export const MIN_TEXT_COLUMN_WIDTH_PX = 240;
+export const MAX_TEXT_COLUMN_WIDTH_PX = 8000;
+
+/**
+ * Coerces a persisted/user-supplied column width to a usable value. Anything
+ * non-finite or non-positive collapses to `null` — the "use the app default"
+ * sentinel — so a corrupt snapshot degrades to the token width.
+ */
+export function normalizeTextColumnWidthPx(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return Math.round(
+    Math.min(MAX_TEXT_COLUMN_WIDTH_PX, Math.max(MIN_TEXT_COLUMN_WIDTH_PX, value)),
+  );
 }
 
 export interface FileTabState {

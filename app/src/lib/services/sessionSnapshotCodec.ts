@@ -4,6 +4,7 @@ import type {
   DocumentState,
   WindowSessionSnapshot,
 } from "../domain/contracts";
+import { normalizeTextColumnWidthPx } from "../domain/contracts";
 import { stripWindowSnapshotForSession } from "./sessionDocumentPersistence";
 
 export function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
@@ -66,6 +67,7 @@ export function normalizeRestoredDocument(documentState: DocumentState): Documen
     dismissedFingerprint: documentState.dismissedFingerprint ?? null,
     fileMissing: documentState.fileMissing ?? false,
     scrollTop: documentState.scrollTop ?? 0,
+    textColumnWidthPx: normalizeTextColumnWidthPx(documentState.textColumnWidthPx),
     markdownViewMode:
       documentState.markdownViewMode === "split" || documentState.markdownViewMode === "preview"
         ? documentState.markdownViewMode

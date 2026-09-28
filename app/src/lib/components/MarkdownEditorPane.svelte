@@ -21,6 +21,7 @@
     showFoldGutter = true,
     autoClosePairs = true,
     autoSuggest = false,
+    textColumnWidthPx = null as number | null,
     markdownEnabled = true,
     markdownHtml = "",
     storedMarkdownViewMode = "edit" as "edit" | "split" | "preview",
@@ -46,6 +47,7 @@
     showFoldGutter?: boolean;
     autoClosePairs?: boolean;
     autoSuggest?: boolean;
+    textColumnWidthPx?: number | null;
     markdownEnabled?: boolean;
     markdownHtml?: string;
     storedMarkdownViewMode?: "edit" | "split" | "preview";
@@ -167,6 +169,7 @@
           {showFoldGutter}
           {autoClosePairs}
           {autoSuggest}
+          {textColumnWidthPx}
           {onStatusMessage}
           {onUntitledTitleRefresh}
           {onScrollTopChange}

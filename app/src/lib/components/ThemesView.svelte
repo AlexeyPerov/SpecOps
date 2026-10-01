@@ -4,7 +4,8 @@
   import {
     BUILTIN_THEME_IDS,
     extractSolidColor,
-    getBuiltinAccentHex,
+    resolveBuiltinTokens,
+    type ThemeTokens,
     getBuiltinThemeLabel,
     getBuiltinThemeMode,
     GRADIENT_CAPABLE_KEYS,
@@ -14,6 +15,7 @@
   } from "../styles/themeTokens";
   import { IMPORTED_THEMES } from "../styles/importedThemes";
   import { CURATED_THEMES } from "../styles/curatedThemes";
+  import ThemeCard from "./ThemeCard.svelte";
   import ProjectFileIcon from "./icons/ProjectFileIcon.svelte";
 
   const snapshot = $derived($appState);
@@ -22,7 +24,7 @@
   interface ThemeOption {
     ref: ActiveThemeRef;
     name: string;
-    accent: string;
+    tokens: Partial<ThemeTokens>;
     baseMode: "dark" | "light";
     editable: boolean;
   }
@@ -37,28 +39,28 @@
     ...BUILTIN_THEME_IDS.map<ThemeOption>((id) => ({
       ref: { kind: "builtin", id },
       name: getBuiltinThemeLabel(id),
-      accent: getBuiltinAccentHex(id),
+      tokens: resolveBuiltinTokens(id),
       baseMode: getBuiltinThemeMode(id),
       editable: false,
     })),
     ...IMPORTED_THEMES.map<ThemeOption>((preset) => ({
       ref: { kind: "preset", id: preset.id },
       name: preset.name,
-      accent: preset.tokens["accent-color"] ?? "#000000",
+      tokens: preset.tokens,
       baseMode: preset.baseMode,
       editable: false,
     })),
     ...CURATED_THEMES.map<ThemeOption>((preset) => ({
       ref: { kind: "preset", id: preset.id },
       name: preset.name,
-      accent: preset.tokens["accent-color"] ?? "#000000",
+      tokens: preset.tokens,
       baseMode: preset.baseMode,
       editable: false,
     })),
     ...snapshot.theme.customThemes.map<ThemeOption>((custom) => ({
       ref: { kind: "custom", id: custom.id },
       name: custom.name,
-      accent: custom.tokens["accent-color"],
+      tokens: custom.tokens,
       baseMode: custom.baseMode,
       editable: true,
     })),
@@ -227,99 +229,43 @@
         {/each}
       </div>
 
+      {#snippet themeGrid(options: ThemeOption[], group: "manual" | "light" | "dark")}
+        <div class="theme-grid" role="group" aria-label={group === "manual" ? "Theme" : `${group === "light" ? "Light" : "Dark"} theme`}>
+          {#each options as option (option.ref.kind + ":" + option.ref.id)}
+            <ThemeCard
+              name={option.name}
+              baseMode={option.baseMode}
+              tokens={option.tokens}
+              editable={option.editable}
+              coloredIcons={snapshot.settings.coloredProjectFileIcons}
+              group={`${group}-theme`}
+              value={`${option.ref.kind}:${option.ref.id}`}
+              selected={group === "manual" ? isManualActive(option) : group === "light" ? isLightActive(option) : isDarkActive(option)}
+              onselect={() => {
+                if (group === "manual") appState.setManualTheme(option.ref);
+                else if (group === "light") appState.setLightTheme(option.ref);
+                else appState.setDarkTheme(option.ref);
+              }}
+              onduplicate={() => appState.duplicateTheme(option.ref)}
+            />
+          {/each}
+        </div>
+      {/snippet}
+
       {#if snapshot.theme.mode === "manual"}
         <div class="settings-subsection">
           <h4>Theme</h4>
-          {#each allOptions as option (option.ref.kind + ":" + option.ref.id)}
-            <label class="settings-theme-row" aria-label="{option.name} {option.baseMode}">
-              <input
-                type="radio"
-                name="manual-theme"
-                value={option.ref.id}
-                checked={isManualActive(option)}
-                onchange={() => appState.setManualTheme(option.ref)}
-              />
-              <span class="theme-swatch" style="background-color: {option.accent}"></span>
-              <span>{option.name}</span>
-              <span class="theme-row-tag theme-mode-tag">{option.baseMode}</span>
-              {#if option.editable}
-                <span class="theme-row-tag">custom</span>
-              {/if}
-              <button
-                type="button"
-                class="theme-row-duplicate"
-                aria-label="Duplicate {option.name}"
-                onclick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  appState.duplicateTheme(option.ref);
-                }}
-              >Duplicate</button>
-            </label>
-          {/each}
+          {@render themeGrid(allOptions, "manual")}
         </div>
       {:else}
         <div class="settings-subsection">
           <h4>Light theme</h4>
-          {#each lightOptions as option (option.ref.kind + ":" + option.ref.id)}
-            <label class="settings-theme-row" aria-label="{option.name} {option.baseMode}">
-              <input
-                type="radio"
-                name="light-theme"
-                value={option.ref.id}
-                checked={isLightActive(option)}
-                onchange={() => appState.setLightTheme(option.ref)}
-              />
-              <span class="theme-swatch" style="background-color: {option.accent}"></span>
-              <span>{option.name}</span>
-              <span class="theme-row-tag theme-mode-tag">{option.baseMode}</span>
-              {#if option.editable}
-                <span class="theme-row-tag">custom</span>
-              {/if}
-              <button
-                type="button"
-                class="theme-row-duplicate"
-                aria-label="Duplicate {option.name}"
-                onclick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  appState.duplicateTheme(option.ref);
-                }}
-              >Duplicate</button>
-            </label>
-          {/each}
+          {@render themeGrid(lightOptions, "light")}
         </div>
-
-      <div class="settings-subsection">
-        <h4>Dark theme</h4>
-        {#each darkOptions as option (option.ref.kind + ":" + option.ref.id)}
-          <label class="settings-theme-row" aria-label="{option.name} {option.baseMode}">
-            <input
-              type="radio"
-              name="dark-theme"
-              value={option.ref.id}
-              checked={isDarkActive(option)}
-              onchange={() => appState.setDarkTheme(option.ref)}
-            />
-            <span class="theme-swatch" style="background-color: {option.accent}"></span>
-            <span>{option.name}</span>
-            <span class="theme-row-tag theme-mode-tag">{option.baseMode}</span>
-            {#if option.editable}
-              <span class="theme-row-tag">custom</span>
-            {/if}
-            <button
-              type="button"
-              class="theme-row-duplicate"
-              aria-label="Duplicate {option.name}"
-              onclick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                appState.duplicateTheme(option.ref);
-              }}
-            >Duplicate</button>
-          </label>
-        {/each}
-      </div>
+        <div class="settings-subsection">
+          <h4>Dark theme</h4>
+          {@render themeGrid(darkOptions, "dark")}
+        </div>
       {/if}
 
       <button type="button" class="settings-button" onclick={() => appState.createCustomTheme()}>
@@ -401,6 +347,12 @@
 <style>
   @import "../styles/settingsForm.css";
   @import "../styles/themePaneForm.css";
+
+  .theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+    gap: 12px;
+  }
 
   .file-icon-samples {
     display: flex;

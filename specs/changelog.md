@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-01 16:02 MSK — Theme preview grid
+
+- Replaced theme selection rows with a responsive grid of cards showing a
+  text and syntax sample beside a miniature project tree, with names below.
+- Preview palettes are isolated per card, including derived colors, gradients,
+  light/dark file icon colors and live custom-theme edits. Selection has a
+  border, checkmark and keyboard focus; Duplicate remains a separate action.
+- Preserved Manual selection and independent Light/Dark choices in Auto.
+  Verified selection, duplication, custom gradients and responsive rendering.
+
 ## 2026-10-01 14:57 MSK — Selectable file icon colors
 
 - Added Color and Monochrome file icon choices with sample symbols in Themes.

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createFileTab, createSessionTab, createSinglePaneLayout, isSessionTab, tabDocumentId } from "../../domain/contracts";
 import { appState, resetThemePersistenceForTests, setThemeSaveErrorNotifier } from "../appState";
 import { saveThemeFile } from "../../services/themeStore";
+import { settingsPersistenceFingerprint } from "../appStateSelectors";
 import { IMPORTED_THEMES } from "../../styles/importedThemes";
 import {
   defaultProviderModelCatalogs,
@@ -45,6 +46,15 @@ describe("appState settings and editor chrome", () => {
     expect(appState.getSnapshot().theme.mode).toBe("manual");
     appState.setThemeMode("auto");
     expect(appState.getSnapshot().theme.mode).toBe("auto");
+  });
+
+  it("includes the file icon choice in persistence and restores it on load", () => {
+    const previous = settingsPersistenceFingerprint(appState.getSnapshot());
+    appState.setColoredProjectFileIcons(false);
+    expect(appState.getSnapshot().settings.coloredProjectFileIcons).toBe(false);
+    expect(settingsPersistenceFingerprint(appState.getSnapshot())).not.toBe(previous);
+    appState.applyPersistedSettings({ coloredProjectFileIcons: true });
+    expect(appState.getSnapshot().settings.coloredProjectFileIcons).toBe(true);
   });
 
   it("setActiveTheme routes a dark ref to the dark slot and a light ref to the light slot", () => {
@@ -351,4 +361,3 @@ describe("appState settings and editor chrome", () => {
     expect(appState.getSnapshot().editor.previewMode).toBe("editor");
   });
 });
-

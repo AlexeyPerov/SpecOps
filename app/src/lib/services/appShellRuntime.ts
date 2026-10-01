@@ -371,6 +371,7 @@ async function startAppShellRuntimeInner(
         zoomPercent: persistedSettings.zoomPercent,
         externalFiles: toExternalFilesSettings(persistedSettings),
         decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
+        coloredProjectFileIcons: persistedSettings.coloredProjectFileIcons,
         showMinimap: persistedSettings.showMinimap,
         showFoldGutter: persistedSettings.showFoldGutter,
         autoClosePairs: persistedSettings.autoClosePairs,

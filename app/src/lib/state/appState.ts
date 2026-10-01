@@ -416,6 +416,12 @@ function createStateStore() {
         },
       }));
     },
+    setColoredProjectFileIcons(value: boolean) {
+      update((state) => ({
+        ...state,
+        settings: { ...state.settings, coloredProjectFileIcons: value },
+      }));
+    },
     setShowMinimap(value: boolean) {
       update((state) => ({
         ...state,

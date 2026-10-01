@@ -2,7 +2,7 @@
   import { classifyProjectFileIcon } from "../../services/projectFileIcon";
   import { projectFileSymbols } from "./projectFileSymbols";
 
-  let { name, size = 16 }: { name: string; size?: number } = $props();
+  let { name, size = 16, colored = true }: { name: string; size?: number; colored?: boolean } = $props();
   const kind = $derived(classifyProjectFileIcon(name));
   const symbol = $derived(projectFileSymbols[kind]);
 </script>
@@ -10,6 +10,7 @@
 <svg
   width={size} height={size} viewBox="0 0 16 16" fill="none"
   class="project-file-icon color-{symbol.color}"
+  class:monochrome={!colored}
   data-file-icon={kind} aria-hidden="true" xmlns="http://www.w3.org/2000/svg"
 >
   {#each symbol.paths as path}
@@ -30,10 +31,11 @@
 <style>
   .project-file-icon { flex-shrink: 0; }
   .color-neutral { color: var(--color-text-secondary); }
-  .color-blue { color: light-dark(#247bb0, #61aed5); }
-  .color-yellow { color: light-dark(#93800a, #c6cf49); }
-  .color-orange { color: light-dark(#be6537, #dd9469); }
-  .color-purple { color: light-dark(#8257b3, #b693dd); }
-  .color-green { color: light-dark(#438459, #82b591); }
-  .color-red { color: light-dark(#bf4d59, #df8390); }
+  .color-blue { color: var(--project-file-icon-blue, #61aed5); }
+  .color-yellow { color: var(--project-file-icon-yellow, #c6cf49); }
+  .color-orange { color: var(--project-file-icon-orange, #dd9469); }
+  .color-purple { color: var(--project-file-icon-purple, #b693dd); }
+  .color-green { color: var(--project-file-icon-green, #82b591); }
+  .color-red { color: var(--project-file-icon-red, #df8390); }
+  .project-file-icon.monochrome { color: var(--color-text-secondary); }
 </style>

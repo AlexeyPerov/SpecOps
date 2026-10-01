@@ -14,6 +14,7 @@
   } from "../styles/themeTokens";
   import { IMPORTED_THEMES } from "../styles/importedThemes";
   import { CURATED_THEMES } from "../styles/curatedThemes";
+  import ProjectFileIcon from "./icons/ProjectFileIcon.svelte";
 
   const snapshot = $derived($appState);
 
@@ -209,6 +210,23 @@
         {/if}
       </div>
 
+      <div class="settings-subsection">
+        <h4>File icons</h4>
+        {#each [{ label: "Color", colored: true }, { label: "Monochrome", colored: false }] as option}
+          <label class="settings-theme-row">
+            <input type="radio" name="file-icons"
+              checked={snapshot.settings.coloredProjectFileIcons === option.colored}
+              onchange={() => appState.setColoredProjectFileIcons(option.colored)} />
+            <span>{option.label}</span>
+            <span class="file-icon-samples" aria-hidden="true">
+              {#each ["notes.md", "data.json", "main.ts", "App.svelte", "Player.cs", "cover.png"] as name}
+                <ProjectFileIcon {name} colored={option.colored} />
+              {/each}
+            </span>
+          </label>
+        {/each}
+      </div>
+
       {#if snapshot.theme.mode === "manual"}
         <div class="settings-subsection">
           <h4>Theme</h4>
@@ -383,6 +401,13 @@
 <style>
   @import "../styles/settingsForm.css";
   @import "../styles/themePaneForm.css";
+
+  .file-icon-samples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-left: auto;
+  }
 
   .themes-view {
     display: flex;

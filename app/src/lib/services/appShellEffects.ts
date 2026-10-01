@@ -316,6 +316,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       zoomPercent: snapshot.editor.zoomPercent,
       externalFiles: snapshot.settings.externalFiles,
       decoratePlaintextSymbols: snapshot.settings.decoratePlaintextSymbols,
+      coloredProjectFileIcons: snapshot.settings.coloredProjectFileIcons,
       showMinimap: snapshot.settings.showMinimap,
       showFoldGutter: snapshot.settings.showFoldGutter,
       autoClosePairs: snapshot.settings.autoClosePairs,

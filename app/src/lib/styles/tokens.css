@@ -87,6 +87,12 @@
 }
 
 :root[data-theme="light"] {
+  --project-file-icon-blue: #247bb0;
+  --project-file-icon-yellow: #93800a;
+  --project-file-icon-orange: #be6537;
+  --project-file-icon-purple: #8257b3;
+  --project-file-icon-green: #438459;
+  --project-file-icon-red: #bf4d59;
   --color-bg-root: #f3f6fa;
   --color-surface-1: #ffffff;
   --color-surface-overlay: rgb(255 255 255 / var(--opacity-overlay-tint));
@@ -146,6 +152,12 @@
 }
 
 :root[data-theme="dark"] {
+  --project-file-icon-blue: #61aed5;
+  --project-file-icon-yellow: #c6cf49;
+  --project-file-icon-orange: #dd9469;
+  --project-file-icon-purple: #b693dd;
+  --project-file-icon-green: #82b591;
+  --project-file-icon-red: #df8390;
   --color-bg-root: #0f141b;
   --color-surface-1: #131a23;
   --color-surface-overlay: rgb(25 31 40 / var(--opacity-overlay-tint));

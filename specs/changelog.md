@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-01 14:57 MSK — Selectable file icon colors
+
+- Added Color and Monochrome file icon choices with sample symbols in Themes.
+  The selection applies immediately to the project tree and new-file drafts,
+  persists in app settings, and defaults to Color.
+- Preserved the existing symbol shapes in both modes. Replaced `light-dark()`
+  icon colors with explicit light/dark palette variables so colored symbols
+  do not depend on support for that CSS function in the desktop WebView.
+- Covered appearance switching, settings persistence and draft rendering.
+
 ## 2026-10-01 14:37 MSK — File symbols and compact folder chevrons
 
 - Added 45 original SVG file symbols with 170 extension rules and filename

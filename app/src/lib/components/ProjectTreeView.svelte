@@ -30,6 +30,7 @@
   interface Props {
     nodes?: ProjectTreeNode[];
     workspaceRoot?: string;
+    coloredFileIcons?: boolean;
     expandedPaths?: ReadonlySet<string>;
     childrenByPath?: ReadonlyMap<string, ProjectTreeNode[]>;
     loadingPaths?: ReadonlySet<string>;
@@ -59,6 +60,7 @@
   let {
     nodes = [],
     workspaceRoot = "",
+    coloredFileIcons = true,
     expandedPaths = emptySet<string>(),
     childrenByPath = emptyMap<string, ProjectTreeNode[]>(),
     loadingPaths = emptySet<string>(),
@@ -487,7 +489,7 @@
           {#if draft?.kind === "directory"}
             <TreeChevron visible={false} />
           {:else}
-            <ProjectFileIcon name={draftValue} />
+            <ProjectFileIcon name={draftValue} colored={coloredFileIcons} />
           {/if}
           <input
             use:focusDraftInput
@@ -537,7 +539,7 @@
             {#if row.node.kind === "directory"}
               <TreeChevron expanded={row.expanded && row.canExpand} visible={row.canExpand} />
             {:else}
-              <ProjectFileIcon name={row.node.name} />
+              <ProjectFileIcon name={row.node.name} colored={coloredFileIcons} />
             {/if}
             <span class="project-tree-label project-tree-label-{labelTone}">{row.node.name}</span>
             {#if fileChangeStatus}

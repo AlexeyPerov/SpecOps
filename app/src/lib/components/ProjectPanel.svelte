@@ -410,6 +410,7 @@
       oncontextmenu={handleContextMenuRoot}
     >
       <ProjectTreeView
+        coloredFileIcons={$appSettings.coloredProjectFileIcons}
         nodes={visibleRootNodes}
         {workspaceRoot}
         {expandedPaths}

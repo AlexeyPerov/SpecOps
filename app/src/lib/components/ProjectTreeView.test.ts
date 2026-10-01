@@ -52,4 +52,16 @@ describe("project tree file symbols", () => {
     flushSync();
     expect(host.querySelector('[data-file-icon="json"]')).not.toBeNull();
   });
+
+  it("applies monochrome to both existing files and the new-file draft", () => {
+    const { host } = mountComponent(ProjectTreeView, {
+      coloredFileIcons: false,
+      nodes: [{ name: "main.ts", path: "/project/main.ts", kind: "file" as const }],
+      draft: { kind: "file" as const, parentDirPath: "/project", defaultValue: "note.md" },
+      workspaceRoot: "/project",
+    });
+    flushSync();
+    expect(host.querySelectorAll(".project-file-icon")).toHaveLength(2);
+    expect(host.querySelectorAll(".project-file-icon.monochrome")).toHaveLength(2);
+  });
 });

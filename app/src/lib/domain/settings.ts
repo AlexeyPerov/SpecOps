@@ -238,6 +238,7 @@ export interface AppSettingsState {
   statusBarVisible: boolean;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
+  coloredProjectFileIcons: boolean;
   /**
    * When true, text/code editors render a scaled minimap column on the right
    * side of the CodeMirror surface. Global editor preference (not per-document).

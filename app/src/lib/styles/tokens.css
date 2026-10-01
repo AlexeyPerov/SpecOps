@@ -63,7 +63,7 @@
   --project-tree-indent: 10px;
   /* Horizontal padding inside a row, and the base offset depth is added to. */
   --project-tree-row-padding-x: var(--space-2);
-  /* Gap between chevron, icon and label inside a row. */
+  /* Gap between the file symbol or folder chevron and the label. */
   --project-tree-row-gap: var(--space-3);
   --project-tree-row-height: 19px;
   /* Vertical gap between rows (the list's grid gap). */

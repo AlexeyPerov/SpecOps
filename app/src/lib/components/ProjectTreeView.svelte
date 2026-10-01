@@ -16,8 +16,8 @@
   } from "./projectTreeDrag";
   import type { PaneDropTargetElements } from "./paneDropTargets";
   import { emptyMap, emptySet } from "../collections/emptyCollections";
-  import DirectoryIcon from "./icons/DirectoryIcon.svelte";
-  import FileIcon from "./icons/FileIcon.svelte";
+  import ProjectFileIcon from "./icons/ProjectFileIcon.svelte";
+  import TreeChevron from "./icons/TreeChevron.svelte";
 
   /**
    * H35 — the tree renders as ONE flattened `{#each}` over the visible rows
@@ -484,8 +484,11 @@
     {#each visibleRows as row (row.kind === "draft" ? "draft" : projectTreeRowKey(row))}
       {#if row.kind === "draft"}
         <li class="project-tree-draft" style={`--node-depth:${row.depth}`} data-tree-row>
-          <span class="project-tree-chevron"></span>
-          {#if draft?.kind === "directory"}<DirectoryIcon />{:else}<FileIcon />{/if}
+          {#if draft?.kind === "directory"}
+            <TreeChevron visible={false} />
+          {:else}
+            <ProjectFileIcon name={draftValue} />
+          {/if}
           <input
             use:focusDraftInput
             bind:value={draftValue}
@@ -531,15 +534,10 @@
             onpointerenter={() => handlePointerEnter(row.node)}
             onpointerleave={handlePointerLeave}
           >
-            <span
-              class={`project-tree-chevron ${row.node.kind === "directory" && row.canExpand && row.expanded ? "project-tree-chevron-open" : ""}`}
-            >
-              {row.node.kind === "directory" && row.canExpand ? "▶" : ""}
-            </span>
             {#if row.node.kind === "directory"}
-              <DirectoryIcon />
+              <TreeChevron expanded={row.expanded && row.canExpand} visible={row.canExpand} />
             {:else}
-              <FileIcon />
+              <ProjectFileIcon name={row.node.name} />
             {/if}
             <span class="project-tree-label project-tree-label-{labelTone}">{row.node.name}</span>
             {#if fileChangeStatus}
@@ -651,17 +649,6 @@
 
   .project-tree-row-dragging {
     opacity: 0.45;
-  }
-
-  .project-tree-chevron {
-    width: 10px;
-    color: var(--color-text-secondary);
-    transform: rotate(0deg);
-    transition: transform var(--motion-fast) var(--easing-standard);
-  }
-
-  .project-tree-chevron-open {
-    transform: rotate(90deg);
   }
 
   .project-tree-label {

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-01 14:37 MSK — File symbols and compact folder chevrons
+
+- Added 45 original SVG file symbols with 170 extension rules and filename
+  overrides for documentation, Git files, configuration and build files.
+  The set covers source code, media and game resources, including scenes,
+  prefabs, materials, shaders, models, animation and metadata. Unknown types
+  retain a generic file symbol. Colors adapt to light and dark appearance.
+- Project tree folders now show a thin rotating chevron without a folder icon;
+  files show a single colored symbol aligned with the folder chevrons. Empty
+  folders reserve the same space without an expansion affordance. New-file
+  draft symbols update as the filename is typed.
+- Added classification and tree interaction coverage, including special-name
+  priority, compound extensions, empty folders and draft extension changes.
+
 ## 2026-09-28 14:11 MSK — File catalog stays current for background workspaces
 
 - Folders created in a workspace while another workspace was active never

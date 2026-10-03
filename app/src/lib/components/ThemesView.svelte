@@ -188,6 +188,28 @@
         />
         Decorate plaintext symbols
       </label>
+      <pre
+        class="plaintext-preview"
+        class:decorated={snapshot.settings.decoratePlaintextSymbols}
+        aria-label="Plain text preview"
+      ><code>Notes<span>:</span> <span>[</span>draft<span>]</span>{"\n"}<span>-</span> Review <span>(</span>v2<span>)</span> <span>-&gt;</span> ready<span>!</span></code></pre>
+
+      <div class="settings-subsection">
+        <h4>File icons</h4>
+        {#each [{ label: "Color", colored: true }, { label: "Monochrome", colored: false }] as option}
+          <label class="settings-theme-row file-icon-choice">
+            <input type="radio" name="file-icons"
+              checked={snapshot.settings.coloredProjectFileIcons === option.colored}
+              onchange={() => appState.setColoredProjectFileIcons(option.colored)} />
+            <span>{option.label}</span>
+            <span class="file-icon-samples" aria-hidden="true">
+              {#each ["notes.md", "data.json", "main.ts", "App.svelte", "Player.cs", "cover.png"] as name}
+                <ProjectFileIcon {name} colored={option.colored} />
+              {/each}
+            </span>
+          </label>
+        {/each}
+      </div>
 
       <div class="settings-subsection">
         <h4>Mode</h4>
@@ -210,23 +232,6 @@
             Auto follows your system appearance (dark/light). Pick the two themes to switch between below.
           </p>
         {/if}
-      </div>
-
-      <div class="settings-subsection">
-        <h4>File icons</h4>
-        {#each [{ label: "Color", colored: true }, { label: "Monochrome", colored: false }] as option}
-          <label class="settings-theme-row">
-            <input type="radio" name="file-icons"
-              checked={snapshot.settings.coloredProjectFileIcons === option.colored}
-              onchange={() => appState.setColoredProjectFileIcons(option.colored)} />
-            <span>{option.label}</span>
-            <span class="file-icon-samples" aria-hidden="true">
-              {#each ["notes.md", "data.json", "main.ts", "App.svelte", "Player.cs", "cover.png"] as name}
-                <ProjectFileIcon {name} colored={option.colored} />
-              {/each}
-            </span>
-          </label>
-        {/each}
       </div>
 
       {#snippet themeGrid(options: ThemeOption[], group: "manual" | "light" | "dark")}
@@ -354,11 +359,38 @@
     gap: 12px;
   }
 
+  .plaintext-preview {
+    align-self: flex-start;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin: 2px 0 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-root);
+    color: var(--color-text-primary);
+    font: 0.8125rem/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .plaintext-preview code {
+    font: inherit;
+  }
+
+  .plaintext-preview.decorated span {
+    color: var(--syntax-plaintext-symbol);
+    opacity: 0.85;
+  }
+
+  .file-icon-choice {
+    flex-wrap: wrap;
+  }
+
   .file-icon-samples {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-left: auto;
   }
 
   .themes-view {
@@ -390,6 +422,7 @@
   }
 
   .theme-mode-segmented {
+    align-self: flex-start;
     display: inline-flex;
     gap: var(--space-2);
     padding: var(--space-2);

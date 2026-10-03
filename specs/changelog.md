@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-03 22:37 MSK — Appearance setting previews and layout
+
+- Added a live plain-text sample below Decorate plaintext symbols. Its
+  punctuation follows the toggle and uses the editor's symbol color and opacity.
+- Placed file icon samples immediately after their labels, with wrapping on
+  narrow panes. Moved Mode directly above theme selection and sized its
+  segmented control to its contents.
+
 ## 2026-10-01 16:02 MSK — Theme preview grid
 
 - Replaced theme selection rows with a responsive grid of cards showing a

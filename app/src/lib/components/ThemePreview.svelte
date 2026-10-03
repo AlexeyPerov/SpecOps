@@ -1,8 +1,11 @@
 <script lang="ts">
   import { THEME_TOKEN_KEYS, GRADIENT_CAPABLE_KEYS, extractSolidColor, resolveBuiltinTokens, type ThemeTokens } from "../styles/themeTokens";
+  import { appearanceVariables, resolveAppearance, type ThemeAppearance } from "../styles/themeAppearance";
   import ProjectFileIcon from "./icons/ProjectFileIcon.svelte";
-  let { tokens, baseMode, coloredIcons = true }: { tokens: Partial<ThemeTokens>; baseMode: "dark" | "light"; coloredIcons?: boolean } = $props();
+  let { appearance, tokens, baseMode, coloredIcons = true }: { appearance?: ThemeAppearance; tokens: Partial<ThemeTokens>; baseMode: "dark" | "light"; coloredIcons?: boolean } = $props();
   // Scope derived colors as well as literal colors to this miniature.
+  const style = $derived(resolveAppearance(appearance));
+  const styleVariables = $derived(Object.entries(appearanceVariables(style)).map(([k, v]) => `${k}:${v}`).join(";"));
   const paletteStyle = $derived.by(() => {
     const defaults = resolveBuiltinTokens(baseMode === "dark" ? "dark-amber" : "light-blue");
     return THEME_TOKEN_KEYS.map((key) => {
@@ -18,7 +21,8 @@
   });
 </script>
 
-<div class="theme-preview" data-mode={baseMode} style={paletteStyle} aria-hidden="true">
+<div class="theme-preview" data-mode={baseMode} style={`${paletteStyle}${styleVariables};${style.accent ? `--preview-accent-color:${style.accent};--preview-color-accent:${style.accent};` : ""}`} aria-hidden="true">
+  <div class="preview-effects"></div>
   <div class="document">
     <div class="tab">overview.md</div>
     <div class="sample">
@@ -35,9 +39,9 @@
   <div class="project">
     <div class="project-title">PROJECT</div>
     <div class="tree-row folder">⌄ workspace</div>
-    <div class="tree-row selected"><ProjectFileIcon name="overview.md" size={11} colored={coloredIcons} /><span>overview.md</span></div>
-    <div class="tree-row"><ProjectFileIcon name="tasks.ts" size={11} colored={coloredIcons} /><span>tasks.ts</span></div>
-    <div class="tree-row"><ProjectFileIcon name="config.json" size={11} colored={coloredIcons} /><span>config.json</span></div>
+    <div class="tree-row selected"><ProjectFileIcon name="overview.md" size={11} colored={coloredIcons && style.icons === "color"} /><span>overview.md</span></div>
+    <div class="tree-row"><ProjectFileIcon name="tasks.ts" size={11} colored={coloredIcons && style.icons === "color"} /><span>tasks.ts</span></div>
+    <div class="tree-row"><ProjectFileIcon name="config.json" size={11} colored={coloredIcons && style.icons === "color"} /><span>config.json</span></div>
     <div class="tree-row hidden"><ProjectFileIcon name=".gitignore" size={11} colored={false} /><span>.gitignore</span></div>
   </div>
   <div class="status"><span>Markdown</span><span>Ln 3, Col 1</span></div>
@@ -45,6 +49,10 @@
 
 <style>
   .theme-preview {
+    position: relative;
+    text-shadow: none;
+    font-size-adjust: var(--font-size-adjust-chat);
+    letter-spacing: var(--text-letter-spacing);
     display: grid;
     grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
     grid-template-rows: minmax(0, 1fr) 17px;
@@ -52,7 +60,8 @@
     overflow: hidden;
     background: var(--preview-color-bg-root);
     color: var(--preview-color-text-primary);
-    font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font: 10px/var(--line-height-chat) var(--font-family-chat);
+    --color-text-primary: var(--preview-color-text-primary);
     text-align: left;
     --color-text-secondary: var(--preview-color-text-secondary);
   }
@@ -72,6 +81,9 @@
     --project-file-icon-green: #438459;
     --project-file-icon-red: #bf4d59;
   }
+  .preview-effects { position: absolute; inset: 0; pointer-events: none; z-index: 2;
+    background: repeating-linear-gradient(to bottom, transparent 0 2px, rgb(0 0 0 / var(--appearance-scanlines)) 2px 3px), radial-gradient(ellipse, transparent 50%, rgb(0 0 0 / var(--appearance-vignette)) 100%), repeating-linear-gradient(18deg, rgb(90 65 30 / var(--appearance-texture)) 0 1px, transparent 1px 4px); }
+  .sample { text-shadow: 0 0 var(--appearance-glow) currentColor; }
   .document, .project {
     min-width: 0;
     overflow: hidden;
@@ -83,7 +95,7 @@
     border-bottom: 1px solid var(--preview-color-border-subtle);
   }
   .sample {
-    padding: 7px 10px;
+    padding: calc(var(--space-4) * 0.875) 10px;
     white-space: nowrap;
   }
   .heading {
@@ -99,6 +111,8 @@
   }
   .code {
     margin-top: 4px;
+    font-family: var(--font-family-mono);
+    font-variant-ligatures: var(--code-ligatures);
   }
   .comment {
     color: var(--preview-syntax-comment);
@@ -125,14 +139,15 @@
   }
   .project-title {
     padding: 4px 6px;
-    font: 600 8px/18px system-ui, sans-serif;
+    font: 600 8px/18px var(--font-family-ui);
     color: var(--preview-color-text-secondary);
   }
   .tree-row {
     display: flex;
     align-items: center;
     gap: 3px;
-    padding: 2px 4px 2px 9px;
+    padding: calc(var(--space-2) * 0.5) 4px calc(var(--space-2) * 0.5) 9px;
+    min-height: calc(var(--project-tree-row-height) * 0.65);
     font-size: 8px;
     white-space: nowrap;
   }

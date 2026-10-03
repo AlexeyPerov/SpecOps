@@ -13,8 +13,10 @@
     THEME_TOKEN_LABELS,
     type ThemeTokenKey,
   } from "../styles/themeTokens";
-  import { IMPORTED_THEMES } from "../styles/importedThemes";
-  import { CURATED_THEMES } from "../styles/curatedThemes";
+  import { PRESET_THEMES } from "../styles/themeCatalog";
+  import AppearanceControls from "./AppearanceControls.svelte";
+  import { appearanceForTheme, resolveActiveTheme, getSystemPrefersDark } from "../state/appState/themeController";
+  import { resolveAppearance, type ThemeAppearance } from "../styles/themeAppearance";
   import ThemeCard from "./ThemeCard.svelte";
   import ProjectFileIcon from "./icons/ProjectFileIcon.svelte";
 
@@ -27,6 +29,8 @@
     tokens: Partial<ThemeTokens>;
     baseMode: "dark" | "light";
     editable: boolean;
+    appearance?: Partial<ThemeAppearance>;
+    category?: string;
   }
 
   const THEME_MODES = [
@@ -43,17 +47,12 @@
       baseMode: getBuiltinThemeMode(id),
       editable: false,
     })),
-    ...IMPORTED_THEMES.map<ThemeOption>((preset) => ({
+    ...PRESET_THEMES.map<ThemeOption>((preset) => ({
       ref: { kind: "preset", id: preset.id },
       name: preset.name,
       tokens: preset.tokens,
-      baseMode: preset.baseMode,
-      editable: false,
-    })),
-    ...CURATED_THEMES.map<ThemeOption>((preset) => ({
-      ref: { kind: "preset", id: preset.id },
-      name: preset.name,
-      tokens: preset.tokens,
+      appearance: preset.appearance,
+      category: preset.category ?? "classic",
       baseMode: preset.baseMode,
       editable: false,
     })),
@@ -61,13 +60,21 @@
       ref: { kind: "custom", id: custom.id },
       name: custom.name,
       tokens: custom.tokens,
+      appearance: custom.appearance,
+      category: "custom",
       baseMode: custom.baseMode,
       editable: true,
     })),
   ]);
 
-  const lightOptions = $derived(allOptions.filter((option) => option.baseMode === "light"));
-  const darkOptions = $derived(allOptions.filter((option) => option.baseMode === "dark"));
+  let section = $state("palette");
+  let search = $state("");
+  let category = $state("all");
+  const filteredOptions = $derived(allOptions.filter(o => o.name.toLowerCase().includes(search.toLowerCase().trim()) && (category === "all" || (o.category ?? "classic") === category)));
+  const currentName = $derived(allOptions.find(o => refsEqual(o.ref, resolveActiveTheme(snapshot.theme)))?.name ?? "Theme");
+  const personalAppearance = $derived(appearanceForTheme(snapshot.theme));
+  const lightOptions = $derived(filteredOptions.filter((option) => option.baseMode === "light"));
+  const darkOptions = $derived(filteredOptions.filter((option) => option.baseMode === "dark"));
 
   const activeCustom = $derived.by(() => {
     // The editor targets whichever theme is currently rendered: manual mode pins
@@ -75,7 +82,7 @@
     const effectiveRef =
       snapshot.theme.mode === "manual"
         ? snapshot.theme.manualTheme
-        : systemPrefersDark()
+        : getSystemPrefersDark()
           ? snapshot.theme.darkTheme
           : snapshot.theme.lightTheme;
     if (effectiveRef.kind !== "custom") {
@@ -91,13 +98,6 @@
   $effect(() => {
     nameDraft = activeCustom?.name ?? "";
   });
-
-  function systemPrefersDark(): boolean {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return true;
-    }
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
-  }
 
   function refsEqual(a: ActiveThemeRef, b: ActiveThemeRef): boolean {
     return a.kind === b.kind && a.id === b.id;
@@ -169,14 +169,26 @@
   }
 </script>
 
-<div class="themes-view" aria-label="Theme">
+<div class="themes-view" aria-label="Appearance">
   <header class="themes-view-header">
-    <h2 class="themes-view-title">Theme</h2>
+    <h2 class="themes-view-title">Appearance <span class="current-theme-name">{currentName}</span></h2>
+    <nav class="appearance-nav" aria-label="Appearance sections">
+      {#each ["palette", "typography", "layout", "effects", "preview"] as name}
+        <button type="button" class:active={section === name} aria-pressed={section === name} onclick={() => section = name}>{name[0].toUpperCase() + name.slice(1)}</button>
+      {/each}
+    </nav>
+    <div class="appearance-toolbar">
+      <button type="button" class="settings-button" onclick={() => appState.applyFullThemeStyle()}>Apply full theme style</button>
+      <button type="button" class="settings-button" onclick={() => appState.saveAppearanceAsTheme()}>Save as theme</button>
+      {#if activeCustom}<button type="button" class="settings-button" onclick={() => appState.updateCustomThemeAppearance(activeCustom.id)}>Save changes to theme</button>{/if}
+      <button type="button" class="settings-button" onclick={() => appState.resetAppearance()}>Reset personal style</button>
+    </div>
   </header>
 
   <div class="themes-view-scroll">
+    {#if section === "palette"}
     <section class="settings-section">
-      <h3>Appearance</h3>
+      <h3>Palette</h3>
       <label class="settings-toggle">
         <input
           type="checkbox"
@@ -199,7 +211,7 @@
         {#each [{ label: "Color", colored: true }, { label: "Monochrome", colored: false }] as option}
           <label class="settings-theme-row file-icon-choice">
             <input type="radio" name="file-icons"
-              checked={snapshot.settings.coloredProjectFileIcons === option.colored}
+              checked={(personalAppearance.icons === "color" && snapshot.settings.coloredProjectFileIcons) === option.colored}
               onchange={() => appState.setColoredProjectFileIcons(option.colored)} />
             <span>{option.label}</span>
             <span class="file-icon-samples" aria-hidden="true">
@@ -242,7 +254,8 @@
               baseMode={option.baseMode}
               tokens={option.tokens}
               editable={option.editable}
-              coloredIcons={snapshot.settings.coloredProjectFileIcons}
+              appearance={resolveAppearance(option.appearance, snapshot.theme.appearanceOverrides)}
+              coloredIcons={snapshot.settings.coloredProjectFileIcons && resolveAppearance(option.appearance, snapshot.theme.appearanceOverrides).icons === "color"}
               group={`${group}-theme`}
               value={`${option.ref.kind}:${option.ref.id}`}
               selected={group === "manual" ? isManualActive(option) : group === "light" ? isLightActive(option) : isDarkActive(option)}
@@ -257,10 +270,17 @@
         </div>
       {/snippet}
 
+      <div class="theme-filters">
+        <label class="settings-field"><span>Search themes</span><input type="search" bind:value={search} placeholder="Theme name" /></label>
+        <label class="settings-field"><span>Collection</span><select bind:value={category}>
+          <option value="all">All themes</option><option value="classic">Classic</option><option value="retro">Retro</option><option value="creative">Creative</option><option value="accessible">High contrast</option><option value="custom">Custom</option>
+        </select></label>
+      </div>
+      {#if filteredOptions.length === 0}<p class="settings-hint">No themes match your search.</p>{/if}
       {#if snapshot.theme.mode === "manual"}
         <div class="settings-subsection">
           <h4>Theme</h4>
-          {@render themeGrid(allOptions, "manual")}
+          {@render themeGrid(filteredOptions, "manual")}
         </div>
       {:else}
         <div class="settings-subsection">
@@ -278,7 +298,10 @@
       </button>
     </section>
 
-    {#if activeCustom}
+    {/if}
+    {#if section !== "palette"}<AppearanceControls {section} />{/if}
+
+    {#if activeCustom && section === "palette"}
       <section class="settings-section">
         <label class="settings-field">
           <span>Name</span>
@@ -350,9 +373,14 @@
 </div>
 
 <style>
-  @import "../styles/settingsForm.css";
-  @import "../styles/themePaneForm.css";
 
+  .current-theme-name { font-size: 0.8125rem; font-weight: 400; color: var(--color-text-secondary); margin-left: var(--space-4); }
+  .appearance-nav { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+  .appearance-nav button { border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-secondary); font: inherit; padding: var(--space-2) var(--space-4); cursor: pointer; }
+  .appearance-nav button.active { color: var(--color-text-primary); background: var(--color-hover); border-color: var(--color-accent); }
+  .appearance-nav button:focus-visible { outline: 2px solid var(--color-focus-ring); }
+  .appearance-toolbar { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+  .theme-filters { display: flex; flex-wrap: wrap; gap: var(--space-6); }
   .theme-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
@@ -369,7 +397,7 @@
     border-radius: var(--radius-sm);
     background: var(--color-bg-root);
     color: var(--color-text-primary);
-    font: 0.8125rem/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
+    font: 0.8125rem/var(--line-height-code, 1.5) var(--font-family-mono, monospace);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }

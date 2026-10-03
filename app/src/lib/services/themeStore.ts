@@ -1,7 +1,9 @@
+import { normalizeFontSettings } from "./fontSettings";
 import { join } from "@tauri-apps/api/path";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
-import { IMPORTED_THEMES } from "../styles/importedThemes";
+import { PRESET_THEMES } from "../styles/themeCatalog";
+import { normalizeAppearanceOverrides, type ThemeAppearance } from "../styles/themeAppearance";
 import type { BuiltinThemeId } from "../styles/themeTokens";
 import {
   DEFAULT_BUILTIN_THEME,
@@ -24,6 +26,8 @@ export type ActiveThemeRef =
   | { kind: "custom"; id: string };
 
 export interface CustomThemeRecord {
+  appearance?: Partial<ThemeAppearance>;
+  fontSettings?: import("../domain/settings").FontSettings;
   id: string;
   name: string;
   baseMode: "dark" | "light";
@@ -37,6 +41,7 @@ export interface CustomThemeRecord {
  * OS `prefers-color-scheme` media query).
  */
 export interface ThemeFileV2 {
+  appearanceOverrides?: Partial<ThemeAppearance>;
   version: 2;
   mode: ThemeMode;
   darkTheme: ActiveThemeRef;
@@ -134,6 +139,8 @@ function normalizeCustomThemeRecord(raw: unknown): CustomThemeRecord | null {
     name: record.name.trim(),
     baseMode: record.baseMode,
     tokens: normalizeThemeTokens(record.baseMode, tokenSource),
+    ...(record.appearance ? { appearance: normalizeAppearanceOverrides(record.appearance) } : {}),
+    ...(record.fontSettings ? { fontSettings: normalizeFontSettings(record.fontSettings) } : {}),
   };
 }
 
@@ -153,7 +160,7 @@ function normalizeActiveTheme(
     const id = ref.id.trim();
     // A preset id may vanish in a future version (curated set changed); fall
     // back to the provided default rather than resolving to a missing theme.
-    if (IMPORTED_THEMES.some((preset) => preset.id === id)) {
+    if (PRESET_THEMES.some((preset) => preset.id === id)) {
       return { kind: "preset", id };
     }
     return fallback;
@@ -180,7 +187,7 @@ function baseModeForRef(
     return getBuiltinThemeMode(ref.id);
   }
   if (ref.kind === "preset") {
-    return IMPORTED_THEMES.find((p) => p.id === ref.id)?.baseMode ?? "dark";
+    return PRESET_THEMES.find((p) => p.id === ref.id)?.baseMode ?? "dark";
   }
   return customThemes.find((theme) => theme.id === ref.id)?.baseMode ?? "dark";
 }
@@ -240,6 +247,7 @@ function parseThemeFile(raw: string): ThemeFileV2 | null {
     return {
       version: 2,
       mode: isThemeMode(parsed.mode) ? parsed.mode : "auto",
+      ...(parsed.appearanceOverrides ? { appearanceOverrides: normalizeAppearanceOverrides(parsed.appearanceOverrides) } : {}),
       darkTheme: normalizeActiveTheme(parsed.darkTheme, customThemes, DEFAULT_DARK_BUILTIN),
       lightTheme: normalizeActiveTheme(parsed.lightTheme, customThemes, DEFAULT_LIGHT_BUILTIN),
       // Files written before manualTheme existed default to dark-amber (no migration).
@@ -256,11 +264,13 @@ function normalizeThemeFile(data: ThemeFileV2): ThemeFileV2 {
     ...custom,
     name: custom.name.trim(),
     tokens: normalizeThemeTokens(custom.baseMode, custom.tokens),
+    ...(custom.appearance ? { appearance: normalizeAppearanceOverrides(custom.appearance) } : {}),
+    ...(custom.fontSettings ? { fontSettings: normalizeFontSettings(custom.fontSettings) } : {}),
   }));
 
   const validRef = (ref: ActiveThemeRef): boolean => {
     if (ref.kind === "builtin") return isBuiltinThemeId(ref.id);
-    if (ref.kind === "preset") return IMPORTED_THEMES.some((p) => p.id === ref.id);
+    if (ref.kind === "preset") return PRESET_THEMES.some((p) => p.id === ref.id);
     return customThemes.some((theme) => theme.id === ref.id);
   };
 
@@ -272,6 +282,7 @@ function normalizeThemeFile(data: ThemeFileV2): ThemeFileV2 {
   return {
     version: 2,
     mode,
+    ...(data.appearanceOverrides ? { appearanceOverrides: normalizeAppearanceOverrides(data.appearanceOverrides) } : {}),
     darkTheme,
     lightTheme,
     manualTheme,
@@ -376,6 +387,7 @@ export async function saveThemeFile(data: ThemeFileV2): Promise<void> {
   const normalized = normalizeThemeFile({
     version: 2,
     mode: data.mode,
+    appearanceOverrides: data.appearanceOverrides,
     darkTheme: data.darkTheme,
     lightTheme: data.lightTheme,
     manualTheme: data.manualTheme,

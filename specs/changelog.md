@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-10-03 23:12 MSK — Complete theme appearance and expanded palettes
+
+- Expanded the catalog from 18 to 43 themes, with 10 light options. Added
+  familiar editor palettes and distinct CRT, DOS, LCD, paper, neon and drawing
+  styles. A single catalog now drives selection, resolution, cycling and
+  persistence; curated themes no longer disappear or fall back on restart.
+- Added Palette, Typography, Layout, Effects and Preview sections with search,
+  collection filters, the current theme name and isolated live previews.
+- Added seven font choices, including five bundled families for offline use.
+  Interface, chat and code fonts are independent; typography controls include
+  sizes, line heights, letter spacing and code ligatures. Retro Latin glyphs
+  use a readable size adjustment and other scripts fall back to a bundled
+  monospace font.
+- Added density, corners, shadows, border contrast, accent and file icon
+  preferences, plus bar/block/underline editor cursors. Personal overrides
+  survive palette changes; applying a full style resets overrides and restores
+  custom saved sizes. Entire appearances can be saved as custom themes or
+  updated in place, including their palette, style and text sizes.
+- Added adjustable text glow, scanlines, screen-edge shading and paper texture.
+  Optional gentle CRT shimmer defaults off and respects reduced motion.
+  Effects do not capture input and are removed from printed output. Theme
+  changes clear stale accents, selection overrides, effects and cursor styles.
+- Improved preset text/comment/hidden-file contrast on both main surfaces and
+  made range controls follow the active palette. Editors remeasure on font and
+  appearance changes; zoomed editors follow the selected base size and the
+  virtual project tree recalculates its row pitch after density changes.
+- Fixed custom theme activation in manual mode and fallback when deleting the
+  active custom theme. Saved theme styles and personal overrides are validated
+  and persisted without introducing data migrations.
+- Validation: 3507 tests passed; Svelte check reported zero errors/warnings;
+  production build passed. Browser visual checks covered light typography,
+  CRT rendering with Latin/Cyrillic, personal font priority and full-style
+  application. Screenshots saved in `screenshots/appearance-typography.jpg`
+  and `screenshots/appearance-crt.jpg`.
+
 ## 2026-10-03 22:37 MSK — Appearance setting previews and layout
 
 - Added a live plain-text sample below Decorate plaintext symbols. Its

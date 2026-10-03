@@ -1,5 +1,6 @@
 import type { AppThemeState } from "../../domain/contracts";
-import { IMPORTED_THEMES } from "../../styles/importedThemes";
+import { PRESET_THEMES } from "../../styles/themeCatalog";
+import { normalizeAppearanceOverrides, resolveAppearance, applyAppearance, type ThemeAppearance } from "../../styles/themeAppearance";
 import {
   defaultThemeFile,
   saveThemeFile,
@@ -102,6 +103,7 @@ function toThemeFile(theme: AppThemeState): ThemeFileV2 {
   return {
     version: 2,
     mode: theme.mode,
+    appearanceOverrides: theme.appearanceOverrides,
     darkTheme: theme.darkTheme,
     lightTheme: theme.lightTheme,
     manualTheme: theme.manualTheme,
@@ -178,7 +180,7 @@ export function baseModeForRef(
     return getBuiltinThemeMode(ref.id);
   }
   if (ref.kind === "preset") {
-    return IMPORTED_THEMES.find((p) => p.id === ref.id)?.baseMode ?? "dark";
+    return PRESET_THEMES.find((p) => p.id === ref.id)?.baseMode ?? "dark";
   }
   return findCustomTheme(customThemes, ref.id)?.baseMode ?? "dark";
 }
@@ -197,7 +199,7 @@ export function resolveTokensForRef(
     return resolveBuiltinTokens(ref.id);
   }
   if (ref.kind === "preset") {
-    const preset = IMPORTED_THEMES.find((p) => p.id === ref.id);
+    const preset = PRESET_THEMES.find((p) => p.id === ref.id);
     if (preset) {
       // Presets may omit state/diff tokens; inherit them from the matching-mode
       // builtin so duplicating a preset yields a complete, editable token set.
@@ -241,6 +243,14 @@ function fallbackBuiltinForRef(
   return baseMode === "dark" ? "dark-amber" : "light-blue";
 }
 
+export function styleForRef(ref: ActiveThemeRef, customThemes: CustomThemeRecord[]): Partial<ThemeAppearance> {
+  if (ref.kind === "preset") return PRESET_THEMES.find(p => p.id === ref.id)?.appearance ?? {};
+  if (ref.kind === "custom") return findCustomTheme(customThemes, ref.id)?.appearance ?? {};
+  return {};
+}
+export function appearanceForTheme(theme: AppThemeState, prefersDark?: boolean): ThemeAppearance {
+  return resolveAppearance(styleForRef(resolveActiveTheme(theme, prefersDark), theme.customThemes), theme.appearanceOverrides);
+}
 export function applyThemeState(theme: AppThemeState, prefersDark?: boolean): void {
   if (typeof document === "undefined") {
     return;
@@ -248,30 +258,36 @@ export function applyThemeState(theme: AppThemeState, prefersDark?: boolean): vo
 
   const root = document.documentElement;
   const ref = resolveActiveTheme(theme, prefersDark);
+  const finish = () => applyAppearance(appearanceForTheme(theme, prefersDark), root);
 
   if (ref.kind === "builtin") {
     applyBuiltinTheme(ref.id, root);
+    finish();
     return;
   }
 
   if (ref.kind === "preset") {
-    const preset = IMPORTED_THEMES.find((p) => p.id === ref.id);
+    const preset = PRESET_THEMES.find((p) => p.id === ref.id);
     if (preset) {
       applyCustomTheme(preset, root);
+      finish();
       return;
     }
     // Unknown preset id (removed in a newer version) — fall back gracefully.
     applyBuiltinTheme(DEFAULT_BUILTIN_THEME, root);
+    finish();
     return;
   }
 
   const custom = findCustomTheme(theme.customThemes, ref.id);
   if (custom) {
     applyCustomTheme(custom, root);
+    finish();
     return;
   }
 
   applyBuiltinTheme(DEFAULT_BUILTIN_THEME, root);
+  finish();
 }
 
 function nextCustomThemeName(customThemes: CustomThemeRecord[]): string {
@@ -317,6 +333,7 @@ export function createCustomThemeFromCurrent(theme: AppThemeState): AppThemeStat
     name: nextCustomThemeName(theme.customThemes),
     baseMode,
     tokens,
+    appearance: appearanceForTheme(theme),
   };
 
   const customRef: ActiveThemeRef = { kind: "custom", id };
@@ -325,6 +342,7 @@ export function createCustomThemeFromCurrent(theme: AppThemeState): AppThemeStat
     customThemes: [...theme.customThemes, custom],
     darkTheme: baseMode === "dark" ? customRef : theme.darkTheme,
     lightTheme: baseMode === "light" ? customRef : theme.lightTheme,
+    manualTheme: theme.mode === "manual" ? customRef : theme.manualTheme,
   };
   applyThemeState(nextTheme);
   return nextTheme;
@@ -346,6 +364,7 @@ export function duplicateTheme(ref: ActiveThemeRef, theme: AppThemeState): AppTh
     name: nextCustomThemeName(theme.customThemes),
     baseMode,
     tokens,
+    appearance: resolveAppearance(styleForRef(ref, theme.customThemes)),
   };
 
   const customRef: ActiveThemeRef = { kind: "custom", id };

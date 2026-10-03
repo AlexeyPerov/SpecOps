@@ -64,6 +64,9 @@ export interface ConvertOptions {
 }
 
 export interface PresetThemeRecord {
+  appearance?: Partial<import("./themeAppearance").ThemeAppearance>;
+  category?: "classic" | "retro" | "creative" | "accessible";
+  description?: string;
   id: string;
   name: string;
   baseMode: "dark" | "light";

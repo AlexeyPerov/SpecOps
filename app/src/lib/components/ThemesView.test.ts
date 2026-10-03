@@ -82,3 +82,64 @@ describe("theme preview grid", () => {
     expect(preview.style.getPropertyValue("--preview-color-hover")).toContain("var(--preview-color-bg-root-solid)");
   });
 });
+
+describe("complete appearance workflow", () => {
+  beforeEach(() => appState.resetAppState());
+
+  it("edits typography and retains personal choices when changing palettes", () => {
+    appState.setThemeMode("manual");
+    const { host } = mountComponent(ThemesView, {});
+    flushSync();
+    Array.from(host.querySelectorAll<HTMLButtonElement>(".appearance-nav button")).find(b => b.textContent === "Typography")!.click();
+    flushSync();
+    const font = host.querySelector<HTMLSelectElement>('[aria-label="Interface font"]')!;
+    font.value = "plex";
+    font.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+    appState.setManualTheme({ kind: "preset", id: "crt-green" });
+    flushSync();
+    expect(font.value).toBe("plex");
+    expect(document.documentElement.style.getPropertyValue("--font-family-ui")).toContain("IBM Plex Mono");
+    expect(document.documentElement.dataset.appearanceCaret).toBe("block");
+    appState.setManualTheme({ kind: "preset", id: "catppuccin-latte" });
+    expect(document.documentElement.dataset.appearanceCaret).toBe("bar");
+    expect(document.documentElement.style.getPropertyValue("--appearance-glow")).toBe("0px");
+  });
+
+  it("saves the entire appearance and explicitly restores it including sizes", () => {
+    appState.setThemeMode("manual");
+    appState.setManualTheme({ kind: "preset", id: "paper-ink" });
+    appState.setAppearance({ uiFont: "plex", corners: "round", accent: "#123456", texture: 40 });
+    appState.setFontSettings({ editorScale: 140, chatScale: 120 });
+    appState.saveAppearanceAsTheme();
+    const custom = appState.getSnapshot().theme.customThemes[0];
+    expect(custom.appearance).toMatchObject({ uiFont: "plex", corners: "round", texture: 40, accent: "#123456" });
+    expect(custom.fontSettings).toMatchObject({ editorScale: 140, chatScale: 120 });
+    expect(appState.getSnapshot().theme.manualTheme).toEqual({ kind: "custom", id: custom.id });
+    appState.setAppearance({ uiFont: "system", texture: 0 });
+    appState.setFontSettings({ editorScale: 100 });
+    appState.applyFullThemeStyle();
+    expect(appState.getSnapshot().theme.appearanceOverrides).toEqual({});
+    expect(document.documentElement.style.getPropertyValue("--font-family-ui")).toContain("IBM Plex Mono");
+    expect(appState.getSnapshot().settings.fontSettings.editorScale).toBe(140);
+    appState.setAppearance({ codeFont: "plex", scanlines: 15 });
+    appState.updateCustomThemeAppearance(custom.id);
+    expect(appState.getSnapshot().theme.customThemes[0].appearance).toMatchObject({ codeFont: "plex", scanlines: 15 });
+    expect(appState.getSnapshot().theme.appearanceOverrides).toEqual({});
+    appState.deleteCustomTheme(custom.id);
+    expect(appState.getSnapshot().theme.manualTheme).toEqual({ kind: "builtin", id: "light-blue" });
+  });
+
+  it("filters themes by name and collection without changing the active palette", () => {
+    appState.setThemeMode("manual");
+    const { host } = mountComponent(ThemesView, {});
+    flushSync();
+    const selected = appState.getSnapshot().theme.manualTheme;
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]')!;
+    search.value = "catppuccin";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+    expect(host.querySelectorAll(".theme-card")).toHaveLength(4);
+    expect(appState.getSnapshot().theme.manualTheme).toEqual(selected);
+  });
+});

@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { ThemeTokens } from "../styles/themeTokens";
+  import type { ThemeAppearance } from "../styles/themeAppearance";
   import ThemePreview from "./ThemePreview.svelte";
-  let { name, baseMode, tokens, editable, coloredIcons, group, value, selected, onselect, onduplicate }: {
-    name: string; baseMode: "dark" | "light"; tokens: Partial<ThemeTokens>; editable: boolean; coloredIcons: boolean;
+  let { appearance, name, baseMode, tokens, editable, coloredIcons, group, value, selected, onselect, onduplicate }: {
+    appearance?: ThemeAppearance; name: string; baseMode: "dark" | "light"; tokens: Partial<ThemeTokens>; editable: boolean; coloredIcons: boolean;
     group: string; value: string; selected: boolean; onselect: () => void; onduplicate: () => void;
   } = $props();
 </script>
@@ -10,7 +11,7 @@
 <div class="theme-card" class:selected data-theme-ref={value}>
   <label class="theme-choice">
     <input type="radio" name={group} {value} checked={selected} onchange={onselect} aria-label="{name} {baseMode}" />
-    <ThemePreview {tokens} {baseMode} {coloredIcons} />
+    <ThemePreview {tokens} {baseMode} {coloredIcons} {appearance} />
     <span class="caption"><span class="name" title={name}>{name}</span><span class="check" aria-hidden="true">{selected ? "✓" : ""}</span></span>
   </label>
   <div class="footer">
@@ -23,7 +24,7 @@
   .theme-card {
     min-width: 0;
     border: 1px solid var(--color-border-subtle);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: var(--color-surface-1);
     overflow: hidden;
   }
@@ -84,7 +85,7 @@
   }
   button {
     border: 0;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     padding: 3px 5px;
     background: transparent;
     color: var(--color-text-secondary);

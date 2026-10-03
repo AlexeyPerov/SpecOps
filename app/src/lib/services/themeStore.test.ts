@@ -349,3 +349,26 @@ describe("saveThemeFile", () => {
     });
   });
 });
+
+describe("appearance persistence", () => {
+  beforeEach(() => {
+    readTextFileMock.mockReset();
+    writeTextFileMock.mockReset();
+    writeTextFileMock.mockResolvedValue(undefined);
+  });
+  it("round-trips curated selections, personal preferences and complete custom styles", async () => {
+    const file: ThemeFileV2 = {
+      ...defaultThemeFile,
+      mode: "manual",
+      manualTheme: { kind: "preset", id: "crt-green" },
+      lightTheme: { kind: "preset", id: "vintage-lcd" },
+      darkTheme: { kind: "preset", id: "terminal-amber" },
+      appearanceOverrides: { uiFont: "plex", scanlines: 0, flicker: false },
+      customThemes: [{ id: "saved-style", name: "Saved style", baseMode: "light", tokens: normalizeThemeTokens("light", {}), appearance: { chatFont: "serif", texture: 25 }, fontSettings: { uiScale: 110, editorScale: 130, chatScale: 120 } }],
+    };
+    await saveThemeFile(file);
+    const raw = writeTextFileMock.mock.calls[0][1] as string;
+    themeReadOrder(raw);
+    expect(await loadThemeFile()).toEqual(file);
+  });
+});

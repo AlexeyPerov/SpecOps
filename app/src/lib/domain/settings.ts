@@ -76,6 +76,7 @@ export type AppProviderSettings = ProviderSettingsById;
 export type ThemeMode = "auto" | "manual";
 
 export interface AppThemeState {
+  appearanceOverrides?: Partial<import("../styles/themeAppearance").ThemeAppearance>;
   mode: ThemeMode;
   /** Applied when the effective mode resolves to dark (mode=auto with OS in dark). */
   darkTheme: ActiveThemeRef;
@@ -102,8 +103,7 @@ export interface LogSettings {
 
 /**
  * Font-size scales for the three rendered surfaces. Values are percentages of
- * the 13px base (100 = default). M6-T2 covers size only — font families are
- * intentionally not configurable (see phase-3.5/questions.md Q9).
+ * the 13px base (100 = default). Font families and typography live in theme appearance.
  */
 export interface FontSettings {
   /** UI chrome font scale (body, panels, status bar). */

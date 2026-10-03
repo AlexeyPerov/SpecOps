@@ -1,5 +1,5 @@
 import type { AppDomainState, FontSettings } from "../../domain/contracts";
-import { fontScaleToPx } from "../../services/fontSettings";
+import { fontScaleToPx, normalizeFontSettings } from "../../services/fontSettings";
 import type { SettingsUpdate } from "./logSettingsSlice";
 
 /**
@@ -15,16 +15,14 @@ export function applyFontSettingsToDom(settings: FontSettings): void {
   root.style.setProperty("--font-size-ui", `${fontScaleToPx(settings.uiScale)}px`);
   root.style.setProperty("--font-size-editor", `${fontScaleToPx(settings.editorScale)}px`);
   root.style.setProperty("--font-size-chat", `${fontScaleToPx(settings.chatScale)}px`);
+  root.dispatchEvent?.(new Event("appearancechange"));
 }
 
 export function createFontSettingsSlice(update: SettingsUpdate) {
   return {
     setFontSettings(patch: Partial<FontSettings>) {
       update((state) => {
-        const fontSettings: FontSettings = {
-          ...state.settings.fontSettings,
-          ...patch,
-        };
+        const fontSettings = normalizeFontSettings({ ...state.settings.fontSettings, ...patch });
         applyFontSettingsToDom(fontSettings);
         return {
           ...state,

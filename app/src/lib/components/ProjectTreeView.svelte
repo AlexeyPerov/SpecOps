@@ -363,10 +363,23 @@
     };
   });
 
+  let appearanceRevision = $state(0);
+  $effect(() => {
+    const root = document.documentElement;
+    const changed = () => { appearanceRevision += 1; };
+    root.addEventListener("appearancechange", changed);
+    document.fonts?.addEventListener("loadingdone", changed);
+    return () => {
+      root.removeEventListener("appearancechange", changed);
+      document.fonts?.removeEventListener("loadingdone", changed);
+    };
+  });
+
   // Measure the real row pitch (row height + list gap) from two consecutive
   // rendered rows; keeps the window math correct across zoom/font changes.
   $effect(() => {
     void rows;
+    void appearanceRevision;
     const el = listEl;
     if (!el) {
       return;

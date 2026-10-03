@@ -1,18 +1,13 @@
 <script lang="ts">
-  import {
-    FONT_SCALE_MAX,
-    FONT_SCALE_MIN,
-    defaultFontSettings,
-  } from "../../services/fontSettings";
   import type {
     NotificationEventId,
   } from "../../domain/contracts";
   import { NOTIFICATION_EVENT_IDS } from "../../domain/contracts";
   import { playSound } from "../../services/soundNotifications";
+  import AppearanceControls from "../AppearanceControls.svelte";
   import { appState } from "../../state/appState";
 
   const snapshot = $derived($appState);
-  const font = $derived(snapshot.settings.fontSettings);
   const sound = $derived(snapshot.settings.soundSettings);
   const os = $derived(snapshot.settings.osNotificationSettings);
 
@@ -23,73 +18,9 @@
     error: "Error",
   };
 
-  function fontLabel(scale: number): string {
-    return `${scale}%`;
-  }
-
-  function resetFonts(): void {
-    appState.setFontSettings({ ...defaultFontSettings });
-  }
 </script>
 
-<section class="settings-section">
-  <h3>Font size</h3>
-  <p class="settings-section-note">
-    Scale the three rendered surfaces independently. Font families stay fixed; only the size changes.
-  </p>
-
-  <label class="settings-field appearance-slider">
-    <span class="appearance-slider-label">UI</span>
-    <input
-      type="range"
-      min={FONT_SCALE_MIN}
-      max={FONT_SCALE_MAX}
-      step="5"
-      value={font.uiScale}
-      oninput={(event) =>
-        appState.setFontSettings({
-          uiScale: Number((event.currentTarget as HTMLInputElement).value),
-        })}
-    />
-    <span class="appearance-slider-value">{fontLabel(font.uiScale)}</span>
-  </label>
-
-  <label class="settings-field appearance-slider">
-    <span class="appearance-slider-label">Editor</span>
-    <input
-      type="range"
-      min={FONT_SCALE_MIN}
-      max={FONT_SCALE_MAX}
-      step="5"
-      value={font.editorScale}
-      oninput={(event) =>
-        appState.setFontSettings({
-          editorScale: Number((event.currentTarget as HTMLInputElement).value),
-        })}
-    />
-    <span class="appearance-slider-value">{fontLabel(font.editorScale)}</span>
-  </label>
-
-  <label class="settings-field appearance-slider">
-    <span class="appearance-slider-label">Chat</span>
-    <input
-      type="range"
-      min={FONT_SCALE_MIN}
-      max={FONT_SCALE_MAX}
-      step="5"
-      value={font.chatScale}
-      oninput={(event) =>
-        appState.setFontSettings({
-          chatScale: Number((event.currentTarget as HTMLInputElement).value),
-        })}
-    />
-    <span class="appearance-slider-value">{fontLabel(font.chatScale)}</span>
-  </label>
-
-  <button type="button" class="appearance-reset" onclick={resetFonts}>
-    Reset font sizes
-  </button>
-</section>
+<AppearanceControls typographyOnly />
 
 <section class="settings-section">
   <h3>Sound notifications</h3>
@@ -206,7 +137,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .appearance-reset,
   .appearance-preview {
     padding: var(--space-2) var(--space-6);
     border: 1px solid var(--color-border-subtle);
@@ -218,13 +148,11 @@
     cursor: pointer;
   }
 
-  .appearance-reset:hover,
   .appearance-preview:hover {
     border-color: var(--color-accent);
     background: var(--color-hover);
   }
 
-  .appearance-reset:focus-visible,
   .appearance-preview:focus-visible {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: 1px;

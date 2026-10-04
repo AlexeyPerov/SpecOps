@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-04 14:15 MSK — Audit agent-runtime tasks and propose Codex-first delivery
+
+- Added an implementation audit of operations milestones 01–06, separating the fake-runtime foundation, acceptance gaps, legacy integration code and missing production adapters.
+- Recorded verified persistence, supervision, stream-failure, redaction, catalog/creation UX, contract-test and packaging gaps; proposed bounded stabilization tasks.
+- Proposed isolated Codex connection profiles for an account separate from the desktop app, with profile-scoped authentication, native history, process routing and acceptance checks.
+- Added an alternative delivery sequence prioritizing a usable Codex preview and moving recovery, packaging and basic activity visibility ahead of additional adapters and handoff. Linked the review from the roadmap and milestone scope documents; implementation statuses are not promoted by this proposal.
+- Validation: 115 targeted frontend/domain tests in 13 files and 48 Agent Host tests in five files passed. No runtime code or account credentials changed; real-account, full Rust and installed-build verification remain outside this audit.
+
 ## 2026-10-04 14:03 MSK — Resolve integration merge conflicts
 
 - Combined the session architecture with current appearance settings, project-tree actions, favorites, preview tabs and compact secondary windows.

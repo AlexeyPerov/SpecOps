@@ -5,6 +5,21 @@
 the numbered phase folders.  
 **Supersedes:** the former Chat / Cloud / per-workspace-backend roadmap and its planned phases 4–7.
 
+## Current planning review — 2026-10-04
+
+The current user priority is **Codex first**, including a SpecOps connection
+authenticated with a different account from Codex desktop. The
+[implementation audit and proposed delivery plan](./audit-2026-10-04.md) record
+verified foundation gaps, missing account-profile scope, task corrections, and
+an alternative sequence. Milestone 01 is implemented, but its acceptance gaps
+remain open; milestones 02–05 have no production adapter in the new host.
+
+The original sequence and dependency claims below describe the August plan,
+not evidence that the prerequisites have been completed. The proposed revision
+removes Claude as a prerequisite for Codex and moves packaging, recovery and
+basic activity visibility before the first usable Codex preview. The audit is
+a planning proposal; it does not mark those changes as implemented.
+
 ---
 
 ## Product direction
@@ -266,7 +281,8 @@ must be documented when implementation lands.
 | **05** | Cursor local SDK adapter | [Scope](./05-cursor-adapter/README.md) | [Index](./05-cursor-adapter/execution-plan.md) |
 | **06** | Handoff, concurrency observability, and release polish | [Scope](./06-handoff-release-polish/README.md) | [Index](./06-handoff-release-polish/execution-plan.md) |
 
-The numeric folder prefixes are the required implementation order. Within each
+The numeric folder prefixes identify the original implementation order, pending
+the Codex-first revision described in the current planning review. Within each
 folder, the execution-plan index defines the order and dependency graph for
 agent-sized handoff plans.
 

@@ -6,6 +6,13 @@
 **Execution plan:** [`execution-plan.md`](execution-plan.md)  
 **Phase plans:** [A](execution-plan-phase-a-chat-removal.md), [B](execution-plan-phase-b-session-domain.md), [C](execution-plan-phase-c-adapter-contract.md), [D](execution-plan-phase-d-agent-host.md), [E](execution-plan-phase-e-supervision.md), [F](execution-plan-phase-f-sessions-ux-exit.md)
 
+**Acceptance review (2026-10-04):** Implemented; acceptance gaps remain open.
+The historical Done marker above records implementation closure, not verified
+production readiness. The [current audit](../audit-2026-10-04.md) confirms open
+binding-persistence, stream-failure, supervision, catalog/creation UX and
+packaging gaps from [review round 1](review-issues-1.md), and proposes a bounded
+stabilization slice before real Codex credentials and usable preview delivery.
+
 This milestone removes the obsolete standalone AI surfaces and establishes the
 runtime-neutral domain, host protocol, process supervision, and Sessions UX on
 which every real runtime adapter depends.

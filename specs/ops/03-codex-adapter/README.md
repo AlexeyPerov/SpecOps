@@ -6,6 +6,13 @@
 **Execution plan:** [`execution-plan.md`](execution-plan.md)  
 **Phase plans:** [A](execution-plan-phase-a-protocol-auth.md), [B](execution-plan-phase-b-thread-events.md), [C](execution-plan-phase-c-capabilities-history.md), [D](execution-plan-phase-d-hardening-exit.md)
 
+**Planning review (2026-10-04):** Codex is now the first user priority. The
+[current audit and alternative plan](../audit-2026-10-04.md) propose removing
+the Claude prerequisite, introducing isolated connection profiles, and shipping
+a usable Codex slice before adding other runtimes. Account isolation, profile
+binding, native-config scope and installed-build acceptance are missing from
+the original phase plans below and must be incorporated in their next revision.
+
 This milestone adds the second production runtime through its official
 app-server protocol and tests that the common contract does not encode assumptions
 from the first adapter.

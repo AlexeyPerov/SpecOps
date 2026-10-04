@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Planned
+**Status:** A source verified; B/C and external acceptance open
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -26,3 +26,5 @@
 ## Task tracking
 
 Task prefix is `AS04-<phase>-<NN>`. Numeric folders reflect the default delivery sequence; cross-stage gates and later/recurring work are explicit above. Mark only implemented and verified tasks `[DONE]`, record pinned contracts and actual smoke/support scope, and update `specs/changelog.md`. Completed records live in [done](../done/README.md); open acceptance remains active.
+
+AS04-A source checks and bundled no-account bootstrap are recorded in [implementation notes](implementation-notes-phase-a.md). Upstream installed/account acceptance is still open; do not treat source status as delivery acceptance.

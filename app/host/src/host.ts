@@ -7,6 +7,8 @@
  * registered; phase 02–05 add real runtimes here.
  */
 
+import { OpenCodeRuntimeAdapter } from "./opencode/adapter";
+import { runtimeOwner } from "./opencode/lifecycle";
 import { CodexRuntimeAdapter } from "./codex/adapter";
 import { AdapterRegistry } from "./registry";
 import { HostDispatcher, type HostWritable } from "./dispatch";
@@ -50,6 +52,7 @@ export function createDefaultRegistry(extra: readonly AgentRuntimeAdapter[] = []
     }),
   );
   registry.register(new CodexRuntimeAdapter());
+  if (runtimeOwner() === "host") registry.register(new OpenCodeRuntimeAdapter());
   for (const adapter of extra) {
     registry.register(adapter);
   }

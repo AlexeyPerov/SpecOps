@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 20:05 MSK — Add isolated second-runtime host bootstrap
+
+- Implemented AS04-A source ownership/profile/bootstrap: exact host SDK/runtime 1.17.4 and reproducible host lockfile, packaged executable propagation, isolated native homes/config/provider auth, host-only loopback password/port, explicit external endpoint ownership and finite core/extension ledger.
+- Added a default host / explicit legacy parity process-start gate, bounded connection/version probes, safe profile snapshots and stale-response rejection, native auth persistence/logout/restart, private credential storage and observed descendant retirement. Core session/events remain the next plan; legacy files remain until cutover.
+- Validation: 125 host tests passed (one ordinary opt-in skip), 8 explicit bundled-native bootstrap tests passed without account credentials, host/frontend checks and host build passed, 17 Rust host tests passed. Upstream installed/account baseline, paid-provider inference, installed owner switching, platform packaging and immediate descendant-exit race remain open. No data migration or compatibility shim.
+
 ## 2026-10-04 17:49 MSK — Harden experimental native faults and credential boundaries
 
 - Implemented AS02-D source fault/security closure: malformed/oversized/crashed native fixture retirement, bounded ignored cancel, profile-local observed descendant cleanup preserving the supervisor group, selected logout credential cleanup and safe direct auth results.

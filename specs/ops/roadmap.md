@@ -21,7 +21,7 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 | [01 — Stabilization](01-foundation-stabilization/README.md) | S accepted on source-checkout macOS; downstream gates open | S before live account work |
 | [02 — Codex](02-codex-adapter/README.md) | A–D experimental source/fixtures verified; manual live-account and installed gates open | Accept real account scenario and 03-A/B installed gates before D closure |
 | [03 — Preview delivery](03-codex-preview-delivery/README.md) | Partial shared infrastructure; acceptance missing | Independent A activity and B packaging/recovery before 02-D |
-| [04 — OpenCode](04-opencode-adapter/README.md) | Legacy code exists; new-host adapter missing | A → B → C core cutover |
+| [04 — OpenCode](04-opencode-adapter/README.md) | A host bootstrap/profile source verified; B/C and external acceptance open | A → B → C core cutover |
 | [05 — Claude](05-claude-adapter/README.md) | Missing production adapter | A → B → C → D |
 | [06 — Handoff/native extensions](06-handoff-native-extensions/README.md) | Missing | A handoff, B OpenCode depth, C simultaneous Codex profiles |
 | [07 — Cursor](07-cursor-adapter/README.md) | Missing production adapter | A feasibility → B → C → D |

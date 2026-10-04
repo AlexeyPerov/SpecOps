@@ -176,7 +176,7 @@ fn child_is_running(child: &mut Child) -> bool {
     }
 }
 
-fn resolve_opencode_binary(app: &AppHandle) -> Result<PathBuf, OpencodeSidecarError> {
+pub(crate) fn resolve_opencode_binary(app: &AppHandle) -> Result<PathBuf, OpencodeSidecarError> {
     if let Some(path) = resolve_bundled_opencode_binary(app) {
         return Ok(path);
     }
@@ -787,6 +787,11 @@ fn start_or_attach_nonblocking(
     directory: String,
     port_override: Option<u16>,
 ) -> Result<OpencodeSidecarStatus, OpencodeSidecarError> {
+    if std::env::var("SPECOPS_OPENCODE_OWNER").as_deref() != Ok("legacy") {
+        return Err(OpencodeSidecarError::Internal {
+            message: "OpenCode is owned by Agent Host. Legacy parity mode requires an explicit runtime-owner override.".to_string(),
+        });
+    }
     // Phase 1 — under the lock, refresh state and decide whether a probe is needed.
     // The HTTP probe itself runs *outside* the lock (see below).
     let probe_base_url = {

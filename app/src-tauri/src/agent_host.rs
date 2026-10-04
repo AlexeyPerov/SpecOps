@@ -423,6 +423,11 @@ fn build_host_command(app: &AppHandle) -> Result<Command, AgentHostError> {
             message: "Cannot resolve profile storage".to_string(),
         })?;
     command.env("SPECOPS_PROFILE_ROOT", data_dir.join("connection-profiles"));
+    if std::env::var_os("SPECOPS_OPENCODE_EXECUTABLE").is_none() {
+        if let Ok(binary) = crate::opencode_sidecar::resolve_opencode_binary(app) {
+            command.env("SPECOPS_OPENCODE_EXECUTABLE", binary);
+        }
+    }
     Ok(command)
 }
 

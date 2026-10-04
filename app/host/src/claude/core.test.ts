@@ -134,7 +134,7 @@ describe("Claude native sessions", () => {
     expect(calls.at(-1)?.cwd).toBe(realpathSync(workspace));
     expect(calls.at(-1)?.env?.HOME).toBe(replacement.store.home(p.id));
     expect(calls.at(-1)?.settingSources).toEqual([]);
-    expect(calls.at(-1)?.tools).toEqual([]);
+    expect(calls.at(-1)?.tools).toEqual({type: "preset", preset: "claude_code"});
     expect(calls.at(-1)?.permissionMode).toBe("default");
     const denied = await calls.at(-1)!.canUseTool!(
       "Read",
@@ -428,4 +428,62 @@ it("closes a late query after cancellation without submitting a native prompt", 
       "utf8",
     ),
   ).toContain('"started":true');
+});
+
+it("routes native callbacks through the adapter and rejects another profile/turn or duplicate reply", async () => {
+  const {a, native, driver} = await setup();
+  for await (const event of a.send(request(native, "approve"))) {
+    if (event.type !== "permission.requested") continue;
+    const input = {native, turnId: event.turnId, permissionId: event.request.permissionId, reply: "once" as const};
+    await expect(a.replyPermission({...input, native: {...native, connectionProfileId: "other"}})).rejects.toThrow("routing");
+    await expect(a.replyPermission({...input, turnId: asSpecOpsTurnId("other")})).rejects.toThrow("routing");
+    await a.replyPermission(input);
+    await expect(a.replyPermission(input)).rejects.toThrow("expired");
+  }
+  expect(driver.interactions[0]).toMatchObject({behavior: "allow", updatedInput:{file_path:"fixture",content:"text"}});
+  for await (const event of a.send(request(native, "questions"))) {
+    if (event.type === "question.requested") await a.replyQuestion({native, turnId:event.turnId, questionId:event.request.questionId, answer:"A, B"});
+  }
+  expect(driver.interactions[1]).toMatchObject({behavior:"allow", updatedInput:{answers:{"Which?":"A, B"}}});
+});
+it("validates unsupported settings before native initialization and keeps accepted policy immutable", async () => {
+  const {a,p,driver} = await setup();
+  const before = driver.calls.length;
+  await expect(a.createSession({runtimeId:"claude", workspaceRootPath:workspace, connectionProfileId:p.id, modelId:"native-model", runtimeMetadata:{allowedTools:"UnknownTool"}})).rejects.toThrow();
+  expect(driver.calls).toHaveLength(before);
+  const native = await a.createSession({runtimeId:"claude", workspaceRootPath:workspace, connectionProfileId:p.id, modelId:"native-model", runtimeMetadata:{permissionMode:"plan",maxTurns:3,maxBudgetUsd:.5,allowedTools:"Read",disallowedTools:"Write"}});
+  expect(driver.calls.at(-1)).toMatchObject({permissionMode:"plan",maxTurns:3,maxBudgetUsd:.5,allowedTools:["Read"],disallowedTools:["Write"]});
+  await expect(collectContractEvents(a.send(request({...native,runtimeMetadata:{...native.runtimeMetadata,permissionMode:"acceptEdits"}})))).rejects.toThrow("Immutable");
+});
+
+it("restart interrupts a pending native callback and stale generation replies cannot approve the next turn", async () => {
+  const {a,p,native,driver} = await setup();
+  const generation = a.snapshot(p).generation;
+  let oldId = "";
+  const first: string[] = [];
+  for await (const event of a.send(request(native,"approve"))) {
+    first.push(event.type);
+    if (event.type === "permission.requested") {
+      oldId = event.request.permissionId;
+      await a.authenticate({runtimeId:"claude",connectionProfileId:p.id,workspaceRootPath:workspace,options:{action:"restart"}});
+    }
+  }
+  expect(first.at(-1)).toBe("turn.cancelled");
+  expect(a.snapshot(p).generation).toBeGreaterThan(generation);
+  expect(driver.interactions[0]).toMatchObject({behavior:"deny"});
+  for await (const event of a.send(request(native,"approve"))) {
+    if(event.type !== "permission.requested") continue;
+    await expect(a.replyPermission({native,turnId:event.turnId,permissionId:oldId,reply:"once"})).rejects.toThrow("expired");
+    await a.replyPermission({native,turnId:event.turnId,permissionId:event.request.permissionId,reply:"once"});
+  }
+  expect(driver.interactions[1]).toMatchObject({behavior:"allow"});
+});
+it("Stop settles a pending native question without a reply or later dispatch", async () => {
+  const {a,native,driver} = await setup(); const events: string[]=[];
+  for await(const event of a.send(request(native,"questions"))) {
+    events.push(event.type);
+    if(event.type === "question.requested") await a.cancel({native,turnId:event.turnId});
+  }
+  expect(events.at(-1)).toBe("turn.cancelled");
+  expect(driver.interactions[0]).toMatchObject({behavior:"deny"});
 });

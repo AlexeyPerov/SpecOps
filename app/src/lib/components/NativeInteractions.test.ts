@@ -33,3 +33,30 @@ it('model-specific default effort is shown with no persisted setting', async () 
   mountComponent(SessionCatalogPicker, { runtimeId: 'fake', runtimeLabel: 'Fixture', catalog: { status: 'ready' as const, models: [{ id: 'high-model' }], modes: [{ id: 'default' }], configuration: { schemaVersion: 1 as const, scope: 'session' as const, description: 'Session defaults', fields: [{ id: 'effort', label: 'Effort', kind: 'select' as const, default: 'medium', optionsByModel: { 'high-model': ['high'] }, defaultsByModel: { 'high-model': 'high' } }] } }, activeModelId: 'high-model', activeModeId: 'default' });
   await tick(); const select = [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === 'high'))!; expect(select.value).toBe('high');
 });
+
+it('hides unsupported persistent approval and shows native operation scope', async () => {
+  mountComponent(PermissionPrompt, {}); await tick();
+  const pending = promptPermission({permissionId:'limited', label:'Write fixture', payload:{allowAlways:false,input:{file_path:'fixture-file'}}});
+  await tick(); expect(document.querySelector('.permission-always')).toBeNull(); expect(document.body.textContent).toContain('fixture-file');
+  (document.querySelector('.permission-once') as HTMLButtonElement).click();
+  await expect(pending).resolves.toEqual({reply:'once'});
+});
+it('native single and multiple selections return labels and other answers without losing format', async () => {
+  mountComponent(QuestionPrompt, {}); await tick();
+  const single = promptQuestion({questionId:'single',prompt:'Choose',choices:['A','B'],payload:{multiSelect:false,allowFreeText:true}}); await tick();
+  const radios = [...document.querySelectorAll<HTMLInputElement>('input[type=radio]')]; radios[0].click(); radios[1].click(); await tick();
+  (document.querySelector('.question-submit') as HTMLButtonElement).click(); await expect(single).resolves.toEqual({type:'reply',answers:[['B']]});
+  const multi = promptQuestion({questionId:'multi',prompt:'Choose several',choices:['A','B'],payload:{multiSelect:true,allowFreeText:true}}); await tick();
+  const checks = [...document.querySelectorAll<HTMLInputElement>('input[type=checkbox]')]; checks[0].click(); checks[1].click(); await tick();
+  (document.querySelector('.question-submit') as HTMLButtonElement).click(); await expect(multi).resolves.toEqual({type:'reply',answers:[['A','B']]});
+  const other = promptQuestion({questionId:'other',prompt:'Choose or explain',choices:['A'],payload:{multiSelect:false,allowFreeText:true}}); await tick();
+  const textarea = document.querySelector('textarea')!; textarea.value='Custom'; textarea.dispatchEvent(new Event('input',{bubbles:true})); await tick();
+  (document.querySelector('.question-submit') as HTMLButtonElement).click(); await expect(other).resolves.toEqual({type:'reply',answers:[['Custom']]});
+});
+it('neutral controls preserve typed number and string settings and allow clearing optional budget', async () => {
+ const changes: unknown[]=[];
+ mountComponent(SessionCatalogPicker,{runtimeId:'fake',runtimeLabel:'Fixture',activeModelId:'model',activeModeId:'',runtimeMetadata:{maxBudgetUsd:1},onSettingsChange:(values:Readonly<Record<string,unknown>>)=>changes.push(values),catalog:{status:'ready' as const,models:[{id:'model'}],modes:[],configuration:{schemaVersion:1 as const,scope:'session' as const,description:'Native settings',fields:[{id:'maxBudgetUsd',label:'Budget USD',kind:'number' as const},{id:'allowedTools',label:'Allow tools',kind:'string' as const}]}}}); await tick();
+ const number=document.querySelector<HTMLInputElement>('input[type=number]')!; number.value='0.5'; number.dispatchEvent(new Event('change',{bubbles:true})); await tick(); expect(changes.at(-1)).toEqual({maxBudgetUsd:.5});
+ number.value=''; number.dispatchEvent(new Event('change',{bubbles:true})); await tick(); expect(changes.at(-1)).toEqual({});
+ const text=document.querySelector<HTMLInputElement>('input[type=text]')!; text.value='Read'; text.dispatchEvent(new Event('change',{bubbles:true})); await tick(); expect(changes.at(-1)).toEqual({maxBudgetUsd:1,allowedTools:'Read'});
+});

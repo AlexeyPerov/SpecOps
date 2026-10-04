@@ -239,7 +239,7 @@ it.each(['divergent','corrupt'] as const)('Claude native %s cache uses productio
  chatStore.updateThreadMetadata({runtimeId:'claude',connectionProfileId:profile.id,selectedModelId:'native-model'});
  chatStore.appendMessage({id:'user-first',role:'user',content:'hello',createdAt:'t'},{sessionId});chatStore.beginTurn('first',sessionId);
  expect(await executeProviderTurn({root,activeSessionId:sessionId,turnId:'first'})).toMatchObject({ok:true});
- const binding=chatStore.getSessionLink(sessionId,root)!;expect(binding).toMatchObject({runtimeId:'claude',connectionProfileId:profile.id,modelId:'native-model',runtimeMetadata:{workspaceRootPath:realpathSync(root),settingSources:[],tools:[],permissionMode:'default'}});
+ const binding=chatStore.getSessionLink(sessionId,root)!;expect(binding).toMatchObject({runtimeId:'claude',connectionProfileId:profile.id,modelId:'native-model',runtimeMetadata:{workspaceRootPath:realpathSync(root),configScope:'isolated',toolSet:'native',permissionMode:'default',writeCapability:'possible'}});
  const saved=chatStore.getActiveThreadSnapshot(sessionId)!;const turn=saved.messages.find(m=>m.role==='assistant')!.nativeTurnId;
  if(cache==='divergent')saved.messages=saved.messages.map(m=>({...m,content:'stale cache'}));
  await persistSessionThreadSnapshot(root,sessionId,saved);await flushSessionIndexPersistence(root);

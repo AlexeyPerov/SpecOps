@@ -2,9 +2,9 @@
 
 **Updated:** 2026-10-04
 
-**Status:** A/B source bootstrap and developer lifecycle implemented; installed/live gates and C–D remain open.
+**Status:** A–C source native sessions/interactions/policies implemented; D and installed/live gates remain open.
 
-**Evidence:** [Phase A notes](implementation-notes-phase-a.md) · [Phase B notes](implementation-notes-phase-b.md)
+**Evidence:** [Phase A notes](implementation-notes-phase-a.md) · [Phase B notes](implementation-notes-phase-b.md) · [Phase C notes](implementation-notes-phase-c.md)
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 

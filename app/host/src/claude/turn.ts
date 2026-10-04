@@ -59,6 +59,7 @@ export class ClaudeTurn {
             : v;
     return redactForSerialization(redact(value), Infinity);
   }
+  isCurrent() { return this.valid(); }
   emit(payload: Payload) {
     if (this.ended) return;
     const event = {
@@ -420,6 +421,7 @@ export class ClaudeTurn {
         : { type, turnId: this.request.turnId },
     );
     this.ended = true;
+    this.abort.abort();
     this.wake?.();
     this.wake = undefined;
   }

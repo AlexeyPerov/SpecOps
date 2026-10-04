@@ -63,8 +63,8 @@ afterEach(() => {
   for (const p of roots.splice(0)) rmSync(p, { recursive: true, force: true });
 });
 describe("Claude host bootstrap", () => {
-  it("keeps stable identity and unimplemented native turns honest", async () => {
-    const a = adapter();
+  it("keeps stable identity and explicit disabled turns honest", async () => {
+    const a = adapter({enableNativeTurns: false});
     expect(await a.describe()).toEqual({ id: "claude", label: "Claude" });
     expect((await a.describeCapabilities()).details.nativeTurns.supported).toBe(
       false,

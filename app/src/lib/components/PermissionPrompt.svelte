@@ -15,6 +15,8 @@
   let label = $state("");
   let permissionId = $state("");
   let submitting = $state(false);
+  let allowAlways = $state(true);
+  let details = $state("");
   let backdropEl = $state<HTMLDivElement | null>(null);
 
   let resolvePrompt: ((result: PermissionPromptResult) => void) | null = null;
@@ -26,6 +28,9 @@
     return new Promise((resolve) => {
       label = request.label;
       permissionId = request.permissionId;
+      const payload = request.payload as { allowAlways?: boolean } | undefined;
+      allowAlways = payload?.allowAlways !== false;
+      details = payload ? JSON.stringify(payload, null, 2) : "";
       submitting = false;
       resolvePrompt = resolve;
       open = true;
@@ -89,6 +94,7 @@
     >
       <h2 id="permission-prompt-title" class="permission-prompt-title">Permission Request</h2>
       <p class="permission-prompt-label">{label}</p>
+      {#if details}<pre class="permission-prompt-details">{details}</pre>{/if}
       <div class="permission-prompt-actions">
         <button
           type="button"
@@ -106,14 +112,14 @@
         >
           Allow Once
         </button>
-        <button
+        {#if allowAlways}<button
           type="button"
           class="toolbar-button permission-always"
           disabled={submitting}
           onclick={() => submitReply("always")}
         >
           Allow for session
-        </button>
+        </button>{/if}
       </div>
     </div>
   </div>
@@ -153,6 +159,8 @@
     color: var(--color-text-primary);
     word-break: break-word;
   }
+
+  .permission-prompt-details { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
 
   .permission-prompt-actions {
     display: flex;

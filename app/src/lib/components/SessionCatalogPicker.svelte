@@ -124,6 +124,17 @@
             {#each options as option}<option value={option}>{option}</option>{/each}
           </select>
         </label>
+      {:else if field.kind === 'number' || field.kind === 'string'}
+        <label class="session-catalog-field" title={field.description}>
+          <span class="session-catalog-label">{field.label}</span>
+          <input class="session-catalog-select" type={field.kind === 'number' ? 'number' : 'text'} disabled={isCatalogDisabled} value={String(runtimeMetadata[field.id] ?? field.default ?? '')} onchange={e => {
+            const value = e.currentTarget.value;
+            const values = { ...runtimeMetadata };
+            if (!value.trim()) delete values[field.id];
+            else values[field.id] = field.kind === 'number' ? Number(value) : value;
+            onSettingsChange?.(values);
+          }} />
+        </label>
       {/if}
     {/each}
     <span class="session-catalog-label" title={catalog.configuration.description}>Session settings</span>

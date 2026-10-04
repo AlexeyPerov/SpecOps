@@ -19,7 +19,7 @@ export function workspaceActivity(state: ChatStoreState, root: string): SessionA
     const runtimeId = entry.runtimeId ?? metadata?.runtimeId ?? 'unknown';
     const settings = entry.runtimeMetadata ?? metadata?.runtimeMetadata;
     const sandbox = settings?.sandbox;
-    const writeCapability = runtimeId === 'codex' && sandbox === 'read-only' ? 'read-only' : runtimeId === 'codex' && (sandbox === 'workspace-write' || sandbox === 'danger-full-access') ? 'possible' : 'unknown';
+    const writeCapability = runtimeId === 'claude' && settings?.writeCapability === 'possible' ? 'possible' : runtimeId === 'codex' && sandbox === 'read-only' ? 'read-only' : runtimeId === 'codex' && (sandbox === 'workspace-write' || sandbox === 'danger-full-access') ? 'possible' : 'unknown';
     const changedPaths = [...new Set(workspace.threadsBySessionId[entry.id]?.messages.find(message => message.id === `assistant-${runtime.activeTurnId}`)?.parts?.flatMap(part => part.type === 'diff' ? part.files ?? [] : []) ?? [])].slice(0, 256);
     return [{ changedPaths, overlaps: [], sessionId: entry.id, title: entry.title, runtimeId, profileId: entry.connectionProfileId ?? metadata?.connectionProfileId, modelId: entry.modelId ?? metadata?.selectedModelId, action: runtime.isWaitingForPermission ? 'permission' : runtime.isWaitingForQuestion ? 'question' : 'running', writeCapability }];
   });

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 21:58 MSK — Add native third-runtime interactions and immutable policy controls
+
+- Implemented AS05-C source correlated native permission/question callbacks, once-only resolution, safe session-scoped rule approval, unsupported-dialog cancellation, deadline/Stop/reconnect interruption and stale profile/turn/generation rejection. Authenticated native source turns are enabled; installed/live acceptance remains open. The actual pinned SDK control dispatcher is covered by a child-process wire fixture, without credentials or inference.
+- Added validated native approval/tool/turn-limit/budget descriptors, a finite built-in tool subset and neutral string/number creation controls. Unknown/unsafe/conflicting settings fail before dispatch. Approval/planning never claims a read-only sandbox; writer visibility reports possible/unknown. Common prompts display operation/rule scope, single/multiple choices, descriptions and free text; native previews stay explainably unavailable.
+- Recorded isolated filesystem config and managed policy/memory qualifications plus a finite execution/display/editing ledger for optional ecosystem surfaces. Full host, focused frontend/persistence fixtures, type checks/builds and explicit bundled no-account native control create/history passed. Real provider permissions/policies, installed/platform cleanup/legal and release gates remain open; no persisted-data migration or compatibility shim.
+
 ## 2026-10-04 21:34 MSK — Add profile-bound third-runtime native session lifecycle
 
 - Implemented AS05-B developer source native session initialization/send/resume/history/cancel, immutable profile/workspace/model/settings and credential binding, stable native/client message identities and atomic cursors. Native readers remain profile-isolated; accepted missing history preserves metadata without new sessions or prompt replay. Control-only UUID reservations are distinguished from accepted native conversation history.

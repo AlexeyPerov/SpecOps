@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** A/B source bootstrap and developer lifecycle implemented; C–D planned, installed/live gates open.
+**Status:** A–C source bootstrap, native lifecycle/interactions/policy implemented; D and installed/live gates open.
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -22,7 +22,7 @@ Claude follows Codex preview and OpenCode core. It never blocks the first Codex 
 | --- | --- | --- |
 | AS05-A | [SDK, auth and profiles](execution-plan-phase-a-sdk-auth.md) | Source implemented; installed/live open |
 | AS05-B | [Native session/event lifecycle](execution-plan-phase-b-session-events.md) | Developer source implemented; live/installed open |
-| AS05-C | [Permissions/config/ecosystem](execution-plan-phase-c-capabilities.md) | Planned |
+| AS05-C | [Permissions/config/ecosystem](execution-plan-phase-c-capabilities.md) | Source implemented; live/installed enforcement open |
 | AS05-D | [Installed baseline acceptance](execution-plan-phase-d-hardening-exit.md) | Planned |
 
 ## Dependencies and delivery
@@ -38,4 +38,4 @@ Default order: 02-D + 04-C → 05-A → 05-B → 05-C → 05-D. An explicit Open
 
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
 
-Phase A evidence and supported auth/assets are recorded in [implementation notes](implementation-notes-phase-a.md). [Phase B evidence](implementation-notes-phase-b.md) records developer native lifecycle and authoritative history. Native turns default off and actionable settings remain unavailable until C interactions/policies are accepted.
+Phase A evidence and supported auth/assets are recorded in [implementation notes](implementation-notes-phase-a.md). [Phase B evidence](implementation-notes-phase-b.md) records developer native lifecycle and authoritative history.  [Phase C evidence and feature ledger](implementation-notes-phase-c.md) records native correlated interactions and immutable policy descriptors. Native source turns now default enabled for an authenticated profile; installed/live policy enforcement remains open. Native approval is not a read-only sandbox; filesystem settings remain isolated with a managed policy/memory qualification.

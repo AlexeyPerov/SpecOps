@@ -17,6 +17,10 @@
   let choices = $state<string[]>([]);
   let selectedChoices = $state<Set<string>>(new Set());
   let freeform = $state("");
+  let multiSelect = $state(true);
+  let allowFreeText = $state(false);
+  let optionDescriptions = $state<Record<string, string>>({});
+  let previewsUnavailable = $state(false);
   let validationError = $state("");
   let submitting = $state(false);
   let backdropEl = $state<HTMLDivElement | null>(null);
@@ -31,6 +35,11 @@
       questionPrompt = request.prompt;
       questionId = request.questionId;
       choices = request.choices ?? [];
+      const payload = request.payload as {multiSelect?: boolean; allowFreeText?: boolean; options?: {label: string; description?: string; preview?: string}[]} | undefined;
+      multiSelect = payload?.multiSelect !== false;
+      allowFreeText = payload?.allowFreeText === true;
+      optionDescriptions = Object.fromEntries((payload?.options ?? []).map(option => [option.label, typeof option.description === "string" ? option.description : ""]));
+      previewsUnavailable = (payload?.options ?? []).some(option => typeof option.preview === "string");
       selectedChoices = new Set();
       freeform = "";
       validationError = "";
@@ -50,6 +59,7 @@
 
   function toggleChoice(label: string): void {
     const next = new Set(selectedChoices);
+    if (!multiSelect) next.clear();
     if (next.has(label)) {
       next.delete(label);
     } else {
@@ -61,12 +71,12 @@
 
   function submitReply(): void {
     if (submitting) return;
-    if (choices.length > 0 && selectedChoices.size === 0) {
+    if (choices.length > 0 && selectedChoices.size === 0 && !freeform.trim()) {
       validationError = "Select at least one option.";
       return;
     }
     submitting = true;
-    const answers: string[][] = choices.length > 0 ? [Array.from(selectedChoices)] : [[freeform]];
+    const answers: string[][] = freeform.trim() ? [[freeform.trim()]] : choices.length > 0 ? [Array.from(selectedChoices)] : [[freeform]];
     finish({ type: "reply", answers });
   }
 
@@ -118,19 +128,21 @@
           {#each choices as choice}
             <label class="question-prompt-choice">
               <input
-                type="checkbox"
+                type={multiSelect ? "checkbox" : "radio"}
+                name="native-question-choice"
                 checked={selectedChoices.has(choice)}
                 onchange={() => toggleChoice(choice)}
               />
-              <span>{choice}</span>
+              <span>{choice}{#if optionDescriptions[choice]} — {optionDescriptions[choice]}{/if}</span>
             </label>
           {/each}
         </div>
       {/if}
+      {#if previewsUnavailable}<p>Native option previews are unavailable; choose using the text descriptions.</p>{/if}
       {#if validationError}
         <p class="question-prompt-error">{validationError}</p>
       {/if}
-      {#if choices.length === 0}<label>Answer<textarea aria-label="Answer" bind:value={freeform}></textarea></label>{/if}
+      {#if choices.length === 0 || allowFreeText}<label>{choices.length ? "Other answer" : "Answer"}<textarea aria-label="Answer" bind:value={freeform}></textarea></label>{/if}
       <div class="question-prompt-actions">
         <button
           type="button"

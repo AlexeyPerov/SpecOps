@@ -11,6 +11,7 @@ import type { ClaudeSessionDriver } from "./session";
 export class ClaudeFixtureDriver implements ClaudeSessionDriver {
   readonly calls: Options[] = [];
   closed = 0;
+  readonly interactions: unknown[] = [];
   constructor(readonly path: string) {}
   private db(): Record<string, SessionMessage[]> {
     return existsSync(this.path)
@@ -67,6 +68,9 @@ export class ClaudeFixtureDriver implements ClaudeSessionDriver {
           tools: [],
           model: input.options.model,
         };
+        if (prompt === "approve" || prompt === "questions") {
+          self.interactions.push(await input.options.canUseTool!(prompt === "approve" ? "Write" : "AskUserQuestion", prompt === "approve" ? {file_path: "fixture", content: "text"} : {questions: [{question: "Which?", options: [{label: "A"}, {label: "B"}], multiSelect: true}]}, {signal: input.options.abortController!.signal, toolUseID: `tool-${user.uuid}`, requestId: `request-${user.uuid}`}));
+        }
         if (prompt === "cancel" || prompt === "hang") {
           await new Promise<void>((resolve) => {
             if (input.options.abortController!.signal.aborted) return resolve();

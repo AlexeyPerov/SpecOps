@@ -11,6 +11,8 @@ import {
   type ClaudeSessionDriver,
 } from "./session";
 import { ClaudeTurn } from "./turn";
+import { ClaudeInteractions } from "./interactions";
+import { claudePolicy, claudeQueryPolicy, claudeConfiguration } from "./policy";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -26,6 +28,9 @@ import type {
 import type {
   CatalogExtension,
   SessionConfigurationExtension,
+  PermissionExtension,
+  QuestionExtension,
+  LifecycleExtension,
 } from "../../../src/lib/session/adapter/extensions";
 import type { SessionEvent } from "../../../src/lib/session/events";
 import type {
@@ -71,10 +76,11 @@ export async function verifyClaudeKey(
 }
 export interface ClaudeAdapterOptions {
   profileRoot?: string;
-  /** Phase B developer gate; release turns require interaction acceptance in C. */
+  /** Explicit embedding/test disable switch. Installed/live acceptance is tracked separately. */
   enableNativeTurns?: boolean;
   sessionDriver?: (assets: ClaudeAssets) => ClaudeSessionDriver;
   turnTimeoutMs?: number;
+  interactionTimeoutMs?: number;
   ambient?: NodeJS.ProcessEnv;
   assets?: () => ClaudeAssets;
   probe?: (
@@ -88,7 +94,10 @@ export class ClaudeRuntimeAdapter
   implements
     AgentRuntimeAdapter,
     CatalogExtension,
-    SessionConfigurationExtension
+    SessionConfigurationExtension,
+    PermissionExtension,
+    QuestionExtension,
+    LifecycleExtension
 {
   readonly runtimeId = "claude" as const;
   readonly store: ClaudeProfileStore;
@@ -100,6 +109,7 @@ export class ClaudeRuntimeAdapter
   private readonly pending = new Map<string, AbortController>();
   private bindings: ClaudeBindings;
   private turns = new Map<string, ClaudeTurn>();
+  private interactions = new Map<string, ClaudeInteractions>();
   private reserved = new Map<
     string,
     { abort: AbortController; turnId: string }
@@ -130,23 +140,32 @@ export class ClaudeRuntimeAdapter
   async describeCapabilities() {
     return {
       schemaVersion: 1 as const,
-      supported: ["catalogs" as const],
+      supported: ["catalogs" as const, "permissions" as const, "questions" as const],
       details: {
+        permissions: {supported: true, notes: "Native request-scoped allow/deny; session rules only when safe suggestions exist."},
+        questions: {supported: true, notes: "Native AskUserQuestion; unsupported user dialog kinds are cancelled."},
         catalogs: {
           supported: true,
           notes:
             "Native discoverable models; access is determined by the selected API key.",
         },
         nativeTurns: {
-          supported: false,
-          notes:
-            "Native session lifecycle is developer gated until interaction acceptance.",
+          supported: this.options.enableNativeTurns !== false,
+          notes: "Native SDK sessions with correlated approvals and questions; installed/live acceptance remains open.",
         },
         subscriptionLogin: {
           supported: false,
           notes:
             "Third-party subscription login is unsupported. Use a dedicated API key.",
         },
+        userDialogs: {supported: false, notes: "No supported dialog kinds are declared; unknown native dialogs are cancelled."},
+        mcp: {supported: false, notes: "No selected servers or management surface; native MCP configuration is strict and empty."},
+        skills: {supported: false, notes: "Empty native skill filter; no skill catalog or editor."},
+        hooks: {supported: false, notes: "No configurable SDK hooks; user/project/local settings are excluded, managed policy may still apply."},
+        subagents: {supported: false, notes: "Native built-in Agent tool remains native; dedicated subagent catalog/settings/display are unavailable."},
+        commands: {supported: false, notes: "No native command catalog or execution action is exposed."},
+        nativeConfiguration: {supported: true, notes: "Validated immutable session policy; filesystem setting sources excluded, native managed policy may still apply."},
+        lifecycle: {supported: true, notes: "Scoped interrupt retires native query; profile reconnect increments generation and interrupts pending callbacks. Resume never replays them."},
         cloudCredentials: {
           supported: false,
           notes: "Cloud credential import is not implemented.",
@@ -205,7 +224,7 @@ export class ClaudeRuntimeAdapter
       !candidate &&
       this.snapshot(p).state === "authenticated" &&
       [...this.turns.values()].some(
-        (t) => t.request.native.connectionProfileId === id,
+        (t) => !t.ended && t.request.native.connectionProfileId === id,
       )
     )
       return this.safe(this.snapshot(p));
@@ -347,13 +366,7 @@ export class ClaudeRuntimeAdapter
     return [];
   }
   async describeSessionConfiguration() {
-    return {
-      schemaVersion: 1 as const,
-      scope: "session" as const,
-      description:
-        "Native settings and tool/budget policies require interaction acceptance. Developer sessions disable project/user settings and tools.",
-      fields: [],
-    };
+    return claudeConfiguration;
   }
   async health(connectionProfileId?: string) {
     if (!connectionProfileId) {
@@ -395,7 +408,7 @@ export class ClaudeRuntimeAdapter
     };
   }
   private gate() {
-    if (!this.options.enableNativeTurns)
+    if (this.options.enableNativeTurns === false)
       throw adapterErrors.capabilityNotSupported("nativeTurns");
   }
   private driver() {
@@ -430,6 +443,7 @@ export class ClaudeRuntimeAdapter
         JSON.stringify(b.native.runtimeMetadata)
     )
       throw new Error("Immutable native settings or workspace mismatch");
+    claudePolicy(b.native.runtimeMetadata);
     const key = this.store.readKey(native.connectionProfileId);
     if (
       !key ||
@@ -444,6 +458,7 @@ export class ClaudeRuntimeAdapter
     binding: ClaudeBinding,
     abort: AbortController,
     owner: ClaudeProcessOwner,
+    interactions?: ClaudeInteractions,
   ) {
     const id = binding.native.connectionProfileId!;
     const key = this.store.readKey(id);
@@ -454,13 +469,10 @@ export class ClaudeRuntimeAdapter
       pathToClaudeCodeExecutable: (this.options.assets ?? resolveClaudeAssets)()
         .executable,
       model: binding.native.modelId,
-      settingSources: [] as [],
-      tools: [] as [],
-      permissionMode: "default" as const,
-      canUseTool: async () => ({
-        behavior: "deny" as const,
-        message: "Native interactions are unavailable until policy acceptance.",
-      }),
+      ...claudeQueryPolicy(binding.native.runtimeMetadata!),
+      canUseTool: interactions?.canUseTool ?? (async () => ({ behavior: "deny" as const, message: "No active native interaction context." })),
+      onUserDialog: interactions?.onUserDialog ?? (async () => ({ behavior: "cancelled" as const })),
+      supportedDialogKinds: [],
       persistSession: true,
       includePartialMessages: true,
       abortController: abort,
@@ -504,10 +516,10 @@ export class ClaudeRuntimeAdapter
     this.gate();
     if (
       request.runtimeId !== "claude" ||
-      request.modeId ||
-      (request.runtimeMetadata && Object.keys(request.runtimeMetadata).length)
+      request.modeId
     )
       throw new Error("Unsupported native session settings");
+    const policy = claudePolicy(request.runtimeMetadata);
     const p = await this.authenticated(request.connectionProfileId);
     const directory = realpathSync(request.workspaceRootPath);
     if (
@@ -522,9 +534,7 @@ export class ClaudeRuntimeAdapter
       modelId: request.modelId,
       runtimeMetadata: {
         workspaceRootPath: directory,
-        settingSources: [],
-        tools: [],
-        permissionMode: "default",
+        ...policy,
       },
     };
     const binding: ClaudeBinding = {
@@ -836,13 +846,15 @@ export class ClaudeRuntimeAdapter
         this.options.turnTimeoutMs ?? 300000,
       );
       this.turns.set(routing, turn);
+      const interactions = new ClaudeInteractions(turn, this.options.interactionTimeoutMs ?? 120000);
+      this.interactions.set(routing, interactions);
       const current = turn;
       const driver = this.driver();
       dispatch = (async () => {
         try {
           // Persist acceptance intent before dispatch. A crash cannot silently issue a
           // second first prompt; resume requires native authoritative history.
-          const options = this.queryOptions(b, current.abort, current.owner);
+          const options = this.queryOptions(b, current.abort, current.owner, interactions);
           b.started = true;
           this.bindings.save(b);
           async function* prompt() {
@@ -881,6 +893,7 @@ export class ClaudeRuntimeAdapter
         await turn.settle();
       }
       if (dispatch) await dispatch;
+      this.interactions.delete(routing);
       this.turns.delete(routing);
       this.reserved.delete(routing);
     }
@@ -895,6 +908,27 @@ export class ClaudeRuntimeAdapter
     const turn = this.turns.get(this.routing(request.native));
     if (turn && (!request.turnId || turn.request.turnId === request.turnId))
       await turn.stop();
+  }
+  private interaction(native: NativeSessionRef, turnId: string) {
+    const routing = this.routing(native);
+    const turn = this.turns.get(routing);
+    if (!turn || turn.request.turnId !== turnId || JSON.stringify(native) !== JSON.stringify(turn.request.native))
+      throw new Error("Native interaction routing mismatch");
+    const interactions = this.interactions.get(routing);
+    if (!interactions) throw new Error("Native interaction expired");
+    return interactions;
+  }
+  async replyPermission(input: Parameters<PermissionExtension["replyPermission"]>[0]) {
+    this.interaction(input.native, input.turnId).reply(input.permissionId, "permission", input.reply);
+  }
+  async replyQuestion(input: Parameters<QuestionExtension["replyQuestion"]>[0]) {
+    this.interaction(input.native, input.turnId).reply(input.questionId, "question", input.answer);
+  }
+  async rejectQuestion(input: Parameters<QuestionExtension["rejectQuestion"]>[0]) {
+    this.interaction(input.native, input.turnId).reply(input.questionId, "question");
+  }
+  async interrupt(input: { native: NativeSessionRef }) {
+    await this.cancel({native: input.native});
   }
   close() {
     for (const reservation of this.reserved.values()) reservation.abort.abort();

@@ -18,3 +18,9 @@ it('Continue keeps the other writer running and suppression only affects the war
  expect(await confirmConcurrentWorkspaceWork('/workspace', 'next')).toBe(true); expect(chatStore.getRuntimeState(a).isGenerating).toBe(true); expect(warnings).toBe(1);
  appState.applyPersistedSettings({ warnConcurrentWriters: false }); expect(await confirmConcurrentWorkspaceWork('/workspace', 'next')).toBe(true); expect(warnings).toBe(1); expect(chatStore.getActiveWorkspaceRoot()).toBe('/workspace');
 });
+
+it('native approval planning never claims a read-only filesystem guarantee', () => {
+ chatStore.setActiveWorkspaceRoot('/workspace'); const id=chatStore.createDraftSession()!; chatStore.updateThreadMetadata({runtimeId:'claude',runtimeMetadata:{permissionMode:'plan',writeCapability:'possible'}}); chatStore.beginTurn('native',id);
+ expect(workspaceActivity(chatStore.getSnapshot(),'/workspace')[0].writeCapability).toBe('possible');
+ chatStore.updateThreadMetadata({runtimeId:'claude',runtimeMetadata:{permissionMode:'plan',writeCapability:'read-only'}}); expect(workspaceActivity(chatStore.getSnapshot(),'/workspace')[0].writeCapability).toBe('unknown');
+});

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -117,4 +117,40 @@ test('build blocks publication when local master is behind the remote', t => {
   f.git('reset', '--hard', previous);
   assert.notEqual(f.run('build').status, 0);
   assert.equal(f.git('tag', '--list'), '');
+});
+
+test('local macOS build opens only reported DMGs after success and preserves Tauri arguments', { skip: process.platform !== 'darwin' }, t => {
+  const f = fixture(t);
+  const bin = join(f.base, 'bin');
+  mkdirSync(bin);
+  const installer = join(f.base, 'Installer with spaces.dmg');
+  const calls = join(f.base, 'mounted.json');
+  const forwarded = join(f.base, 'args.json');
+  writeFileSync(installer, 'fixture');
+  const executable = (name, body) => {
+    const path = join(bin, name);
+    writeFileSync(path, `#!${process.execPath}\n${body}\n`);
+    chmodSync(path, 0o755);
+  };
+  executable('hdiutil', `require('node:fs').writeFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)));`);
+  const run = (...args) => spawnSync(process.execPath, [join(f.root, 'scripts/release.mjs'), 'build', '--local', ...args], {
+    cwd: f.base, encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+  });
+  executable('npm', `require('node:fs').writeFileSync(${JSON.stringify(forwarded)}, JSON.stringify(process.argv.slice(2)));
+    process.stderr.write(${JSON.stringify(`    \x1b[32m${installer}\x1b[0m\n`)});`);
+  ok(run('--target', 'aarch64-apple-darwin', '--bundles', 'dmg'));
+  assert.deepEqual(JSON.parse(readFileSync(calls, 'utf8')), ['attach', '-autoopen', installer]);
+  assert.deepEqual(JSON.parse(readFileSync(forwarded, 'utf8')), ['run', 'tauri', '--', 'build', '--target', 'aarch64-apple-darwin', '--bundles', 'dmg']);
+  rmSync(calls);
+  executable('npm', `console.log('Finished app bundle');`);
+  ok(run('--bundles', 'app'));
+  assert.equal(existsSync(calls), false);
+  executable('npm', `console.log(${JSON.stringify(installer)}); process.exitCode = 1;`);
+  assert.notEqual(run().status, 0);
+  assert.equal(existsSync(calls), false);
+  executable('npm', `console.log(${JSON.stringify(installer)});`);
+  executable('hdiutil', 'process.exitCode = 1;');
+  const result = run();
+  ok(result);
+  assert.match(result.stderr, /Build succeeded, but the installer could not be opened/);
 });

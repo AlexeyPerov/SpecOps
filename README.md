@@ -181,6 +181,9 @@ files stay staged so you can resolve the failure and commit them.
 `build --local` uses the current checkout without committing, pushing or
 creating a tag. The script resolves repository paths itself, so it also works
 when invoked by its path from another directory.
+On macOS, a successful local DMG build opens the finished installer in Finder.
+It stays mounted until you eject it; the temporary window shown during packaging
+still closes when the builder finishes configuring the disk image.
 
 ## Docs
 

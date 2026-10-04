@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-04 12:48 MSK — Keep the local installer available
+
+- On macOS, `build --local` now mounts and opens the finished DMG after a
+  successful build. Its Finder window remains available until manually closed
+  or ejected, after the temporary packaging window disappears.
+- Uses only installer paths reported by the current build, including custom
+  targets and paths with spaces; app-only and failed builds do not open old DMGs.
+  A mount failure reports the installer path without failing the completed build.
+- Validation: release helper tests cover installer opening, argument forwarding,
+  app-only builds, build failures and mount failures (7 tests passed). A real
+  local build succeeded and mounted the finished installer at `/Volumes/SpecOps`.
+
 ## 2026-10-04 12:47 MSK — Fix collection annotations in component builds
 
 - Reused fresh empty-set helpers in editor pane and project search effects,

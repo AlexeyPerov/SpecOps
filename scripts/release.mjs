@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -105,10 +105,15 @@ function bump(requested) {
   console.log(`Version ${next} committed. Run node scripts/release.mjs build to publish installers.`);
 }
 
-function build(args) {
+async function build(args) {
   if (args[0] === '--local') {
     versionState();
-    execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'tauri', '--', 'build', ...args.slice(1)], {
+    const buildArgs = ['run', 'tauri', '--', 'build', ...args.slice(1)];
+    if (process.platform === 'darwin') {
+      await buildLocalMac(buildArgs);
+      return;
+    }
+    execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', buildArgs, {
       cwd: resolve(root, 'app'), stdio: 'inherit', shell: process.platform === 'win32',
     });
     return;
@@ -138,11 +143,50 @@ function build(args) {
   console.log(`Release build started for ${tag}.\nhttps://github.com/AlexeyPerov/spec-ops/actions/workflows/release.yml`);
 }
 
+async function buildLocalMac(args) {
+  // Read artifact paths from this build's output so custom targets and output
+  // directories work, and an app-only build never opens an older installer.
+  const installers = new Set();
+  await new Promise((resolveBuild, rejectBuild) => {
+    const child = spawn('npm', args, {
+      cwd: resolve(root, 'app'), stdio: ['inherit', 'pipe', 'pipe'],
+    });
+    for (const [stream, destination] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
+      let pending = '';
+      const readLine = line => {
+        const path = line.replace(/\x1b\[[0-9;]*m/g, '').trim();
+        if (path.startsWith('/') && path.endsWith('.dmg')) installers.add(path);
+      };
+      stream.setEncoding('utf8');
+      stream.on('data', chunk => {
+        destination.write(chunk);
+        const lines = (pending + chunk).split('\n');
+        pending = lines.pop();
+        lines.forEach(readLine);
+      });
+      stream.on('end', () => readLine(pending));
+    }
+    child.on('error', rejectBuild);
+    child.on('close', (code, signal) => {
+      if (code === 0) resolveBuild();
+      else rejectBuild(new Error(`Local build failed (${signal ?? code}).`));
+    });
+  });
+  for (const installer of installers) {
+    if (!existsSync(installer)) continue;
+    try {
+      execFileSync('hdiutil', ['attach', '-autoopen', installer], { stdio: 'inherit' });
+    } catch {
+      console.warn(`Build succeeded, but the installer could not be opened. Open it manually: ${installer}`);
+    }
+  }
+}
+
 try {
   const [command = 'help', ...args] = process.argv.slice(2);
   if (['help', '--help', '-h'].includes(command)) console.log(help);
   else if (command === 'bump' && args.length <= 1) bump(args[0] ?? 'patch');
-  else if (command === 'build') build(args);
+  else if (command === 'build') await build(args);
   else throw new Error(help);
 } catch (error) {
   console.error(error.stderr?.toString().trim() || error.message);

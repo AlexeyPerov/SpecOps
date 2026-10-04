@@ -13,7 +13,7 @@ export interface ProfileUsageSnapshot {
 /** Nonsecret control-plane snapshot. Auth material remains in the host-owned profile home. */
 export interface ConnectionProfileSnapshot {
   id: string;
-  runtimeId: 'codex' | 'opencode';
+  runtimeId: 'codex' | 'opencode' | 'claude';
   label: string;
   createdAt: string;
   experimental?: boolean;
@@ -28,7 +28,7 @@ export interface ConnectionProfileSnapshot {
   support: { browser: boolean; device: boolean; apiKey: boolean };
 }
 export interface ProfileAuthUpdate {
-  runtimeId: 'codex' | 'opencode';
+  runtimeId: 'codex' | 'opencode' | 'claude';
   connectionProfileId: string;
   hostGeneration?: number;
   generation: number;

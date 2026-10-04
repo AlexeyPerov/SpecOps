@@ -2,7 +2,9 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Planned
+**Status:** A source bootstrap implemented; installed/live gates and B–D remain open.
+
+**Evidence:** [Phase A notes](implementation-notes-phase-a.md)
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 

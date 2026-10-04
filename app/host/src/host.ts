@@ -7,6 +7,7 @@
  * registered; phase 02–05 add real runtimes here.
  */
 
+import { ClaudeRuntimeAdapter } from "./claude/adapter";
 import { OpenCodeRuntimeAdapter } from "./opencode/adapter";
 import { CodexRuntimeAdapter } from "./codex/adapter";
 import { AdapterRegistry } from "./registry";
@@ -52,6 +53,7 @@ export function createDefaultRegistry(extra: readonly AgentRuntimeAdapter[] = []
   );
   registry.register(new CodexRuntimeAdapter());
   registry.register(new OpenCodeRuntimeAdapter());
+  registry.register(new ClaudeRuntimeAdapter());
   for (const adapter of extra) {
     registry.register(adapter);
   }

@@ -2,6 +2,7 @@
 // Version metadata is injected at build time (HOST_VERSION from package.json,
 // git sha, build timestamp) so the packaged artifact reports deterministic
 // identity without the WebView importing any host code.
+import { packageClaudeAssets } from "./claude-assets.mjs";
 import { build } from "esbuild";
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -43,5 +44,7 @@ await build({
   },
   logLevel: "info",
 });
+
+packageClaudeAssets(path.join(hostDir, "dist"));
 
 console.log(`agent-host ${pkg.version} (git ${gitSha}) built at ${buildTime}`);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-04 21:09 MSK — Bootstrap third native runtime SDK and isolated API key profiles
+
+- Implemented AS05-A host-only official native SDK 0.3.289 / executable 2.1.289 bootstrap, same-host packaged module/native/license assets and manifest identity checks. Added isolated private profile credential import, non-inference API authentication verification, logout/reconnect and stale-generation guards, dynamic native model catalogs and common profile selection. Unsupported subscription/cloud login, turns and native session settings remain explainably unavailable.
+- Official auth/embedding contracts and distribution strategy are recorded in phase notes. Deterministic credential/security/bootstrap tests, host/frontend type checks and builds passed; an explicit credential-free Darwin arm64 package probe imported the full copied SDK outside the checkout and initialized the native model catalog with no developer installation. Installed, live-account/inference and signed release/platform cleanup gates remain open; no migrations or compatibility shims.
+
 ## 2026-10-04 20:52 MSK — Cut over common Sessions to native host runtimes
 
 - Implemented AS04-C source cutover: removed WebView SDK/direct backend, Rust competing supervisor, temporary ownership gate, obsolete native UI/stores/codecs/tests and transport settings. Common runtime/profile/model/mode selection, isolated local/external profiles and host-only private-file provider import preserve missing-profile/history bindings without migrations. Rich controls remain unavailable with a finite later-extension ledger.

@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Planned
+**Status:** Phase A source bootstrap implemented; B–D planned, installed/live gates open.
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -20,7 +20,7 @@ Claude follows Codex preview and OpenCode core. It never blocks the first Codex 
 
 | Phase | Plan | State |
 | --- | --- | --- |
-| AS05-A | [SDK, auth and profiles](execution-plan-phase-a-sdk-auth.md) | Planned |
+| AS05-A | [SDK, auth and profiles](execution-plan-phase-a-sdk-auth.md) | Source implemented; installed/live open |
 | AS05-B | [Native session/event lifecycle](execution-plan-phase-b-session-events.md) | Planned |
 | AS05-C | [Permissions/config/ecosystem](execution-plan-phase-c-capabilities.md) | Planned |
 | AS05-D | [Installed baseline acceptance](execution-plan-phase-d-hardening-exit.md) | Planned |
@@ -37,3 +37,5 @@ Default order: 02-D + 04-C → 05-A → 05-B → 05-C → 05-D. An explicit Open
 - [ ] Setup/support limitations, accepted evidence and changelog updated when implementation lands.
 
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
+
+Phase A evidence and supported auth/assets are recorded in [implementation notes](implementation-notes-phase-a.md). Native turns and settings remain unavailable pending B/C.

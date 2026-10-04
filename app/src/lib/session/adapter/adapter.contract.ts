@@ -153,7 +153,7 @@ export function runAdapterContractSuite(factory: ContractAdapterFactory): void {
     });
 
     it("resumeSession() returns the (possibly refreshed) native ref", async () => {
-      const { adapter, ref } = await setup();
+      const { ref } = await setup();
       const replacement = await factory.create();
       const resumed = await withTimeout(replacement.resumeSession({ native: JSON.parse(JSON.stringify(ref)), workspaceRootPath: root }));
       expect(resumed.nativeSessionId).toBe(ref.nativeSessionId);

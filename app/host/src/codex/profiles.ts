@@ -3,7 +3,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync,
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-export interface ConnectionProfile { id: string; label: string; runtimeId: 'codex'; createdAt: string }
+export interface ConnectionProfile { id: string; label: string; runtimeId: 'codex'; createdAt: string; experimental?: boolean }
 export function validProfileId(value: unknown): value is string {
   return typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(value);
 }
@@ -31,8 +31,8 @@ export class ProfileStore {
       if (!existsSync(path)) return [];
       if (lstatSync(path).isSymbolicLink()) throw new Error('Unsafe profile metadata');
       const raw = JSON.parse(readFileSync(path, 'utf8')) as ConnectionProfile;
-      if (raw.id !== id || raw.runtimeId !== 'codex' || typeof raw.label !== 'string' || typeof raw.createdAt !== 'string') throw new Error('Invalid profile metadata');
-      return [{ id, label: raw.label, runtimeId: 'codex' as const, createdAt: raw.createdAt }];
+      if (raw.id !== id || raw.runtimeId !== 'codex' || typeof raw.label !== 'string' || typeof raw.createdAt !== 'string' || (raw.experimental !== undefined && typeof raw.experimental !== 'boolean')) throw new Error('Invalid profile metadata');
+      return [{ id, label: raw.label, runtimeId: 'codex' as const, createdAt: raw.createdAt, ...(raw.experimental === true ? { experimental: true } : {}) }];
     });
   }
   create(label: string): ConnectionProfile {
@@ -41,6 +41,11 @@ export class ProfileStore {
     writeFileSync(join(home, 'config.toml'), 'cli_auth_credentials_store = "file"\nmodel_provider = "openai"\n', { mode: 0o600, flag: 'wx' });
     writeFileSync(join(this.root, profile.id, 'profile.json'), JSON.stringify(profile, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
     return profile;
+  }
+  setExperimental(id: string, enabled: boolean): ConnectionProfile {
+    const profile = this.require(id); const next = { ...profile, experimental: enabled };
+    writeFileSync(join(this.root, id, 'profile.json'), JSON.stringify(next, null, 2) + '\n', { mode: 0o600 });
+    return next;
   }
   require(id: unknown): ConnectionProfile {
     const profile = this.list().find(p => p.id === id);

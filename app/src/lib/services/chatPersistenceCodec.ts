@@ -103,6 +103,7 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
     selectedModeId: value.selectedModeId,
     runtimeId: value.runtimeId,
     connectionProfileId: value.connectionProfileId,
+    runtimeMetadata: isRecord(value.runtimeMetadata) ? value.runtimeMetadata : undefined,
   };
 }
 
@@ -324,6 +325,8 @@ function parseMessage(value: unknown): ChatMessage | null {
   }
   return {
     id: value.id,
+    nativeTurnId: parseOptionalString(value.nativeTurnId),
+    nativeItemId: parseOptionalString(value.nativeItemId),
     role: value.role,
     content: value.content,
     createdAt: value.createdAt,

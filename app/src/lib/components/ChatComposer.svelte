@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { chatStore } from "../state/chatStore";
+  import { chatStore, chatMetadata } from "../state/chatStore";
   import { createComposerSendActions, persistActiveThreadSnapshot } from "../ai/composerSendActions";
   import SessionCatalogPicker from "./SessionCatalogPicker.svelte";
   import AttachmentTray from "./AttachmentTray.svelte";
@@ -149,10 +149,18 @@
     if (nextModelId === activeModelId || isModelSelectionDisabled) {
       return;
     }
-    const updated = chatStore.updateThreadMetadata({ selectedModelId: nextModelId });
+    const model = catalog.models.find(m => m.id === nextModelId);
+    const current = chatStore.getMetadata()?.runtimeMetadata ?? {};
+    const effort = model?.reasoningEfforts?.includes(String(current.effort)) ? current.effort : model?.defaultReasoningEffort ?? model?.reasoningEfforts?.[0];
+    const updated = chatStore.updateThreadMetadata({ selectedModelId: nextModelId, ...(effort ? { runtimeMetadata: { ...current, effort } } : {}) });
     if (updated) {
       persistActiveThreadSnapshot();
     }
+  }
+
+  function selectSettings(values: Readonly<Record<string, unknown>>): void {
+    if (isModelSelectionDisabled) return;
+    if (chatStore.updateThreadMetadata({ runtimeMetadata: values })) persistActiveThreadSnapshot();
   }
 
   function selectMode(nextModeId: string): void {
@@ -483,6 +491,8 @@
         {catalog}
         activeModelId={activeModelId}
         activeModeId={activeModeId}
+        runtimeMetadata={$chatMetadata?.runtimeMetadata}
+        onSettingsChange={selectSettings}
         disabled={isModelSelectionDisabled}
         onSelectModel={selectModel}
         onSelectMode={selectMode}

@@ -29,6 +29,8 @@ import {
 export interface AgentModelDescriptor {
   readonly id: string;
   readonly name?: string;
+  readonly reasoningEfforts?: readonly string[];
+  readonly defaultReasoningEffort?: string;
 }
 
 export interface AgentModeDescriptor {

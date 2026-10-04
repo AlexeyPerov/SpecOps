@@ -19,6 +19,8 @@
     catalog: SessionCatalogSnapshot;
     activeModelId: string;
     activeModeId: string;
+    runtimeMetadata?: Readonly<Record<string, unknown>>;
+    onSettingsChange?: (values: Readonly<Record<string, unknown>>) => void;
     disabled?: boolean;
     onSelectModel?: (modelId: string) => void;
     onSelectMode?: (modeId: string) => void;
@@ -30,6 +32,8 @@
     catalog,
     activeModelId,
     activeModeId,
+    runtimeMetadata = {},
+    onSettingsChange,
     disabled = false,
     onSelectModel,
     onSelectMode,
@@ -52,6 +56,7 @@
   );
   const models = $derived(catalog.models as readonly AgentModelDescriptor[]);
   const modes = $derived(catalog.modes as readonly AgentModeDescriptor[]);
+  const efforts = $derived(models.find(m => m.id === activeModelId)?.reasoningEfforts ?? models[0]?.reasoningEfforts ?? []);
   const hasModes = $derived(modes.length > 1);
 
   function modelLabel(model: AgentModelDescriptor): string {
@@ -109,6 +114,24 @@
         {/each}
       </select>
     </label>
+  {/if}
+  {#if runtimeId === 'codex'}
+    <label class="session-catalog-field"><span class="session-catalog-label">Effort</span>
+      <select class="session-catalog-select" disabled={isCatalogDisabled || !efforts.length} value={String(runtimeMetadata.effort ?? 'medium')} onchange={e => onSettingsChange?.({ ...runtimeMetadata, effort: e.currentTarget.value })}>
+        {#each efforts as effort}<option value={effort}>{effort}</option>{/each}
+      </select>
+    </label>
+    <label class="session-catalog-field"><span class="session-catalog-label">Sandbox</span>
+      <select class="session-catalog-select" disabled={disabled} value={String(runtimeMetadata.sandbox ?? 'workspace-write')} onchange={e => onSettingsChange?.({ ...runtimeMetadata, sandbox: e.currentTarget.value })}>
+        <option value="read-only">Read only</option><option value="workspace-write">Workspace write</option><option value="danger-full-access">Full access</option>
+      </select>
+    </label>
+    <label class="session-catalog-field"><span class="session-catalog-label">Approval</span>
+      <select class="session-catalog-select" disabled={disabled} value={String(runtimeMetadata.approvalPolicy ?? 'on-request')} onchange={e => onSettingsChange?.({ ...runtimeMetadata, approvalPolicy: e.currentTarget.value })}>
+        <option value="on-request">On request</option><option value="untrusted">Untrusted</option><option value="on-failure">On failure</option><option value="never">Never</option>
+      </select>
+    </label>
+    {#if !hasModes}<span class="session-catalog-label" title="Plan mode and questions require an explicit host experimental opt-in, unavailable by default.">Default mode</span>{/if}
   {/if}
 </div>
 

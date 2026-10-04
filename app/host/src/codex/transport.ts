@@ -33,8 +33,9 @@ export class CodexTransport {
   generation = 0;
   unknownNotifications = 0;
   onNotification: (method: string, params: unknown, generation: number) => void = () => {};
+  onRequest: (id: string | number, method: string, params: unknown, generation: number) => void = () => {};
   onExit: (generation: number) => void = () => {};
-  constructor(readonly executable: string, readonly home: string, private readonly ambient = process.env) {}
+  constructor(readonly executable: string, readonly home: string, private readonly ambient = process.env, private readonly experimental = false) {}
   get running(): boolean { return this.child !== null; }
   async start(): Promise<void> {
     if (this.startPromise) return this.startPromise;
@@ -71,7 +72,7 @@ export class CodexTransport {
       this.pending.clear(); this.onExit(generation);
     };
     child.on('error', retire); child.on('exit', retire);
-    const initialize = { clientInfo: { name: 'specops', title: 'SpecOps', version: '0.3.0' }, capabilities: { experimentalApi: false, requestAttestation: false, optOutNotificationMethods: null } } satisfies InitializeParams;
+    const initialize = { clientInfo: { name: 'specops', title: 'SpecOps', version: '0.3.0' }, capabilities: { experimentalApi: this.experimental, requestAttestation: false, optOutNotificationMethods: null } } satisfies InitializeParams;
     const result = await this.request('initialize', initialize);
     if (token !== this.lifecycle || this.child !== child) throw new Error('Codex initialization was cancelled');
     if (!object(result) || typeof result.userAgent !== 'string') throw new Error('Incompatible Codex initialization payload');
@@ -80,7 +81,9 @@ export class CodexTransport {
   private receive(raw: unknown, generation: number): void {
     if (generation !== this.generation || !this.child) return;
     if (!object(raw)) throw new Error('Malformed native frame');
-    if (typeof raw.id === 'number') {
+    if (typeof raw.method === 'string' && (typeof raw.id === 'string' || typeof raw.id === 'number')) {
+      this.onRequest(raw.id, raw.method, raw.params, generation);
+    } else if (typeof raw.id === 'number') {
       const pending = this.pending.get(raw.id);
       if (!pending) return;
       this.pending.delete(raw.id); clearTimeout(pending.timer);
@@ -91,6 +94,13 @@ export class CodexTransport {
       if ('id' in raw) throw new Error('Unsupported native server request');
       this.onNotification(raw.method, raw.params, generation);
     } else throw new Error('Malformed native frame');
+  }
+  respond(id: string | number, result: unknown, generation: number): void {
+    if (!this.child || generation !== this.generation) throw new Error('Native interaction generation expired');
+    this.child.stdin.write(JSON.stringify({ id, result }) + '\n');
+  }
+  reject(id: string | number, generation: number): void {
+    if (this.child && generation === this.generation) this.child.stdin.write(JSON.stringify({ id, error: { code: -32601, message: 'Unsupported interaction' } }) + '\n');
   }
   notify(method: string, params?: unknown): void { this.child?.stdin.write(JSON.stringify({ method, ...(params === undefined ? {} : { params }) }) + '\n'); }
   request(method: string, params: unknown = {}, timeoutMs = 10000): Promise<unknown> {

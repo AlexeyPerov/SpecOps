@@ -29,6 +29,7 @@
       submitting = false;
       resolvePrompt = resolve;
       open = true;
+      request.signal?.addEventListener('abort', () => { if (permissionId === request.permissionId) finish({ reply: "reject" }); }, { once: true });
     });
   }
 
@@ -111,7 +112,7 @@
           disabled={submitting}
           onclick={() => submitReply("always")}
         >
-          Always Allow
+          Allow for session
         </button>
       </div>
     </div>

@@ -1,0 +1,101 @@
+import { randomUUID } from 'node:crypto';
+import type { AgentTurnRequest } from '../../../src/lib/session/adapter';
+import type { SessionEvent, PermissionReply } from '../../../src/lib/session/events';
+import type { CodexTransport } from './transport';
+import { object } from './transport';
+import type { ThreadItem } from './generated/v2/ThreadItem';
+import type { ToolRequestUserInputQuestion } from './generated/v2/ToolRequestUserInputQuestion';
+import type { ToolRequestUserInputResponse } from './generated/v2/ToolRequestUserInputResponse';
+
+type Payload = SessionEvent extends infer E ? E extends SessionEvent ? Omit<E, 'nativeSessionId' | 'connectionProfileId' | 'seq' | 'at'> : never : never;
+interface Interaction { id: string | number; method: string; generation: number; timer: ReturnType<typeof setTimeout>; questions?: ToolRequestUserInputQuestion[]; answers?: Record<string, { answers: string[] }>; keys: string[] }
+/** One native turn, bounded push queue, no prompt replay, one terminal and iterator closure. */
+export class NativeTurn {
+  nativeTurnId?: string;
+  ended = false;
+  cancelled = false;
+  private queue: SessionEvent[] = [];
+  private bytes = 0;
+  private wake?: () => void;
+  private texts = new Map<string, string>();
+  private reasonings = new Map<string, string>();
+  private completed = new Set<string>();
+  private tools = new Set<string>();
+  private pending = new Map<string, Interaction>();
+  private buffered: (() => void)[] = [];
+  private totals?: { input: number; output: number; reasoning: number; read: number; write: number };
+  readonly generation: number;
+  constructor(readonly request: AgentTurnRequest, readonly transport: CodexTransport, private nextSeq: () => number, readonly interactionTimeoutMs = 300000) { this.generation = transport.generation; this.emit({ type: 'turn.started', turnId: request.turnId }); }
+  emit(payload: Payload): void {
+    if (this.ended) return;
+    const event = { ...payload, nativeSessionId: this.request.native.nativeSessionId, connectionProfileId: this.request.native.connectionProfileId, nativeGeneration: this.generation, nativeTurnId: this.nativeTurnId, seq: this.nextSeq(), at: new Date().toISOString() } as SessionEvent;
+    const bytes = Buffer.byteLength(JSON.stringify(event));
+    if (!['turn.finished','turn.failed','turn.cancelled'].includes(payload.type) && (this.queue.length >= 4096 || this.bytes + bytes > 4 * 1024 * 1024)) { const started = this.queue.find(e => e.type === 'turn.started'); this.queue = started ? [started] : []; this.bytes = started ? Buffer.byteLength(JSON.stringify(started)) : 0; this.texts.clear(); this.finish('turn.failed', 'Native event capacity exceeded; reconnect the thread.'); this.transport.close(); return; }
+    this.queue.push(event); this.bytes += bytes; this.wake?.(); this.wake = undefined;
+  }
+  bind(id: unknown): void { if (typeof id !== 'string' || !id || (this.nativeTurnId && this.nativeTurnId !== id)) throw new Error('Native turn identity mismatch'); this.nativeTurnId = id; for (const apply of this.buffered.splice(0)) apply(); }
+  finish(type: 'turn.finished' | 'turn.failed' | 'turn.cancelled', message?: string): void {
+    if (this.ended) return;
+    if (this.texts.size) this.emit({ type: 'text.finished', turnId: this.request.turnId, text: [...this.texts.values()].join('').slice(0, 512 * 1024) });
+    for (const interaction of new Set(this.pending.values())) { clearTimeout(interaction.timer); try { this.transport.respond(interaction.id, interaction.questions ? { answers: {} } : { decision: 'cancel' }, interaction.generation); } catch {} }
+    this.pending.clear(); this.buffered = [];
+    this.emit(type === 'turn.failed' ? { type, turnId: this.request.turnId, message: message ?? 'Native turn failed' } : { type, turnId: this.request.turnId }); this.ended = true; this.wake?.(); this.wake = undefined;
+  }
+  private correlated(raw: unknown, generation: number, apply: (raw: Record<string, unknown>) => void): void {
+    if (this.ended || generation !== this.generation || !object(raw) || raw.threadId !== this.request.native.nativeSessionId) return;
+    if (!this.nativeTurnId) { if (this.buffered.length >= 128) { this.finish('turn.failed', 'Native correlation capacity exceeded'); return; } this.buffered.push(() => this.correlated(raw, generation, apply)); return; }
+    if (raw.turnId !== this.nativeTurnId && (!object(raw.turn) || raw.turn.id !== this.nativeTurnId)) return;
+    apply(raw);
+  }
+  notification(method: string, raw: unknown, generation: number): void {
+    if (method === 'turn/started' && object(raw) && raw.threadId === this.request.native.nativeSessionId && object(raw.turn) && generation === this.generation && !this.nativeTurnId && !this.ended) this.bind(raw.turn.id);
+    this.correlated(raw, generation, p => {
+      const turnId = this.request.turnId;
+      if (method === 'turn/completed' && object(p.turn)) { const status = p.turn.status; if (status === 'completed') this.finish('turn.finished'); else if (status === 'interrupted') this.finish(this.cancelled ? 'turn.cancelled' : 'turn.failed', 'Native turn interrupted; resume explicitly to continue.'); else this.finish('turn.failed', 'Native turn failed; inspect the thread and retry explicitly.'); }
+      else if (method === 'turn/started') this.emit({ type: 'status.changed', status: 'running' });
+      else if (method === 'item/agentMessage/delta' && typeof p.itemId === 'string' && typeof p.delta === 'string' && !this.completed.has(p.itemId)) { this.texts.set(p.itemId, (this.texts.get(p.itemId) ?? '') + p.delta); this.emit({ type: 'text.delta', turnId, delta: p.delta, nativeItemId: p.itemId }); }
+      else if ((method === 'item/reasoning/summaryTextDelta' || method === 'item/reasoning/textDelta') && typeof p.itemId === 'string' && typeof p.delta === 'string') { const id = `${p.itemId}:${method.includes('summary') ? 'summary' : 'content'}:${p.summaryIndex ?? p.contentIndex ?? 0}`; this.reasonings.set(id, (this.reasonings.get(id) ?? '') + p.delta); this.emit({ type: 'reasoning.delta', turnId, reasoningId: id, delta: p.delta, nativeItemId: p.itemId }); }
+      else if ((method === 'item/started' || method === 'item/completed') && object(p.item)) this.item(p.item as unknown as ThreadItem, method === 'item/completed');
+      else if ((method === 'item/commandExecution/outputDelta' || method === 'item/fileChange/outputDelta') && typeof p.itemId === 'string' && typeof p.delta === 'string') this.emit({ type: 'tool.progress', turnId, callId: p.itemId, progress: p.delta });
+      else if (method === 'thread/tokenUsage/updated' && object(p.tokenUsage) && object(p.tokenUsage.last)) {
+        const v = object(p.tokenUsage.total) ? p.tokenUsage.total : p.tokenUsage.last; const next = { input: Number(v.inputTokens), output: Number(v.outputTokens), reasoning: Number(v.reasoningOutputTokens), read: Number(v.cachedInputTokens), write: Number(v.cacheWriteInputTokens ?? 0) };
+        if (Object.values(next).some(n => !Number.isFinite(n) || n < 0)) throw new Error('Invalid native usage');
+        const last = p.tokenUsage.last;
+        const names = { input: 'inputTokens', output: 'outputTokens', reasoning: 'reasoningOutputTokens', read: 'cachedInputTokens', write: 'cacheWriteInputTokens' };
+        const diff = (key: keyof typeof next) => this.totals ? Math.max(0, next[key] - this.totals[key]) : Math.max(0, Number(last[names[key]] ?? 0));
+        if (JSON.stringify(next) === JSON.stringify(this.totals)) return;
+        this.emit({ type: 'usage.recorded', turnId, usage: { input: diff('input'), output: diff('output'), reasoning: diff('reasoning'), cache: { read: diff('read'), write: diff('write') } } }); this.totals = next;
+      } else if (method === 'error') { if (p.willRetry === true) this.emit({ type: 'diagnostic', level: 'warn', message: 'Native request is retrying.' }); else this.finish('turn.failed', 'Native request failed'); }
+      else this.emit({ type: 'diagnostic', level: 'info', reason: ['item/agentMessage/delta','item/reasoning/summaryTextDelta','item/reasoning/textDelta','item/started','item/completed','thread/tokenUsage/updated'].includes(method) ? 'malformed' : 'unknown-native', message: 'Unmapped native notification' });
+    });
+  }
+  item(item: ThreadItem, done: boolean): void {
+    if (!('id' in item) || typeof item.id !== 'string') return;
+    const turnId = this.request.turnId;
+    if (done && this.completed.has(item.id)) return;
+    if (item.type === 'agentMessage' || item.type === 'plan') { if (done) this.texts.set(item.id, item.text); else if (!this.texts.has(item.id)) this.texts.set(item.id, ''); }
+    else if (item.type === 'reasoning' && done) { for (const [kind, sections] of [['summary', item.summary], ['content', item.content]] as const) sections.forEach((text, index) => { const id = `${item.id}:${kind}:${index}`; this.reasonings.set(id, text); this.emit({ type: 'reasoning.ended', turnId, reasoningId: id, text }); }); }
+    else if (['commandExecution','fileChange','mcpToolCall','dynamicToolCall','webSearch','imageView','collabAgentToolCall'].includes(item.type)) {
+      const raw = item as unknown as Record<string, unknown>;
+      if (!this.tools.has(item.id)) { this.tools.add(item.id); this.emit({ type: 'tool.started', turnId, toolCall: { callId: item.id, toolName: item.type, status: 'running', input: raw.command ?? raw.arguments ?? raw.changes ?? raw.prompt } }); }
+      if (done) this.emit({ type: 'tool.completed', turnId, callId: item.id, status: raw.status === 'failed' || raw.status === 'declined' || raw.success === false || (typeof raw.exitCode === 'number' && raw.exitCode !== 0) ? 'failure' : 'success', output: raw.aggregatedOutput ?? raw.result ?? raw.contentItems ?? raw.changes });
+      if (done && item.type === 'fileChange') this.emit({ type: 'diff.posted', turnId, diff: { id: item.id, files: item.changes.map(c => c.path), snapshot: item.changes.map(c => c.diff).join('\n') } });
+    } else if (item.type !== 'userMessage') this.emit({ type: 'diagnostic', level: 'info', reason: 'unknown-native', message: 'Unmapped native item' });
+    if (done) this.completed.add(item.id);
+  }
+  serverRequest(id: string | number, method: string, raw: unknown, generation: number): void {
+    if (this.ended || generation !== this.generation || !object(raw) || raw.threadId !== this.request.native.nativeSessionId || (this.nativeTurnId && raw.turnId !== this.nativeTurnId)) { this.transport.reject(id, generation); return; }
+    if (!['item/commandExecution/requestApproval','item/fileChange/requestApproval','item/tool/requestUserInput'].includes(method)) { this.transport.reject(id, generation); return; }
+    this.correlated(raw, generation, p => {
+      const key = randomUUID(); const questions = method === 'item/tool/requestUserInput' && Array.isArray(p.questions) ? p.questions as ToolRequestUserInputQuestion[] : undefined;
+      if (method.endsWith('requestUserInput') && (!questions?.length || questions.length > 32 || new Set(questions.map(q => q.id)).size !== questions.length || questions.some(q => typeof q.id !== 'string' || typeof q.question !== 'string' || q.isSecret))) { this.transport.reject(id, generation); return; }
+      const interaction: Interaction = { id, method, generation, keys: [], questions, answers: {}, timer: setTimeout(() => { this.resolve(interaction, questions ? { answers: {} } : { decision: 'cancel' }); this.cancelled = true; void this.transport.request('turn/interrupt', { threadId: this.request.native.nativeSessionId, turnId: this.nativeTurnId }, 750).catch(() => this.transport.close()); this.finish('turn.cancelled'); }, this.interactionTimeoutMs) };
+      if (questions) questions.forEach((q, index) => { const token = `${key}:${index}`; interaction.keys.push(token); this.pending.set(token, interaction); this.emit({ type: 'question.requested', turnId: this.request.turnId, request: { questionId: token, prompt: q.question, choices: q.options?.map(o => o.label), payload: { nativeItemId: p.itemId, header: q.header } } }); });
+      else { interaction.keys.push(key); this.pending.set(key, interaction); this.emit({ type: 'permission.requested', turnId: this.request.turnId, request: { permissionId: key, label: method.includes('commandExecution') ? `Run ${typeof p.command === 'string' ? p.command : 'native command'}` : 'Allow native file changes', payload: { nativeItemId: p.itemId, command: p.command, cwd: p.cwd, reason: p.reason, scope: 'thread' } } }); }
+    });
+  }
+  private resolve(interaction: Interaction, result: unknown): void { this.transport.respond(interaction.id, result, interaction.generation); clearTimeout(interaction.timer); for (const key of interaction.keys) this.pending.delete(key); }
+  permission(key: string, reply: PermissionReply): void { const pending = this.pending.get(key); if (!pending || pending.questions || this.ended || this.transport.generation !== pending.generation) throw new Error('Approval expired or belongs to another turn'); this.resolve(pending, { decision: reply === 'once' ? 'accept' : reply === 'always' ? 'acceptForSession' : 'decline' }); }
+  question(key: string, answer?: string): void { const pending = this.pending.get(key); if (!pending?.questions || this.ended || this.transport.generation !== pending.generation) throw new Error('Question expired or belongs to another turn'); if (answer === undefined) { this.resolve(pending, { answers: {} }); return; } const index = pending.keys.indexOf(key); const question = pending.questions[index]; if (!question || pending.answers?.[question.id]) throw new Error('Question already answered'); pending.answers![question.id] = { answers: [answer] }; if (Object.keys(pending.answers!).length === pending.questions.length) this.resolve(pending, { answers: pending.answers! } satisfies ToolRequestUserInputResponse); }
+  async *events(): AsyncIterable<SessionEvent> { while (!this.ended || this.queue.length) { const event = this.queue.shift(); if (event) { this.bytes -= Buffer.byteLength(JSON.stringify(event)); yield event; } else await new Promise<void>(resolve => { this.wake = resolve; }); } }
+}

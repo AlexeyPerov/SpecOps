@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-04 17:01 MSK — Add native coding turns and minimum thread resume
+
+- Implemented AS02-B source thread start/read/resume, deterministic native text/reasoning/tools/file/usage events, stable native IDs/generation correlation, single-terminal streams, native interrupt and selected-child loss settlement.
+- Added correlated command/file approvals and supported native questions with explicit allow/deny/answer/cancel/deadline handling, late/stale reply rejection and prompt visibility across remount. Frontend stream observation settles waiting UI on terminal/loss and cancels/disposes bounded producers.
+- Persisted distinct model/effort/collaboration/sandbox/approval settings and write capability through the production pipeline; fresh app/host fixtures hydrate completed native history and continue the same thread without replay or duplicate messages.
+- Verified the official pinned npm distribution: default paginated history lacks required hydration support. Added a default-off persisted profile experimental checkbox and blocked coding before work without opt-in; opted sessions use explicitly selected legacy history. Recorded actual no-account legacy marker/read/resume evidence and deterministic 188-file/44-root generated contracts.
+- Validation: 94 host tests and 3,229 frontend tests passed; host/frontend checks and production builds passed. Native process/shared-contract fixtures, actual dispatcher/client/pipeline/disk restart and approval-child-loss integration, remount/abort/overflow/disposal UI checks passed. Authenticated coding/account preservation, whole supervised-host smoke and installed readiness remain explicit external gates. No data migration or compatibility shim.
+
 ## 2026-10-04 16:28 MSK — Add isolated Codex connection and authentication
 
 - Implemented AS02-A source control plane: pinned 0.160.0 app-server handshake/schemas, bounded profile child transport/restart/generations, official account read/browser/device/API-key login/cancel/logout, native creation shell and model discovery. Native turns/resume remain the next execution plan.

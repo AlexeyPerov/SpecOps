@@ -126,6 +126,9 @@ export interface BaseSessionEvent {
   readonly nativeSessionId: NativeSessionId;
   readonly connectionProfileId?: string;
   /** Monotonic sequence within the session (1-based). */
+  readonly nativeGeneration?: number;
+  readonly nativeTurnId?: string;
+  readonly nativeItemId?: string;
   readonly seq: number;
   readonly at: string;
 }

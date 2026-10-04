@@ -9,8 +9,9 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
  let result = {};
  if (req.method === 'initialize') result = process.env.SPECOPS_FIXTURE_BAD_INIT ? { invalid: true } : { userAgent: 'fixture', codexHome: process.env.CODEX_HOME, platformFamily: 'unix', platformOs: 'macos' };
  if (req.method === 'account/read') result = { account, requiresOpenaiAuth: true };
- if (req.method === 'model/list') result = { data: [{ id: 'fixture-model', displayName: 'Fixture model' }], nextCursor: null };
- if (req.method === 'thread/start') result = { thread: { id: 'same-native-id' }, model: 'fixture-model' };
+ if (req.method === 'model/list') result = { data: [{ id: 'fixture-model', model: 'fixture-model', displayName: 'Fixture model', supportedReasoningEfforts: [{ reasoningEffort: 'medium' }], defaultReasoningEffort: 'medium', isDefault: true }], nextCursor: null };
+ if (req.method === 'collaborationMode/list') result = { data: [{ name: 'Default', mode: 'default' }, { name: 'Plan', mode: 'plan' }] };
+ if (req.method === 'thread/start') result = { thread: { id: 'same-native-id', historyMode: 'legacy' }, model: 'fixture-model' };
  if (req.method === 'account/logout') account = null;
  if (req.method === 'account/login/start') {
    if (req.params.type === 'apiKey') { account = { type: 'apiKey' }; result = { type: 'apiKey' }; }

@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** In progress — A implemented from source; live account acceptance pending
+**Status:** In progress — A/B implemented from source; experimental developer/live account acceptance pending
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -28,3 +28,5 @@
 ## Task tracking
 
 Task prefix is `AS02-<phase>-<NN>`. Numeric folders reflect the default delivery sequence; cross-stage gates and later/recurring work are explicit above. Mark only implemented and verified tasks `[DONE]`, record pinned contracts and actual smoke/support scope, and update `specs/changelog.md`. Completed records live in [done](../done/README.md); open acceptance remains active.
+
+**Phase B evidence:** [Native coding implementation and pin/support ledger](implementation-notes-phase-b.md). Official 0.160.0 distribution requires explicit persisted profile experimental opt-in and legacy history for coding/resume; default coding creation fails before work. Native/shared/production/UI fixtures pass; real authenticated coding, whole-host recovery and installed acceptance remain open.

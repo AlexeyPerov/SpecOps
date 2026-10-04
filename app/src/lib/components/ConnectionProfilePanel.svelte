@@ -78,6 +78,7 @@
       {:else}
         <button onclick={() => action('logout')} disabled={busy}>Sign out</button>
       {/if}
+      <label title="Required for the pinned runtime's legacy history and developer coding slice. Restarts only this profile; pending turns end."><input type="checkbox" checked={selected.experimental ?? false} disabled={busy} onchange={e => action(e.currentTarget.checked ? 'experimental-on' : 'experimental-off')} />Enable experimental protocol (legacy history, plan and questions)</label>
       <button onclick={() => action('read')} disabled={busy}>Verify account</button>
       <button onclick={() => action('restart')} disabled={busy}>Reconnect profile</button>
       {#if selected.message}<span>{selected.message}</span>{/if}

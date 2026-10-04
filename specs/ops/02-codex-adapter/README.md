@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** In progress — A implemented from source; live account acceptance pending
+**Status:** In progress — A/B implemented from source; experimental developer/live account acceptance pending
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -21,7 +21,7 @@ Codex is the first production runtime and the second active milestone. A–D del
 | Phase | Plan | State |
 | --- | --- | --- |
 | AS02-A | [Isolated profile and authentication](execution-plan-phase-a-protocol-auth.md) | Implemented; manual account gate pending |
-| AS02-B | [Native coding slice and minimum resume](execution-plan-phase-b-thread-events.md) | Planned |
+| AS02-B | [Native coding slice and minimum resume](execution-plan-phase-b-thread-events.md) | Experimental source/fixtures verified; authenticated developer smoke pending |
 | AS02-C | [Native config, limits and reconciliation](execution-plan-phase-c-capabilities-history.md) | Planned |
 | AS02-D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | Planned |
 
@@ -39,3 +39,5 @@ Codex is the first production runtime and the second active milestone. A–D del
 - [ ] Setup/support limitations, accepted evidence and changelog updated when implementation lands.
 
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
+
+**Phase B evidence:** [Native coding implementation and pin/support ledger](implementation-notes-phase-b.md). Official 0.160.0 distribution requires explicit persisted profile experimental opt-in and legacy history for coding/resume; default coding creation fails before work. Native/shared/production/UI fixtures pass; real authenticated coding, whole-host recovery and installed acceptance remain open.

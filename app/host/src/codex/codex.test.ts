@@ -15,7 +15,7 @@ afterEach(() => { for (const close of cleanup.splice(0).reverse()) close(); });
 function temporary(): string { const path = mkdtempSync(join(tmpdir(), 'specops-codex-test-')); cleanup.push(() => rmSync(path, { recursive: true, force: true })); return path; }
 function fixture(): string { const path = join(temporary(), 'codex-fixture'); writeFileSync(path, controlPlaneFixture, { mode: 0o700 }); return path; }
 function adapter(options: ConstructorParameters<typeof CodexRuntimeAdapter>[0] = {}) {
-  const runtime = new CodexRuntimeAdapter({ profileRoot: temporary(), executable: fixture(), openBrowser: async () => {}, ...options }); cleanup.push(() => runtime.close()); return runtime;
+  const runtime = new CodexRuntimeAdapter({ profileRoot: temporary(), executable: fixture(), experimental: true, openBrowser: async () => {}, ...options }); cleanup.push(() => runtime.close()); return runtime;
 }
 const tick = () => new Promise(resolve => setTimeout(resolve, 30));
 

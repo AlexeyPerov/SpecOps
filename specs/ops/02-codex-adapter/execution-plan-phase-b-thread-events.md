@@ -2,9 +2,11 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** Source implemented and automated checks accepted; authenticated developer smoke pending
 
-**Prerequisites:** AS02-A accepted.
+**Prerequisites:** AS02-A source/bootstrap evidence accepted; live account gate remains open.
+
+**Evidence:** [B implementation and support boundary](implementation-notes-phase-b.md). Coding requires explicit persisted profile experimental opt-in: the pinned default paginated history cannot support minimum resume. No authenticated coding success or installed readiness is claimed.
 
 **Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
 
@@ -63,3 +65,16 @@ Run shared contract plus success/tool/edit/allow/deny/question/cancel/failure/un
 ## Exit and next work
 
 C, 03-A and 03-B can consume stable B descriptors/lifecycle without waiting for each other. Usable preview waits for C + 03-A/03-B + D. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+
+## Implementation disposition (2026-10-04 17:01 MSK)
+
+| Task | Recorded disposition |
+| --- | --- |
+| AS02-B-01 | Source and production-path fresh-app/host persistence fixture verified; explicit profile/history failures and same-thread resume. |
+| AS02-B-02 | Native process fixtures and unchanged shared contract verified; deterministic tools/text/reasoning/files/usage, native IDs/generations, one terminal and closure. |
+| AS02-B-03 | Native correlated command/file approval and opted experimental question fixtures verified; no auto approval, deadlines/late replies and prompt remount/loss settlement. |
+| AS02-B-04 | Distinct model/effort/mode/sandbox/policy host validation and creation UI verified; default-off experimental profile setting persisted and coding gated before work. |
+| AS02-B-05 | Native interrupt/lost-child fixture and completed legacy-history fresh-host continuation verified. Whole-host/authenticated native timing acceptance remains external. |
+| AS02-B-06 | Account-free native/shared/production/UI suites accepted. Real authenticated UI coding task, actual file effects and fresh-app smoke remain pending. |
+
+This plan remains active until its external developer acceptance is recorded. C and early 03-A/B may proceed using the verified source contracts. The detailed pin limitation, official-distribution comparison, reproduction commands and remaining gates are in the linked B evidence.

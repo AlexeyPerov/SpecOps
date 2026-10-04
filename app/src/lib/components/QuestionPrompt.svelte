@@ -16,6 +16,7 @@
   let questionId = $state("");
   let choices = $state<string[]>([]);
   let selectedChoices = $state<Set<string>>(new Set());
+  let freeform = $state("");
   let validationError = $state("");
   let submitting = $state(false);
   let backdropEl = $state<HTMLDivElement | null>(null);
@@ -31,10 +32,12 @@
       questionId = request.questionId;
       choices = request.choices ?? [];
       selectedChoices = new Set();
+      freeform = "";
       validationError = "";
       submitting = false;
       resolvePrompt = resolve;
       open = true;
+      request.signal?.addEventListener('abort', () => { if (questionId === request.questionId) finish({ type: "reject" }); }, { once: true });
     });
   }
 
@@ -63,7 +66,7 @@
       return;
     }
     submitting = true;
-    const answers: string[][] = choices.length > 0 ? [Array.from(selectedChoices)] : [];
+    const answers: string[][] = choices.length > 0 ? [Array.from(selectedChoices)] : [[freeform]];
     finish({ type: "reply", answers });
   }
 
@@ -127,6 +130,7 @@
       {#if validationError}
         <p class="question-prompt-error">{validationError}</p>
       {/if}
+      {#if choices.length === 0}<label>Answer<textarea aria-label="Answer" bind:value={freeform}></textarea></label>{/if}
       <div class="question-prompt-actions">
         <button
           type="button"

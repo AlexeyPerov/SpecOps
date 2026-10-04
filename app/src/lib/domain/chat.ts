@@ -94,6 +94,8 @@ export type ChatMessagePartType = ChatMessagePart["type"];
 
 export interface ChatMessage {
   id: string;
+  nativeTurnId?: string;
+  nativeItemId?: string;
   role: ChatMessageRole;
   content: string;
   createdAt: string;
@@ -121,6 +123,7 @@ export interface ChatThreadMetadata {
   /** Runtime this thread's session is bound to (immutable after first link). */
   runtimeId?: string;
   connectionProfileId?: string;
+  runtimeMetadata?: Readonly<Record<string, unknown>>;
 }
 
 /** One persisted workspace session conversation (messages + per-session settings). */
@@ -140,10 +143,10 @@ export interface SessionIndexEntry {
   /** Native session id on the bound runtime for this workspace session tab. */
   nativeSessionId?: string;
   connectionProfileId?: string;
+  runtimeMetadata?: Readonly<Record<string, unknown>>;
   /** Last model used with the linked native session (restore hint). */
   modelId?: string;
   modeId?: string;
-  runtimeMetadata?: Readonly<Record<string, unknown>>;
   /** Public share URL when the linked session has been shared. */
   shareUrl?: string;
   /** Native session this one was forked from, if any. */

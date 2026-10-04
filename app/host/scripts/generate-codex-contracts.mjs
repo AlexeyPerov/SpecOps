@@ -15,10 +15,20 @@ const contracts = [
   'v2/CancelLoginAccountParams', 'v2/CancelLoginAccountResponse', 'v2/LogoutAccountResponse',
   'v2/AccountLoginCompletedNotification', 'v2/AccountUpdatedNotification',
   'v2/ModelListParams', 'v2/ModelListResponse',
+  'v2/ThreadStartParams', 'v2/ThreadStartResponse', 'v2/ThreadReadParams', 'v2/ThreadReadResponse',
+  'v2/ThreadTurnsListParams', 'v2/ThreadTurnsListResponse', 'v2/ThreadItemsListParams', 'v2/ThreadItemsListResponse',
+  'v2/CollaborationModeListParams', 'v2/CollaborationModeListResponse', 'v2/ThreadResumeParams', 'v2/ThreadResumeResponse', 'v2/TurnStartParams', 'v2/TurnStartResponse',
+  'v2/TurnInterruptParams', 'v2/TurnInterruptResponse', 'v2/TurnStartedNotification', 'v2/TurnCompletedNotification',
+  'v2/ItemStartedNotification', 'v2/ItemCompletedNotification', 'v2/AgentMessageDeltaNotification',
+  'v2/ReasoningSummaryTextDeltaNotification', 'v2/ReasoningTextDeltaNotification',
+  'v2/CommandExecutionOutputDeltaNotification', 'v2/ThreadTokenUsageUpdatedNotification',
+  'v2/CommandExecutionRequestApprovalParams', 'v2/CommandExecutionRequestApprovalResponse',
+  'v2/FileChangeRequestApprovalParams', 'v2/FileChangeRequestApprovalResponse',
+  'v2/ToolRequestUserInputParams', 'v2/ToolRequestUserInputResponse',
 ];
 try {
   if (execFileSync(executable, ['--version'], { env, timeout: 5000, encoding: 'utf8' }).trim() !== 'codex-cli 0.160.0') throw new Error('Codex 0.160.0 required');
-  for (const format of ['ts', 'json-schema']) execFileSync(executable, ['app-server', `generate-${format}`, '--out', join(temporary, format)], { env, timeout: 30000, stdio: 'pipe' });
+  for (const format of ['ts', 'json-schema']) execFileSync(executable, ['app-server', `generate-${format}`, '--experimental', '--out', join(temporary, format)], { env, timeout: 30000, stdio: 'pipe' });
   const destination = join(root, 'src/codex/generated'); rmSync(destination, { recursive: true, force: true }); mkdirSync(destination, { recursive: true });
   const copied = new Set();
   function copy(name) {
@@ -28,8 +38,8 @@ try {
     for (const match of source.matchAll(/from "([^"]+)"/g)) copy(join(dirname(name), match[1]));
   }
   for (const name of contracts) copy(name);
-  const schemas = Object.fromEntries(contracts.map(name => [name, JSON.parse(readFileSync(join(temporary, 'json-schema', `${name.includes('/') ? name : 'v1/' + name}.json`), 'utf8'))]));
+  const schemas = Object.fromEntries(contracts.map(name => [name, JSON.parse(readFileSync(join(temporary, 'json-schema', `${name.includes('RequestApproval') || name.includes('ToolRequestUserInput') ? name.split('/').at(-1) : name.includes('/') ? name : 'v1/' + name}.json`), 'utf8'))]));
   writeFileSync(join(destination, 'control-plane.schema.json'), JSON.stringify(schemas, null, 2) + '\n');
-  writeFileSync(join(destination, 'manifest.json'), JSON.stringify({ version: '0.160.0', experimental: false, contracts, license: 'Apache-2.0', documentation: 'https://learn.chatgpt.com/docs/app-server' }, null, 2) + '\n');
+  writeFileSync(join(destination, 'manifest.json'), JSON.stringify({ version: '0.160.0', experimental: true, contracts, license: 'Apache-2.0', documentation: 'https://learn.chatgpt.com/docs/app-server' }, null, 2) + '\n');
   console.log(`Generated ${copied.size} TypeScript contracts and ${contracts.length} schema contracts.`);
 } finally { rmSync(temporary, { recursive: true, force: true }); }

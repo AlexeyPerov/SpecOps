@@ -4,6 +4,7 @@ export interface ConnectionProfileSnapshot {
   runtimeId: 'codex';
   label: string;
   createdAt: string;
+  experimental?: boolean;
   generation: number;
   state: 'disconnected' | 'connecting' | 'auth-required' | 'login-pending' | 'authenticated' | 'missing-runtime' | 'incompatible-runtime' | 'error';
   account?: { type: 'apiKey' | 'chatgpt'; email?: string; planType?: string };

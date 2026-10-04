@@ -1,3 +1,4 @@
+import { observeTurnStream } from './observedTurnStream';
 import type { ChatMessage } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore, type ChatTurnError } from "../state/chatStore";
@@ -336,14 +337,26 @@ async function ensureNativeBinding(input: {
     // Resume so a host restart mid-session recovers the native session before
     // the next turn (the fake adapter adopts known ids; real adapters reconnect).
     const native = await client.resumeSession({
-      native: toNativeRef(existing),
+      native: { ...toNativeRef(existing), ...(modelId ? { modelId } : {}), ...(modeId ? { modeId } : {}), runtimeMetadata: chatStore.getMetadata(activeSessionId)?.runtimeMetadata ?? existing.runtimeMetadata },
       workspaceRootPath: root,
     });
     if (native.runtimeId !== existing.runtimeId || native.nativeSessionId !== existing.nativeSessionId || native.connectionProfileId !== existing.connectionProfileId) {
       throw new Error("Resume returned a different native session. Create a new session explicitly to continue.");
     }
+    if (native.history?.length) {
+      const current = chatStore.getMessages(activeSessionId);
+      const history = native.history.map(message => { const fold = (message.events ?? []).reduce(foldSessionEvent, initialTurnFoldState()); return { id: message.id, role: message.role, content: message.content, createdAt: message.createdAt, nativeTurnId: message.nativeTurnId, ...(message.role === 'assistant' ? { parts: fold.parts, toolCalls: fold.toolCalls } : {}) }; });
+      const nativeIds = new Set(history.map(m => m.id));
+      // client IDs persist user identity; each completed native assistant replaces its local cache.
+      const nativeUsers = new Set(history.filter(m => m.role === 'user').map(m => m.id));
+      const nativeTurns = new Set(native.history.map(m => m.nativeTurnId));
+      const cachedAssistants = new Set(current.filter((m, i) => m.role === 'assistant' && ((m.nativeTurnId && nativeTurns.has(m.nativeTurnId)) || (i > 0 && nativeUsers.has(current[i - 1]!.id)))).map(m => m.id));
+      const tail = current.filter(m => !nativeIds.has(m.id) && !cachedAssistants.has(m.id));
+      chatStore.setThreadMessages([...history, ...tail], activeSessionId, root);
+    }
     const binding: SessionBinding = {
       ...existing,
+      ...(native.runtimeMetadata ? { runtimeMetadata: native.runtimeMetadata } : {}),
       runtimeId: native.runtimeId,
       nativeSessionId: native.nativeSessionId,
     connectionProfileId: native.connectionProfileId,
@@ -364,6 +377,7 @@ async function ensureNativeBinding(input: {
     runtimeId,
     connectionProfileId: chatStore.getMetadata(activeSessionId)?.connectionProfileId,
     workspaceRootPath: root,
+    runtimeMetadata: chatStore.getMetadata(activeSessionId)?.runtimeMetadata,
     ...(modelId ? { modelId } : {}),
     ...(modeId ? { modeId } : {}),
   });
@@ -443,15 +457,23 @@ export async function executeProviderTurn(params: {
     const client = getAgentHostClient();
 
     let fold = initialTurnFoldState();
-    for await (const event of client.sendTurn({
+    const observed = observeTurnStream(client.sendTurn({
       turnId: asSpecOpsTurnId(turnId),
       native,
       workspaceRootPath: root,
       prompt: userMessage.content,
-      ...(params.context ? { context: params.context as unknown as Record<string, unknown> } : {}),
-    })) {
+      context: { ...(params.context as unknown as Record<string, unknown> ?? {}), clientUserMessageId: userMessage.id },
+    }), () => client.cancelTurn({ native, turnId: asSpecOpsTurnId(turnId), reason: "supervisor" }));
+    for await (const event of observed.events()) {
       if (!chatStore.isGenerationTurnActive(root, activeSessionId, turnId)) {
         throw new TurnCancelledError();
+      }
+      if (event.nativeTurnId) {
+        const current = chatStore.getMessages(activeSessionId);
+        const assistant = current.find(m => m.id === assistantMessage.id);
+        if (assistant?.nativeTurnId !== event.nativeTurnId || (event.type === 'text.delta' && event.nativeItemId && assistant?.nativeItemId !== event.nativeItemId)) {
+          chatStore.setThreadMessages(current.map(m => m.id === assistantMessage.id ? { ...m, nativeTurnId: event.nativeTurnId, ...(event.type === 'text.delta' && event.nativeItemId ? { nativeItemId: event.nativeItemId } : {}) } : m.id === userMessage.id ? { ...m, nativeTurnId: event.nativeTurnId } : m), activeSessionId, root);
+        }
       }
       if (event.type === "permission.requested") {
         assertTurnStillActive(root, activeSessionId, turnId);
@@ -461,6 +483,7 @@ export async function executeProviderTurn(params: {
           sessionId: activeSessionId,
           turnId,
           pending: promptPermission({
+            signal: observed.signal,
             permissionId: event.request.permissionId,
             label: event.request.label,
             payload: event.request.payload,
@@ -469,6 +492,7 @@ export async function executeProviderTurn(params: {
           chatStore.setWaitingForPermission(activeSessionId, false, root);
         });
         assertTurnStillActive(root, activeSessionId, turnId);
+        if (observed.signal.aborted) continue;
         await client.replyPermission({
           native,
           turnId: asSpecOpsTurnId(turnId),
@@ -485,6 +509,7 @@ export async function executeProviderTurn(params: {
           sessionId: activeSessionId,
           turnId,
           pending: promptQuestion({
+            signal: observed.signal,
             questionId: event.request.questionId,
             prompt: event.request.prompt,
             choices: [...(event.request.choices ?? [])],
@@ -494,8 +519,9 @@ export async function executeProviderTurn(params: {
           chatStore.setWaitingForQuestion(activeSessionId, false, root);
         });
         assertTurnStillActive(root, activeSessionId, turnId);
+        if (observed.signal.aborted) continue;
         if (result.type === "reply") {
-          await client.replyQuestion({
+        await client.replyQuestion({
             native,
             turnId: asSpecOpsTurnId(turnId),
             questionId: event.request.questionId,

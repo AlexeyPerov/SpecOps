@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Active plan; foundation stabilization accepted on macOS from source; Codex A source implementation verified; live/native-turn/installed gates pending.
+**Status:** Active plan; foundation stabilization accepted on macOS from source; Codex A/B source implementation verified; experimental authenticated developer and installed gates pending.
 
 **Source of truth:** This roadmap and the linked milestone scope/execution plans. The [2026-10-04 audit](done/reviews/audit-2026-10-04.md) is historical evidence; its proposed order is adopted here. Active folders and task IDs are numbered in the default delivery order; shared early gates and repeated release acceptance are explicit exceptions. Completed records are in [done](done/README.md).
 
@@ -19,7 +19,7 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 | Milestone | Actual state | Next work |
 | --- | --- | --- |
 | [01 — Stabilization](01-foundation-stabilization/README.md) | S accepted on source-checkout macOS; downstream gates open | S before live account work |
-| [02 — Codex](02-codex-adapter/README.md) | A isolated profile/control plane implemented; manual live-account gate open | B → C → D, with early preview gates |
+| [02 — Codex](02-codex-adapter/README.md) | A profile/control plane and B experimental native turns/resume verified from source; manual live-account/coding gate open | C → D, with B live acceptance and early preview gates |
 | [03 — Preview delivery](03-codex-preview-delivery/README.md) | Partial shared infrastructure; acceptance missing | Independent A activity and B packaging/recovery before 02-D |
 | [04 — OpenCode](04-opencode-adapter/README.md) | Legacy code exists; new-host adapter missing | A → B → C core cutover |
 | [05 — Claude](05-claude-adapter/README.md) | Missing production adapter | A → B → C → D |

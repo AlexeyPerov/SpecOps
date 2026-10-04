@@ -31,6 +31,8 @@ import {
   validateAgentHostSend,
   abortTurn,
 } from "./chatSendPipeline";
+import { registerConfirmRunner } from "../services/confirmDialogUi";
+import { appState } from "../state/appState";
 import { registerPermissionPromptRunner } from "../services/permissionPrompt";
 
 interface FakeHostHarness {
@@ -109,6 +111,8 @@ describe("chatSendPipeline (host-backed turns)", () => {
 
   beforeEach(() => {
     registerPermissionPromptRunner(null);
+    registerConfirmRunner(null);
+    appState.resetAppState();
     chatStore.reset();
     chatStore.setActiveWorkspaceRoot("/work/host-pipeline");
     harness = createFakeHostHarness();
@@ -117,6 +121,7 @@ describe("chatSendPipeline (host-backed turns)", () => {
 
   afterEach(() => {
     bindAgentHostClientForTests(null);
+    registerConfirmRunner(null);
   });
 
   async function seedThreadWithUserMessage(): Promise<string> {
@@ -137,6 +142,20 @@ describe("chatSendPipeline (host-backed turns)", () => {
     chatStore.beginTurn("turn-test-1", sessionId);
     return sessionId;
   }
+
+  it("Stop while the writer warning is pending prevents native creation and send after Continue", async () => {
+    const other = await seedThreadWithUserMessage();
+    const current = await seedThreadWithUserMessage();
+    let continueWarning!: (allow: boolean) => void;
+    registerConfirmRunner(() => new Promise(resolve => { continueWarning = resolve; }));
+    const send = vi.spyOn(harness.client, 'sendTurn');
+    const pending = executeProviderTurn({ root: '/work/host-pipeline', activeSessionId: current, turnId: 'turn-test-1' });
+    expect(continueWarning).toBeTypeOf('function');
+    abortTurn(current, '/work/host-pipeline'); continueWarning(true);
+    expect((await pending).ok).toBe(false);
+    expect(harness.createSession).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled();
+    expect(chatStore.getRuntimeState(other).isGenerating).toBe(true);
+  });
 
   it("creates a native binding on first send and streams folded content", async () => {
     const sessionId = await seedThreadWithUserMessage();

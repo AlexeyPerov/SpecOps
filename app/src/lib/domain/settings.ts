@@ -61,33 +61,6 @@ export interface FontSettings {
   chatScale: number;
 }
 
-export type OpencodeTransportMode = "sidecar" | "url";
-
-/**
- * Master toggle for the experimental workspace-sessions backend (OpenCode).
- *
- * Disabled by default (beta). When false, no OpenCode sidecar/SDK activity
- * runs, the Sessions sidebar is hidden in workspaces, the activity-rail per-
- * workspace session counts are hidden, and the Settings → Workspaces subtree
- * (OpenCode, Config, Providers, MCP servers, Agents, Permissions, Commands,
- * Instructions) is removed from the sidebar. The toggle lives in Settings →
- * Dev. Open session tabs are closed when the feature is switched off so no
- * orphan tabs remain.
- */
-export interface OpencodeSettings {
-  enabled: boolean;
-  mode: OpencodeTransportMode;
-  /** Remote OpenCode server base URL used when mode is `url`. */
-  baseUrl: string;
-  /**
-   * Local sidecar port used when mode is `sidecar`. M14-T2 introduces this as
-   * an explicit field so users can pick a free port (the prior hard-coded
-   * `4096` lived in Rust). Validated to 1024–65535; missing or out-of-range
-   * values normalize to {@link defaultOpencodeSettings.sidecarPort} (4096).
-   */
-  sidecarPort: number;
-}
-
 /**
  * Where system-git version control integration is allowed to run.
  *
@@ -124,17 +97,6 @@ export interface GitIntegrationSettings {
   showProjectTreeBadges: boolean;
   /** Load git status cells in Workspace Manager. */
   showWorkspaceManagerGitColumn: boolean;
-}
-
-export type OpencodeHealthStatus = "unknown" | "checking" | "healthy" | "degraded" | "error";
-
-export type OpencodeHealthSource = "sidecar" | "url" | null;
-
-export interface OpencodeHealthState {
-  status: OpencodeHealthStatus;
-  source: OpencodeHealthSource;
-  checkedAt: string | null;
-  lastErrorMessage: string | null;
 }
 
 /**
@@ -213,9 +175,8 @@ export interface AppSettingsState {
    */
   restrictFilesToContext: boolean;
   sessionsEnabled: boolean;
-  opencode: OpencodeSettings;
+  warnConcurrentWriters: boolean;
   gitIntegration: GitIntegrationSettings;
-  opencodeHealth: OpencodeHealthState;
   commandBindingOverrides: CommandBindingOverrides;
   logSettings: LogSettings;
   /** Markdown snippet catalog preferences (M6). */

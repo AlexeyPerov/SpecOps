@@ -9,7 +9,6 @@ import type {
   GitIntegrationSettings,
   LogSettings,
   MarkdownViewMode,
-  OpencodeSettings,
   OsNotificationSettings,
   SoundSettings,
 } from "../domain/contracts";
@@ -26,10 +25,6 @@ import {
 } from "./largeFileOpen";
 import { defaultLogSettings, normalizeLogSettings } from "./logSettings";
 import { defaultMarkdownSnippetSettings } from "../editor/markdownSnippetSettings";
-import {
-  defaultOpencodeSettings,
-  normalizeOpencodeSettings,
-} from "./opencodeSettings";
 import {
   defaultGitIntegrationSettings,
   normalizeGitIntegrationSettings,
@@ -63,7 +58,7 @@ export interface PersistedSettings {
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   sessionsEnabled?: boolean;
-  opencode: OpencodeSettings;
+  warnConcurrentWriters?: boolean;
   gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
   markdownSnippets: MarkdownSnippetSettings;
@@ -98,7 +93,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   sessionsEnabled: true,
-  opencode: defaultOpencodeSettings,
+  warnConcurrentWriters: true,
   gitIntegration: defaultGitIntegrationSettings,
   logSettings: defaultLogSettings,
   markdownSnippets: defaultMarkdownSnippetSettings,
@@ -205,8 +200,8 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         restrictFilesToContext: isBoolean(parsed.restrictFilesToContext)
           ? parsed.restrictFilesToContext
           : defaultPersistedSettings.restrictFilesToContext,
+        warnConcurrentWriters: typeof parsed.warnConcurrentWriters === "boolean" ? parsed.warnConcurrentWriters : true,
         sessionsEnabled: typeof parsed.sessionsEnabled === "boolean" ? parsed.sessionsEnabled : true,
-        opencode: normalizeOpencodeSettings(parsed.opencode),
         gitIntegration: normalizeGitIntegrationSettings(parsed.gitIntegration),
         logSettings: normalizeLogSettings(parsed.logSettings),
         markdownSnippets: normalizeMarkdownSnippetSettings(parsed.markdownSnippets),
@@ -278,7 +273,7 @@ export function toPersistedSettings(input: {
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
   sessionsEnabled?: boolean;
-  opencode: OpencodeSettings;
+  warnConcurrentWriters?: boolean;
   gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
   markdownSnippets: MarkdownSnippetSettings;
@@ -315,7 +310,7 @@ export function toPersistedSettings(input: {
       ? input.restrictFilesToContext
       : defaultPersistedSettings.restrictFilesToContext,
     sessionsEnabled: input.sessionsEnabled ?? true,
-    opencode: normalizeOpencodeSettings(input.opencode),
+    warnConcurrentWriters: input.warnConcurrentWriters ?? true,
     gitIntegration: normalizeGitIntegrationSettings(input.gitIntegration),
     logSettings: normalizeLogSettings(input.logSettings),
     markdownSnippets: normalizeMarkdownSnippetSettings(input.markdownSnippets),

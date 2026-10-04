@@ -27,9 +27,9 @@ describe('connection profile production boundaries', () => {
   expect(chatStore.updateThreadMetadata({ connectionProfileId: 'profile-c' })).toBe(false);
   expect(chatStore.getSessionLink(id, '/profiles')?.connectionProfileId).toBe('profile-b');
  });
- it('persists neutral enablement independently from provider enablement', () => {
-  const encoded = toPersistedSettings({ ...defaultSettings, wrapLines: true, zoomPercent: 100, sessionsEnabled: true, opencode: { ...defaultSettings.opencode, enabled: false } });
-  expect(encoded.sessionsEnabled).toBe(true); expect(encoded.opencode.enabled).toBe(false);
+ it('persists neutral enablement without retired transport state', () => {
+  const encoded = toPersistedSettings({ ...defaultSettings, wrapLines: true, zoomPercent: 100, sessionsEnabled: true });
+  expect(encoded.sessionsEnabled).toBe(true); expect(encoded).not.toHaveProperty("opencode");
  });
  it('starts before catalogs, retries failure and detects host replacement', async () => {
   let generation = 1; let running = true;

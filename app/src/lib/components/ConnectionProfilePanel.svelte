@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { sessionSupportSnapshot } from '../services/sessionSupport';
   import { chatStore } from '../state/chatStore';
   import { onMount } from 'svelte';
   import { ensureAgentHostStarted, getAgentHostClient, loadSessionCatalogs } from '../services/agentHostRuntime';
@@ -13,40 +14,70 @@
   let runtimes = $state<readonly AgentRuntimeDescriptor[]>([]);
   let profiles = $state<readonly ConnectionProfileSnapshot[]>([]);
   let label = $state('');
+  let providerId = $state('');
+  let providerIds = $state<string[]>([]);
+  let ownership = $state<'local' | 'external'>('local');
+  let endpoint = $state('');
+  let refreshEpoch = 0;
   let busy = $state(false);
   let error = $state('');
+  let diagnostics = $state('');
   const selected = $derived(profiles.find(p => p.id === connectionProfileId));
   function mergeProfiles(incoming: readonly ConnectionProfileSnapshot[]): readonly ConnectionProfileSnapshot[] {
     return incoming.map(profile => { const previous = profiles.find(p => p.id === profile.id); return previous && !isNewerProfileSnapshot(previous, profile) ? previous : profile; });
   }
   async function refresh(): Promise<void> {
+    const selectedRuntime = runtimeId;
+    const selectedProfile = connectionProfileId;
+    const epoch = ++refreshEpoch;
     await ensureAgentHostStarted();
     const client = getAgentHostClient();
-    runtimes = (await client.discover()).runtimes;
-    const result = await client.authenticate({ runtimeId: 'codex', workspaceRootPath: '', options: { action: 'list-profiles' } });
+    const discovered = (await client.discover()).runtimes;
+    if (epoch !== refreshEpoch || selectedRuntime !== runtimeId) return;
+    runtimes = discovered;
+    if (selectedRuntime !== 'codex' && selectedRuntime !== 'opencode') { profiles = []; return; }
+    const result = await client.authenticate({ runtimeId: selectedRuntime, workspaceRootPath: '', options: { action: 'list-profiles' } });
+    if (epoch !== refreshEpoch || selectedRuntime !== runtimeId) return;
     profiles = mergeProfiles(result.profiles ?? []);
+    const [hostStatus, nativeHealth] = await Promise.all([client.getStatus(), client.health(selectedRuntime, selectedProfile).catch(() => undefined)]);
+    if (epoch !== refreshEpoch || selectedRuntime !== runtimeId || selectedProfile !== connectionProfileId) return;
+    diagnostics = sessionSupportSnapshot(hostStatus, nativeHealth, profiles.find(profile => profile.id === selectedProfile));
+    providerIds = [];
+    if (selectedRuntime === 'opencode' && selectedProfile) {
+      const catalog = await client.catalogModels(selectedRuntime, undefined, selectedProfile).catch(() => null);
+      if (epoch !== refreshEpoch || selectedRuntime !== runtimeId || selectedProfile !== connectionProfileId) return;
+      providerIds = [...new Set(catalog?.models.map(model => model.id.split('/')[0]) ?? [])];
+      if (!providerIds.includes(providerId)) providerId = providerIds[0] ?? '';
+    }
   }
   async function action(action: string): Promise<void> {
+    const selectedRuntime = runtimeId;
+    const selectedProfile = connectionProfileId;
     busy = true; error = '';
     try {
       await ensureAgentHostStarted();
-      const result = await getAgentHostClient().authenticate({ runtimeId: 'codex', connectionProfileId, workspaceRootPath: '', options: { action, ...(action === 'create-profile' ? { label } : {}) }, ...(action === 'login-api-key' ? { credential: { kind: 'api-key', ref: 'profile-api-key' } as const } : {}) });
-      if (result.profiles) { profiles = mergeProfiles(result.profiles); if (!bound && action === 'create-profile') onSelect('codex', result.profile?.id); }
+      const result = await getAgentHostClient().authenticate({ runtimeId: selectedRuntime, connectionProfileId: selectedProfile, workspaceRootPath: '', options: { action, ...(action === 'create-profile' ? { label, ...(selectedRuntime === 'opencode' && ownership === 'external' ? { endpoint } : {}) } : {}), ...(selectedRuntime === 'opencode' ? { providerId } : {}) }, ...(action === 'login-api-key' ? { credential: { kind: 'api-key', ref: 'profile-api-key' } as const } : {}) });
+      if (selectedRuntime !== runtimeId || selectedProfile !== connectionProfileId) return;
+      if (result.profiles) { profiles = mergeProfiles(result.profiles); if (!bound && action === 'create-profile') onSelect(selectedRuntime, result.profile?.id); }
       if (result.profile) { profiles = profiles.map(p => p.id === result.profile!.id && isNewerProfileSnapshot(p, result.profile!) ? result.profile! : p); chatStore.applyConnectionProfileState(result.profile.id, result.profile.generation, result.profile.state === 'auth-required', result.profile.hostGeneration); }
       label = ''; onRefresh();
+      await refresh();
     } catch (failure) { error = failure instanceof Error ? failure.message : 'Connection is unavailable. Retry.'; await refresh().catch(() => {}); }
     finally { busy = false; }
   }
+  $effect(() => {
+    runtimeId; connectionProfileId;
+    void refresh().catch(() => { error = 'Runtime discovery failed. Retry connection.'; });
+  });
   onMount(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    void refresh().catch(() => { error = 'Runtime discovery failed. Retry connection.'; });
     void getAgentHostClient().subscribeProfiles(update => {
-      if (disposed) return;
+      if (disposed || update.runtimeId !== runtimeId) return;
       chatStore.applyConnectionProfileState(update.connectionProfileId, update.generation, update.profile.state === 'auth-required', update.hostGeneration);
       profiles = profiles.map(p => p.id === update.connectionProfileId && isNewerProfileSnapshot(p, update.profile) ? update.profile : p);
       if (update.connectionProfileId === connectionProfileId && update.profile.state === 'authenticated') {
-        void loadSessionCatalogs('codex', connectionProfileId).then(() => onRefresh());
+        void loadSessionCatalogs(runtimeId, connectionProfileId).then(() => onRefresh());
       }
     }).then(stop => { if (disposed) stop(); else unlisten = stop; }).catch(() => {});
     return () => { disposed = true; unlisten?.(); };
@@ -60,19 +91,26 @@
       {#each runtimes as runtime}<option value={runtime.id}>{runtime.label}</option>{/each}
     </select>
   </label>
-  {#if runtimeId === 'codex'}
+  {#if runtimeId === 'codex' || runtimeId === 'opencode'}
     <label>Account profile
-      <select value={connectionProfileId ?? ''} disabled={bound || busy} onchange={event => onSelect('codex', event.currentTarget.value || undefined)}>
+      <select value={connectionProfileId ?? ''} disabled={bound || busy} onchange={event => onSelect(runtimeId, event.currentTarget.value || undefined)}>
         <option value="">Select a profile</option>
+        {#if connectionProfileId && !selected}<option value={connectionProfileId}>Missing profile — saved session binding preserved</option>{/if}
         {#each profiles as profile}<option value={profile.id}>{profile.label}</option>{/each}
       </select>
     </label>
+    {#if bound && connectionProfileId && !selected}<span role="alert">The saved profile is missing. Session metadata and native history binding are preserved. Restore the selected profile before explicitly resuming this session.</span>{/if}
     {#if !bound}
       <input aria-label="New profile name" placeholder="New account profile" bind:value={label} disabled={busy} maxlength="80" />
+      {#if runtimeId === 'opencode'}
+        <label>Connection<select bind:value={ownership} disabled={busy}><option value="local">Local native runtime</option><option value="external">Owner-managed endpoint</option></select></label>
+        {#if ownership === 'external'}<input aria-label="External runtime endpoint" placeholder="Loopback HTTP or HTTPS origin" bind:value={endpoint} disabled={busy} />{/if}
+      {/if}
       <button onclick={() => action('create-profile')} disabled={busy}>Create profile</button>
     {/if}
     {#if selected}
       <span role="status">{selected.state}{selected.account?.type === 'chatgpt' ? `: ${selected.account.email ?? 'ChatGPT account'} (${selected.account.planType})` : selected.account?.type === 'apiKey' ? ': API key' : ''}</span>
+      {#if runtimeId === 'codex'}
       {#if selected.state === 'login-pending'}
         <span>Complete sign-in in the browser, then verify the account.</span>
         <button onclick={() => action('cancel')} disabled={busy}>Cancel sign-in</button>
@@ -85,6 +123,15 @@
         <button onclick={() => action('logout')} disabled={busy}>Sign out</button>
       {/if}
       <label title="Required for the pinned runtime's legacy history and developer coding slice. Restarts only this profile; pending turns end."><input type="checkbox" checked={selected.experimental ?? false} disabled={busy} onchange={e => action(e.currentTarget.checked ? 'experimental-on' : 'experimental-off')} />Enable experimental protocol (legacy history, plan and questions)</label>
+      {:else}
+        <label>Provider<select bind:value={providerId} disabled={busy} aria-label="Native provider">
+          <option value="">Select provider</option>
+          {#each providerIds as id}<option value={id}>{id}</option>{/each}
+        </select></label>
+        <button onclick={() => action('login-api-key')} disabled={busy || !providerId || !selected.support.apiKey}>Import private API key</button>
+        <button onclick={() => action('logout')} disabled={busy || !providerId || !selected.support.apiKey}>Remove provider credential</button>
+        <span class="note">Local import reads the private 0600 api-key file in this profile’s app data home and consumes it after success. External credentials belong to the endpoint owner. Browser/device sign-in is unavailable.</span>
+      {/if}
       <button onclick={() => action('read')} disabled={busy}>Verify account</button>
       <button onclick={() => action('restart')} disabled={busy}>Reconnect profile</button>
       {#if selected.usage}
@@ -96,6 +143,7 @@
       {#if selected.message}<span>{selected.message}</span>{/if}
     {/if}
   {/if}
+  {#if diagnostics}<button onclick={() => { void navigator.clipboard.writeText(diagnostics).catch(() => { error = 'Could not copy support details.'; }); }}>Copy safe support details</button>{/if}
   <button onclick={() => { void refresh().then(() => onRefresh()).catch(() => { error = 'Runtime discovery failed.'; }); }} disabled={busy}>Retry discovery</button>
   {#if error}<span role="alert">{error}</span>{/if}
 </div>

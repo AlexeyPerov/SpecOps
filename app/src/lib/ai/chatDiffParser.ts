@@ -1,7 +1,7 @@
 import type {
-  OpencodeFileChangeStatus,
-  OpencodeSessionFileDiff,
-} from "./backends/workspaceAgentBackend";
+  FileChangeStatus,
+  SessionFileDiff,
+} from "../domain/fileChanges";
 
 /**
  * M5-T2 — pure helpers for the session diff viewer.
@@ -26,11 +26,11 @@ export interface DiffRow {
 }
 
 export interface ParsedFileDiff {
-  file: OpencodeSessionFileDiff;
+  file: SessionFileDiff;
   rows: DiffRow[];
 }
 
-export type DiffStatusFilter = "all" | OpencodeFileChangeStatus;
+export type DiffStatusFilter = "all" | FileChangeStatus;
 
 /**
  * Parses a unified-diff `patch` into renderable rows. Tracks old/new line
@@ -125,15 +125,15 @@ export function parseHunkHeader(line: string): HunkHeader | null {
 }
 
 /** Parses every file's patch in one pass. */
-export function parseSessionDiffs(files: readonly OpencodeSessionFileDiff[]): ParsedFileDiff[] {
+export function parseSessionDiffs(files: readonly SessionFileDiff[]): ParsedFileDiff[] {
   return files.map((file) => ({ file, rows: parseUnifiedDiffPatch(file.patch) }));
 }
 
 /** Filters the file list by status (`all` / `added` / `deleted` / `modified`). */
 export function filterSessionDiffs(
-  files: readonly OpencodeSessionFileDiff[],
+  files: readonly SessionFileDiff[],
   filter: DiffStatusFilter,
-): OpencodeSessionFileDiff[] {
+): SessionFileDiff[] {
   if (filter === "all") {
     return [...files];
   }
@@ -147,7 +147,7 @@ export interface SessionDiffTotals {
 }
 
 export function summarizeSessionDiffs(
-  files: readonly OpencodeSessionFileDiff[],
+  files: readonly SessionFileDiff[],
 ): SessionDiffTotals {
   return files.reduce(
     (acc, file) => ({
@@ -160,7 +160,7 @@ export function summarizeSessionDiffs(
 }
 
 /** Short label for a status (used in the file list + filter chips). */
-export function diffStatusBadgeLabel(status: OpencodeFileChangeStatus): string {
+export function diffStatusBadgeLabel(status: FileChangeStatus): string {
   if (status === "conflicted") return "!";
   switch (status) {
     case "added":

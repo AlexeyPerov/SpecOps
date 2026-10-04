@@ -7,6 +7,8 @@ import {
   chmodSync,
   readFileSync,
   statSync,
+  symlinkSync,
+  existsSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +19,6 @@ import {
   RuntimeConnection,
   OPENCODE_VERSION,
   resolveExecutable,
-  runtimeOwner,
 } from "./lifecycle";
 import { OpenCodeRuntimeAdapter } from "./adapter";
 const roots: string[] = [];
@@ -75,9 +76,6 @@ describe("host runtime bootstrap", () => {
         PATH: "/bin",
       }),
     ).toBeNull();
-    expect(runtimeOwner({})).toBe("host");
-    expect(runtimeOwner({ SPECOPS_OPENCODE_OWNER: "legacy" })).toBe("legacy");
-    expect(() => runtimeOwner({ SPECOPS_OPENCODE_OWNER: "both" })).toThrow();
   });
   it("external connection probes pinned health without owning a child", async () => {
     const server = createServer((req, res) => {
@@ -111,15 +109,9 @@ describe("host runtime bootstrap", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
-  it("refuses local start in legacy owner mode and incompatible version", async () => {
+  it("refuses an incompatible native version", async () => {
     const s = store();
     const p = s.create("local");
-    const legacy = new RuntimeConnection(p, s, null, {
-      SPECOPS_OPENCODE_OWNER: "legacy",
-    });
-    connections.push(legacy);
-    await expect(legacy.start()).rejects.toThrow("connection failed");
-    expect(legacy.child).toBeNull();
     const path = join(s.root, "native");
     writeFileSync(path, "#!/bin/sh\necho 0.0.0\n");
     chmodSync(path, 0o700);
@@ -172,14 +164,15 @@ it("native fixture preserves auth across restart and kills observed descendants"
     const connection = await adapter.connect(id);
     connections.push(connection);
     const pid = Number(readFileSync(join(s.home(id), "fixture-child"), "utf8"));
+    writeFileSync(join(s.home(id), "api-key"), "fixture-secret", { mode: 0o600 });
     const signed = await adapter.authenticate({
       runtimeId: "opencode",
       workspaceRootPath: s.root,
       connectionProfileId: id,
+      credential: { kind: "api-key", ref: "profile-api-key" },
       options: {
         action: "login-api-key",
         providerId: "example",
-        apiKey: "fixture-secret",
       },
     });
     expect(signed.status).toBe("authenticated");
@@ -282,3 +275,20 @@ it.skipIf(!process.env.SPECOPS_NATIVE_SMOKE)(
   },
   20000,
 );
+
+it("private provider import rejects raw options, missing/public/symlink files and consumes only a successful host import", async () => {
+  const s = store(); const profile = s.create("Private");
+  const adapter = new OpenCodeRuntimeAdapter({ profileRoot: s.root, executable: fileURLToPath(new URL("./nativeFixture.mjs", import.meta.url)) });
+  const base = { runtimeId: "opencode" as const, workspaceRootPath: s.root, connectionProfileId: profile.id, credential: { kind: "api-key" as const, ref: "profile-api-key" }, options: { action: "login-api-key", providerId: "example" } };
+  const path = join(s.home(profile.id), "api-key");
+  try {
+    await expect(adapter.authenticate({ ...base, options: { ...base.options, apiKey: "sk-RAW-CANARY-123456789000" } })).rejects.toThrow("profile action failed");
+    await expect(adapter.authenticate(base)).rejects.toThrow("profile action failed");
+    writeFileSync(path, "private-secret-canary", { mode: 0o644 });
+    if (process.platform !== "win32") await expect(adapter.authenticate(base)).rejects.toThrow("profile action failed");
+    chmodSync(path, 0o600);
+    const result = await adapter.authenticate(base); expect(JSON.stringify(result)).not.toContain("secret-canary"); expect(existsSync(path)).toBe(false);
+    const target = join(s.home(profile.id), "other-key"); writeFileSync(target, "secret", { mode: 0o600 }); symlinkSync(target, path);
+    await expect(adapter.authenticate(base)).rejects.toThrow("profile action failed"); expect(existsSync(target)).toBe(true);
+  } finally { adapter.close(); }
+});

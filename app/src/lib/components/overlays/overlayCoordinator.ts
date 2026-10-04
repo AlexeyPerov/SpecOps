@@ -30,7 +30,6 @@ export interface OverlayState {
   bookmarkListOpen: boolean;
   snippetInsertOpen: boolean;
   projectSearchOpen: boolean;
-  sessionListOpen: boolean;
   addMultipleOpen: boolean;
   timelineOpen: boolean;
   workspaceContextMenu: { workspaceId: ContextId; x: number; y: number } | null;
@@ -100,7 +99,6 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
   function isAnyOverlayOpen(): boolean {
     const s = deps.getState();
     return (
-      s.sessionListOpen ||
       s.addMultipleOpen ||
       s.projectSearchOpen ||
       s.timelineOpen ||
@@ -123,7 +121,6 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
   function isModalOverlayOpen(): boolean {
     const s = deps.getState();
     return (
-      s.sessionListOpen ||
       s.addMultipleOpen ||
       s.timelineOpen ||
       s.quickOpenOpen ||

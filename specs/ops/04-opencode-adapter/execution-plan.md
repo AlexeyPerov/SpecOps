@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** A/B source verified; C and external acceptance open
+**Status:** A/B/C source verified; external acceptance open
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -30,3 +30,5 @@ Task prefix is `AS04-<phase>-<NN>`. Numeric folders reflect the default delivery
 AS04-A source checks and bundled no-account bootstrap are recorded in [implementation notes](implementation-notes-phase-a.md). Upstream installed/account acceptance is still open; do not treat source status as delivery acceptance.
 
 AS04-B native core evidence and concrete cutover handoff: [implementation notes](implementation-notes-phase-b.md). Installed/live-provider core acceptance remains open.
+
+AS04-C source/asset/host-fault baseline and remaining external gates: [implementation evidence](implementation-notes-phase-c.md). Rich comparison evidence remains [documentary](cutover-reference-evidence.md); 06-B stays Planned.

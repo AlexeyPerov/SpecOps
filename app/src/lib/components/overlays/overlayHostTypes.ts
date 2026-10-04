@@ -27,7 +27,6 @@ export type OverlayKind =
   | "bookmarkList"
   | "snippetInsert"
   | "projectSearch"
-  | "sessionList"
   | "addMultiple"
   | "timeline"
   | "workspaceContextMenu";
@@ -122,7 +121,6 @@ export interface OverlayHostBound {
     x: number;
     y: number;
   } | null;
-  sessionListActiveSessionId: string | null;
   persistProjectSearchHeight: () => void;
   /** Internal setter — exposes the project-search query field setters. */
   setProjectSearchQuery: (query: string) => void;

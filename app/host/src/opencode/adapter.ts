@@ -31,9 +31,9 @@ import { redactForSerialization } from "../../../src/lib/session/redact";
 import { RuntimeProfileStore, type RuntimeProfile } from "./profiles";
 import {
   RuntimeConnection,
+  RuntimeStartupError,
   OPENCODE_VERSION,
   resolveExecutable,
-  runtimeOwner,
 } from "./lifecycle";
 export interface OpenCodeAdapterOptions {
   profileRoot?: string;
@@ -190,7 +190,7 @@ export class OpenCodeRuntimeAdapter
         : "auth-required";
       this.publish(profile);
       return connection;
-    } catch {
+    } catch (failure) {
       if (
         requestGeneration !== undefined &&
         (requestGeneration !== connection.generation ||
@@ -198,9 +198,8 @@ export class OpenCodeRuntimeAdapter
       )
         throw new Error("Runtime connection generation expired");
       snapshot.generation = connection.generation;
-      snapshot.state = "error";
-      snapshot.message =
-        "OpenCode connection failed. Check the selected profile, endpoint and pinned runtime.";
+      snapshot.state = failure instanceof RuntimeStartupError ? failure.kind : "error";
+      snapshot.message = failure instanceof RuntimeStartupError ? failure.message : "OpenCode connection failed. Check the selected profile, endpoint and pinned runtime.";
       this.publish(profile);
       throw new Error(snapshot.message);
     }
@@ -254,13 +253,13 @@ export class OpenCodeRuntimeAdapter
       if (action === "logout")
         await connection.client!.auth.remove({ providerID });
       else {
-        const key = request.options?.apiKey;
-        if (typeof key !== "string" || !key.trim() || key.length > 8192)
-          throw new Error("Provider API key is required");
+        if (request.options?.apiKey !== undefined || request.credential?.ref !== "profile-api-key") throw new Error("Use the selected profile's private api-key file");
+        const imported = this.store.importKey(profile.id);
         await connection.client!.auth.set({
           providerID,
-          auth: { type: "api", key },
+          auth: { type: "api", key: imported.key },
         });
+        imported.consume();
       }
       if (generation !== connection.generation || !connection.client)
         throw new Error("Authentication generation expired");
@@ -324,10 +323,7 @@ export class OpenCodeRuntimeAdapter
       return {
         runtimeId: this.runtimeId,
         runtimeVersion: OPENCODE_VERSION,
-        status:
-          runtimeOwner(this.options.ambient) === "host"
-            ? "degraded"
-            : "unavailable",
+        status: "degraded",
         checkedAt: new Date().toISOString(),
         message: "Select an OpenCode profile to verify its connection.",
       };

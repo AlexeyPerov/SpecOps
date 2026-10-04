@@ -89,3 +89,6 @@ TODO.md
 **/.svelte-kit/**
 
 **/.zcode/**
+
+# Generated packaged execution assets
+app/src-tauri/resources/agent-host/

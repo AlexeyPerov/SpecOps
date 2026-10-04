@@ -44,7 +44,6 @@ import { normalizePathSync } from "../../services/diskFingerprint";
 import { openFolderDialog } from "../../services/fileSystem";
 import { markWorkspaceLifecycleActive } from "../../services/workspaceLifecycle";
 import { appState } from "../../state/appState";
-import type { WorkspaceAgentSessionDetails } from "../../ai/backends/workspaceAgentBackend";
 
 /** Inputs shared by every project-search handler. */
 export interface ProjectSearchQueryState {
@@ -82,17 +81,6 @@ export interface OverlayHostHandlersDeps {
   setProjectSearchRunning: (running: boolean) => void;
   bumpProjectSearchGeneration: () => number;
   getProjectSearchGeneration: () => number;
-
-  // --- Session list setters + backend hooks ---
-  setSessionListLoading: (loading: boolean) => void;
-  setSessionListSessions: (sessions: WorkspaceAgentSessionDetails[]) => void;
-  /** Returns the current session-list search query (controlled input). */
-  getSessionListSearch: () => string;
-  handleListWorkspaceSessions: (options: {
-    search?: string;
-  }) => Promise<WorkspaceAgentSessionDetails[]>;
-  handleOpenExternalSession: (sessionId: string, title?: string) => Promise<void>;
-  setSessionListOpen: (open: boolean) => void;
 
   // --- Add-multiple setters ---
   setAddMultipleOpen: (open: boolean) => void;
@@ -405,37 +393,6 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
   // Session list panel
   // -----------------------------------------------------------------------
 
-  async function refreshSessionList(): Promise<void> {
-    deps.setSessionListLoading(true);
-    try {
-      // handleListWorkspaceSessions degrades to [] and never throws (M7-T5
-      // surfaces failures via diagnostics instead), so there's nothing to
-      // catch here — kept in try/finally purely for the loading toggle.
-      const sessions = await deps.handleListWorkspaceSessions({
-        ...(deps.getSessionListSearch().trim()
-          ? { search: deps.getSessionListSearch().trim() }
-          : {}),
-      });
-      deps.setSessionListSessions(sessions);
-    } finally {
-      deps.setSessionListLoading(false);
-    }
-  }
-
-  async function openSessionListPanel(): Promise<void> {
-    deps.setSessionListOpen(true);
-    await refreshSessionList();
-  }
-
-  function closeSessionListPanel(): void {
-    deps.setSessionListOpen(false);
-  }
-
-  async function handleOpenSessionFromList(sessionId: string, title?: string): Promise<void> {
-    await deps.handleOpenExternalSession(sessionId, title);
-    closeSessionListPanel();
-  }
-
   // -----------------------------------------------------------------------
   // Add multiple workspaces
   // -----------------------------------------------------------------------
@@ -527,10 +484,6 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
     handleHeadingJumpSelect,
     handleBookmarkListSelect,
     handleSnippetInsertSelect,
-    refreshSessionList,
-    openSessionListPanel,
-    closeSessionListPanel,
-    handleOpenSessionFromList,
     openAddMultipleWorkspaces,
     toggleAddMultipleEntry,
     confirmAddMultiple,

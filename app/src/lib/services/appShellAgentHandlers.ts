@@ -7,9 +7,6 @@ import {
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { closeTabWithUnsavedPrompt } from "./closeTabFlow";
-import {
-  isOpencodeEnabled,
-} from "./opencodeSettings";
 import { promptEntryName } from "./entryNamePrompt";
 import { getAgentHostClient, resetAgentHostEnsureCache } from "./agentHostRuntime";
 import {
@@ -83,9 +80,8 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
     const isRestoreTargetActive = (): boolean =>
       appState.getWorkspaceRoot() === normalizedRoot;
     const snapshot = appState.getSnapshot();
-    // Dev feature gate for Sessions (neutral settings gate is follow-up
-    // cleanup; the gate itself stays).
-    if (!isOpencodeEnabled(snapshot.settings.opencode)) {
+    // Shared Sessions enablement applies before restoring any runtime.
+    if (!snapshot.settings.sessionsEnabled) {
       if (!isRestoreTargetActive()) {
         return;
       }

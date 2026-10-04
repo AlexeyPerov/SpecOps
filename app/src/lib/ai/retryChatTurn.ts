@@ -11,8 +11,7 @@ import {
   type ChatTurnSuccessResult,
   type SendChatMessageFailureReason,
 } from "./chatSendPipeline";
-import { OPENCODE_DISABLED_MESSAGE } from "./chatErrorCopy";
-import { isOpencodeEnabled } from "../services/opencodeSettings";
+import { SESSIONS_DISABLED_MESSAGE } from "./chatErrorCopy";
 
 export type RetryLastChatTurnFailureReason =
   | SendChatMessageFailureReason
@@ -49,8 +48,8 @@ export async function retryLastChatTurn(
     };
   }
 
-  if (!isOpencodeEnabled(appState.getSnapshot().settings.opencode)) {
-    return { ok: false, reason: "provider_unavailable", message: OPENCODE_DISABLED_MESSAGE };
+  if (!appState.getSnapshot().settings.sessionsEnabled) {
+    return { ok: false, reason: "provider_unavailable", message: SESSIONS_DISABLED_MESSAGE };
   }
 
   const validation = await validateAgentHostSend(target.root, target.activeSessionId);

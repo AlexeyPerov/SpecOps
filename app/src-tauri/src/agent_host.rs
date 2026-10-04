@@ -373,13 +373,28 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
     None
 }
 
-fn resolve_node_binary() -> Result<PathBuf, AgentHostError> {
+fn resolve_node_binary(app: &AppHandle) -> Result<PathBuf, AgentHostError> {
+    if let Some(raw) = std::env::var_os("SPECOPS_NODE_EXECUTABLE") {
+        let path = PathBuf::from(raw);
+        if path.is_absolute() && path.is_file() {
+            return Ok(path);
+        }
+        return Err(AgentHostError::NodeMissing {
+            message: "Explicit Node executable is missing or not absolute".to_string(),
+        });
+    }
+    if let Ok(resources) = app.path().resource_dir() {
+        let name = if cfg!(windows) { "node.exe" } else { "node" };
+        let path = resources.join("agent-host").join(name);
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    #[cfg(debug_assertions)]
     if let Some(path) = find_on_path("node") {
         return Ok(path);
     }
-    Err(AgentHostError::NodeMissing {
-        message: "Node.js was not found on PATH; install Node to run the Agent Host.".to_string(),
-    })
+    Err(AgentHostError::NodeMissing { message: "Bundled Node runtime is missing. Reinstall SpecOps or set an explicit absolute SPECOPS_NODE_EXECUTABLE path.".to_string() })
 }
 
 /// Resolve the built host bundle. Order: `SPECOPS_HOST_PATH` env override,
@@ -388,9 +403,12 @@ fn resolve_node_binary() -> Result<PathBuf, AgentHostError> {
 fn resolve_host_script(app: &AppHandle) -> Result<PathBuf, AgentHostError> {
     if let Ok(raw) = std::env::var("SPECOPS_HOST_PATH") {
         let path = PathBuf::from(raw);
-        if path.is_file() {
+        if path.is_absolute() && path.is_file() {
             return Ok(path);
         }
+        return Err(AgentHostError::HostPathMissing {
+            message: "Explicit Agent Host bundle is missing or not absolute".to_string(),
+        });
     }
     if let Ok(resource_dir) = app.path().resource_dir() {
         let bundled = resource_dir.join("agent-host").join("index.js");
@@ -398,11 +416,14 @@ fn resolve_host_script(app: &AppHandle) -> Result<PathBuf, AgentHostError> {
             return Ok(bundled);
         }
     }
-    // Dev fallback. `CARGO_MANIFEST_DIR` is baked at compile time
-    // (`.../app/src-tauri`); the host bundle lives at `app/host/dist`.
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../host/dist/index.js");
-    if dev.is_file() {
-        return Ok(dev);
+    #[cfg(debug_assertions)]
+    {
+        // Source development only. `CARGO_MANIFEST_DIR` is baked at compile time
+        // (`.../app/src-tauri`); the host bundle lives at `app/host/dist`.
+        let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../host/dist/index.js");
+        if dev.is_file() {
+            return Ok(dev);
+        }
     }
     Err(AgentHostError::HostPathMissing {
         message:
@@ -412,7 +433,7 @@ fn resolve_host_script(app: &AppHandle) -> Result<PathBuf, AgentHostError> {
 }
 
 fn build_host_command(app: &AppHandle) -> Result<Command, AgentHostError> {
-    let node = resolve_node_binary()?;
+    let node = resolve_node_binary(app)?;
     let script = resolve_host_script(app)?;
     let mut command = Command::new(node);
     command.arg(script);
@@ -424,8 +445,16 @@ fn build_host_command(app: &AppHandle) -> Result<Command, AgentHostError> {
         })?;
     command.env("SPECOPS_PROFILE_ROOT", data_dir.join("connection-profiles"));
     if std::env::var_os("SPECOPS_OPENCODE_EXECUTABLE").is_none() {
-        if let Ok(binary) = crate::opencode_sidecar::resolve_opencode_binary(app) {
-            command.env("SPECOPS_OPENCODE_EXECUTABLE", binary);
+        match crate::native_assets::resolve_opencode_binary(app) {
+            Ok(binary) => {
+                command.env("SPECOPS_OPENCODE_EXECUTABLE", binary);
+            }
+            Err(message) => {
+                log::warn!("{message}");
+                // An explicit empty override disables host PATH discovery while
+                // keeping other installed runtimes available.
+                command.env("SPECOPS_OPENCODE_EXECUTABLE", "");
+            }
         }
     }
     Ok(command)

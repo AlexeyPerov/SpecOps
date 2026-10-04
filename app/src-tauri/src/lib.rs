@@ -2,7 +2,7 @@ mod agent_host;
 mod file_watcher;
 mod git;
 mod git_askpass;
-mod opencode_sidecar;
+mod native_assets;
 mod session_fs;
 
 #[cfg(target_os = "macos")]
@@ -10,7 +10,6 @@ mod dock_menu;
 
 use agent_host::AgentHostState;
 use file_watcher::FileWatcherState;
-use opencode_sidecar::OpencodeSidecarState;
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -56,13 +55,10 @@ fn take_pending_opened_paths() -> Vec<String> {
     Vec::new()
 }
 
-/// Stop the sidecar and reap in-flight git children. Idempotent.
+/// Stop Agent Host and reap in-flight git children. Idempotent.
 fn run_shutdown_cleanup(app_handle: &tauri::AppHandle) {
     if let Some(host_state) = app_handle.try_state::<AgentHostState>() {
         host_state.stop_sync();
-    }
-    if let Some(sidecar_state) = app_handle.try_state::<OpencodeSidecarState>() {
-        sidecar_state.stop_sync();
     }
     // Terminate any in-flight git subprocesses so a mid-flight write does not
     // orphan a `.git/index.lock`. Each child is reaped and its index lock
@@ -87,7 +83,6 @@ fn quit_app(app_handle: tauri::AppHandle) {
 pub fn run() {
     let app = tauri::Builder::default()
         .manage(FileWatcherState::new())
-        .manage(OpencodeSidecarState::new())
         .manage(AgentHostState::new())
         .setup(|app| {
             git_askpass::set_git_askpass_app_handle(app.handle().clone());
@@ -117,11 +112,6 @@ pub fn run() {
             session_fs::session_fs_write_text,
             session_fs::session_fs_read_text,
             session_fs::session_fs_atomic_write_text,
-            opencode_sidecar::opencode_sidecar_attach_workspace,
-            opencode_sidecar::opencode_sidecar_start,
-            opencode_sidecar::opencode_sidecar_stop,
-            opencode_sidecar::opencode_sidecar_restart,
-            opencode_sidecar::opencode_sidecar_status,
             agent_host::agent_host_start,
             agent_host::agent_host_stop,
             agent_host::agent_host_restart,
@@ -153,8 +143,8 @@ pub fn run() {
         // Both arms: `ExitRequested` covers the normal path (last window closed,
         // `AppHandle::exit`), while `Exit` is the last chance on shutdown paths that
         // skip it. `run_shutdown_cleanup` is idempotent, so running twice is fine —
-        // whereas missing it leaks `opencode serve` holding port 4096 (the next launch
-        // then fails with PortInUse) and orphans git children with their index locks.
+        // missing cleanup orphans native runtime descendants and git children
+        // holding their index locks.
         if matches!(&event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
             run_shutdown_cleanup(app_handle);
         }

@@ -125,7 +125,6 @@ describe("fileStatusTracker git integration", () => {
 
     const state = await refreshFileStatuses({
       workspaceRootPath: "/repo",
-      allowOpencode: false,
     });
 
     expect(resolveRepoRootMock).not.toHaveBeenCalled();

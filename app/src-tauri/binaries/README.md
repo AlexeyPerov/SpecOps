@@ -43,7 +43,7 @@ After the script writes new binaries:
    the installed version matches what you intend to ship.
 2. `git add app/src-tauri/binaries/opencode-*`
 3. `git commit -m 'chore: refresh bundled opencode binaries to vX.Y.Z'`
-4. Consider aligning `@opencode-ai/sdk` in `app/package.json` to the same
+4. Consider aligning the pinned host SDK in `app/host/package.json` to the same
    release version (the script does not touch the SDK lockfile).
 
 ## Sidecar asset → Tauri triple mapping

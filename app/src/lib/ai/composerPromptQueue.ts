@@ -13,7 +13,7 @@
  * `$state` arrays for chip rendering.
  */
 
-import type { WorkspaceAgentSendContext } from "./backends/workspaceAgentBackend";
+import type { ChatSendContext } from "./chatSendPipeline";
 import type { ChatQueueMode } from "./chatSendPipeline";
 
 export interface QueuedPrompt {
@@ -22,7 +22,7 @@ export interface QueuedPrompt {
   prompt: string;
   mode: ChatQueueMode;
   /** Optional assembled composer context (mentions / attachments). */
-  context?: WorkspaceAgentSendContext;
+  context?: ChatSendContext;
   /** ISO timestamp when the user queued the prompt. */
   queuedAt: string;
 }
@@ -47,7 +47,7 @@ export function createComposerPromptQueue(): {
   enqueue(input: {
     prompt: string;
     mode: ChatQueueMode;
-    context?: WorkspaceAgentSendContext;
+    context?: ChatSendContext;
   }): QueuedPrompt | null;
   remove(id: string): void;
   clear(): void;

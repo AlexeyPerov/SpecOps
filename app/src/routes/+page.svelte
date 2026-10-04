@@ -96,12 +96,9 @@
   } from "../lib/services/sessionManager";
   import { isWorkspaceLifecycleActive } from "../lib/services/workspaceLifecycle";
   import {
-    requestOpencodeHealthRefresh,
     syncActiveFileTreeExpandEffect,
     syncSessionTabEffect,
     syncExternalFileWatcherEffect,
-    syncOpencodeSidecarEffect,
-    syncOpencodeToggleEffect,
     syncProjectTreeWatcherEffect,
     syncWorkspaceFileCatalogEffect,
     syncResponsiveLayoutEffect,
@@ -111,15 +108,6 @@
     syncWorkspaceContextEffect,
   } from "../lib/services/appShellEffects";
   import { flushThemePersistence } from "../lib/state/appState/themeController";
-  import {
-    clearOpencodeCatalog,
-  } from "../lib/ai/opencodeCatalog";
-  import {
-    clearOpencodeConfigStore,
-  } from "../lib/ai/opencodeConfigStore";
-  import {
-    clearOpencodeCommands,
-  } from "../lib/ai/backends/opencodeCommands";
   import {
     getFileStatusTracker,
     refreshFileStatuses,
@@ -291,7 +279,6 @@
   );
   /** Native session id for the active session (host binding link). */
   const activeNativeSessionId = $derived(activeSessionEntry?.nativeSessionId ?? null);
-  const opencodeMode = $derived($appSettings.opencode.mode);
 
   /**
    * M5-T3 — workspace git status (file.status) for the project-tree badges.
@@ -419,12 +406,10 @@
     ),
   );
 
-  const opencodeBaseUrl = $derived($appSettings.opencode.baseUrl);
-  const opencodeEnabled = $derived($appSettings.sessionsEnabled);
-  const opencodeSidecarPort = $derived($appSettings.opencode.sidecarPort);
+  const sessionsEnabled = $derived($appSettings.sessionsEnabled);
   const showSessionsSidebar = $derived(
     Boolean(activeWorkspaceRoot) &&
-      opencodeEnabled &&
+      sessionsEnabled &&
       !workspaceLayout.sessionsSidebarCollapsed,
   );
   const sessionSelectedTabId = $derived(getSessionSelectedTabId(session));
@@ -668,14 +653,14 @@
     isSessionTabActive;
     selectedSessionId;
     lastChatScopeKey;
-    opencodeEnabled;
+    sessionsEnabled;
     syncSessionTabEffect({
       activeTab,
       activeContextId,
       activeWorkspaceRoot,
       isSessionTabActive,
       lastChatScopeKey,
-      opencodeEnabled,
+      sessionsEnabled,
       restoreWorkspaceSession: (root, options) =>
         appShellHost?.api.restoreWorkspaceSession(root, options) ?? Promise.resolve(),
       setLastChatScopeKey: (key) => {
@@ -738,11 +723,11 @@
     activeRuntimeBySessionId;
     $appSettings.soundSettings;
     $appSettings.osNotificationSettings;
-    opencodeEnabled;
+    sessionsEnabled;
     // P03-08-29(c): with AI disabled no agent can run, so runtime transitions
     // never occur — skip the observer update entirely rather than rely on it
     // being an unreachable no-op.
-    if (!runtimeReady || !opencodeEnabled) {
+    if (!runtimeReady || !sessionsEnabled) {
       return;
     }
     sessionNotificationObserver.update({
@@ -753,43 +738,6 @@
         osNotifications: $appSettings.osNotificationSettings,
       },
     });
-  });
-
-  $effect(() => {
-    // Sidecar health depends on session-tab active; keep that dep here only.
-    const effectStartedAt = nowMs();
-    runtimeReady;
-    isWorkspaceLifecycleActive();
-    activeWorkspaceRoot;
-    isSessionTabActive;
-    syncOpencodeSidecarEffect({
-      runtimeReady,
-      workspaceLifecycleActive: isWorkspaceLifecycleActive(),
-      activeWorkspaceRoot,
-      isSessionTabActive,
-      opencodeEnabled,
-      opencodeMode,
-      opencodeBaseUrl,
-      opencodeSidecarPort,
-      setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
-    });
-    syncOpencodeToggleEffect({
-      runtimeReady,
-      opencodeEnabled,
-      opencodeMode,
-    });
-    void logPerfTiming(
-      "tab/workspace shell effect scheduled",
-      {
-        metric: "tab.activationSideEffects",
-        durationMs: elapsedMs(effectStartedAt),
-        label: "shell-sidecar-effect",
-        runtimeReady,
-        isSessionTabActive,
-        hasWorkspaceRoot: Boolean(activeWorkspaceRoot),
-      },
-      "debug",
-    );
   });
 
   $effect(() => {
@@ -872,52 +820,6 @@
   });
 
   $effect(() => {
-    // This effect handles *settings-driven* health refreshes (mode/url/port
-    // toggle changes). It deliberately does NOT depend on `activeWorkspaceRoot`
-    // — the per-workspace status probe is handled by syncOpencodeSidecarEffect
-    // above. Without this guard the two effects would both fire on every
-    // workspace switch and double-probe the sidecar. activeWorkspaceRoot is
-    // still passed through as a value (ensureOpencodeSidecar needs it), read
-    // untracked via appState.getSnapshot() so it does not become a dep.
-    runtimeReady;
-    opencodeEnabled;
-    opencodeMode;
-    opencodeBaseUrl;
-    opencodeSidecarPort;
-    if (!runtimeReady) {
-      return;
-    }
-    requestOpencodeHealthRefresh({
-      opencodeEnabled,
-      opencodeMode,
-      opencodeBaseUrl,
-      opencodeSidecarPort,
-      activeWorkspaceRoot: appState.getWorkspaceRoot(),
-      setOpencodeHealth: (patch) => appState.applyPersistedSettings({ opencodeHealth: patch }),
-    });
-  });
-
-  /**
-   * M13.5 — deduped snackbar on hard sidecar failure. Emits one status
-   * message per distinct failure signature (kind+message); re-emitting the
-   * same signature (e.g. on tab switch while breaker is active) does not
-   * flash a second snackbar. Cleared when the signature changes.
-   */
-  let lastHardFailureSignature = "";
-  $effect(() => {
-    const health = $appSettings.opencodeHealth;
-    if (health.status !== "error") {
-      return;
-    }
-    const signature = health.lastErrorMessage ?? "error";
-    if (signature === lastHardFailureSignature) {
-      return;
-    }
-    lastHardFailureSignature = signature;
-    notify("OpenCode could not start. Check Settings → Workspaces → OpenCode.");
-  });
-
-  $effect(() => {
     // External file watcher: only path-affecting state (watch flag + open file paths).
     runtimeReady;
     runtimeSyncExternalFileWatcher;
@@ -983,31 +885,9 @@
     }
     void refreshFileStatuses({
       workspaceRootPath: root,
-      allowOpencode: isSessionTabActive,
     });
   });
 
-  /**
-   * M10-T3 — invalidate the workspace-scoped pull-only stores on workspace
-   * switch so the process-lifetime cache doesn't accumulate an entry per
-   * workspace ever opened (slow leak in a long-running desktop app). The
-   * per-session (todo/diff) and reactive workspace (file-status /
-   * status-summary) stores are cleared by their own effects above; this covers
-   * the remaining catalog / config / commands pull-only stores.
-   */
-  let lastWorkspaceStoreRoot = $state<string | null>(null);
-  $effect(() => {
-    runtimeReady;
-    activeWorkspaceRoot;
-
-    const root = activeWorkspaceRoot;
-    if (lastWorkspaceStoreRoot && lastWorkspaceStoreRoot !== root) {
-      clearOpencodeCatalog(lastWorkspaceStoreRoot);
-      clearOpencodeConfigStore(lastWorkspaceStoreRoot);
-      clearOpencodeCommands(lastWorkspaceStoreRoot);
-    }
-    lastWorkspaceStoreRoot = root;
-  });
 </script>
 
 
@@ -1064,7 +944,7 @@
   {fileDropTargetPaneId}
   {statusMessage}
   {openSessionIds}
-  opencodeEnabled={$appSettings.sessionsEnabled}
+  sessionsEnabled={$appSettings.sessionsEnabled}
   canOpenLogsPanel={$appSettings.logSettings.canOpenLogsPanel}
   onFileDropPaneChange={handleFileDropPaneChange}
   {editorWorkbench}

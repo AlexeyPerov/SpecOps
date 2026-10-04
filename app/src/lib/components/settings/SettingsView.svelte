@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { appState } from "../../state/appState";
   import {
     buildSettingsSidebar,
     filterSettingsSidebar,
@@ -10,14 +9,6 @@
   } from "../../services/settingsDialogUi";
   import KeyboardShortcutsSettings from "../KeyboardShortcutsSettings.svelte";
   import DevSettingsPanel from "./DevSettingsPanel.svelte";
-  import OpenCodeSettingsPanel from "./OpenCodeSettingsPanel.svelte";
-  import OpenCodeConfigPanel from "./OpenCodeConfigPanel.svelte";
-  import ProviderManagementPanel from "./ProviderManagementPanel.svelte";
-  import McpManagementPanel from "./McpManagementPanel.svelte";
-  import AgentManagementPanel from "./AgentManagementPanel.svelte";
-  import PermissionRulesPanel from "./PermissionRulesPanel.svelte";
-  import CommandManagementPanel from "./CommandManagementPanel.svelte";
-  import InstructionsPanel from "./InstructionsPanel.svelte";
   import EditorSettingsPanel from "./EditorSettingsPanel.svelte";
   import AppearancePanel from "./AppearancePanel.svelte";
   import LogsSettingsPanel from "./LogsSettingsPanel.svelte";
@@ -38,9 +29,8 @@
   // Read only the specific settings slice this view depends on so the deep-link
   // effect below does not re-run on every `$appState` emit (which would otherwise
   // re-snap `activeTab` and clear `filterQuery` while the user is typing).
-  const opencodeSettings = $derived($appState.settings.opencode);
 
-  const settingsSidebar = $derived(buildSettingsSidebar(opencodeSettings));
+  const settingsSidebar = $derived(buildSettingsSidebar());
   const filteredSettingsSidebar = $derived(
     filterSettingsSidebar(settingsSidebar, filterQuery),
   );
@@ -52,19 +42,18 @@
     ),
   );
 
-  // Honour a deep-link target carried by the view tab (e.g. openSettingsDialog("opencode")).
+  // Honour a deep-link target carried by the view tab (e.g. openSettingsDialog("dev")).
   $effect(() => {
     if (subTab) {
       const resolved = resolveOpenSettingsDialogTab(
         subTab as SettingsDialogTab,
-        opencodeSettings,
       );
       activeTab = resolved;
       filterQuery = "";
     }
   });
 
-  // Reset to a valid tab when the active one is hidden by a beta gate.
+  // Keep unknown deep links within available settings.
   $effect(() => {
     if (!visibleTabIds.has(activeTab)) {
       activeTab = "dev";
@@ -87,22 +76,6 @@
     <VersionControlSettingsPanel />
   {:else if tabId === "dev"}
     <DevSettingsPanel dialogOpen={true} />
-  {:else if tabId === "opencode"}
-    <OpenCodeSettingsPanel dialogOpen={true} />
-  {:else if tabId === "openCodeConfig"}
-    <OpenCodeConfigPanel dialogOpen={true} />
-  {:else if tabId === "providers"}
-    <ProviderManagementPanel dialogOpen={true} />
-  {:else if tabId === "mcp"}
-    <McpManagementPanel dialogOpen={true} />
-  {:else if tabId === "agents"}
-    <AgentManagementPanel dialogOpen={true} />
-  {:else if tabId === "permissions"}
-    <PermissionRulesPanel dialogOpen={true} />
-  {:else if tabId === "commands"}
-    <CommandManagementPanel dialogOpen={true} />
-  {:else if tabId === "instructions"}
-    <InstructionsPanel dialogOpen={true} />
   {:else if tabId === "logs"}
     <LogsSettingsPanel />
   {/if}

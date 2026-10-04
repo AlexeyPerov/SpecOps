@@ -131,7 +131,7 @@
     workspaceHiddenRootPaths: Set<string>;
     projectTreeControllerState: ProjectTreeControllerState;
     fileStatusByPath:
-      | ReadonlyMap<string, import("../ai/backends/workspaceAgentBackend").OpencodeFileChangeStatus>
+      | ReadonlyMap<string, import("../domain/fileChanges").FileChangeStatus>
       | null;
     showProjectPanel: boolean;
     showSessionsSidebar: boolean;
@@ -144,7 +144,7 @@
     openSessionIds: ReadonlySet<string>;
 
     // --- Settings-derived flags ---
-    opencodeEnabled: boolean;
+    sessionsEnabled: boolean;
     canOpenLogsPanel: boolean;
 
     // --- fileDropTargetPaneId setter (page-owned state) ---
@@ -223,7 +223,7 @@
     fileDropTargetPaneId,
     statusMessage,
     openSessionIds,
-    opencodeEnabled,
+    sessionsEnabled,
     canOpenLogsPanel,
     onFileDropPaneChange,
     editorWorkbench,
@@ -617,7 +617,7 @@
     show: true,
     workspaces: railWorkspaces,
     activeContextId,
-    opencodeEnabled,
+    sessionsEnabled,
     panelWidthPx: normalizeActivityRailWidthPx(activityRailWidthPx),
     notepadOpenTabCount,
     notepadRecentTabs,
@@ -631,7 +631,7 @@
     onSelectNotepadTab: handleSelectNotepadTab,
   }}
   sessionsSidebar={{
-    show: Boolean(activeWorkspaceRoot) && opencodeEnabled,
+    show: Boolean(activeWorkspaceRoot) && sessionsEnabled,
     sessions: workspaceSessions,
     activeSessionId: selectedSessionId,
     sidebarTitle: "Sessions",
@@ -773,6 +773,5 @@
   headingJump={undefined}
   bookmarkList={undefined}
   snippetInsert={undefined}
-  sessionListPanel={undefined}
   addMultipleWorkspaces={undefined}
 />

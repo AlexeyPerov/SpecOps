@@ -1,9 +1,10 @@
 <script lang="ts">
   import { persistSessionConnectionSelection } from "../ai/composerSendActions";
+  import { workspaceActivity } from "../services/sessionActivity";
   import ConnectionProfilePanel from "./ConnectionProfilePanel.svelte";
   import {
     getAccessBlockedCopy,
-    OPENCODE_DISABLED_RECOVERY,
+    SESSIONS_DISABLED_RECOVERY,
     PROVIDER_REQUEST_FAILURE_RECOVERY,
     isComposerConfigurationError,
   } from "../ai/chatErrorCopy";
@@ -21,8 +22,7 @@
     formatCompactionNotice,
   } from "../state/chatStore";
   import { draftEntryTitleForScope } from "../services/chatSessions";
-  import { isOpencodeEnabled } from "../services/opencodeSettings";
-  import { openSettingsDialog } from "../services/settingsDialogUi";
+    import { openSettingsDialog } from "../services/settingsDialogUi";
   import { requestConfirm } from "../services/confirmDialogUi";
   import { extractSessionTotals } from "../ai/chatSteps";
   import { abortTurn } from "../ai/chatSendPipeline";
@@ -68,7 +68,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
   );
   const isChatBlockedVisible = $derived(isBlocked);
   const isSessionsDisabledForWorkspace = $derived(
-    !isOpencodeEnabled($appState.settings.opencode),
+    !$appState.settings.sessionsEnabled,
   );
   const isEmpty = $derived(messages.length === 0);
   const emptySetupAction = $derived.by(() => {
@@ -79,14 +79,14 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
       return {
         hint: "Finish session setup and try again.",
         label: "Open session settings",
-        onClick: () => openSettingsDialog("opencode"),
+        onClick: () => openSettingsDialog("dev"),
       };
     }
     if (isSessionsDisabledForWorkspace) {
       return {
-        hint: OPENCODE_DISABLED_RECOVERY,
+        hint: SESSIONS_DISABLED_RECOVERY,
         label: "Open session settings",
-        onClick: () => openSettingsDialog("opencode"),
+        onClick: () => openSettingsDialog("dev"),
       };
     }
     return null;
@@ -95,6 +95,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
    * Cumulative cost / token totals across all assistant messages. Assistant
    * messages accumulate `cost` parts as `usage.recorded` events stream in.
    */
+  const activities = $derived(workspaceActivity($chatStore, chatStore.getActiveWorkspaceRoot() ?? ""));
   const sessionTotals = $derived(extractSessionTotals(messages));
   const activeSessionId = $derived(chatStore.getActiveSessionId());
   const activeAgentTitle = $derived.by(() => {
@@ -326,6 +327,18 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
       }}
       onRefresh={() => { catalogRevision += 1; }}
     />
+  {#if activities.length}
+    <div aria-label="Workspace session activity" role="status">
+      {#each activities as activity (activity.sessionId)}
+        <div>{activity.title}: {activity.runtimeId}, profile {activity.profileId ?? 'unknown'}, model {activity.modelId ?? 'default'} — {activity.action}; {activity.writeCapability === 'unknown' ? 'write capability unknown' : activity.writeCapability === 'possible' ? 'may write files' : 'native read-only sandbox'}
+          {#if activity.overlaps.length}<span>Reported path overlap: {activity.overlaps.join(', ')}</span>{/if}
+          <button onclick={() => abortTurn(activity.sessionId, workspaceRootPath)}>Stop</button>
+        </div>
+      {/each}
+      <span>Shared workspace. Stop does not undo file changes. Changed-path overlap is best-effort; incomplete native path data cannot prove isolation.</span>
+    </div>
+  {/if}
+
     <ChatComposer
       {isBlocked}
       {isGenerating}

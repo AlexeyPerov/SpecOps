@@ -1,5 +1,6 @@
 /** Identifies which git mutation triggered a version-control UI refresh. */
 export type VersionControlMutationScope =
+  | "workspace-edit"
   | "stage"
   | "commit"
   | "checkout"

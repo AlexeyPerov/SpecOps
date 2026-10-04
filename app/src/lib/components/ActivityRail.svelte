@@ -36,7 +36,7 @@
      * per-workspace "Sessions" count is hidden from expanded rail cards (the
      * sessions backend is inactive).
      */
-    opencodeEnabled?: boolean;
+    sessionsEnabled?: boolean;
     /** Resizable rail width (compact 48px → expanded cards). */
     panelWidthPx?: number;
     /** Number of currently-open tabs in the notepad context. */
@@ -63,7 +63,7 @@
   let {
     workspaces = [],
     activeContextId = "notepad",
-    opencodeEnabled = false,
+    sessionsEnabled = false,
     panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
     notepadOpenTabCount = 0,
     notepadRecentTabs = [],
@@ -354,7 +354,7 @@
               <span class="rail-workspace-name" title={workspacePath(workspace)}>{workspaceName(workspace)}</span>
               <span class="rail-workspace-path" title={workspacePath(workspace)}>{workspacePath(workspace)}</span>
               <span class="rail-workspace-stats">
-                {#if opencodeEnabled}
+                {#if sessionsEnabled}
                   <span class="rail-workspace-stat">Sessions: {counts.sessions}</span>
                 {/if}
                 <span class="rail-workspace-stat">Tabs: {counts.tabs}</span>

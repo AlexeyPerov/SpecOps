@@ -18,6 +18,7 @@ const child = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], {
   stdio: "ignore",
 });
 writeFileSync(join(process.env.HOME, "fixture-child"), String(child.pid));
+writeFileSync(join(process.env.HOME, "fixture-native"), String(process.pid));
 const sessionsPath = join(process.env.HOME, "fixture-sessions.json");
 const sessions = existsSync(sessionsPath)
   ? JSON.parse(readFileSync(sessionsPath, "utf8"))

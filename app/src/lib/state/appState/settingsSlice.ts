@@ -8,8 +8,6 @@ import type {
   GitIntegrationSettings,
   LogSettings,
   MarkdownViewMode,
-  OpencodeHealthState,
-  OpencodeSettings,
   OsNotificationSettings,
   SoundSettings,
 } from "../../domain/contracts";
@@ -38,7 +36,6 @@ import { createFontSettingsSlice } from "./fontSettingsSlice";
 import { createLogSettingsSlice, type SettingsUpdate } from "./logSettingsSlice";
 import { createNotificationSettingsSlice } from "./notificationSettingsSlice";
 import { createSnippetSettingsSlice } from "./snippetSettingsSlice";
-import { defaultOpencodeSettings, normalizeOpencodeSettings } from "../../services/opencodeSettings";
 import {
   defaultGitIntegrationSettings,
   isGitIntegrationEnabled,
@@ -46,7 +43,6 @@ import {
 } from "../../services/gitIntegrationSettings";
 import { drainGitCommands } from "../../git/gitRun";
 import { closeAllSessionTabsInState, closeAllViewTabsInState } from "./tabHelpers";
-import { clearOpencodeSidecarCircuitBreaker } from "../../services/opencodeSidecarEnsure";
 
 const defaultExternalFilesSettings: ExternalFilesSettings = {
   watchExternalChanges: true,
@@ -78,14 +74,8 @@ export const defaultSettings: AppSettingsState = {
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
   sessionsEnabled: true,
-  opencode: defaultOpencodeSettings,
+  warnConcurrentWriters: true,
   gitIntegration: defaultGitIntegrationSettings,
-  opencodeHealth: {
-    status: "unknown",
-    source: null,
-    checkedAt: null,
-    lastErrorMessage: null,
-  },
   commandBindingOverrides: {},
   logSettings: defaultLogSettings,
   markdownSnippets: defaultMarkdownSnippetSettings,
@@ -101,43 +91,6 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       update(state => {
         const next = { ...state, settings: { ...state.settings, sessionsEnabled: enabled } };
         return enabled ? next : closeAllSessionTabsInState(next);
-      });
-    },
-    setOpencodeEnabled(enabled: boolean) {
-      // Toggling the master switch clears the sidecar circuit breaker so a
-      // prior failure does not block re-enable.
-      clearOpencodeSidecarCircuitBreaker();
-      update((state) => {
-        let next: AppDomainState = {
-          ...state,
-          settings: {
-            ...state.settings,
-            opencode: normalizeOpencodeSettings({
-              ...state.settings.opencode,
-              enabled,
-            }),
-            opencodeHealth: enabled
-              ? {
-                  status: "checking",
-                  source: state.settings.opencode.mode,
-                  checkedAt: new Date().toISOString(),
-                  lastErrorMessage: null,
-                }
-              : {
-                  status: "unknown",
-                  source: null,
-                  checkedAt: new Date().toISOString(),
-                  lastErrorMessage: null,
-                },
-          },
-        };
-        if (!enabled) {
-          // Close any open session tabs so the hidden feature leaves no orphan
-          // tabs (mirrors how the git master toggle closes version-control
-          // view tabs).
-          next = closeAllSessionTabsInState(next);
-        }
-        return next;
       });
     },
     setGitIntegrationEnabled(enabled: boolean) {
@@ -267,9 +220,8 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       defaultMarkdownViewMode?: MarkdownViewMode;
       restrictFilesToContext?: boolean;
       sessionsEnabled?: boolean;
-      opencode?: Partial<OpencodeSettings>;
+      warnConcurrentWriters?: boolean;
       gitIntegration?: Partial<GitIntegrationSettings>;
-      opencodeHealth?: Partial<OpencodeHealthState>;
       logSettings?: Partial<LogSettings>;
       markdownSnippets?: Partial<AppSettingsState["markdownSnippets"]>;
       commandBindingOverrides?: CommandBindingOverrides;
@@ -375,19 +327,8 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             },
           };
         }
+        if (typeof partial.warnConcurrentWriters === "boolean") next = { ...next, settings: { ...next.settings, warnConcurrentWriters: partial.warnConcurrentWriters } };
         if (typeof partial.sessionsEnabled === "boolean") next = { ...next, settings: { ...next.settings, sessionsEnabled: partial.sessionsEnabled } };
-        if (partial.opencode) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              opencode: normalizeOpencodeSettings({
-                ...next.settings.opencode,
-                ...partial.opencode,
-              }),
-            },
-          };
-        }
         if (partial.gitIntegration) {
           next = {
             ...next,
@@ -397,18 +338,6 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
                 ...next.settings.gitIntegration,
                 ...partial.gitIntegration,
               }),
-            },
-          };
-        }
-        if (partial.opencodeHealth) {
-          next = {
-            ...next,
-            settings: {
-              ...next.settings,
-              opencodeHealth: {
-                ...next.settings.opencodeHealth,
-                ...partial.opencodeHealth,
-              },
             },
           };
         }

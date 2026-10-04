@@ -11,7 +11,8 @@ import type {
   ToolCallRecord,
   WorkspaceSessionsIndexSnapshot,
 } from "../domain/contracts";
-import { readBoolean, readNumber } from "../ai/backends/wireReaders";
+function readBoolean(value: unknown): boolean | null { return typeof value === "boolean" ? value : null; }
+function readNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
 
 export const CHAT_RETENTION_MAX_TURNS = 50;
 export const CHAT_THREAD_VERSION = 1;

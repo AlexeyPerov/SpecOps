@@ -22,24 +22,10 @@
 
 import type { AppDomainState, ContextId, TabState } from "../domain/contracts";
 import { isSessionTab } from "../domain/contracts";
-import type { OpencodeHealthStatus } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { normalizePathSync } from "./diskFingerprint";
 import { syncProjectTreeWatcher } from "./fileWatcher";
-import {
-  getOpencodeSidecarStatus,
-  healthFromSidecarStatus,
-  isOpencodeSidecarError,
-  stopOpencodeSidecar,
-} from "./opencodeSidecar";
-import {
-  ensureOpencodeSidecar,
-  isOpencodeSidecarBlocked,
-  clearOpencodeSidecarCircuitBreaker,
-} from "./opencodeSidecarEnsure";
-import { isOpencodeEnabled } from "./opencodeSettings";
-import { loadOpencodeServerPassword } from "./providerSecretsStore";
 import type { createProjectTreeController } from "./projectTreeController";
 
 type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
@@ -73,7 +59,7 @@ export interface SyncSessionTabEffectInput {
    * chat slice on every switch is pure waste that keeps the chat emit fan-out
    * wired.
    */
-  opencodeEnabled: boolean;
+  sessionsEnabled: boolean;
 }
 
 export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
@@ -84,7 +70,7 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
     lastChatScopeKey,
     restoreWorkspaceSession,
     setLastChatScopeKey,
-    opencodeEnabled,
+    sessionsEnabled,
   } = input;
 
   if (activeTab && isSessionTab(activeTab)) {
@@ -110,7 +96,7 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
   // (session tabs are hidden) and creating an empty per-workspace slice on
   // every switch only keeps the chat emit fan-out wired for no user benefit.
   // Cancel any stale scope and stop — re-enabling AI re-arms the full path.
-  if (!opencodeEnabled) {
+  if (!sessionsEnabled) {
     if (lastChatScopeKey !== null) {
       chatStore.cancelAllGenerations(lastChatScopeKey);
       setLastChatScopeKey(null);
@@ -285,7 +271,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       defaultMarkdownViewMode: snapshot.settings.defaultMarkdownViewMode,
       restrictFilesToContext: snapshot.settings.restrictFilesToContext,
       sessionsEnabled: snapshot.settings.sessionsEnabled ?? true,
-      opencode: snapshot.settings.opencode,
+      warnConcurrentWriters: snapshot.settings.warnConcurrentWriters,
       gitIntegration: snapshot.settings.gitIntegration,
       logSettings: snapshot.settings.logSettings,
       markdownSnippets: snapshot.settings.markdownSnippets,
@@ -296,22 +282,6 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       showHiddenFiles: snapshot.settings.showHiddenFiles,
     }),
   );
-}
-
-export interface SyncOpencodeToggleEffectInput {
-  runtimeReady: boolean;
-  opencodeEnabled: boolean;
-  opencodeMode: import("../domain/contracts").OpencodeTransportMode;
-}
-
-export function syncOpencodeToggleEffect(input: SyncOpencodeToggleEffectInput): void {
-  const { runtimeReady, opencodeEnabled, opencodeMode } = input;
-  if (!runtimeReady || opencodeEnabled || opencodeMode !== "sidecar") {
-    return;
-  }
-  void stopOpencodeSidecar().catch(() => {
-    // best-effort; ignore errors on stop
-  });
 }
 
 export interface SyncProjectTreeWatcherEffectInput {
@@ -333,338 +303,6 @@ export interface SyncProjectTreeWatcherEffectInput {
    * throttle drops the redundant pass.
    */
   revalidateProjectTree?: () => Promise<void>;
-}
-
-export interface SyncOpencodeSidecarEffectInput {
-  runtimeReady: boolean;
-  workspaceLifecycleActive: boolean;
-  activeWorkspaceRoot: string | null;
-  /** M13.5 — gate automatic sidecar-mode health work on session-tab active. */
-  isSessionTabActive: boolean;
-  opencodeEnabled: boolean;
-  opencodeMode: import("../domain/contracts").OpencodeTransportMode;
-  opencodeBaseUrl: string;
-  /** M14-T4 — current sidecar port from settings; forwarded to the sidecar
-   * on the next attach. Not used by the URL-mode probe path. */
-  opencodeSidecarPort: number;
-  serverPassword?: string;
-  setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
-}
-
-const URL_HEALTH_TIMEOUT_MS = 10_000;
-const SIDECAR_STATUS_TIMEOUT_MS = 7_000;
-let lastOpencodeSidecarProbeKey: string | null = null;
-
-interface UrlHealthProbeResult {
-  status: OpencodeHealthStatus;
-  message: string | null;
-}
-
-async function resolveServerPassword(provided: string | undefined): Promise<string> {
-  if (provided !== undefined) {
-    return provided;
-  }
-  try {
-    return await loadOpencodeServerPassword();
-  } catch {
-    return "";
-  }
-}
-
-export async function probeUrlHealth(
-  baseUrl: string,
-  serverPassword: string,
-): Promise<UrlHealthProbeResult> {
-  let endpoint: URL;
-  try {
-    endpoint = new URL(baseUrl);
-  } catch {
-    return { status: "error", message: "OpenCode URL is invalid." };
-  }
-  const healthUrl = new URL("/global/health", endpoint);
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), URL_HEALTH_TIMEOUT_MS);
-  const headers: Record<string, string> = {};
-  if (serverPassword.trim().length > 0) {
-    headers["Authorization"] = `Basic ${btoa(`opencode:${serverPassword}`)}`;
-  }
-  try {
-    const response = await fetch(healthUrl.toString(), {
-      method: "GET",
-      headers,
-      signal: controller.signal,
-    });
-    if (response.status === 401) {
-      return {
-        status: "degraded",
-        message:
-          "OpenCode server requires authentication. Set Server password in Settings \u2192 Workspaces \u2192 OpenCode.",
-      };
-    }
-    if (!response.ok) {
-      return {
-        status: "degraded",
-        message: `OpenCode server responded with HTTP ${response.status}.`,
-      };
-    }
-    return { status: "healthy", message: null };
-  } catch (error: unknown) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return {
-        status: "error",
-        message: `OpenCode health check timed out after ${URL_HEALTH_TIMEOUT_MS / 1000}s.`,
-      };
-    }
-    const message = error instanceof Error ? error.message : "OpenCode URL is unreachable.";
-    return { status: "error", message };
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-export function syncOpencodeSidecarEffect(input: SyncOpencodeSidecarEffectInput): void {
-  const {
-    runtimeReady,
-    workspaceLifecycleActive,
-    activeWorkspaceRoot,
-    isSessionTabActive,
-    opencodeEnabled,
-    opencodeMode,
-    opencodeBaseUrl,
-    opencodeSidecarPort,
-    setOpencodeHealth,
-  } = input;
-
-  // P03-08-29(a): when AI is disabled, the health state is always `unknown`
-  // regardless of which workspace is active. Keep `activeWorkspaceRoot` OUT of
-  // the probe key in that case, otherwise every workspace switch changes the
-  // key, bypasses the dedup gate, and writes a fresh `checkedAt` timestamp —
-  // a new state object per switch that fans out through the full derived
-  // cascade (settings fingerprint, etc.) for no semantic change. Publish the
-  // `unknown` patch once and stop re-touching state until AI is re-enabled.
-  if (!opencodeEnabled) {
-    const disabledKey = ["disabled", runtimeReady].join("|");
-    if (disabledKey === lastOpencodeSidecarProbeKey) {
-      return;
-    }
-    lastOpencodeSidecarProbeKey = disabledKey;
-    setOpencodeHealth({
-      status: "unknown",
-      source: null,
-      checkedAt: new Date().toISOString(),
-      lastErrorMessage: null,
-    });
-    return;
-  }
-
-  const probeKey = [
-    runtimeReady,
-    workspaceLifecycleActive,
-    activeWorkspaceRoot ?? "",
-    isSessionTabActive,
-    opencodeEnabled,
-    opencodeMode,
-    opencodeBaseUrl,
-    opencodeSidecarPort,
-  ].join("|");
-  if (probeKey === lastOpencodeSidecarProbeKey) {
-    return;
-  }
-  lastOpencodeSidecarProbeKey = probeKey;
-
-  if (!runtimeReady || !workspaceLifecycleActive || !activeWorkspaceRoot) {
-    return;
-  }
-
-  // URL mode: probe the configured server (no spawn). Skip when not on a
-  // session tab to avoid probe storms on file/editor activity; the URL is
-  // not a local sidecar so there's no spawn risk, but the probe itself
-  // consumes time and can race with editor saves.
-  if (opencodeMode === "url") {
-    if (!isSessionTabActive) {
-      return;
-    }
-    let endpoint: URL;
-    try {
-      endpoint = new URL(opencodeBaseUrl);
-    } catch {
-      setOpencodeHealth({
-        status: "error",
-        source: "url",
-        checkedAt: new Date().toISOString(),
-        lastErrorMessage: "OpenCode URL is invalid. Update Settings -> Workspaces -> OpenCode.",
-      });
-      return;
-    }
-    void (async () => {
-      const password = await resolveServerPassword(input.serverPassword);
-      const result = await probeUrlHealth(endpoint.toString(), password);
-      setOpencodeHealth({
-        status: result.status,
-        source: "url",
-        checkedAt: new Date().toISOString(),
-        lastErrorMessage: result.message,
-      });
-    })();
-    return;
-  }
-
-  // Sidecar mode (M13.5): no attach on workspace activation. Only probe the
-  // running sidecar (status-only), and only when the user is on a session
-  // tab — the sidecar is meant to serve sessions, not file editing. The
-  // sidecar is started lazily by Send or explicit Settings actions.
-  if (!isSessionTabActive) {
-    return;
-  }
-
-  // Respect circuit breaker: don't keep poking the sidecar after a hard
-  // failure — leave the existing `error` health in place until the user
-  // retries via Settings → Check connection or toggles OpenCode.
-  if (isOpencodeSidecarBlocked()) {
-    return;
-  }
-
-  setOpencodeHealth({
-    status: "checking",
-    source: "sidecar",
-    checkedAt: new Date().toISOString(),
-    lastErrorMessage: null,
-  });
-
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(
-      () => reject(new Error("OpenCode sidecar status check timed out after 7s")),
-      SIDECAR_STATUS_TIMEOUT_MS,
-    ),
-  );
-  void Promise.race([getOpencodeSidecarStatus(), timeout])
-    .then((status) => {
-      setOpencodeHealth({
-        status: healthFromSidecarStatus(status.health),
-        source: "sidecar",
-        checkedAt: new Date().toISOString(),
-        lastErrorMessage: status.lastError?.message ?? null,
-      });
-    })
-    .catch((error: unknown) => {
-      const message =
-        isOpencodeSidecarError(error) && error.message.trim().length > 0
-          ? error.message
-          : error instanceof Error && error.message.trim().length > 0
-            ? error.message
-            : "Failed to read OpenCode sidecar status.";
-      setOpencodeHealth({
-        status: "error",
-        source: "sidecar",
-        checkedAt: new Date().toISOString(),
-        lastErrorMessage: message,
-      });
-    });
-}
-
-export function requestOpencodeHealthRefresh(input: {
-  opencodeEnabled: boolean;
-  opencodeMode: import("../domain/contracts").OpencodeTransportMode;
-  opencodeBaseUrl: string;
-  /** M14-T4 — current sidecar port; forwarded to `ensureOpencodeSidecar`
-   * so a settings-driven port change re-attaches on the new port. */
-  opencodeSidecarPort: number;
-  serverPassword?: string;
-  activeWorkspaceRoot?: string | null;
-  setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void;
-}): void {
-  const {
-    opencodeEnabled,
-    opencodeMode,
-    opencodeBaseUrl,
-    opencodeSidecarPort,
-    activeWorkspaceRoot,
-    setOpencodeHealth,
-  } = input;
-  if (!opencodeEnabled) {
-    setOpencodeHealth({
-      status: "unknown",
-      source: null,
-      checkedAt: new Date().toISOString(),
-      lastErrorMessage: null,
-    });
-    return;
-  }
-  if (opencodeMode === "sidecar") {
-    // Settings intent — may spawn the sidecar (explicit user retry after a
-    // hard failure clears the circuit breaker; first-time start clears
-    // it on success).
-    if (!activeWorkspaceRoot) {
-      setOpencodeHealth({
-        status: "error",
-        source: "sidecar",
-        checkedAt: new Date().toISOString(),
-        lastErrorMessage:
-          "Open a workspace folder before checking the sidecar connection.",
-      });
-      return;
-    }
-    void ensureOpencodeSidecar(
-      {
-        intent: "settings",
-        directory: activeWorkspaceRoot,
-        port: opencodeSidecarPort,
-      },
-      {
-        setOpencodeHealth: (patch) =>
-          setOpencodeHealth({
-            status: patch.status,
-            source: "sidecar",
-            checkedAt: patch.checkedAt,
-            lastErrorMessage: patch.lastErrorMessage,
-          }),
-      },
-    ).catch(() => {
-      // ensure already published health; fall through to a final probe so
-      // the status pill reflects the latest settled state.
-      void probeSidecarStatusAfterRefresh(setOpencodeHealth);
-    });
-    return;
-  }
-
-  setOpencodeHealth({
-    status: "checking",
-    source: "url",
-    checkedAt: new Date().toISOString(),
-    lastErrorMessage: null,
-  });
-  void (async () => {
-    const password = await resolveServerPassword(input.serverPassword);
-    const result = await probeUrlHealth(opencodeBaseUrl, password);
-    setOpencodeHealth({
-      status: result.status,
-      source: "url",
-      checkedAt: new Date().toISOString(),
-      lastErrorMessage: result.message,
-    });
-  })();
-}
-
-async function probeSidecarStatusAfterRefresh(
-  setOpencodeHealth: (patch: Partial<import("../domain/contracts").OpencodeHealthState>) => void,
-): Promise<void> {
-  try {
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("OpenCode sidecar status check timed out after 7s")),
-        SIDECAR_STATUS_TIMEOUT_MS,
-      ),
-    );
-    const status = await Promise.race([getOpencodeSidecarStatus(), timeout]);
-    setOpencodeHealth({
-      status: healthFromSidecarStatus(status.health),
-      source: "sidecar",
-      checkedAt: new Date().toISOString(),
-      lastErrorMessage: status.lastError?.message ?? null,
-    });
-  } catch {
-    // Status probe already failed; ensure published the failure. No-op.
-  }
 }
 
 /**
@@ -784,7 +422,6 @@ export function resetAppShellEffectsForTests(): void {
   lastWorkspaceFileCatalogKey = null;
   lastOpenWorkspaceCatalogRoots = new Set();
   lastSettingsPersistenceFingerprint = null;
-  lastOpencodeSidecarProbeKey = null;
   if (settingsPersistTimer) {
     clearTimeout(settingsPersistTimer);
     settingsPersistTimer = null;

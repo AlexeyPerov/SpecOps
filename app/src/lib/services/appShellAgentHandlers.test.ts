@@ -39,7 +39,7 @@ vi.mock("../state/appState", () => ({
     selectTab: vi.fn(),
     getSnapshot: vi.fn(() => ({
       settings: {
-        opencode: { enabled: true, mode: "sidecar", baseUrl: "http://127.0.0.1:4096", sidecarPort: 4096 },
+        sessionsEnabled: true,
       },
     })),
   },
@@ -75,7 +75,7 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
       ...appStateMock.getSnapshot(),
       settings: {
         ...defaultSettings,
-        opencode: { enabled: true, mode: "sidecar", baseUrl: "http://127.0.0.1:4096", sidecarPort: 4096 },
+        sessionsEnabled: true,
       },
     });
 
@@ -161,7 +161,7 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
       ...appStateMock.getSnapshot(),
       settings: {
         ...defaultSettings,
-        opencode: { enabled: false, mode: "sidecar", baseUrl: "http://127.0.0.1:4096", sidecarPort: 4096 },
+        sessionsEnabled: false,
       },
     });
 

@@ -9,7 +9,6 @@ import {
   toExternalFilesSettings,
   toPersistedSettings,
 } from "./settingsStore";
-import { defaultOpencodeSettings } from "./opencodeSettings";
 import { defaultLogSettings } from "./logSettings";
 import { defaultFontSettings } from "./fontSettings";
 import {
@@ -58,7 +57,6 @@ describe("settings mapping", () => {
       autoClosePairs: true,
       autoSuggest: false,
       restrictFilesToContext: false,
-      opencode: defaultOpencodeSettings,
       gitIntegration: defaultPersistedSettings.gitIntegration,
       logSettings: { ...defaultLogSettings, verboseProviderLogging: false },
       markdownSnippets: defaultPersistedSettings.markdownSnippets,

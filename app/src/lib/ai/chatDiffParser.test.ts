@@ -8,7 +8,7 @@ import {
   splitDiffFilePath,
   summarizeSessionDiffs,
 } from "./chatDiffParser";
-import type { OpencodeSessionFileDiff } from "./backends/workspaceAgentBackend";
+import type { SessionFileDiff } from "../domain/fileChanges";
 
 /**
  * M5-T2 — unified-diff patch parsing + session-diff filtering / summarizing.
@@ -104,7 +104,7 @@ describe("chatDiffParser", () => {
 
   describe("parseSessionDiffs", () => {
     it("parses every file's patch in one pass", () => {
-      const files: OpencodeSessionFileDiff[] = [
+      const files: SessionFileDiff[] = [
         {
           file: "a.ts",
           patch: "@@ -1,1 +1,1 @@\n-a\n+a\n",
@@ -122,7 +122,7 @@ describe("chatDiffParser", () => {
   });
 
   describe("filterSessionDiffs", () => {
-    const files: OpencodeSessionFileDiff[] = [
+    const files: SessionFileDiff[] = [
       { file: "a", patch: "", additions: 0, deletions: 0, status: "modified" },
       { file: "b", patch: "", additions: 1, deletions: 0, status: "added" },
       { file: "c", patch: "", additions: 0, deletions: 1, status: "deleted" },
@@ -141,7 +141,7 @@ describe("chatDiffParser", () => {
 
   describe("summarizeSessionDiffs", () => {
     it("sums file count, additions, and deletions", () => {
-      const files: OpencodeSessionFileDiff[] = [
+      const files: SessionFileDiff[] = [
         { file: "a", patch: "", additions: 3, deletions: 1, status: "modified" },
         { file: "b", patch: "", additions: 5, deletions: 2, status: "added" },
       ];

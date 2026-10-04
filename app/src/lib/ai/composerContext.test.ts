@@ -6,8 +6,10 @@ import {
   parseAgentToken,
   parseFilePathToken,
   type ComposerAttachment,
+  type MentionToken,
 } from "./composerContext";
-import { mentionTokenForAgent, mentionTokenForFile } from "./backends/opencodeSearch";
+function mentionTokenForFile(path: string): MentionToken { return { kind: "file", display: `@file:${path}`, value: path }; }
+function mentionTokenForAgent(name: string, _label?: string): MentionToken { return { kind: "agent", display: `@agent:${name}`, value: name }; }
 
 function attachment(overrides: Partial<ComposerAttachment> = {}): ComposerAttachment {
   return {

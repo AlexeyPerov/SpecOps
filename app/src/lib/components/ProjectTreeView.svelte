@@ -4,7 +4,7 @@
   import { onDestroy } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
   import type { ContextId } from "../domain/contracts";
-  import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
+  import type { FileChangeStatus } from "../domain/fileChanges";
   import {
     flattenProjectTree,
     projectTreeRowKey,
@@ -43,7 +43,7 @@
     onCancelDraft?: () => void;
     activeFilePath?: string | null;
     /** M5-T3 — absolute path → git change status, for badges. */
-    statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
+    statusByPath?: ReadonlyMap<string, FileChangeStatus> | null;
     onToggleDirectory?: (path: string) => void;
     onOpenFile?: (path: string) => void;
     /** Double click on a file row: keep its (preview) tab. */

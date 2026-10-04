@@ -14,7 +14,6 @@ function setup(initial: Partial<OverlayState> = {}) {
     bookmarkListOpen: false,
     snippetInsertOpen: false,
     projectSearchOpen: false,
-    sessionListOpen: false,
     addMultipleOpen: false,
     timelineOpen: false,
     workspaceContextMenu: null,
@@ -78,13 +77,11 @@ describe("createOverlayCoordinator.closeOtherPickers", () => {
     const { state, coordinator } = setup({
       quickOpenOpen: true,
       projectSearchOpen: true,
-      sessionListOpen: true,
       addMultipleOpen: true,
       timelineOpen: true,
     });
     coordinator.closeOtherPickers("headingJump");
     expect(state.projectSearchOpen).toBe(true);
-    expect(state.sessionListOpen).toBe(true);
     expect(state.addMultipleOpen).toBe(true);
     expect(state.timelineOpen).toBe(true);
   });
@@ -107,7 +104,7 @@ describe("createOverlayCoordinator.shouldCloseEditorTools", () => {
   it("returns false for non-picker overlays", () => {
     const { coordinator } = setup();
     expect(coordinator.shouldCloseEditorTools("projectSearch")).toBe(false);
-    expect(coordinator.shouldCloseEditorTools("sessionList")).toBe(false);
+    expect(coordinator.shouldCloseEditorTools("addMultiple")).toBe(false);
     expect(coordinator.shouldCloseEditorTools("addMultiple")).toBe(false);
     expect(coordinator.shouldCloseEditorTools("timeline")).toBe(false);
     expect(coordinator.shouldCloseEditorTools("workspaceContextMenu")).toBe(false);
@@ -144,8 +141,7 @@ describe("createOverlayCoordinator.isModalOverlayOpen (H30)", () => {
 
   it("returns true for every modal overlay", () => {
     const modalKeys: Array<keyof OverlayState> = [
-      "sessionListOpen",
-      "addMultipleOpen",
+            "addMultipleOpen",
       "timelineOpen",
       "quickOpenOpen",
       "commandPaletteOpen",
@@ -189,12 +185,10 @@ describe("createOverlayCoordinator.closeAllOnWorkspaceSwitch", () => {
 
   it("does NOT close sessionList / addMultiple / timeline (pre-existing asymmetry)", () => {
     const { state, coordinator } = setup({
-      sessionListOpen: true,
       addMultipleOpen: true,
       timelineOpen: true,
     });
     coordinator.closeAllOnWorkspaceSwitch();
-    expect(state.sessionListOpen).toBe(true);
     expect(state.addMultipleOpen).toBe(true);
     expect(state.timelineOpen).toBe(true);
   });
@@ -279,7 +273,7 @@ describe("createOverlayCoordinator.isPicker", () => {
   it("classifies the 5 non-picker overlays as not pickers", () => {
     const { coordinator } = setup();
     expect(coordinator.isPicker("projectSearch")).toBe(false);
-    expect(coordinator.isPicker("sessionList")).toBe(false);
+    expect(coordinator.isPicker("addMultiple")).toBe(false);
     expect(coordinator.isPicker("addMultiple")).toBe(false);
     expect(coordinator.isPicker("timeline")).toBe(false);
     expect(coordinator.isPicker("workspaceContextMenu")).toBe(false);

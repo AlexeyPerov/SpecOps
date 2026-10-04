@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 20:52 MSK — Cut over common Sessions to native host runtimes
+
+- Implemented AS04-C source cutover: removed WebView SDK/direct backend, Rust competing supervisor, temporary ownership gate, obsolete native UI/stores/codecs/tests and transport settings. Common runtime/profile/model/mode selection, isolated local/external profiles and host-only private-file provider import preserve missing-profile/history bindings without migrations. Rich controls remain unavailable with a finite later-extension ledger.
+- Extended shared activity with honest write-policy states, Continue/Stop and persisted writer-warning preference, bounded changed-path overlaps and native diff refresh. Added packaged Node 24/license/hash manifest and host resources, deterministic host metadata, exact installed native asset resolution, explicit overrides and bounded allowlisted support details.
+- Validation: full frontend 2863 tests, host 157 tests with bundled no-account native smoke, Rust 78 tests, type checks and builds passed. Production host/client faults prove healthy runtime isolation and joint whole-host settlement without replay. Copied Node/host lifecycle passed outside checkout. Source work is complete; live-account/provider, signed installed/platform cleanup, immediate descendant-exit and release acceptance remain open. 06-B remains Planned; 08-A records a blocked subset baseline.
+
 ## 2026-10-04 20:27 MSK — Add second-runtime native core session parity
 
 - Implemented AS04-B native create/read/resume/history with immutable profile/workspace/model/mode binding in native metadata and persisted native/client message identity. Production dispatcher/client/pipeline/disk fixtures recover divergent or corrupt caches without replay or duplicate messages.

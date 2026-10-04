@@ -14,13 +14,10 @@ import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import type { RuntimeProfile, RuntimeProfileStore } from "./profiles";
 export const OPENCODE_VERSION = "1.17.4";
-export function runtimeOwner(
-  env: NodeJS.ProcessEnv = process.env,
-): "host" | "legacy" {
-  const value = env.SPECOPS_OPENCODE_OWNER ?? "host";
-  if (value !== "host" && value !== "legacy")
-    throw new Error("Invalid OpenCode runtime owner");
-  return value;
+export class RuntimeStartupError extends Error {
+  constructor(readonly kind: 'missing-runtime' | 'incompatible-runtime' | 'error') {
+    super('OpenCode connection failed. ' + (kind === 'missing-runtime' ? 'Install the bundled executable or configure an explicit absolute runtime path.' : kind === 'incompatible-runtime' ? 'Select the supported native runtime version ' + OPENCODE_VERSION + '.' : 'Verify endpoint and profile configuration.'));
+  }
 }
 export function resolveExecutable(
   env: NodeJS.ProcessEnv = process.env,
@@ -78,11 +75,9 @@ export class RuntimeConnection {
     if (this.client) return;
     const token = ++this.lifecycle;
     this.starting = this.launch(token)
-      .catch(() => {
+      .catch((failure) => {
         if (token === this.lifecycle) this.close();
-        throw new Error(
-          "OpenCode connection failed. Verify executable, endpoint and profile configuration.",
-        );
+        throw failure instanceof RuntimeStartupError ? failure : new RuntimeStartupError("error");
       })
       .finally(() => {
         if (token === this.lifecycle) this.starting = null;
@@ -90,14 +85,12 @@ export class RuntimeConnection {
     return this.starting;
   }
   private async launch(token: number): Promise<void> {
-    if (runtimeOwner(this.ambient) !== "host")
-      throw new Error("Runtime is owned by legacy parity mode");
     const generation = ++this.generation;
     let baseUrl = this.profile.endpoint;
     let authorization: string | undefined;
     if (this.profile.ownership === "local") {
       if (!this.executable)
-        throw new Error("Runtime executable is unavailable");
+        throw new RuntimeStartupError("missing-runtime");
       const env = this.store.environment(this.profile.id, this.ambient);
       await new Promise<void>((resolve, reject) =>
         execFile(
@@ -106,7 +99,7 @@ export class RuntimeConnection {
           { env, timeout: 5000, maxBuffer: 4096 },
           (error, out) =>
             error || out.trim() !== OPENCODE_VERSION
-              ? reject(new Error("Unsupported runtime version"))
+              ? reject(new RuntimeStartupError(error ? "error" : "incompatible-runtime"))
               : resolve(),
         ),
       );
@@ -162,16 +155,15 @@ export class RuntimeConnection {
       try {
         const result = await client.global.health();
         if (
-          token !== this.lifecycle ||
-          !result.data?.healthy ||
-          result.data.version !== OPENCODE_VERSION
-        )
-          throw new Error("Incompatible runtime health");
+          token !== this.lifecycle || !result.data?.healthy
+        ) throw new Error("Runtime health unavailable");
+        if (result.data.version !== OPENCODE_VERSION) throw new RuntimeStartupError("incompatible-runtime");
         this.streamEndpoint = baseUrl;
         this.streamAuthorization = authorization;
         this.client = client;
         return;
-      } catch {
+      } catch (failure) {
+        if (failure instanceof RuntimeStartupError) throw failure;
         if (
           this.profile.ownership === "external" ||
           Date.now() >= deadline ||

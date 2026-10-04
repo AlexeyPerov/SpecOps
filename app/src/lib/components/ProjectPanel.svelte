@@ -8,7 +8,7 @@
   import { appState } from "../state/appState";
   import { appSettings } from "../state/appStateSelectors";
   import type { ProjectTreeNode } from "../services/projectTree";
-  import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
+  import type { FileChangeStatus } from "../domain/fileChanges";
   import type { PaneDropTargetElements } from "./paneDropTargets";
   import type { ContextId } from "../domain/contracts";
   import {
@@ -42,7 +42,7 @@
     markdownPaths?: readonly string[] | null;
     activeFilePath?: string | null;
     /** M5-T3 — git change status badges (absolute path → status). */
-    statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
+    statusByPath?: ReadonlyMap<string, FileChangeStatus> | null;
     showHidden?: boolean;
     collapsed?: boolean;
     panelWidthPx?: number;

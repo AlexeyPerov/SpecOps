@@ -1,8 +1,8 @@
 import { normalizePathSync } from "./diskFingerprint";
-import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
+import type { FileChangeStatus } from "../domain/fileChanges";
 
 /** Aggregate changed descendants without loading closed directories. */
-export function projectTreeChangeTones(statuses: ReadonlyMap<string, OpencodeFileChangeStatus> | null): Map<string, "pending" | "conflicted"> {
+export function projectTreeChangeTones(statuses: ReadonlyMap<string, FileChangeStatus> | null): Map<string, "pending" | "conflicted"> {
   const tones = new Map<string, "pending" | "conflicted">();
   for (const [path, status] of statuses ?? []) {
     let key = normalizePathSync(path).replace(/\/+$/, "");

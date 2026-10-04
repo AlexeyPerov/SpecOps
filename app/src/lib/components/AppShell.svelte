@@ -55,7 +55,7 @@
     show: boolean;
     workspaces: WorkspaceEntry[];
     activeContextId: ContextId;
-    opencodeEnabled: boolean;
+    sessionsEnabled: boolean;
     panelWidthPx: number;
     notepadOpenTabCount: number;
     notepadRecentTabs: { tabId: string; label: string }[];
@@ -93,7 +93,7 @@
     /** M5-T3 — git change status badges (absolute path → status). */
     statusByPath?: ReadonlyMap<
       string,
-      import("../ai/backends/workspaceAgentBackend").OpencodeFileChangeStatus
+      import("../domain/fileChanges").FileChangeStatus
     > | null;
     markdownPaths?: readonly string[] | null;
     collapsed: boolean;
@@ -284,22 +284,6 @@
     onOpenTimeline?: () => void;
   }
 
-  export interface AppShellSessionListPanelProps {
-    open: boolean;
-    sessions: readonly import("../ai/backends/workspaceAgentBackend").WorkspaceAgentSessionDetails[];
-    openSessionIds: ReadonlySet<string>;
-    activeSessionId: string | null;
-    loading: boolean;
-    errorMessage: string | null;
-    sort: import("../ai/backends/opencodeSessionList").SessionListSort;
-    searchQuery: string;
-    onOpenSession: (sessionId: string, title?: string) => void;
-    onClose: () => void;
-    onSearchChange: (query: string) => void;
-    onSortChange: (sort: import("../ai/backends/opencodeSessionList").SessionListSort) => void;
-    onRefresh: () => void;
-  }
-
   /** Add-multiple workspaces modal props (decision 8). */
   export interface AppShellAddMultipleWorkspacesProps {
     open: boolean;
@@ -375,7 +359,6 @@
     projectSearch,
     workspaceContextMenu,
     overlays,
-    sessionListPanel,
     addMultipleWorkspaces,
     timelineDialog,
     quickOpen,
@@ -400,7 +383,6 @@
     projectSearch?: AppShellProjectSearchProps;
     workspaceContextMenu: AppShellWorkspaceContextMenuProps;
     overlays: AppShellOverlayProps;
-    sessionListPanel?: AppShellSessionListPanelProps;
     addMultipleWorkspaces?: AppShellAddMultipleWorkspacesProps;
     timelineDialog?: AppShellTimelineDialogProps;
     quickOpen?: AppShellQuickOpenProps;
@@ -639,7 +621,7 @@
       <ActivityRail
         workspaces={activityRail.workspaces}
         activeContextId={activityRail.activeContextId}
-        opencodeEnabled={activityRail.opencodeEnabled}
+        sessionsEnabled={activityRail.sessionsEnabled}
         panelWidthPx={activityRail.panelWidthPx}
         notepadOpenTabCount={activityRail.notepadOpenTabCount}
         notepadRecentTabs={activityRail.notepadRecentTabs}

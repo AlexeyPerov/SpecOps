@@ -154,8 +154,8 @@ describe("appState tabs and selection", () => {
     }
   });
 
-  it("setOpencodeEnabled(false) closes session tabs across workspaces and resets health", () => {
-    appState.setOpencodeEnabled(true);
+  it("setSessionsEnabled(false) closes session tabs across workspaces and resets health", () => {
+    appState.setSessionsEnabled(true);
     const workspaceId = appState.addWorkspace("/tmp/ws-a");
     expect(workspaceId).not.toBeNull();
     appState.switchContext(workspaceId!);
@@ -172,16 +172,14 @@ describe("appState tabs and selection", () => {
     );
     expect(beforeTabs).toHaveLength(2);
 
-    appState.setOpencodeEnabled(false);
+    appState.setSessionsEnabled(false);
 
     for (const workspace of appState.getSnapshot().contexts.workspaces) {
       const sessionTabs = getSessionTabs(workspace.snapshot.session).filter(isSessionTab);
       expect(sessionTabs).toHaveLength(0);
     }
     const settings = appState.getSnapshot().settings;
-    expect(settings.opencode.enabled).toBe(false);
-    expect(settings.opencodeHealth.status).toBe("unknown");
-    expect(settings.opencodeHealth.source).toBeNull();
+    expect(settings.sessionsEnabled).toBe(false);
   });
 
   it("openOrFocusViewTab opens a singleton version-control tab and focuses an existing one", () => {

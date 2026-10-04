@@ -1,3 +1,5 @@
+import { confirmConcurrentWorkspaceWork } from "../services/sessionActivity";
+import { notifyVersionControlMutation } from "../git/versionControlRefresh";
 import { reconcileNativeHistory } from "../session/history";
 import { observeTurnStream } from './observedTurnStream';
 import type { ChatMessage } from "../domain/contracts";
@@ -435,10 +437,16 @@ export async function executeProviderTurn(params: {
   let hasScheduledStreamingPersistence = false;
 
   try {
+    if (!await confirmConcurrentWorkspaceWork(root, activeSessionId)) {
+      abortTurn(activeSessionId, root);
+      return { ok: false, reason: "provider_unavailable", message: "Send cancelled before native execution." };
+    }
+    assertTurnStillActive(root, activeSessionId, turnId);
     // Lazy host start: the send path is the primary spawn trigger. Concurrent
     // sends share one start promise; a failed start clears the cache so the
     // next turn retries.
     await ensureAgentHostStarted();
+    assertTurnStillActive(root, activeSessionId, turnId);
 
     const metadata = chatStore.getMetadata(activeSessionId);
     const modelId = metadata?.selectedModelId?.trim() || params.modelId || "";
@@ -450,6 +458,7 @@ export async function executeProviderTurn(params: {
       modeId,
       pendingMessageIds: [userMessage.id, assistantMessage.id],
     });
+    assertTurnStillActive(root, activeSessionId, turnId);
     const native = toNativeRef(binding);
     const client = getAgentHostClient();
 
@@ -542,6 +551,7 @@ export async function executeProviderTurn(params: {
         throw new TurnCancelledError();
       }
 
+      if (event.type === "diff.posted") notifyVersionControlMutation(root, "workspace-edit");
       const next = foldSessionEvent(fold, event);
       if (next.content !== fold.content) {
         chatStore.updateMessageContent(assistantMessage.id, next.content, activeSessionId, root);

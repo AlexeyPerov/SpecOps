@@ -12,8 +12,7 @@ import {
 } from "./chatSendPipeline";
 import { retryLastChatTurn, type RetryLastChatTurnFailureReason, type RetryLastChatTurnResult } from "./retryChatTurn";
 import type { ChatTurnSuccessResult } from "./chatSendPipeline";
-import { OPENCODE_DISABLED_MESSAGE } from "./chatErrorCopy";
-import { isOpencodeEnabled } from "../services/opencodeSettings";
+import { SESSIONS_DISABLED_MESSAGE } from "./chatErrorCopy";
 import { appState } from "../state/appState";
 
 export { retryLastChatTurn };
@@ -54,12 +53,11 @@ export async function sendChatMessage(
   }
   persistSessionThreadOnce(target.root, target.activeSessionId);
 
-  // Dev feature gate for Sessions (renaming `settings.opencode` → a neutral
-  // sessions gate is tracked as follow-up cleanup).
-  if (!isOpencodeEnabled(appState.getSnapshot().settings.opencode)) {
+  // Shared Sessions enablement applies to every host runtime.
+  if (!appState.getSnapshot().settings.sessionsEnabled) {
     chatStore.removeMessage(userMessage.id, target.activeSessionId, target.root);
     abortTurn(target.activeSessionId, target.root);
-    return { ok: false, reason: "provider_unavailable", message: OPENCODE_DISABLED_MESSAGE };
+    return { ok: false, reason: "provider_unavailable", message: SESSIONS_DISABLED_MESSAGE };
   }
 
   const validation = await validateAgentHostSend(target.root, target.activeSessionId);

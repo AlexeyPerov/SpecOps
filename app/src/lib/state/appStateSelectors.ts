@@ -250,7 +250,7 @@ export function settingsPersistenceFingerprint(state: AppDomainState): string {
     defaultMarkdownViewMode: settings.defaultMarkdownViewMode,
     restrictFilesToContext: settings.restrictFilesToContext,
     sessionsEnabled: settings.sessionsEnabled ?? true,
-      opencode: settings.opencode,
+    warnConcurrentWriters: settings.warnConcurrentWriters,
     gitIntegration: settings.gitIntegration,
     logSettings: settings.logSettings,
     markdownSnippets: settings.markdownSnippets,

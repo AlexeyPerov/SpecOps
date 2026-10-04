@@ -7,12 +7,11 @@ import { describe, expect, it } from "vitest";
  *
  * The common UI/state surface must stay runtime-neutral:
  *   - no provider-prefixed session field anywhere in common code;
- *   - no vendor SDK import outside the phase-04 adapter-candidate backends;
+ *   - no vendor SDK import in the WebView source tree;
  *   - the store, domain types, and the send pipeline carry no `opencode*`
  *     identifiers at all (the pipeline drives the Agent Host client).
  *
- * The OpenCode settings gate + settings panels keep their identifiers until
- * the settings surface is renamed (documented follow-up cleanup).
+ * Runtime-owned configuration and credentials belong to the native host.
  */
 
 const SRC_ROOT = join(import.meta.dirname, "..");
@@ -120,4 +119,12 @@ describe("runtime-neutral absence guard (phase F)", () => {
     expect(pipeline).not.toMatch(/from "\.\/backends\//);
     expect(read("ai/sendChatMessage.ts")).not.toMatch(/from "\.\/backends\//);
   });
+});
+
+it("all WebView source and Rust ownership remain free of direct native clients and the removed launcher", () => {
+ const webview = listSourceFiles(join(SRC_ROOT, '..')).filter(file => !file.endsWith('.test.ts'));
+ expect(webview.filter(file => /(?:from\s+["']|import\s*\(\s*["'])@(?:opencode-ai\/sdk|anthropic-ai\/sdk)/.test(readFileSync(file, 'utf8')))).toEqual([]);
+ const rustRoot = join(SRC_ROOT, '../../src-tauri/src');
+ const rust = ['lib.rs', 'agent_host.rs'].map(file => readFileSync(join(rustRoot, file), 'utf8')).join('\n');
+ expect(rust).not.toContain('opencode_sidecar'); expect(rust).not.toContain('SPECOPS_OPENCODE_OWNER');
 });

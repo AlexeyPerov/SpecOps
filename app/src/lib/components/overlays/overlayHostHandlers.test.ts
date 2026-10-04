@@ -72,12 +72,6 @@ function makeDeps(overrides: Partial<OverlayHostHandlersDeps> = {}): OverlayHost
     setProjectSearchRunning: vi.fn(),
     bumpProjectSearchGeneration: () => 1,
     getProjectSearchGeneration: () => 1,
-    setSessionListLoading: vi.fn(),
-    setSessionListSessions: vi.fn(),
-    getSessionListSearch: () => "",
-    handleListWorkspaceSessions: vi.fn(async () => []),
-    handleOpenExternalSession: vi.fn(async () => {}),
-    setSessionListOpen: vi.fn(),
     setAddMultipleOpen: vi.fn(),
     setAddMultipleLoading: vi.fn(),
     setAddMultipleError: vi.fn(),
@@ -135,62 +129,6 @@ describe("createOverlayHostHandlers.toggleAddMultipleEntry", () => {
     const input = new Set(["/tmp/a"]);
     handlers.toggleAddMultipleEntry("/tmp/a", false, input);
     expect([...input]).toEqual(["/tmp/a"]);
-  });
-});
-
-describe("createOverlayHostHandlers.openSessionListPanel", () => {
-  it("opens the panel then refreshes", async () => {
-    const setSessionListOpen = vi.fn();
-    const setSessionListLoading = vi.fn();
-    const handleListWorkspaceSessions = vi.fn(async () => []);
-    const setSessionListSessions = vi.fn();
-    const handlers = createOverlayHostHandlers(
-      makeDeps({
-        setSessionListOpen,
-        setSessionListLoading,
-        handleListWorkspaceSessions,
-        setSessionListSessions,
-      }),
-    );
-    await handlers.openSessionListPanel();
-    expect(setSessionListOpen).toHaveBeenCalledWith(true);
-    expect(setSessionListLoading.mock.calls).toEqual([[true], [false]]);
-    expect(handleListWorkspaceSessions).toHaveBeenCalledWith({});
-    expect(setSessionListSessions).toHaveBeenCalledWith([]);
-  });
-
-  it("forwards the trimmed search query when present", async () => {
-    const handleListWorkspaceSessions = vi.fn(async () => []);
-    const handlers = createOverlayHostHandlers(
-      makeDeps({
-        handleListWorkspaceSessions,
-        getSessionListSearch: () => "  foo  ",
-      }),
-    );
-    await handlers.refreshSessionList();
-    expect(handleListWorkspaceSessions).toHaveBeenCalledWith({ search: "foo" });
-  });
-});
-
-describe("createOverlayHostHandlers.closeSessionListPanel", () => {
-  it("closes the panel", () => {
-    const setSessionListOpen = vi.fn();
-    const handlers = createOverlayHostHandlers(makeDeps({ setSessionListOpen }));
-    handlers.closeSessionListPanel();
-    expect(setSessionListOpen).toHaveBeenCalledWith(false);
-  });
-});
-
-describe("createOverlayHostHandlers.handleOpenSessionFromList", () => {
-  it("opens the external session then closes the panel", async () => {
-    const handleOpenExternalSession = vi.fn(async () => {});
-    const setSessionListOpen = vi.fn();
-    const handlers = createOverlayHostHandlers(
-      makeDeps({ handleOpenExternalSession, setSessionListOpen }),
-    );
-    await handlers.handleOpenSessionFromList("sess-1", "Title");
-    expect(handleOpenExternalSession).toHaveBeenCalledWith("sess-1", "Title");
-    expect(setSessionListOpen).toHaveBeenCalledWith(false);
   });
 });
 

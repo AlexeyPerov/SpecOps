@@ -35,3 +35,5 @@ First invocation: 02-D plus 03-A/B. Later invocations require each selected adap
 - [ ] Setup/support limitations, accepted evidence and changelog updated when implementation lands.
 
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
+
+AS04-C extends early shared activity and host/Node/native asset/support source infrastructure; source and external acceptance are separated in [04-C evidence](../04-opencode-adapter/implementation-notes-phase-c.md) and [the blocked subset baseline](../08-release-gates/baseline-04-c.md). Installed/live evidence remains open; this does not mark the phase Done.

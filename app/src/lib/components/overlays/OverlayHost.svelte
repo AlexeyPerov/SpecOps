@@ -21,7 +21,6 @@
    * page (they fuse retained snapshot state with picker state — see the L14
    * changelog).
    */
-  import SessionListPanel from "../SessionListPanel.svelte";
   import AddMultipleWorkspacesModal from "../AddMultipleWorkspacesModal.svelte";
   import SessionTimelineDialog from "../SessionTimelineDialog.svelte";
   import { loadLazyPicker } from "../lazyPicker";
@@ -37,10 +36,6 @@
     EditorBookmarkSnapshot,
     EditorHostIdentity,
   } from "../../types/editor";
-  import type {
-    SessionListSort,
-  } from "../../ai/backends/opencodeSessionList";
-  import type { WorkspaceAgentSessionDetails } from "../../ai/backends/workspaceAgentBackend";
   import {
     createOverlayHostHandlers,
     computeProjectSearchQueryError,
@@ -75,14 +70,6 @@
     runCommand: (commandId: AppCommandId) => void;
     setMarkdownViewMode: (mode: "edit" | "split" | "preview") => void;
     openAndActivatePath: (path: string) => Promise<unknown>;
-    /**
-     * Session-browsing hooks. Optional: the entry point is hidden while no
-     * registered runtime exposes native session browsing through the host.
-     */
-    handleListWorkspaceSessions?: (options: {
-      search?: string;
-    }) => Promise<WorkspaceAgentSessionDetails[]>;
-    handleOpenExternalSession?: (sessionId: string, title?: string) => Promise<void>;
     getWorkspaceFileCatalogRegistry: () => import("../../services/workspaceFileCatalogRegistry").WorkspaceFileCatalogRegistry;
     getEditorWorkbench: () => import("../../editor/editorWorkbenchRuntime").EditorWorkbenchRuntime;
     getEditorTools: () => import("../../editor/editorToolController").EditorToolController;
@@ -105,8 +92,6 @@
     runCommand,
     setMarkdownViewMode,
     openAndActivatePath,
-    handleListWorkspaceSessions,
-    handleOpenExternalSession,
     getWorkspaceFileCatalogRegistry,
     getEditorWorkbench,
     getEditorTools,
@@ -156,12 +141,6 @@
   // -------------------------------------------------------------------------
   // Session list panel state (was +page.svelte:344-353)
   // -------------------------------------------------------------------------
-  let sessionListOpen = $state(false);
-  let sessionListSessions = $state<WorkspaceAgentSessionDetails[]>([]);
-  let sessionListLoading = $state(false);
-  let sessionListError = $state<string | null>(null);
-  let sessionListSort = $state<SessionListSort>("updated");
-  let sessionListSearch = $state("");
 
   // -------------------------------------------------------------------------
   // Add-multiple workspaces modal state (was +page.svelte:201-206)
@@ -272,7 +251,6 @@
     rankSnippets(markdownSnippets, snippetInsertQuery),
   );
 
-  const openSessionIdsForPanel = $derived(openSessionIds);
 
   // -------------------------------------------------------------------------
   // Handler factory (delegates state setters back into local $state)
@@ -302,24 +280,6 @@
       return projectSearchGeneration;
     },
     getProjectSearchGeneration: () => projectSearchGeneration,
-    setSessionListLoading: (loading) => {
-      sessionListLoading = loading;
-    },
-    setSessionListSessions: (sessions) => {
-      sessionListSessions = sessions;
-    },
-    getSessionListSearch: () => sessionListSearch,
-    handleListWorkspaceSessions: (options) =>
-      handleListWorkspaceSessions
-        ? handleListWorkspaceSessions(options)
-        : Promise.resolve([] as WorkspaceAgentSessionDetails[]),
-    handleOpenExternalSession: (sessionId, title) =>
-      handleOpenExternalSession
-        ? handleOpenExternalSession(sessionId, title)
-        : Promise.resolve(),
-    setSessionListOpen: (open) => {
-      sessionListOpen = open;
-    },
     setAddMultipleOpen: (open) => {
       addMultipleOpen = open;
     },
@@ -430,7 +390,6 @@
       bookmarkListOpen,
       snippetInsertOpen,
       projectSearchOpen,
-      sessionListOpen,
       addMultipleOpen,
       timelineOpen,
       workspaceContextMenu,
@@ -448,7 +407,6 @@
         }
       }
       if (p.projectSearchOpen !== undefined) projectSearchOpen = p.projectSearchOpen;
-      if (p.sessionListOpen !== undefined) sessionListOpen = p.sessionListOpen;
       if (p.addMultipleOpen !== undefined) addMultipleOpen = p.addMultipleOpen;
       if (p.timelineOpen !== undefined) timelineOpen = p.timelineOpen;
       if (p.workspaceContextMenu !== undefined) {
@@ -496,7 +454,6 @@
    * not reliably re-run when overlay state flips.
    */
   const anyOverlayOpen = $derived(
-    sessionListOpen ||
       addMultipleOpen ||
       projectSearchOpen ||
       timelineOpen ||
@@ -551,9 +508,6 @@
         projectSearchFocusReplace = options?.focusReplace ?? false;
         projectSearchNonce += 1;
         break;
-      case "sessionList":
-        void handlers.openSessionListPanel();
-        break;
       case "addMultiple":
         void handlers.openAddMultipleWorkspaces();
         break;
@@ -585,9 +539,6 @@
         break;
       case "projectSearch":
         closeProjectSearch();
-        break;
-      case "sessionList":
-        sessionListOpen = false;
         break;
       case "addMultiple":
         handlers.cancelAddMultiple();
@@ -674,9 +625,6 @@
     workspaceId: workspaceContextMenu?.workspaceId ?? null,
   });
 
-  const sessionListActiveSessionId = $derived(
-    activeNativeSessionId, // surfaced for the panel's "active" highlight
-  );
 
   // -------------------------------------------------------------------------
   // Project-search handlers exposed upward so AppShellHost can wire the
@@ -738,7 +686,6 @@
     projectSearchPanelState,
     workspaceContextMenuState,
     workspaceContextMenu,
-    sessionListActiveSessionId,
     persistProjectSearchHeightNow as persistProjectSearchHeight,
     runProjectSearch,
     replaceAllInProject,
@@ -822,30 +769,6 @@
 {/await}
 
 <!-- The 3 conditionally-rendered dialogs (were inside AppShell.svelte) -->
-<SessionListPanel
-  open={sessionListOpen}
-  sessions={sessionListSessions}
-  openSessionIds={openSessionIdsForPanel}
-  activeSessionId={sessionListActiveSessionId}
-  loading={sessionListLoading}
-  errorMessage={sessionListError}
-  sort={sessionListSort}
-  searchQuery={sessionListSearch}
-  onOpenSession={(sessionId, title) => {
-    void handlers.handleOpenSessionFromList(sessionId, title);
-  }}
-  onClose={() => handlers.closeSessionListPanel()}
-  onSearchChange={(query) => {
-    sessionListSearch = query;
-    void handlers.refreshSessionList();
-  }}
-  onSortChange={(next) => {
-    sessionListSort = next;
-  }}
-  onRefresh={() => {
-    void handlers.refreshSessionList();
-  }}
-/>
 
 <AddMultipleWorkspacesModal
   open={addMultipleOpen}

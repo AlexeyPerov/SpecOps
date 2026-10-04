@@ -11,11 +11,11 @@ export const WORKSPACE_PATH_INACCESSIBLE_RECOVERY =
 export const WORKSPACE_ACCESS_LOST_MESSAGE =
   "Workspace file access was lost. Chat is paused until access is restored.";
 
-export const OPENCODE_DISABLED_MESSAGE =
-  "Workspace sessions are disabled. Enable them in Settings → Workspaces to use sessions.";
+export const SESSIONS_DISABLED_MESSAGE =
+  "Workspace sessions are disabled. Enable them in Settings → Dev to use sessions.";
 
-export const OPENCODE_DISABLED_RECOVERY =
-  "Open Settings → Workspaces and turn on workspace sessions.";
+export const SESSIONS_DISABLED_RECOVERY =
+  "Open Settings → Dev and turn on workspace sessions.";
 
 export const PROVIDER_REQUEST_FAILURE_MESSAGE = "The assistant could not finish this response.";
 

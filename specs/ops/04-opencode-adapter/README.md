@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** A/B source verified; C and external acceptance open
+**Status:** A/B/C source verified; external acceptance open
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -22,7 +22,7 @@ OpenCode is the second native runtime. Existing code/fixtures are input, not pro
 | --- | --- | --- |
 | AS04-A | [Ownership and finite parity ledger](execution-plan-phase-a-host-lifecycle.md) | Source verified; acceptance open |
 | AS04-B | [Core session/event parity](execution-plan-phase-b-core-parity.md) | Source verified; native lifecycle verified; acceptance open |
-| AS04-C | [Core cutover and acceptance](execution-plan-phase-c-cutover-exit.md) | Planned |
+| AS04-C | [Core cutover and acceptance](execution-plan-phase-c-cutover-exit.md) | Source cutover verified; installed/account acceptance open |
 
 ## Dependencies and delivery
 
@@ -31,13 +31,15 @@ OpenCode is the second native runtime. Existing code/fixtures are input, not pro
 ## Definition of done
 
 - [ ] A/B/C core parity, profile/history and Codex coexistence accepted.
-- [ ] No direct vendor SDK in WebView or legacy competing runtime owner.
-- [ ] Every rich feature is explicitly retained/deferred with owner; implement retained features later in 06-B.
+- [x] No direct vendor SDK in WebView or legacy competing runtime owner.
+- [x] Every rich feature is explicitly retained/deferred with owner; implement retained features later in 06-B.
 - [ ] Installed/core security and selected-scope 08-A evidence recorded.
 - [ ] Setup/support limitations, accepted evidence and changelog updated when implementation lands.
 
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
 
-Implementation evidence and finite classifications: [AS04-A notes](implementation-notes-phase-a.md). Host ownership is default; legacy requires explicit process-start parity mode until C removes its files.
+Implementation evidence and finite classifications: [AS04-A notes](implementation-notes-phase-a.md). The historical temporary ownership gate and legacy files were removed by C.
 
 AS04-B native core evidence and concrete cutover handoff: [implementation notes](implementation-notes-phase-b.md). Installed/live-provider core acceptance remains open.
+
+AS04-C source/asset/host-fault baseline and remaining external gates: [implementation evidence](implementation-notes-phase-c.md). Rich comparison evidence remains [documentary](cutover-reference-evidence.md); 06-B stays Planned.

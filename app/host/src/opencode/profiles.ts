@@ -1,5 +1,10 @@
 import {
   chmodSync,
+  openSync,
+  closeSync,
+  fstatSync,
+  constants,
+  unlinkSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -122,6 +127,19 @@ export class RuntimeProfileStore {
       { mode: 0o600, flag: "wx" },
     );
     return profile;
+  }
+  importKey(id: string): { key: string; consume: () => void } {
+    const path = join(this.home(id), "api-key");
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8192 || (process.platform !== "win32" && (stat.mode & 0o077) !== 0)) throw new Error("API key file must be private and bounded");
+    const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    try {
+      const actual = fstatSync(fd);
+      if (actual.ino !== stat.ino || actual.dev !== stat.dev || actual.size > 8192 || (process.platform !== "win32" && (actual.mode & 0o077) !== 0)) throw new Error("API key file changed");
+      const key = readFileSync(fd, "utf8").trim();
+      if (!key || key.length > 8192) throw new Error("Invalid private API key file");
+      return { key, consume: () => { const current = lstatSync(path); if (current.ino === actual.ino && current.dev === actual.dev) unlinkSync(path); } };
+    } finally { closeSync(fd); }
   }
   secure(id: string): void {
     const home = this.home(id);

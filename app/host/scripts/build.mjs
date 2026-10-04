@@ -21,7 +21,10 @@ try {
   // git unavailable (e.g. packed tarball) — keep the deterministic fallback.
 }
 
-const buildTime = new Date().toISOString();
+const sourceEpoch = process.env.SOURCE_DATE_EPOCH;
+let sourceTime;
+try { sourceTime = execSync("git show -s --format=%cI HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch { sourceTime = "unknown"; }
+const buildTime = sourceEpoch === undefined ? sourceTime : new Date(Number(sourceEpoch) * 1000).toISOString();
 
 await build({
   entryPoints: [path.join(hostDir, "src/index.ts")],

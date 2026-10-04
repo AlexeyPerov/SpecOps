@@ -61,7 +61,6 @@ import {
   syncProjectTreeWatcher,
   type FileWatcherEventKind,
 } from "./fileWatcher";
-import { stopOpencodeSidecar } from "./opencodeSidecar";
 import { selectTabForNormalizedPath } from "./openFileGate";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
@@ -410,7 +409,7 @@ async function startAppShellRuntimeInner(
         defaultMarkdownViewMode: persistedSettings.defaultMarkdownViewMode,
         restrictFilesToContext: persistedSettings.restrictFilesToContext,
         sessionsEnabled: persistedSettings.sessionsEnabled ?? true,
-      opencode: persistedSettings.opencode,
+        warnConcurrentWriters: persistedSettings.warnConcurrentWriters ?? true,
         gitIntegration: persistedSettings.gitIntegration,
         commandBindingOverrides: persistedSettings.commandBindingOverrides,
         logSettings: persistedSettings.logSettings,
@@ -643,7 +642,6 @@ async function startAppShellRuntimeInner(
     // window does not keep stat-ing files against a tearing-down store.
     void cancelStartupExternalChecks();
     void clearFileWatcherPaths();
-    void stopOpencodeSidecar();
     if (activeRuntimeCleanup === cleanup) {
       activeRuntimeCleanup = null;
     }

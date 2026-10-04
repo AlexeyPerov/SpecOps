@@ -1,11 +1,7 @@
 import { writable, type Readable, type Writable } from "svelte/store";
 import { formatGitErrorPrimaryMessage } from "../git/gitErrorUi";
 import { logDiagnostic } from "./logging";
-import { createOpencodeBackendFromAppState } from "../ai/backends/opencodeBackendFactory";
-import {
-  type OpencodeFileChangeStatus,
-  type OpencodeFileStatusEntry,
-} from "../ai/backends/workspaceAgentBackend";
+import type { FileChangeStatus, FileStatusItem } from "../domain/fileChanges";
 import { mapWorkingTreeStatusToAbsoluteBadges } from "../git/projectTreeFileStatusMap";
 import { shouldLoadProjectTreeGitBadges } from "../git/gitIntegrationGating";
 import { queryWorkingTreeStatus, resolveRepoRoot } from "../git/gitService";
@@ -17,9 +13,8 @@ import {
 /**
  * M5-T3 — workspace file-change tracker for project-tree M/A/D badges.
  *
- * Git-backed workspaces read `git status --porcelain` (FIX-02). Non-git
- * workspaces fall back to OpenCode `file.status` when the session tab is
- * active. Status entries resolve to absolute paths via `resolveAbsoluteStatusMap`.
+ * Git-backed workspaces read `git status --porcelain`. Non-git workspaces
+ * report no badges until a supported native extension supplies status data.
  */
 
 export type FileStatusTrackerStatus = "idle" | "loading" | "loaded" | "error";
@@ -27,11 +22,11 @@ export type FileStatusTrackerStatus = "idle" | "loading" | "loaded" | "error";
 export interface FileStatusTrackerState {
   status: FileStatusTrackerStatus;
   /** Absolute workspace path → change status. */
-  statusByPath: Map<string, OpencodeFileChangeStatus>;
+  statusByPath: Map<string, FileChangeStatus>;
   lastErrorMessage: string | null;
   loadedAt: string | null;
   /** Whether the latest snapshot came from system git or OpenCode. */
-  source: "git" | "opencode" | null;
+  source: "git" | null;
 }
 
 const emptyState: FileStatusTrackerState = {
@@ -202,36 +197,11 @@ async function fetchGitFileStatuses(
   };
 }
 
-async function fetchOpencodeFileStatuses(
-  workspaceRootPath: string,
-): Promise<FileStatusTrackerState> {
-  const backend = createOpencodeBackendFromAppState();
-  if (!backend) {
-    return copyEmptyState();
-  }
-
-  const entries = await backend.listFileStatuses({ workspaceRootPath });
-  const statusByPath = resolveAbsoluteStatusMap(workspaceRootPath, entries);
-  return {
-    status: "loaded",
-    statusByPath,
-    lastErrorMessage: null,
-    loadedAt: new Date().toISOString(),
-    source: "opencode",
-  };
-}
-
 async function fetchFileStatuses(input: {
   workspaceRootPath: string;
-  allowOpencode?: boolean;
 }): Promise<FileStatusTrackerState> {
   if (!shouldLoadProjectTreeGitBadges()) {
-    // P03-08-T1: badges are off — either the user disabled
-    // `showProjectTreeBadges`, or git is scoped to Version Control only / off.
-    // Previously this silently fell back to an OpenCode `file.status` HTTP
-    // call, so "off" wasn't really off. Return the empty state instead; the
-    // OpenCode fallback below only runs when badges are enabled *and* the
-    // workspace turns out not to be a git repository.
+    // Disabled git integration never triggers runtime HTTP work.
     return copyEmptyState();
   }
 
@@ -240,11 +210,7 @@ async function fetchFileStatuses(input: {
     return gitState;
   }
 
-  if (input.allowOpencode === false) {
-    return copyEmptyState();
-  }
-
-  return fetchOpencodeFileStatuses(input.workspaceRootPath);
+  return copyEmptyState();
 }
 
 export function getFileStatusTracker(workspaceRootPath: string): Readable<FileStatusTrackerState> {
@@ -269,7 +235,6 @@ export function resetFileStatusTrackerForTests(): void {
 
 export async function refreshFileStatuses(input: {
   workspaceRootPath: string;
-  allowOpencode?: boolean;
   /** Bypass the TTL cache (used by mutation-driven refreshes). */
   force?: boolean;
 }): Promise<FileStatusTrackerState> {
@@ -371,10 +336,10 @@ export function clearFileStatusTracker(workspaceRootPath: string): void {
  */
 export function resolveAbsoluteStatusMap(
   workspaceRootPath: string,
-  entries: readonly OpencodeFileStatusEntry[],
-): Map<string, OpencodeFileChangeStatus> {
+  entries: readonly FileStatusItem[],
+): Map<string, FileChangeStatus> {
   const root = workspaceRootPath.replace(/\/+$/, "");
-  const map = new Map<string, OpencodeFileChangeStatus>();
+  const map = new Map<string, FileChangeStatus>();
   for (const entry of entries) {
     const trimmed = entry.path.trim();
     if (trimmed.length === 0) {
@@ -387,7 +352,7 @@ export function resolveAbsoluteStatusMap(
 }
 
 /** One-letter badge label for a status (M / A / D). */
-export function fileStatusBadgeLabel(status: OpencodeFileChangeStatus): string {
+export function fileStatusBadgeLabel(status: FileChangeStatus): string {
   switch (status) {
     case "added":
       return "A";
@@ -408,7 +373,7 @@ export interface FileStatusCounts {
 }
 
 export function summarizeFileStatuses(
-  statusByPath: ReadonlyMap<string, OpencodeFileChangeStatus>,
+  statusByPath: ReadonlyMap<string, FileChangeStatus>,
 ): FileStatusCounts {
   const counts: FileStatusCounts = { modified: 0, added: 0, deleted: 0, total: 0 };
   for (const status of statusByPath.values()) {

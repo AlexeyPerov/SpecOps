@@ -4,9 +4,9 @@
   "version": "0.3.0",
   "identifier": "com.alexeyperov.specops",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm --prefix host run build && npm run dev",
     "devUrl": "http://localhost:1430",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && npm --prefix host run build && node host/scripts/package-assets.mjs",
     "frontendDist": "../build"
   },
   "app": {
@@ -19,7 +19,10 @@
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 16, "y": 15 }
+        "trafficLightPosition": {
+          "x": 16,
+          "y": 15
+        }
       }
     ],
     "security": {
@@ -28,7 +31,10 @@
         "enable": true,
         "scope": {
           "requireLiteralLeadingDot": false,
-          "allow": ["$HOME/**/*", "$APPDATA/**/*"],
+          "allow": [
+            "$HOME/**/*",
+            "$APPDATA/**/*"
+          ],
           "deny": [
             "$HOME/.ssh/**",
             "$HOME/.aws/**",
@@ -46,10 +52,14 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/opencode"],
+    "externalBin": [
+      "binaries/opencode"
+    ],
     "fileAssociations": [
       {
-        "ext": ["*"],
+        "ext": [
+          "*"
+        ],
         "name": "Any File",
         "description": "Allows opening files dropped onto the app icon",
         "role": "Editor",
@@ -70,7 +80,11 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "../host/dist/index.js": "agent-host/index.js",
+      "resources/agent-host/": "agent-host/"
+    }
   },
   "plugins": {
     "fs": {

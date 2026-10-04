@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { chatStore } from '../state/chatStore';
   import { onMount } from 'svelte';
   import { ensureAgentHostStarted, getAgentHostClient, loadSessionCatalogs } from '../services/agentHostRuntime';
+  import { isNewerProfileSnapshot } from '../session/profiles';
   import type { ConnectionProfileSnapshot } from '../session/profiles';
   import type { AgentRuntimeDescriptor, AgentRuntimeId } from '../session/runtime';
   let { runtimeId, connectionProfileId, bound = false, onSelect, onRefresh = () => {} }: {
@@ -14,20 +16,23 @@
   let busy = $state(false);
   let error = $state('');
   const selected = $derived(profiles.find(p => p.id === connectionProfileId));
+  function mergeProfiles(incoming: readonly ConnectionProfileSnapshot[]): readonly ConnectionProfileSnapshot[] {
+    return incoming.map(profile => { const previous = profiles.find(p => p.id === profile.id); return previous && !isNewerProfileSnapshot(previous, profile) ? previous : profile; });
+  }
   async function refresh(): Promise<void> {
     await ensureAgentHostStarted();
     const client = getAgentHostClient();
     runtimes = (await client.discover()).runtimes;
     const result = await client.authenticate({ runtimeId: 'codex', workspaceRootPath: '', options: { action: 'list-profiles' } });
-    profiles = result.profiles ?? [];
+    profiles = mergeProfiles(result.profiles ?? []);
   }
   async function action(action: string): Promise<void> {
     busy = true; error = '';
     try {
       await ensureAgentHostStarted();
       const result = await getAgentHostClient().authenticate({ runtimeId: 'codex', connectionProfileId, workspaceRootPath: '', options: { action, ...(action === 'create-profile' ? { label } : {}) }, ...(action === 'login-api-key' ? { credential: { kind: 'api-key', ref: 'profile-api-key' } as const } : {}) });
-      if (result.profiles) { profiles = result.profiles; if (!bound && action === 'create-profile') onSelect('codex', result.profile?.id); }
-      if (result.profile) profiles = profiles.map(p => p.id === result.profile!.id ? result.profile! : p);
+      if (result.profiles) { profiles = mergeProfiles(result.profiles); if (!bound && action === 'create-profile') onSelect('codex', result.profile?.id); }
+      if (result.profile) { profiles = profiles.map(p => p.id === result.profile!.id && isNewerProfileSnapshot(p, result.profile!) ? result.profile! : p); chatStore.applyConnectionProfileState(result.profile.id, result.profile.generation, result.profile.state === 'auth-required', result.profile.hostGeneration); }
       label = ''; onRefresh();
     } catch (failure) { error = failure instanceof Error ? failure.message : 'Connection is unavailable. Retry.'; await refresh().catch(() => {}); }
     finally { busy = false; }
@@ -38,7 +43,8 @@
     void refresh().catch(() => { error = 'Runtime discovery failed. Retry connection.'; });
     void getAgentHostClient().subscribeProfiles(update => {
       if (disposed) return;
-      profiles = profiles.map(p => p.id === update.connectionProfileId && update.generation >= p.generation ? update.profile : p);
+      chatStore.applyConnectionProfileState(update.connectionProfileId, update.generation, update.profile.state === 'auth-required', update.hostGeneration);
+      profiles = profiles.map(p => p.id === update.connectionProfileId && isNewerProfileSnapshot(p, update.profile) ? update.profile : p);
       if (update.connectionProfileId === connectionProfileId && update.profile.state === 'authenticated') {
         void loadSessionCatalogs('codex', connectionProfileId).then(() => onRefresh());
       }
@@ -81,6 +87,12 @@
       <label title="Required for the pinned runtime's legacy history and developer coding slice. Restarts only this profile; pending turns end."><input type="checkbox" checked={selected.experimental ?? false} disabled={busy} onchange={e => action(e.currentTarget.checked ? 'experimental-on' : 'experimental-off')} />Enable experimental protocol (legacy history, plan and questions)</label>
       <button onclick={() => action('read')} disabled={busy}>Verify account</button>
       <button onclick={() => action('restart')} disabled={busy}>Reconnect profile</button>
+      {#if selected.usage}
+        {#each Object.values(selected.usage.limits) as limit (limit.id)}
+          <span>{limit.name ?? limit.id}: {limit.primary ? `${Math.max(0, 100 - limit.primary.usedPercent).toFixed(0)}% remaining` : 'usage unavailable'}{limit.primary?.resetsAt ? `; resets ${new Date(limit.primary.resetsAt * 1000).toLocaleString()}` : ''}</span>
+        {/each}
+      {/if}
+      {#if selected.recovery}<span role="status">{selected.recovery === 'auth-required' ? 'Sign in again, then resume explicitly.' : selected.recovery === 'quota' ? 'Quota blocked. Verify account after recovery, then retry explicitly.' : 'Reconnect or verify account, then retry explicitly.'}</span>{/if}
       {#if selected.message}<span>{selected.message}</span>{/if}
     {/if}
   {/if}

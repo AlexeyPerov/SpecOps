@@ -221,3 +221,8 @@ describe("ChatMessageList.svelte — interleaved part rendering (M12-T1)", () =>
     });
   });
 });
+
+it("shows recovered interrupted partial work explicitly", () => {
+  const { host } = mountList([{ ...assistantMessage({ content: "Partial work" }), completionState: "interrupted" }]);
+  expect(host.textContent).toContain("Interrupted"); expect(host.textContent).toContain("continue with a new message"); expect(host.textContent).toContain("Partial work");
+});

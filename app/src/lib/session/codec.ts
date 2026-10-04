@@ -53,7 +53,7 @@ function validateOptionalFields(value: unknown, depth = 0): string | null {
     return null;
   }
   if (!isObject(value)) return null;
-  const strings = ["description", "prompt", "reason", "filename", "snapshot", "finishedAt", "connectionProfileId", "modelId", "modeId", "parentSessionId", "lastTurnAt", "name"];
+  const strings = ["nativeTurnId", "nativeItemId", "description", "prompt", "reason", "filename", "snapshot", "finishedAt", "connectionProfileId", "modelId", "modeId", "parentSessionId", "lastTurnAt", "name"];
   // Tool input/output are intentionally arbitrary JSON; validate only typed structures.
   if ("agent" in value) {
     for (const key of ["output", "error"]) if (value[key] !== undefined && typeof value[key] !== "string") return `${key} must be a string`;
@@ -61,9 +61,11 @@ function validateOptionalFields(value: unknown, depth = 0): string | null {
   for (const key of strings) {
     if (value[key] !== undefined && typeof value[key] !== "string" && !(key === "output" && "callId" in value)) return `${key} must be a string`;
   }
-  for (const key of ["cost", "index"]) {
+  for (const key of ["cost", "index", "nativeGeneration"]) {
     if (value[key] !== undefined && readNumber(value[key]) === null) return `${key} must be finite`;
   }
+  for (const key of ["nativeTurnId", "nativeItemId"]) if (value[key] !== undefined && (typeof value[key] !== "string" || !value[key])) return `${key} must be a nonempty string`;
+  if (value.nativeGeneration !== undefined && (!Number.isSafeInteger(value.nativeGeneration) || Number(value.nativeGeneration) < 0)) return "nativeGeneration must be a nonnegative integer";
   if (value.type === "diagnostic" && value.reason !== undefined && !["unknown-native", "malformed", "redacted"].includes(value.reason as string)) return "invalid diagnostic reason";
   for (const key of ["model", "mode"]) {
     if (value[key] !== undefined && (!isObject(value[key]) || typeof value[key].id !== "string" || !value[key].id)) return `invalid ${key}`;
@@ -344,6 +346,10 @@ function decodeDiagnostic(value: unknown): DiagnosticEvent | null {
     nativeSessionId: asNativeSessionId(nativeSessionId),
     seq,
     at,
+    ...(value.connectionProfileId !== undefined ? { connectionProfileId: readOptionalString(value.connectionProfileId) } : {}),
+    ...(value.nativeTurnId !== undefined ? { nativeTurnId: readOptionalString(value.nativeTurnId) } : {}),
+    ...(value.nativeItemId !== undefined ? { nativeItemId: readOptionalString(value.nativeItemId) } : {}),
+    ...(value.nativeGeneration !== undefined ? { nativeGeneration: readOptionalNumber(value.nativeGeneration) } : {}),
     ...(value.reason !== undefined ? { reason: readOptionalString(value.reason) as DiagnosticEvent["reason"] } : {}),
     ...(value.redactedRaw !== undefined ? { redactedRaw: value.redactedRaw } : {}),
   };

@@ -98,9 +98,30 @@ function createChatStore() {
   });
   const sessionsSlice = createSessionsSlice({ update, getSnapshot, getActiveChatScopeKey });
 
+  const profileGenerations = new Map<string, readonly [number, number]>();
   return {
     subscribe,
+    applyConnectionProfileState(profileId: string, generation: number, authRequired: boolean, hostGeneration = 0): void {
+      const previous = profileGenerations.get(profileId) ?? [0, 0];
+      if (hostGeneration < previous[0] || (hostGeneration === previous[0] && generation < previous[1])) return;
+      profileGenerations.set(profileId, [hostGeneration, generation]);
+      update(state => {
+        let changed = false; const workspaces = { ...state.workspaces };
+        for (const [root, workspace] of Object.entries(workspaces)) {
+          const runtimeBySessionId = { ...workspace.runtimeBySessionId };
+          for (const entry of workspace.sessionIndex) {
+            if (entry.connectionProfileId !== profileId) continue;
+            const runtime = { ...runtimeSlice.getRuntimeState(entry.id, root) };
+            if (authRequired) runtime.connectionState = 'auth-required'; else delete runtime.connectionState;
+            runtimeBySessionId[entry.id] = runtime; changed = true;
+          }
+          if (changed) workspaces[root] = { ...workspace, runtimeBySessionId };
+        }
+        return changed ? { ...state, workspaces } : state;
+      });
+    },
     reset() {
+      profileGenerations.clear();
       set(initialState);
       resetSessionIdCounterForTests();
       resetSessionHydrationForTests();

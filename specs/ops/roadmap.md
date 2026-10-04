@@ -156,3 +156,5 @@ Each phase records automated checks, pinned contracts and actual smoke/support e
 | 2026-08-11 | Replaced Chat/Cloud/per-workspace roadmap with native per-session runtime direction |
 
 Completed foundation phases, implementation notes and review/audit snapshots moved out of this queue live in [done](done/README.md). Older completed/cancelled archives retain their historical location under `specs/archive/ops-done` and `specs/archive/ops-postponed`. Archived evidence does not close active acceptance gaps.
+
+**AS02-C source evidence (2026-10-04):** [Pinned configuration/usage/history ledger](02-codex-adapter/implementation-notes-phase-c.md). Experimental full legacy history, optional session configuration, sparse per-profile limits/recovery and composite host/child epoch guards are implemented with production persistence fixtures. Paginated items are unavailable in the pinned executable; native management panels and authenticated/installed acceptance remain open. This does not close AS03-A/B or AS02-D.

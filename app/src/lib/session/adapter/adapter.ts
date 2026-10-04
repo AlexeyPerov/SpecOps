@@ -48,8 +48,8 @@ export interface NativeSessionRef {
   readonly modelId?: string;
   readonly modeId?: string;
   readonly runtimeMetadata?: Readonly<Record<string, unknown>>;
-  /** Completed native history fetched during explicit resume, never a replay. */
-  readonly history?: readonly { id: string; role: "user" | "assistant"; content: string; createdAt: string; nativeTurnId: string; events?: readonly SessionEvent[] }[];
+  /** Authoritative native history (including interrupted partial turns) fetched during explicit resume, never a replay. */
+  readonly history?: readonly { id: string; role: "user" | "assistant"; content: string; createdAt: string; nativeTurnId: string; nativeItemId?: string; completionState?: "completed" | "interrupted" | "failed"; events?: readonly SessionEvent[] }[];
 }
 
 // ---------------------------------------------------------------------------

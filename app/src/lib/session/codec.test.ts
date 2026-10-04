@@ -170,7 +170,7 @@ describe("complete transcript codec evidence", () => {
   it("round-trips every part, tool status, reasoning, diagnostics and compaction", () => {
     const record = sampleRecord();
     record.transcript.turns[1] = { ...record.transcript.turns[1], parts: parts as never, usage, cost: 2, reasoning: [{ id: "r", text: "reasoning" }], toolCalls: ["pending", "running", "success", "failure"].map((status) => ({ callId: status, toolName: "tool", status: status as never, input: { a: 1 }, output: { b: 2 }, progress: { c: 3 } })) };
-    record.transcript.diagnostics = [{ type: "diagnostic", nativeSessionId: asNativeSessionId("native-1"), seq: 4, at: "t", level: "warn", message: "diagnostic", reason: "malformed", redactedRaw: { native: "unknown" } }];
+    record.transcript.diagnostics = [{ type: "diagnostic", nativeSessionId: asNativeSessionId("native-1"), seq: 4, at: "t", level: "warn", message: "diagnostic", connectionProfileId: "profile-b", nativeGeneration: 2, nativeTurnId: "turn-native", nativeItemId: "item-native", reason: "malformed", redactedRaw: { native: "unknown" } }];
     record.transcript.compaction = { count: 1, lastAt: "t", removedMessageCount: 2 };
     const encoded = encodeSessionRecord(record);
     const decoded = decodeSessionRecord(encoded);
@@ -194,4 +194,11 @@ describe("complete transcript codec evidence", () => {
     delete record.transcript.turns[1].usage;
     expect(decodeSessionRecord(JSON.stringify({ ...record, session: { ...record.session, model: { name: "missing ID" } } })).ok).toBe(false);
   });
+});
+
+it("rejects invalid persisted native generation and IDs", () => {
+  for (const invalid of [-1, 1.5]) {
+    const record = sampleRecord(); record.transcript.diagnostics = [{ type: 'diagnostic', nativeSessionId: asNativeSessionId('native-1'), seq: 1, at: 't', level: 'warn', message: 'fixture', nativeGeneration: invalid }];
+    expect(decodeSessionRecord(encodeSessionRecord(record)).ok).toBe(false);
+  }
 });

@@ -1,3 +1,4 @@
+import { mergeUsage, usageBlocked, failureRecovery } from './limits';
 import { adapterErrors } from '../../../src/lib/session/adapter/errors';
 import { NativeTurn } from './turn';
 import { settings, validateModel, type NativeSettings } from './settings';
@@ -15,14 +16,14 @@ import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import type { AgentRuntimeAdapter, AgentAuthRequest, AgentAuthResult, CreateAgentSessionRequest, ResumeAgentSessionRequest, NativeSessionRef, AgentTurnRequest, CancelAgentTurnRequest, AdapterHealth } from '../../../src/lib/session/adapter';
-import type { CatalogExtension, PermissionExtension, QuestionExtension, LifecycleExtension } from '../../../src/lib/session/adapter/extensions';
+import type { SessionConfigurationExtension, CatalogExtension, PermissionExtension, QuestionExtension, LifecycleExtension } from '../../../src/lib/session/adapter/extensions';
 import type { SessionEvent } from '../../../src/lib/session/events';
 import type { ConnectionProfileSnapshot, ProfileAuthUpdate } from '../../../src/lib/session/profiles';
 import { asNativeSessionId } from '../../../src/lib/session/ids';
 import { ProfileStore, type ConnectionProfile } from './profiles';
-import { CodexTransport, CODEX_VERSION, object, resolveCodexExecutable } from './transport';
+import { NativeRpcError, CodexTransport, CODEX_VERSION, object, resolveCodexExecutable } from './transport';
 
-interface ProfileConnection { profile: ConnectionProfile; transport: CodexTransport | null; snapshot: ConnectionProfileSnapshot; attempt: number; loginId?: string }
+interface ProfileConnection { profile: ConnectionProfile; transport: CodexTransport | null; snapshot: ConnectionProfileSnapshot; attempt: number; loginId?: string; accountIdentity?: string; reauthRequired?: boolean }
 export interface CodexAdapterOptions {
   profileRoot?: string;
   executable?: string | null;
@@ -41,7 +42,7 @@ async function openBrowser(url: string): Promise<void> {
   const args = process.platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
   await new Promise<void>((resolve, reject) => execFile(command, args, { timeout: 5000 }, error => error ? reject(new Error('Could not open authentication browser')) : resolve()));
 }
-export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtension, PermissionExtension, QuestionExtension, LifecycleExtension {
+export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigurationExtension, CatalogExtension, PermissionExtension, QuestionExtension, LifecycleExtension {
   readonly runtimeId = 'codex' as const;
   readonly store: ProfileStore;
   private readonly connections = new Map<string, ProfileConnection>();
@@ -77,14 +78,14 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtensio
       c.transport.onExit = generation => {
         for (const turn of this.turns.values()) if (turn.request.native.connectionProfileId === c.profile.id && turn.generation === generation) turn.finish('turn.failed', 'Native profile process exited; resume explicitly to continue.');
         c.attempt++; delete c.loginId; delete c.snapshot.loginId; delete c.snapshot.account;
-        c.snapshot.generation = generation; c.snapshot.state = 'disconnected'; this.publish(c);
+        c.snapshot.generation = generation; c.snapshot.state = 'disconnected'; if (!['quota', 'auth-required'].includes(c.snapshot.recovery ?? '')) c.snapshot.recovery = 'offline'; c.snapshot.message = 'Connection lost. Reconnect this profile, then explicitly resume.'; this.publish(c);
       };
       c.transport.onRequest = (id, method, params, generation) => {
         const turn = object(params) && typeof params.threadId === 'string' ? this.turns.get(nativeRoutingKey('codex', c.profile.id, params.threadId)) : undefined;
         if (!turn || turn.ended || generation !== turn.generation || (method === 'item/tool/requestUserInput' && !this.experimental(c.profile.id))) { c.transport!.reject(id, generation); return; }
         try { turn.serverRequest(id, method, params, generation); } catch { turn.finish('turn.failed', 'Invalid native interaction'); c.transport!.reject(id, generation); }
       };
-      c.transport.onNotification = (method, params, generation) => { void this.notification(c, method, params, generation).catch(() => { c.snapshot.state = 'error'; c.snapshot.message = 'Incompatible authentication notification'; this.publish(c); }); };
+      c.transport.onNotification = (method, params, generation) => { void this.notification(c, method, params, generation).catch(() => { if (method !== 'account/rateLimits/updated') c.snapshot.state = 'error'; c.snapshot.message = method === 'account/rateLimits/updated' ? 'Usage update unavailable. Verify account to retry.' : 'Incompatible authentication notification'; this.publish(c); }); };
     }
     if (!c.transport.running) {
       c.snapshot.state = 'connecting'; this.publish(c);
@@ -102,20 +103,48 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtensio
     const transport = c.transport!;
     const generation = transport.generation;
     const attempt = c.attempt;
+    const previousIdentity = c.accountIdentity;
     const raw = await transport.request('account/read', { refreshToken: false });
     if (generation !== transport.generation || attempt !== c.attempt || !transport.running) return;
     if (!object(raw) || typeof raw.requiresOpenaiAuth !== 'boolean' || !('account' in raw)) throw new Error('Incompatible account payload');
-    if (raw.account === null) { delete c.snapshot.account; c.snapshot.state = c.loginId ? 'login-pending' : 'auth-required'; }
+    if (raw.account === null) { delete c.snapshot.account; delete c.snapshot.usage; c.snapshot.recovery = 'auth-required'; c.snapshot.state = c.loginId ? 'login-pending' : 'auth-required'; }
     else if (object(raw.account) && raw.account.type === 'apiKey') { c.snapshot.account = { type: 'apiKey' }; c.snapshot.state = 'authenticated'; }
     else if (object(raw.account) && raw.account.type === 'chatgpt' && (raw.account.email === null || typeof raw.account.email === 'string') && typeof raw.account.planType === 'string') {
       c.snapshot.account = { type: 'chatgpt', ...(typeof raw.account.email === 'string' ? { email: raw.account.email } : {}), planType: raw.account.planType };
       c.snapshot.state = 'authenticated';
     } else throw new Error('Incompatible account identity');
+    const nextIdentity = c.snapshot.account?.type === 'chatgpt' ? c.snapshot.account.email : c.snapshot.account?.type;
+    c.accountIdentity = nextIdentity;
+    if (previousIdentity !== nextIdentity) { delete c.snapshot.usage; delete c.snapshot.recovery; }
+    if (c.reauthRequired) { c.snapshot.state = 'auth-required'; delete c.snapshot.account; delete c.snapshot.usage; }
+    if (c.snapshot.state === 'auth-required') c.snapshot.recovery = 'auth-required';
+    if (c.snapshot.state === 'authenticated' && c.snapshot.recovery === 'auth-required') delete c.snapshot.recovery;
     delete c.snapshot.message; this.store.secure(c.profile.id); this.publish(c);
+  }
+  private async readUsage(c: ProfileConnection): Promise<void> {
+    const transport = c.transport!; const generation = transport.generation; const attempt = c.attempt;
+    try {
+      const raw = await transport.request('account/rateLimits/read');
+      if (!transport.running || generation !== transport.generation || attempt !== c.attempt) return;
+      c.snapshot.usage = mergeUsage(c.snapshot.usage, raw);
+      if (usageBlocked(c.snapshot.usage)) c.snapshot.recovery = 'quota';
+      // Only explicit backend permission permits recovery; reset time/percentages do not.
+      else if (object(raw) && raw.ordinaryUsageAllowed === true) delete c.snapshot.recovery;
+      this.publish(c);
+    } catch {
+      // Unavailable usage must not disable an otherwise authenticated profile.
+      if (transport.running && generation === transport.generation && attempt === c.attempt) {
+        c.snapshot.message = 'Usage is unavailable. Verify account to retry; missing usage does not block work.'; this.publish(c);
+      }
+    }
   }
   private async notification(c: ProfileConnection, method: string, raw: unknown, generation: number): Promise<void> {
     if (generation !== c.transport?.generation || !c.transport.running) return;
-    if (method === 'account/login/completed') {
+    if (method === 'account/rateLimits/updated') {
+      c.snapshot.usage = mergeUsage(c.snapshot.usage, raw);
+      if (usageBlocked(c.snapshot.usage)) c.snapshot.recovery = 'quota';
+      this.publish(c);
+    } else if (method === 'account/login/completed') {
       if (!object(raw) || typeof raw.success !== 'boolean' || (raw.loginId !== null && typeof raw.loginId !== 'string')) throw new Error('Invalid login completion');
       if (!c.loginId || raw.loginId !== c.loginId || c.snapshot.generation !== generation) return;
       delete c.loginId; delete c.snapshot.loginId;
@@ -127,6 +156,13 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtensio
       if (!c.loginId) await this.readAccount(c);
     } else if (object(raw) && typeof raw.threadId === 'string' && this.turns.has(nativeRoutingKey('codex', c.profile.id, raw.threadId))) {
       const turn = this.turns.get(nativeRoutingKey('codex', c.profile.id, raw.threadId))!;
+      const correlated = generation === turn.generation && !!turn.nativeTurnId && (raw.turnId === turn.nativeTurnId || (object(raw.turn) && raw.turn.id === turn.nativeTurnId));
+      if (correlated && ((method === 'error' && raw.willRetry !== true) || (method === 'turn/completed' && object(raw.turn) && raw.turn.status === 'failed'))) {
+        c.snapshot.recovery = failureRecovery(method === 'error' ? (object(raw.error) ? raw.error : raw) : (raw.turn as Record<string, unknown>).error);
+        if (c.snapshot.recovery === 'auth-required') { c.reauthRequired = true; c.snapshot.state = 'auth-required'; delete c.snapshot.account; delete c.snapshot.usage; }
+        c.snapshot.message = c.snapshot.recovery === 'quota' ? 'Usage limit reached. Verify account after quota recovery; retry explicitly.' : c.snapshot.recovery === 'auth-required' ? 'Authentication expired. Sign in to this profile again.' : 'Native request failed. Reconnect or retry this profile explicitly.';
+        this.publish(c);
+      }
       try { turn.notification(method, raw, generation); } catch { turn.finish('turn.failed', 'Incompatible native turn notification'); }
     } else { c.transport.unknownNotifications = Math.min(100, c.transport.unknownNotifications + 1); }
   }
@@ -166,11 +202,15 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtensio
       await this.connect(c.profile.id);
       if (action === 'logout' || action === 'cancel' || action === 'login-browser' || action === 'login-device' || action === 'login-api-key') {
         c.attempt++;
+        if (action !== 'cancel') { delete c.snapshot.usage; delete c.snapshot.recovery; c.reauthRequired = action === 'logout'; delete c.accountIdentity; }
         const oldLogin = c.loginId; delete c.loginId; delete c.snapshot.loginId;
         if (oldLogin) await c.transport!.request('account/login/cancel', { loginId: oldLogin });
       }
       if (action === 'logout') {
-        await c.transport!.request('account/logout'); delete c.snapshot.account; await this.readAccount(c);
+        await c.transport!.request('account/logout');
+        for (const key of this.sessions.keys()) if (JSON.parse(key)[1] === c.profile.id) this.sessions.delete(key);
+        for (const turn of this.turns.values()) if (turn.request.native.connectionProfileId === c.profile.id) turn.finish('turn.failed', 'Profile signed out. Authenticate and explicitly resume.');
+        delete c.snapshot.account; delete c.snapshot.usage; c.snapshot.recovery = 'auth-required'; await this.readAccount(c); c.transport!.close(); c.snapshot.state = 'auth-required'; c.snapshot.recovery = 'auth-required'; this.publish(c);
       } else if (action === 'login-api-key') {
         if (request.credential?.ref !== 'profile-api-key') throw new Error('Provide a private api-key file in the selected profile home.');
         this.store.secure(c.profile.id);
@@ -209,7 +249,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtensio
         this.publish(c);
         if (action === 'login-device') void completeOpen().catch(() => {});
         else await completeOpen();
-      } else if (action === 'cancel' || action === 'read') await this.readAccount(c);
+      } else if (action === 'cancel' || action === 'read') { await this.readAccount(c); if (action === 'read' && c.snapshot.state === 'authenticated') await this.readUsage(c); }
       else if (action !== 'logout') throw new Error('Unsupported authentication action');
     }
     return { status: c.snapshot.state === 'authenticated' ? 'authenticated' : 'challenge', profile: { ...c.snapshot } };
@@ -237,6 +277,19 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtensio
     const raw = await c.transport!.request('collaborationMode/list', {});
     if (!object(raw) || !Array.isArray(raw.data)) throw new Error('Incompatible collaboration catalog');
     return raw.data.filter(m => object(m) && ['default', 'plan'].includes(String(m.mode))).map(m => ({ id: String((m as Record<string, unknown>).mode), name: String((m as Record<string, unknown>).name) }));
+  }
+  async describeSessionConfiguration(input?: { connectionProfileId?: string }) {
+    const c = await this.connect(input?.connectionProfileId);
+    if (!this.models.has(c.profile.id)) await this.listModels(input);
+    return {
+      schemaVersion: 1 as const, scope: 'session' as const,
+      description: 'Saved with this session. Explicit session values override native profile/workspace defaults; other native settings and workspace instructions remain native-owned. Experimental protocol is a separate profile opt-in.',
+      fields: [
+        { id: 'effort', label: 'Effort', kind: 'select' as const, defaultsByModel: Object.fromEntries(this.models.get(c.profile.id)!.map(m => [m.id, m.defaultReasoningEffort])), optionsByModel: Object.fromEntries(this.models.get(c.profile.id)!.map(m => [m.id, m.supportedReasoningEfforts.map(e => e.reasoningEffort)])), default: 'medium', description: 'Reasoning effort for the selected model and session.' },
+        { id: 'sandbox', label: 'Sandbox', kind: 'select' as const, options: ['read-only', 'workspace-write', 'danger-full-access'], default: 'workspace-write', description: 'Native filesystem scope for this session. Changes apply on the next explicit resume.' },
+        { id: 'approvalPolicy', label: 'Approval', kind: 'select' as const, options: ['on-request', 'untrusted', 'on-failure', 'never'], default: 'on-request', description: 'Native approval policy for this session, independent of sandbox.' },
+      ],
+    };
   }
   private async selection(profileId: string, modelId: string | undefined, raw: unknown, modeId?: string) {
     if (!this.models.has(profileId)) await this.listModels({ connectionProfileId: profileId });
@@ -267,7 +320,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtensio
     const key = this.key(request.native);
     if (this.turns.has(key) && !this.turns.get(key)!.ended) throw new Error('Thread already has an active turn');
     const { config, model } = await this.selection(c.profile.id, request.native.modelId, request.native.runtimeMetadata, request.native.modeId);
-    const read = await c.transport!.request('thread/read', { threadId: request.native.nativeSessionId, includeTurns: false }).catch(() => { throw adapterErrors.sessionNotFound(String(request.native.nativeSessionId)); });
+    const read = await c.transport!.request('thread/read', { threadId: request.native.nativeSessionId, includeTurns: false }).catch(error => { if (error instanceof NativeRpcError && error.missingHistory) throw adapterErrors.sessionNotFound(String(request.native.nativeSessionId)); throw error; });
     if (!object(read) || !object(read.thread) || read.thread.id !== request.native.nativeSessionId) throw adapterErrors.sessionNotFound(String(request.native.nativeSessionId));
     if (read.thread.cwd !== request.workspaceRootPath) throw new Error('Native workspace binding mismatch');
     const raw = await c.transport!.request('thread/resume', { threadId: request.native.nativeSessionId, cwd: request.workspaceRootPath, model: model.model, approvalPolicy: config.approvalPolicy, approvalsReviewer: 'user', sandbox: config.sandbox, config: { model_reasoning_effort: config.effort }, excludeTurns: false } satisfies ThreadResumeParams);
@@ -277,31 +330,49 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtensio
     return { ...request.native, modelId: model.id, modeId: config.collaborationMode, runtimeMetadata: { ...config, writeCapability: config.sandbox !== 'read-only' }, history };
   }
   private async history(transport: CodexTransport, native: NativeSessionRef, thread: Record<string, unknown>): Promise<NonNullable<NativeSessionRef['history']>> {
-    let turns = Array.isArray(thread.turns) ? thread.turns : [];
-    if (thread.historyMode === 'paginated') turns = await this.pages(transport, 'thread/turns/list', { threadId: native.nativeSessionId });
+    if (thread.historyMode !== 'legacy') throw new Error('This pinned runtime cannot hydrate paginated native history. Preserve this record and use a supported runtime.');
+    if (!Array.isArray(thread.turns)) throw new Error('Native history snapshot is incomplete; cached history was preserved.');
+    const byTurn = new Map<string, Record<string, unknown>>();
+    for (const value of thread.turns) {
+      if (!object(value) || typeof value.id !== 'string' || !value.id) throw new Error('Invalid native history turn');
+      const old = byTurn.get(value.id);
+      // A complete snapshot dominates a reordered partial duplicate.
+      const rank = (snapshot: Record<string, unknown>) => (snapshot.status === 'completed' ? 4 : snapshot.status === 'failed' || snapshot.status === 'interrupted' ? 3 : 1) * 2 + (snapshot.itemsView === 'full' ? 1 : 0);
+      if (!old || rank(value) >= rank(old)) byTurn.set(value.id, value);
+    }
+    const turns = [...byTurn.values()].sort((a, b) => Number(a.startedAt ?? 0) - Number(b.startedAt ?? 0));
+    if (turns.length > 10000) throw new Error('Native history exceeds hydration limit');
     const history: NonNullable<NativeSessionRef['history']>[number][] = [];
     for (const turn of turns) {
-      if (!object(turn) || typeof turn.id !== 'string') throw new Error('Invalid native history turn');
-      if (turn.status === 'inProgress') { await transport.request('turn/interrupt', { threadId: native.nativeSessionId, turnId: turn.id }); continue; }
-      let items = Array.isArray(turn.items) ? turn.items : [];
-      if (turn.itemsView !== undefined && turn.itemsView !== 'full' || thread.historyMode === 'paginated') items = (await this.pages(transport, 'thread/items/list', { threadId: native.nativeSessionId, turnId: turn.id })).map(entry => object(entry) ? entry.item : undefined);
+      if (!['completed', 'failed', 'interrupted', 'inProgress'].includes(String(turn.status))) throw new Error('Invalid native history status');
+      if (turn.status === 'inProgress') await transport.request('turn/interrupt', { threadId: native.nativeSessionId, turnId: turn.id });
+      // items/list is absent in the pinned executable; never treat a sparse view as complete.
+      if ((turn.itemsView !== undefined && turn.itemsView !== 'full') || !Array.isArray(turn.items)) throw new Error('Native history item view is incomplete in this runtime; cached history was preserved.');
+      const items = new Map<string, ThreadItem>();
+      for (const item of turn.items) {
+        if (!object(item) || typeof item.id !== 'string' || !item.id || typeof item.type !== 'string') throw new Error('Invalid native history item');
+        const oldItem = items.get(item.id);
+        if (oldItem && oldItem.type !== item.type) throw new Error('Conflicting native history item identity; cached history was preserved.');
+        const terminal = (value: unknown) => object(value) && ['completed', 'failed', 'declined'].includes(String(value.status));
+        if (!oldItem || !terminal(oldItem) || terminal(item)) items.set(item.id, item as unknown as ThreadItem);
+      }
+      if (items.size > 10000) throw new Error('Native history exceeds hydration limit');
+      const turnId = String(turn.id);
       const at = new Date(typeof turn.startedAt === 'number' ? turn.startedAt * 1000 : 0).toISOString();
-      const mapped = new NativeTurn({ native, turnId: asSpecOpsTurnId(turn.id), workspaceRootPath: String(thread.cwd), prompt: '' }, transport, () => 1);
-      for (const raw of items) { if (!object(raw) || typeof raw.id !== 'string' || typeof raw.type !== 'string') throw new Error('Invalid native history item'); const item = raw as unknown as ThreadItem;
-        if (item.type === 'userMessage') history.push({ id: item.clientId ?? item.id, nativeTurnId: turn.id, role: 'user', content: item.content.filter(v => v.type === 'text').map(v => v.type === 'text' ? v.text : '').join(''), createdAt: at });
+      let seq = 0;
+      const mapped = new NativeTurn({ native, turnId: asSpecOpsTurnId(turnId), workspaceRootPath: String(thread.cwd), prompt: '' }, transport, () => ++seq);
+      mapped.bind(turnId);
+      for (const item of items.values()) {
+        if (item.type === 'userMessage') history.push({ id: item.clientId ?? item.id, nativeTurnId: turnId, nativeItemId: item.id, role: 'user', content: item.content.filter(v => v.type === 'text').map(v => v.type === 'text' ? v.text : '').join(''), createdAt: at });
         else mapped.item(item, true);
       }
-      mapped.finish(turn.status === 'completed' ? 'turn.finished' : 'turn.failed', 'Native history turn did not complete');
+      mapped.finish(turn.status === 'completed' ? 'turn.finished' : 'turn.failed', 'Native history turn was interrupted or failed; continue with a new message explicitly.');
       const events: SessionEvent[] = []; for await (const event of mapped.events()) events.push(event);
       const text = events.find(e => e.type === 'text.finished');
-      history.push({ id: `native-assistant:${turn.id}`, nativeTurnId: turn.id, role: 'assistant', content: text?.type === 'text.finished' ? text.text : '', createdAt: at, events });
+      const textItems = [...items.values()].filter(item => item.type === 'agentMessage');
+      history.push({ id: `native-assistant:${turnId}`, nativeTurnId: turnId, ...(textItems.length === 1 ? { nativeItemId: textItems[0]!.id } : {}), role: 'assistant', completionState: turn.status === 'completed' ? 'completed' : turn.status === 'failed' ? 'failed' : 'interrupted', content: text?.type === 'text.finished' ? text.text : '', createdAt: at, events });
     }
     return history;
-  }
-  private async pages(transport: CodexTransport, method: string, params: Record<string, unknown>): Promise<unknown[]> {
-    const data: unknown[] = []; const seen = new Set<string>(); let cursor: string | undefined;
-    do { const raw = await transport.request(method, { ...params, sortDirection: 'asc', limit: 100, ...(cursor ? { cursor } : {}) }); if (!object(raw) || !Array.isArray(raw.data)) throw new Error('Invalid native history page'); data.push(...raw.data); cursor = typeof raw.nextCursor === 'string' ? raw.nextCursor : undefined; if (cursor && seen.has(cursor) || data.length > 10000) throw new Error('Native history exceeds hydration limit'); if (cursor) seen.add(cursor); } while (cursor);
-    return data;
   }
   async *send(request: AgentTurnRequest): AsyncIterable<SessionEvent> {
     const c = await this.connect(request.native.connectionProfileId); const key = this.key(request.native); const bound = this.sessions.get(key);
@@ -309,6 +380,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, CatalogExtensio
     if (this.turns.has(key) && !this.turns.get(key)!.ended) throw new Error('Thread already has an active turn');
     if (c.snapshot.state !== 'authenticated') throw adapterErrors.authenticationRequired();
     const { config, model } = await this.selection(c.profile.id, request.native.modelId, request.native.runtimeMetadata, request.native.modeId);
+    if (c.snapshot.recovery === 'quota') throw new Error('Usage limit reached. Verify the selected profile after recovery, then explicitly retry.');
     if (request.attachments?.length) throw new Error('Attachments are unsupported by this developer slice');
     if (this.turns.has(key) && !this.turns.get(key)!.ended) throw new Error('Thread already has an active turn');
     const turn = new NativeTurn(request, c.transport!, () => { const seq = (this.cursors.get(key) ?? 0) + 1; this.cursors.set(key, seq); return seq; }, this.options.interactionTimeoutMs);

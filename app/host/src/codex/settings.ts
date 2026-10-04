@@ -6,6 +6,7 @@ import { object } from './transport';
 export interface NativeSettings { effort: ReasoningEffort; sandbox: SandboxMode; approvalPolicy: Extract<AskForApproval, string>; collaborationMode: 'default' | 'plan' }
 export function settings(raw: unknown): NativeSettings {
   const value = object(raw) ? raw : {};
+  for (const key of Object.keys(value)) if (!['effort', 'sandbox', 'approvalPolicy', 'collaborationMode', 'writeCapability'].includes(key)) throw new Error('Unknown session setting or invalid configuration scope');
   const result = { effort: value.effort ?? 'medium', sandbox: value.sandbox ?? 'workspace-write', approvalPolicy: value.approvalPolicy ?? 'on-request', collaborationMode: value.collaborationMode ?? 'default' };
   if (!['none','minimal','low','medium','high','xhigh','max','ultra'].includes(String(result.effort)) || !['read-only','workspace-write','danger-full-access'].includes(String(result.sandbox)) || !['untrusted','on-failure','on-request','never'].includes(String(result.approvalPolicy)) || !['default','plan'].includes(String(result.collaborationMode))) throw new Error('Unsupported native session settings');
   return result as NativeSettings;

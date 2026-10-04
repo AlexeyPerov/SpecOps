@@ -64,7 +64,7 @@ import type {
   AgentRuntimeAdapter,
   NativeSessionRef,
 } from "../../src/lib/session/adapter";
-import { isCatalogExtension, isPermissionExtension, isQuestionExtension } from "../../src/lib/session/adapter";
+import { isSessionConfigurationExtension, isCatalogExtension, isPermissionExtension, isQuestionExtension } from "../../src/lib/session/adapter";
 import type { SessionEvent } from "../../src/lib/session/events";
 import type { NativeSessionId } from "../../src/lib/session/ids";
 import type { SpecOpsTurnId } from "../../src/lib/session/ids";
@@ -273,7 +273,7 @@ export class HostDispatcher {
     const models = isCatalogExtension(adapter)
       ? await adapter.listModels({ connectionProfileId: decoded.value.connectionProfileId, ...(decoded.value.workspaceRootPath ? { workspaceRootPath: decoded.value.workspaceRootPath } : {}) })
       : [];
-    await this.respond(makeResponse(id, { runtimeId: decoded.value.runtimeId, connectionProfileId: decoded.value.connectionProfileId, models }));
+    await this.respond(makeResponse(id, { runtimeId: decoded.value.runtimeId, connectionProfileId: decoded.value.connectionProfileId, models, ...(isSessionConfigurationExtension(adapter) ? { configuration: await adapter.describeSessionConfiguration({ connectionProfileId: decoded.value.connectionProfileId }) } : {}) }));
   }
 
   private async handleCatalogModes(id: RequestId, params: unknown): Promise<void> {

@@ -1,3 +1,4 @@
+import { reconcileNativeHistory } from "../session/history";
 import { observeTurnStream } from './observedTurnStream';
 import type { ChatMessage } from "../domain/contracts";
 import { appState } from "../state/appState";
@@ -329,6 +330,7 @@ async function ensureNativeBinding(input: {
   activeSessionId: string;
   modelId: string;
   modeId: string;
+  pendingMessageIds: readonly string[];
 }): Promise<SessionBinding> {
   const { root, activeSessionId, modelId, modeId } = input;
   const client = getAgentHostClient();
@@ -343,16 +345,10 @@ async function ensureNativeBinding(input: {
     if (native.runtimeId !== existing.runtimeId || native.nativeSessionId !== existing.nativeSessionId || native.connectionProfileId !== existing.connectionProfileId) {
       throw new Error("Resume returned a different native session. Create a new session explicitly to continue.");
     }
-    if (native.history?.length) {
+    if (native.history !== undefined) {
       const current = chatStore.getMessages(activeSessionId);
-      const history = native.history.map(message => { const fold = (message.events ?? []).reduce(foldSessionEvent, initialTurnFoldState()); return { id: message.id, role: message.role, content: message.content, createdAt: message.createdAt, nativeTurnId: message.nativeTurnId, ...(message.role === 'assistant' ? { parts: fold.parts, toolCalls: fold.toolCalls } : {}) }; });
-      const nativeIds = new Set(history.map(m => m.id));
-      // client IDs persist user identity; each completed native assistant replaces its local cache.
-      const nativeUsers = new Set(history.filter(m => m.role === 'user').map(m => m.id));
-      const nativeTurns = new Set(native.history.map(m => m.nativeTurnId));
-      const cachedAssistants = new Set(current.filter((m, i) => m.role === 'assistant' && ((m.nativeTurnId && nativeTurns.has(m.nativeTurnId)) || (i > 0 && nativeUsers.has(current[i - 1]!.id)))).map(m => m.id));
-      const tail = current.filter(m => !nativeIds.has(m.id) && !cachedAssistants.has(m.id));
-      chatStore.setThreadMessages([...history, ...tail], activeSessionId, root);
+      chatStore.setThreadMessages(reconcileNativeHistory(current, native.history, input.pendingMessageIds), activeSessionId, root);
+      if (native.history.some(message => message.role === 'user' && message.id === input.pendingMessageIds[0])) throw new Error('This message already exists in native history. Continue with a new message; it was not replayed.');
     }
     const binding: SessionBinding = {
       ...existing,
@@ -452,6 +448,7 @@ export async function executeProviderTurn(params: {
       activeSessionId,
       modelId,
       modeId,
+      pendingMessageIds: [userMessage.id, assistantMessage.id],
     });
     const native = toNativeRef(binding);
     const client = getAgentHostClient();

@@ -129,3 +129,28 @@ describe('profile auth control plane', () => {
     expect(c.snapshot.state).toBe('error'); expect(JSON.stringify(c.snapshot)).not.toContain('CANARY');
   });
 });
+
+describe('profile-scoped usage and recovery', () => {
+  it('isolates sparse updates, stale generations, logout and reauthentication across two profiles', async () => {
+    const runtime = adapter(); const a = runtime.store.create('A'); const b = runtime.store.create('B');
+    const login = async (id: string) => { writeFileSync(join(runtime.store.home(id), 'api-key'), 'synthetic-private-key', { mode: 0o600 }); await runtime.authenticate({ runtimeId: 'codex', connectionProfileId: id, workspaceRootPath: '', credential: { kind: 'api-key', ref: 'profile-api-key' }, options: { action: 'login-api-key' } }); };
+    await login(a.id); await login(b.id);
+    const ca = await runtime.connect(a.id); const cb = await runtime.connect(b.id);
+    await ca.transport!.request('fixture/notify', { method: 'account/rateLimits/updated', params: { rateLimits: { limitId: 'coding', primary: { usedPercent: 12, resetsAt: 123 } } } }); await tick();
+    await cb.transport!.request('fixture/notify', { method: 'account/rateLimits/updated', params: { rateLimits: { limitId: 'coding', rateLimitReachedType: 'rate_limit_reached' } } }); await tick();
+    expect(ca.snapshot.usage?.limits.coding?.primary?.usedPercent).toBe(12); expect(ca.snapshot.recovery).toBeUndefined(); expect(cb.snapshot.recovery).toBe('quota');
+    const oldGeneration = cb.transport!.generation;
+    await runtime.authenticate({ runtimeId: 'codex', connectionProfileId: b.id, workspaceRootPath: '', options: { action: 'logout' } });
+    expect(cb.snapshot.state).toBe('auth-required'); expect(cb.snapshot.usage).toBeUndefined(); expect(ca.snapshot.state).toBe('authenticated');
+    await login(b.id); expect(cb.snapshot.usage).toBeUndefined(); expect(cb.snapshot.recovery).toBeUndefined();
+    cb.transport!.onNotification('account/rateLimits/updated', { rateLimits: { limitId: 'coding', spendControlReached: true } }, oldGeneration); await tick();
+    expect(cb.snapshot.usage).toBeUndefined(); expect(ca.snapshot.usage?.limits.coding?.primary?.usedPercent).toBe(12);
+  });
+  it('optional session schema does not write profile/global defaults and validation rejects arbitrary scopes', async () => {
+    const runtime = adapter(); const profile = runtime.store.create('Settings');
+    const configPath = join(runtime.store.home(profile.id), 'config.toml'); const original = readFileSync(configPath, 'utf8');
+    const schema = await runtime.describeSessionConfiguration({ connectionProfileId: profile.id }); expect(schema.scope).toBe('session'); expect(schema.fields.map(f => f.id)).toEqual(['effort', 'sandbox', 'approvalPolicy']);
+    expect(readFileSync(configPath, 'utf8')).toBe(original);
+    const { settings } = await import('./settings'); expect(() => settings({ scope: 'global', effort: 'medium' })).toThrow('scope'); expect(() => settings({ sandbox: 'unknown' })).toThrow();
+  });
+});

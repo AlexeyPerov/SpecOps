@@ -125,6 +125,23 @@ export interface ConfigurationExtension {
   }): Promise<void>;
 }
 
+/** Optional session controls. Values travel with the session binding; no global writes. */
+export interface SessionConfigurationSchema {
+  readonly schemaVersion: 1;
+  readonly scope: "session";
+  readonly description: string;
+  readonly fields: readonly (AgentConfigurationField & {
+    readonly defaultsByModel?: Readonly<Record<string, string>>;
+    readonly optionsByModel?: Readonly<Record<string, readonly string[]>>;
+  })[];
+}
+export interface SessionConfigurationExtension {
+  describeSessionConfiguration(input?: { readonly connectionProfileId?: string }): Promise<SessionConfigurationSchema>;
+}
+export function isSessionConfigurationExtension(adapter: unknown): adapter is SessionConfigurationExtension {
+  return hasMethod(adapter, "describeSessionConfiguration");
+}
+
 // ---------------------------------------------------------------------------
 // MCP / skills / commands — runtime-side tooling surfaces
 // ---------------------------------------------------------------------------

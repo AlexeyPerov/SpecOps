@@ -327,6 +327,7 @@ function parseMessage(value: unknown): ChatMessage | null {
     id: value.id,
     nativeTurnId: parseOptionalString(value.nativeTurnId),
     nativeItemId: parseOptionalString(value.nativeItemId),
+    ...(value.completionState === 'completed' || value.completionState === 'interrupted' || value.completionState === 'failed' ? { completionState: value.completionState } : {}),
     role: value.role,
     content: value.content,
     createdAt: value.createdAt,

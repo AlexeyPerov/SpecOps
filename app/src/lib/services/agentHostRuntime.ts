@@ -1,3 +1,4 @@
+import type { SessionConfigurationSchema } from "../session/adapter/extensions";
 /**
  * Shared Agent Host client + lazy start (phase F, task AS01-F-03).
  *
@@ -83,6 +84,7 @@ export type { AgentHostBindings, AgentHostClient, AgentHostStatus };
 
 /** Catalog snapshot for the runtime/model/mode pickers. */
 export interface SessionCatalogSnapshot {
+  configuration?: SessionConfigurationSchema;
   status: "idle" | "loading" | "ready" | "error" | "empty";
   models: readonly AgentModelDescriptor[];
   modes: readonly AgentModeDescriptor[];
@@ -117,7 +119,7 @@ export async function loadSessionCatalogs(
     if (models.length === 0 && modes.length === 0) {
       return { status: "empty", models, modes };
     }
-    return { status: "ready", models, modes };
+    return { status: "ready", models, modes, ...(modelsResult.configuration ? { configuration: modelsResult.configuration } : {}) };
   } catch (error: unknown) {
     return {
       status: "error",

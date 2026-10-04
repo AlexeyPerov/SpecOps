@@ -151,6 +151,7 @@ pub struct AgentHostStatus {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HostEvent {
+    host_generation: u64,
     method: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     params: Option<Value>,
@@ -659,7 +660,11 @@ fn stdout_reader(
                 .unwrap_or("")
                 .to_string();
             let params = obj.get("params").cloned();
-            let event = HostEvent { method, params };
+            let event = HostEvent {
+                host_generation: generation,
+                method,
+                params,
+            };
             if event_tx.try_send(event).is_err() {
                 mark_exited(&inner_arc, generation, None);
                 break;
@@ -1144,6 +1149,17 @@ mod tests {
             inner.restarts.push(old);
         }
         assert!(!inner.within_crash_loop(), "old restarts must not count");
+    }
+
+    #[test]
+    fn forwarded_notification_carries_supervised_generation() {
+        let event = HostEvent {
+            host_generation: 3,
+            method: "profile.authUpdated".to_string(),
+            params: None,
+        };
+        let value = serde_json::to_value(event).unwrap();
+        assert_eq!(value["hostGeneration"], 3);
     }
 
     #[test]

@@ -11,6 +11,8 @@
     "v2/CancelLoginAccountParams",
     "v2/CancelLoginAccountResponse",
     "v2/LogoutAccountResponse",
+    "v2/GetAccountRateLimitsResponse",
+    "v2/AccountRateLimitsUpdatedNotification",
     "v2/AccountLoginCompletedNotification",
     "v2/AccountUpdatedNotification",
     "v2/ModelListParams",

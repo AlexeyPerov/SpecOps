@@ -37,6 +37,7 @@ export interface ChatTurnError {
 
 /** Ephemeral per-session chat runtime; not persisted to disk. */
 export interface ChatThreadRuntimeState {
+  connectionState?: "auth-required";
   isGenerating: boolean;
   isWaitingForPermission: boolean;
   isWaitingForQuestion: boolean;

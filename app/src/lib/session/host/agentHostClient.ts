@@ -1,3 +1,4 @@
+import type { SessionConfigurationSchema } from "../adapter/extensions";
 /**
  * Frontend Agent Host client (phase F, task AS01-F-03).
  *
@@ -66,6 +67,7 @@ export type AgentHostClientError =
 
 /** Notification payload forwarded by the bridge. */
 interface HostNotification {
+  hostGeneration?: number;
   method: string;
   params?: unknown;
 }
@@ -89,6 +91,7 @@ export interface DiscoverResult {
 }
 
 export interface CatalogModelsResult {
+  configuration?: SessionConfigurationSchema;
   runtimeId?: AgentRuntimeId;
   connectionProfileId?: string;
   models: readonly AgentModelDescriptor[];
@@ -183,6 +186,7 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
   const profileSubscribers = new Set<(update: ProfileAuthUpdate) => void>();
   const subscribers = new Map<string, Set<SessionSubscriber>>();
   let listenerPromise: Promise<UnlistenFn> | null = null;
+  let hostEpoch = 0;
   const failures = new Map<string, (error: Error) => void>();
   const failStreams = (message: string): void => { for (const fail of failures.values()) fail(new Error(message)); };
 
@@ -200,9 +204,12 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
       if (!notification || typeof notification.method !== "string") {
         return;
       }
+      const epoch = notification.hostGeneration ?? lastStatus?.generation ?? 0;
+      if (epoch < hostEpoch) return;
+      hostEpoch = epoch;
       if (notification.method === "profile.authUpdated") {
         const update = notification.params as ProfileAuthUpdate;
-        if (update && typeof update.connectionProfileId === "string" && typeof update.generation === "number" && update.profile) for (const listener of profileSubscribers) listener(update);
+        if (update && typeof update.connectionProfileId === "string" && typeof update.generation === "number" && update.profile) for (const listener of profileSubscribers) listener({ ...update, hostGeneration: epoch, profile: { ...update.profile, hostGeneration: epoch } });
       }
       if (notification.method === "session.event") {
         const params = notification.params as SessionEventParams | undefined;
@@ -260,6 +267,7 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
   let lastStatus: AgentHostStatus | null = null;
   const rememberStatus = (status: AgentHostStatus): AgentHostStatus => {
     if (!status.running || (lastStatus && status.generation !== lastStatus.generation)) failStreams("Agent Host stopped or was replaced. Resume the session to continue.");
+    hostEpoch = Math.max(hostEpoch, status.generation);
     lastStatus = status;
     return status;
   };
@@ -296,7 +304,10 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
       return request<DiscoverResult>("discover");
     },
     async authenticate(req) {
-      return request<AgentAuthResult>("auth", req);
+      const epoch = hostEpoch;
+      const result = await request<AgentAuthResult>("auth", req);
+      if (hostEpoch !== epoch) throw new Error("Agent Host was replaced during account verification. Retry this profile explicitly.");
+      return { ...result, ...(result.profile ? { profile: { ...result.profile, hostGeneration: epoch } } : {}), ...(result.profiles ? { profiles: result.profiles.map(profile => ({ ...profile, hostGeneration: epoch })) } : {}) };
     },
     async catalogModels(runtimeId, workspaceRootPath, connectionProfileId) {
       return request<CatalogModelsResult>("catalog.models", {

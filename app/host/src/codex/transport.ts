@@ -7,6 +7,15 @@ import type { InitializeParams } from './generated/InitializeParams';
 import { isolatedEnvironment } from './profiles';
 
 export const CODEX_VERSION = '0.160.0';
+/** Secret-safe RPC error classification; native error text is never exposed. */
+export class NativeRpcError extends Error {
+  readonly missingHistory: boolean;
+  constructor(raw: unknown) {
+    const code = object(raw) && typeof raw.code === 'number' ? raw.code : 'unknown';
+    super(`Codex native request failed (${code}). Retry or reauthenticate the selected profile.`);
+    this.missingHistory = object(raw) && typeof raw.message === 'string' && /(?:thread|rollout|history).*(?:not found|missing|does not exist)|missing native history/i.test(raw.message);
+  }
+}
 const LIMIT = 1024 * 1024;
 export function resolveCodexExecutable(env: NodeJS.ProcessEnv = process.env): string | null {
   if (env.SPECOPS_CODEX_EXECUTABLE) return isAbsolute(env.SPECOPS_CODEX_EXECUTABLE) && existsSync(env.SPECOPS_CODEX_EXECUTABLE) ? env.SPECOPS_CODEX_EXECUTABLE : null;
@@ -87,7 +96,7 @@ export class CodexTransport {
       const pending = this.pending.get(raw.id);
       if (!pending) return;
       this.pending.delete(raw.id); clearTimeout(pending.timer);
-      if ('error' in raw) pending.reject(new Error(`Codex native request failed (${object(raw.error) && typeof raw.error.code === 'number' ? raw.error.code : 'unknown'}). Retry or reauthenticate the selected profile.`));
+      if ('error' in raw) pending.reject(new NativeRpcError(raw.error));
       else if ('result' in raw) pending.resolve(raw.result);
       else pending.reject(new Error('Incompatible native response'));
     } else if (typeof raw.method === 'string') {

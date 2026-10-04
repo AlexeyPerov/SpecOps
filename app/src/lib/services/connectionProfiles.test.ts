@@ -65,3 +65,37 @@ describe('connection profile production boundaries', () => {
   await a.next(); await b.next(); stop();
  });
 });
+
+it('profile sign-out marks only bound sessions auth-required and ignores stale profile updates', () => {
+  chatStore.reset(); chatStore.setActiveWorkspaceRoot('/profile-workspace');
+  const a = chatStore.createDraftSession()!; chatStore.setSessionLink(a, { runtimeId: 'codex', connectionProfileId: 'profile-a', nativeSessionId: 'thread-a' });
+  const b = chatStore.createDraftSession()!; chatStore.setSessionLink(b, { runtimeId: 'codex', connectionProfileId: 'profile-b', nativeSessionId: 'thread-b', parentSessionId: 'local-parent' });
+  chatStore.applyConnectionProfileState('profile-b', 2, true);
+  expect(chatStore.getRuntimeState(b).connectionState).toBe('auth-required'); expect(chatStore.getRuntimeState(a).connectionState).toBeUndefined();
+  expect(chatStore.getSessionLink(b)?.parentSessionId).toBe('local-parent');
+  chatStore.applyConnectionProfileState('profile-b', 1, false); expect(chatStore.getRuntimeState(b).connectionState).toBe('auth-required');
+  chatStore.applyConnectionProfileState('profile-b', 3, false); expect(chatStore.getRuntimeState(b).connectionState).toBeUndefined(); chatStore.reset();
+});
+
+it('whole host replacement accepts reset child counters and rejects queued prior-host updates', async () => {
+  let hostGeneration = 1; let emit: (value: unknown) => void = () => {};
+  const client = createAgentHostClient({ invoke: async () => status(hostGeneration), listen: async (_event, handler) => { emit = handler; return () => {}; } });
+  chatStore.setActiveWorkspaceRoot('/epoch'); const session = chatStore.createDraftSession()!; chatStore.setSessionLink(session, { runtimeId: 'codex', connectionProfileId: 'profile', nativeSessionId: 'thread' });
+  const seen: number[] = [];
+  const stop = await client.subscribeProfiles(update => { seen.push(update.generation); chatStore.applyConnectionProfileState(update.connectionProfileId, update.generation, update.profile.state === 'auth-required', update.hostGeneration); });
+  await client.getStatus();
+  const frame = (epoch: number, generation: number, state: 'auth-required' | 'authenticated') => ({ hostGeneration: epoch, method: 'profile.authUpdated', params: { runtimeId: 'codex', connectionProfileId: 'profile', generation, profile: { id: 'profile', generation, state } } });
+  emit(frame(1, 3, 'auth-required')); expect(chatStore.getRuntimeState(session).connectionState).toBe('auth-required');
+  hostGeneration = 2; await client.getStatus(); emit(frame(2, 1, 'authenticated')); expect(chatStore.getRuntimeState(session).connectionState).toBeUndefined();
+  emit(frame(1, 4, 'auth-required')); expect(chatStore.getRuntimeState(session).connectionState).toBeUndefined();
+  emit(frame(2, 2, 'auth-required')); expect(chatStore.getRuntimeState(session).connectionState).toBe('auth-required'); expect(seen).toEqual([3, 1, 2]); stop();
+});
+
+it('account replies carry host epoch and an in-flight old-host reply cannot overwrite new profile state', async () => {
+  let generation = 1; let resolveAuth: (value: unknown) => void = () => {};
+  const client = createAgentHostClient({ invoke: async (command) => command === 'agent_host_request' ? new Promise(resolve => { resolveAuth = resolve; }) : status(generation), listen: async () => () => {} });
+  await client.getStatus(); const first = client.authenticate({ runtimeId: 'codex', connectionProfileId: 'profile', workspaceRootPath: '' });
+  resolveAuth({ status: 'authenticated', profile: { id: 'profile', generation: 3, state: 'authenticated' } }); expect((await first).profile?.hostGeneration).toBe(1);
+  const stale = client.authenticate({ runtimeId: 'codex', connectionProfileId: 'profile', workspaceRootPath: '' }); generation = 2; await client.getStatus();
+  resolveAuth({ status: 'authenticated', profile: { id: 'profile', generation: 3, state: 'authenticated' } }); await expect(stale).rejects.toThrow('replaced');
+});

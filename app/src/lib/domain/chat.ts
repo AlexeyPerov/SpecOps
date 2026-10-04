@@ -96,6 +96,7 @@ export interface ChatMessage {
   id: string;
   nativeTurnId?: string;
   nativeItemId?: string;
+  completionState?: "completed" | "interrupted" | "failed";
   role: ChatMessageRole;
   content: string;
   createdAt: string;

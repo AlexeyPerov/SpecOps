@@ -13,6 +13,7 @@ const contracts = [
   'InitializeParams', 'InitializeResponse',
   'v2/LoginAccountParams', 'v2/LoginAccountResponse', 'v2/GetAccountParams', 'v2/GetAccountResponse',
   'v2/CancelLoginAccountParams', 'v2/CancelLoginAccountResponse', 'v2/LogoutAccountResponse',
+  'v2/GetAccountRateLimitsResponse', 'v2/AccountRateLimitsUpdatedNotification',
   'v2/AccountLoginCompletedNotification', 'v2/AccountUpdatedNotification',
   'v2/ModelListParams', 'v2/ModelListResponse',
   'v2/ThreadStartParams', 'v2/ThreadStartResponse', 'v2/ThreadReadParams', 'v2/ThreadReadResponse',

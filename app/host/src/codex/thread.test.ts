@@ -60,3 +60,35 @@ class ContractRuntime extends CodexRuntimeAdapter {
  override async createSession(input: Parameters<CodexRuntimeAdapter['createSession']>[0]) { return super.createSession({...input,connectionProfileId:this.profileId}); }
 }
 runAdapterContractSuite({runtimeId:'codex',finishPrompt:'unknown',cancelPrompt:'cancel',create:async()=>{sharedRoot??=temporary();const executable=join(sharedRoot,'fixture.cjs');writeFileSync(executable,threadFixture,{mode:0o700});const adapter=new ContractRuntime(sharedRoot,executable);clean.push(()=>adapter.close());return adapter;},createFaultAdapter:async()=>{sharedRoot=undefined;const root=temporary();const executable=join(root,'fixture.cjs');writeFileSync(executable,threadFixture,{mode:0o700});const adapter=new ContractRuntime(root,executable);clean.push(()=>adapter.close());return adapter;}});
+
+describe('authoritative legacy history', () => {
+  it('deduplicates reordered terminal/partial turns and items; retains interrupted partial text without replay', async () => {
+    const { adapter, native, workspace, profile } = await setup(); await collectContractEvents(adapter.send(request(native, workspace)));
+    const path = join(adapter.store.home(profile.id), 'fixture-history.json');
+    const db = JSON.parse(readFileSync(path, 'utf8')); const turn = db[native.nativeSessionId].turns[0];
+    const text = turn.items.find((item: { type: string }) => item.type === 'agentMessage');
+    turn.items.push({ ...text });
+    db[native.nativeSessionId].turns.push({ ...turn, status: 'inProgress', items: [], itemsView: 'full' });
+    db[native.nativeSessionId].turns.push({ id: 'partial-turn', status: 'inProgress', itemsView: 'full', startedAt: 101, items: [{ type: 'userMessage', id: 'partial-user', clientId: 'partial-client', content: [{ type: 'text', text: 'interrupted prompt' }] }, { ...text, id: 'partial-text', text: 'partial answer' }] });
+    writeFileSync(path, JSON.stringify(db)); adapter.close();
+    const resumed = await adapter.resumeSession({ native, workspaceRootPath: workspace });
+    expect(resumed.history?.filter(m => m.nativeTurnId === turn.id)).toHaveLength(2); expect(resumed.history?.find(m => m.nativeTurnId === turn.id && m.role === 'assistant')?.content).toBe('Hello native');
+    const partial = resumed.history?.find(m => m.nativeTurnId === 'partial-turn' && m.role === 'assistant'); expect(partial?.content).toBe('partial answer'); expect(partial?.completionState).toBe('interrupted'); expect(partial?.events?.at(-1)?.type).toBe('turn.failed'); expect(partial?.nativeItemId).toBe('partial-text');
+    const logs = readFileSync(join(adapter.store.home(profile.id), 'fixture-requests.jsonl'), 'utf8'); expect(logs.match(/thread\/start/g)).toHaveLength(1); expect(resumed.history?.filter(m => m.role === 'user').map(m => m.content)).toEqual(['hello', 'interrupted prompt']); expect(logs).not.toContain('thread/items/list');
+  });
+  it('sparse unsupported item view fails explicitly and never calls the absent paginated items method', async () => {
+    const { adapter, native, workspace, profile } = await setup(); await collectContractEvents(adapter.send(request(native, workspace)));
+    const path = join(adapter.store.home(profile.id), 'fixture-history.json'); const db = JSON.parse(readFileSync(path, 'utf8')); db[native.nativeSessionId].turns[0].itemsView = 'summary'; writeFileSync(path, JSON.stringify(db)); adapter.close();
+    await expect(adapter.resumeSession({ native, workspaceRootPath: workspace })).rejects.toThrow('cached history was preserved');
+    expect(readFileSync(join(adapter.store.home(profile.id), 'fixture-requests.jsonl'), 'utf8')).not.toContain('thread/items/list');
+  });
+});
+
+it('native expiry marks only the bound profile auth-required; explicit retry and quota failures stay actionable', async () => {
+  const { adapter, native, workspace, profile } = await setup(); const other = adapter.store.create('Unrelated'); const otherConnection = await adapter.connect(other.id);
+  const conn = await adapter.connect(profile.id); const iterator = adapter.send(request(native, workspace, 'cancel'))[Symbol.asyncIterator](); await iterator.next(); await new Promise(resolve => setTimeout(resolve, 20));
+  conn.transport!.onNotification('error', { threadId: native.nativeSessionId, turnId: 'native-turn-0', error: { codexErrorInfo: 'unauthorized' }, willRetry: false }, conn.transport!.generation);
+  const events = []; for (let next = await iterator.next(); !next.done; next = await iterator.next()) events.push(next.value);
+  expect(events.at(-1)?.type).toBe('turn.failed'); expect(conn.snapshot.state).toBe('auth-required'); expect(conn.snapshot.recovery).toBe('auth-required'); expect(otherConnection.snapshot.state).toBe('authenticated');
+  await expect(collectContractEvents(adapter.send(request(native, workspace)))).rejects.toMatchObject({ code: 'authentication-required' });
+});

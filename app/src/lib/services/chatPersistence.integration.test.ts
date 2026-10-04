@@ -64,7 +64,7 @@ async function nativeClient(adapter: CodexRuntimeAdapter, generation: number) {
   const status = { running: true, generation, health: 'healthy', pid: 1, hostVersion: 'fixture', protocolVersion: PROTOCOL_VERSION, restartCount: generation - 1, lastError: null };
   return createAgentHostClient({ invoke: async (command, args) => command === 'agent_host_request' ? rpc(String(args?.method), args?.params) : status, listen: async (_event, callback) => { notification = callback; return () => { notification = undefined; }; } });
 }
-it('native fixture passes dispatcher/client/pipeline and production disk writer across fresh app/host, without prompt replay or duplicate history', async () => {
+it.each(['divergent', 'corrupt'] as const)('native fixture (%s cache) passes dispatcher/client/pipeline and production disk writer across fresh app/host, without prompt replay or duplicate history', async (cache) => {
   const root = join(dataDir, 'workspace'); await mkdir(root);
   const executable = join(dataDir, 'native-fixture.cjs'); writeFileSync(executable, threadFixture, { mode: 0o700 });
   const options = { profileRoot: join(dataDir, 'profiles'), executable };
@@ -77,10 +77,13 @@ it('native fixture passes dispatcher/client/pipeline and production disk writer 
   chatStore.updateThreadMetadata({ runtimeId: 'codex', connectionProfileId: profile.id, selectedModelId: 'fixture-model', selectedModeId: 'plan', runtimeMetadata: { effort: 'high', sandbox: 'workspace-write', approvalPolicy: 'on-request' } });
   chatStore.appendMessage({ id: 'user-first', role: 'user', content: 'hello', createdAt: 't' }, { sessionId }); chatStore.beginTurn('first', sessionId);
   expect(await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'first' })).toMatchObject({ ok: true });
-  const binding = chatStore.getSessionLink(sessionId, root)!;
+  const binding = { ...chatStore.getSessionLink(sessionId, root)!, parentSessionId: 'local-parent' }; chatStore.setSessionLink(sessionId, binding, root);
   expect(binding.runtimeMetadata).toMatchObject({ effort: 'high', sandbox: 'workspace-write', collaborationMode: 'plan' });
   const saved = chatStore.getActiveThreadSnapshot(sessionId)!; expect(saved.messages.find(m => m.role === 'assistant')?.nativeTurnId).toBe('native-turn-0');
-  await persistSessionThreadSnapshot(root, sessionId, saved); await flushSessionIndexPersistence(root); first.close();
+  saved.metadata.summary = 'Local summary';
+  if (cache === 'divergent') saved.messages = [...saved.messages.map(m => ({ ...m, content: 'divergent cached text' })), { id: 'duplicate-old', nativeTurnId: 'native-turn-0', role: 'assistant', content: 'duplicate', createdAt: 't' }];
+  await persistSessionThreadSnapshot(root, sessionId, saved);
+  if (cache === 'corrupt') { const { getSessionThreadFilePath } = await import('./chatPersistencePaths'); await writeFile(await getSessionThreadFilePath(root, sessionId), '{broken-cache'); } await flushSessionIndexPersistence(root); first.close();
   chatStore.reset(); chatStore.setActiveWorkspaceRoot(root); await chatStore.loadWorkspaceSessions(root);
   const restored = chatStore.getSessionLink(sessionId, root)!; expect(restored).toEqual(binding);
   const fresh = new CodexRuntimeAdapter(options); nativeRuntimes.push(fresh); const freshClient = await nativeClient(fresh, 2); bindAgentHostClientForTests(() => freshClient);
@@ -89,10 +92,20 @@ it('native fixture passes dispatcher/client/pipeline and production disk writer 
   registerPermissionPromptRunner(async () => ({ reply: 'once' }));
   expect(await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'next' })).toMatchObject({ ok: true });
   const messages = chatStore.getMessages(sessionId); expect(messages.filter(m => m.id === 'user-first')).toHaveLength(1); expect(messages.filter(m => m.role === 'assistant' && m.nativeTurnId === 'native-turn-0')).toHaveLength(1);
+  expect(messages.some(m => m.content === 'divergent cached text' || m.id === 'duplicate-old')).toBe(false);
+  expect(messages.find(m => m.id === 'user-first')?.content).toBe('hello');
+  expect(messages.find(m => m.role === 'assistant' && m.nativeTurnId === 'native-turn-0')?.nativeItemId).toBe('native-turn-0-text');
+  if (cache === 'divergent') expect(chatStore.getMetadata(sessionId)?.summary).toBe('Local summary');
+  expect(chatStore.getSessionLink(sessionId, root)?.parentSessionId).toBe('local-parent');
   expect(chatStore.getSessionLink(sessionId, root)?.nativeSessionId).toBe(binding.nativeSessionId);
   const nativeHistory = await fresh.resumeSession({ native: { ...restored, nativeSessionId: restored.nativeSessionId as never }, workspaceRootPath: root }); expect(nativeHistory.history?.filter(m => m.role === 'user').map(m => m.content)).toEqual(['hello', 'approval']);
   const requests = await readFile(join(fresh.store.home(profile.id), 'fixture-requests.jsonl'), 'utf8'); expect(requests.match(/thread\/start/g)).toHaveLength(1);
   let dismissed = false; registerPermissionPromptRunner(request => new Promise(() => { request.signal?.addEventListener('abort', () => { dismissed = true; }, { once: true }); }));
   chatStore.appendMessage({ id: 'user-child-loss', role: 'user', content: 'approval-child-failure', createdAt: 't3' }, { sessionId }); chatStore.beginTurn('lost-child', sessionId);
   const before = Date.now(); const failure = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'lost-child' }); expect(failure.ok).toBe(false); expect(dismissed).toBe(true); expect(Date.now() - before).toBeLessThan(1500); expect(chatStore.getRuntimeState(sessionId).isGenerating).toBe(false);
+  const nativePath = join(fresh.store.home(profile.id), 'fixture-history.json'); const nativeDb = JSON.parse(await readFile(nativePath, 'utf8')); delete nativeDb[binding.nativeSessionId]; await writeFile(nativePath, JSON.stringify(nativeDb)); fresh.close();
+  chatStore.appendMessage({ id: 'user-missing', role: 'user', content: 'new continuation', createdAt: 't4' }, { sessionId }); chatStore.beginTurn('missing', sessionId);
+  const missing = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'missing' }); expect(missing.ok).toBe(false);
+  expect(chatStore.getSessionLink(sessionId, root)?.nativeSessionId).toBe(binding.nativeSessionId); expect(chatStore.getMessages(sessionId).some(m => m.content === 'Hello native')).toBe(true);
+  const afterMissing = await readFile(join(fresh.store.home(profile.id), 'fixture-requests.jsonl'), 'utf8'); expect(afterMissing.match(/thread\/start/g)).toHaveLength(1);
 });

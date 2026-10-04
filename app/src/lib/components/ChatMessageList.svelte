@@ -371,6 +371,9 @@
           >
             <div class="chat-message-header">
               <p class="chat-message-role">{messageRoleLabel(message)}</p>
+              {#if message.completionState === 'interrupted' || message.completionState === 'failed'}
+                <span role="status">{message.completionState === 'interrupted' ? 'Interrupted' : 'Failed'} — continue with a new message.</span>
+              {/if}
               {#if hasMessageActions(message, index)}
                 <div class="chat-message-actions">
                   {#if canForkFromMessage}

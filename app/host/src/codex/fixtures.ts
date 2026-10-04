@@ -20,6 +20,7 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
  }
  if (req.method === 'fixture/complete') { account = { type: 'chatgpt', email: 'profile@example.test', planType: 'plus' }; process.stdout.write(JSON.stringify({ method: 'account/login/completed', params: { loginId: req.params.loginId, success: true, error: null, onboardingEntrypoint: null } }) + '\\n'); }
  if (req.method === 'fixture/descendant') { const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); result = { pid: child.pid }; }
+ if (req.method === 'fixture/notify') process.stdout.write(JSON.stringify({ method: req.params.method, params: req.params.params }) + '\\n');
  if (req.method === 'fixture/env') result = { CODEX_HOME: process.env.CODEX_HOME, OPENAI_API_KEY: process.env.OPENAI_API_KEY || null, CODEX_API_KEY: process.env.CODEX_API_KEY || null, PATH: process.env.PATH, WORKSPACE_FIXTURE: process.env.WORKSPACE_FIXTURE };
  process.stdout.write(JSON.stringify({ id: req.id, result }) + '\\n');
 });

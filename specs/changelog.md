@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-04 17:32 MSK — Add profile recovery, optional settings and authoritative native history
+
+- Implemented AS02-C supported source scope: optional neutral session configuration descriptors replace runtime-specific common-UI branches, with model-specific effort defaults, separate sandbox/approval/collaboration scope and validated session overrides. Profile config remains native-owned; the persisted experimental protocol gate defaults off.
+- Added per-profile/account/limit sparse usage merges, actionable quota/auth-expiry/offline/retry states, explicit backend-authorized quota recovery and isolated logout/session auth-required marking. Supervised host epoch plus child generation prevent stale auth state after whole-host replacement; old-host account replies are rejected.
+- Reconciled full materialized legacy native history by stable turn/item IDs, terminal-first deduplication and retained interrupted partial work. Production persistence reconstructs divergent/duplicate/corrupt caches, preserves readable local metadata/lineage, retains missing-native-thread records and never silently replays prompts. Sparse/paginated history and unavailable native management panels remain explicit pinned-runtime deferrals.
+- Recorded the pinned execution/display/configuration ledger and reproducible 199-file/46-root contracts. Validation: 102 host, 3,237 frontend and 17 Rust Agent Host tests passed; host/frontend checks and both production builds passed. Real account-B inference/account-A preservation, native extension/instruction smoke, whole-host UI recovery and installed readiness remain external gates. No persisted-data migration or compatibility shim.
+
 ## 2026-10-04 17:01 MSK — Add native coding turns and minimum thread resume
 
 - Implemented AS02-B source thread start/read/resume, deterministic native text/reasoning/tools/file/usage events, stable native IDs/generation correlation, single-terminal streams, native interrupt and selected-child loss settlement.

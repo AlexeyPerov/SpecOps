@@ -31,15 +31,7 @@ function makeState(overrides: Partial<AppDomainState> = {}): AppDomainState {
           lastActiveSessionId: null,
         },
       },
-      chatHttp: {
-        documents: [],
-        session: {
-          editorLayout: createSinglePaneLayout([], null),
-          lastActiveWindowId: "main",
-          windowBounds: null,
-          lastActiveSessionId: null,
-        },
-      },
+
       workspaces: [],
     },
     settings: defaultSettings,

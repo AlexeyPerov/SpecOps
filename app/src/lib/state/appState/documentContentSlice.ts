@@ -14,6 +14,7 @@ import {
   getSessionTabs,
   isFileTab,
   normalizeTabState,
+  normalizeTextColumnWidthPx,
   removeTabFromPane,
   revealFileTabsInLayout,
   setActivePaneInLayout,
@@ -39,7 +40,12 @@ import {
   documentWithOpenedFilePayload,
   inferLanguage,
 } from "./documentHelpers";
-import { canCreateFileTabs, reopenTabForDocument, selectTabInternal } from "./tabHelpers";
+import {
+  canCreateFileTabs,
+  promoteTransientTabInLayout,
+  reopenTabForDocument,
+  selectTabInternal,
+} from "./tabHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
 
@@ -429,6 +435,19 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
               };
             }
           }
+          // Editing a previewed file is the clearest "I want to keep this"
+          // signal there is: promote its transient tab. A no-op (same layout
+          // reference) for the ordinary tabs every other keystroke targets.
+          const promotedLayout = promoteTransientTabInLayout(
+            nextCtx.session.editorLayout,
+            documentId,
+          );
+          if (promotedLayout !== nextCtx.session.editorLayout) {
+            nextCtx = {
+              ...nextCtx,
+              session: { ...nextCtx.session, editorLayout: promotedLayout },
+            };
+          }
           return nextCtx;
         }),
       );
@@ -467,6 +486,19 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
                 session: { ...nextCtx.session, editorLayout: nextLayout },
               };
             }
+          }
+          // Editing a previewed file is the clearest "I want to keep this"
+          // signal there is: promote its transient tab. A no-op (same layout
+          // reference) for the ordinary tabs every other keystroke targets.
+          const promotedLayout = promoteTransientTabInLayout(
+            nextCtx.session.editorLayout,
+            documentId,
+          );
+          if (promotedLayout !== nextCtx.session.editorLayout) {
+            nextCtx = {
+              ...nextCtx,
+              session: { ...nextCtx.session, editorLayout: promotedLayout },
+            };
           }
           return nextCtx;
         }),
@@ -688,6 +720,34 @@ export function createDocumentContentSlice(deps: { update: AppStateUpdate }) {
             }
             changed = true;
             return { ...documentState, scrollTop };
+          });
+          return changed ? { ...ctx, documents } : ctx;
+        }),
+      );
+    },
+    /**
+     * Persists the per-document text-column width set by dragging the column
+     * edge in the editor. `null` restores the app default. Context-aware
+     * because the drag can land on a surface parked in a non-active context.
+     */
+    setDocumentTextColumnWidthForContext(
+      contextId: ContextId,
+      documentId: string,
+      textColumnWidthPx: number | null,
+    ) {
+      const nextWidth = normalizeTextColumnWidthPx(textColumnWidthPx);
+      update((state) =>
+        patchContextById(state, contextId, (ctx) => {
+          let changed = false;
+          const documents = ctx.documents.map((documentState) => {
+            if (
+              documentState.id !== documentId ||
+              (documentState.textColumnWidthPx ?? null) === nextWidth
+            ) {
+              return documentState;
+            }
+            changed = true;
+            return { ...documentState, textColumnWidthPx: nextWidth };
           });
           return changed ? { ...ctx, documents } : ctx;
         }),

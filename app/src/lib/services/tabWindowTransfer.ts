@@ -229,5 +229,9 @@ export async function moveTabToNewWindow({
   }
 
   await finalizeSourceAfterTransfer(tabId, sourceWindowId, notify);
+  // The window was focused when it was created, before it had adopted the tab;
+  // raise it again now that it has, so the file the user just sent over is the
+  // window in front (matching the existing-window transfer path).
+  await focusWebviewWindow(createdWindowId);
   return true;
 }

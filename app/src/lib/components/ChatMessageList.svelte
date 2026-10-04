@@ -706,8 +706,8 @@
 
   .chat-message-content {
     margin: 0;
-    font-size: var(--font-size-md);
-    line-height: 1.5;
+    font-size: var(--font-size-chat);
+    line-height: var(--line-height-chat, 1.55);
     white-space: pre-wrap;
     word-break: break-word;
     overflow-wrap: anywhere;

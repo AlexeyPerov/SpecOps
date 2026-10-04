@@ -7,8 +7,9 @@ import { syncRecentFiles } from "../services/recentFilesSync";
 import { loadThemeFile } from "../services/themeStore";
 import type { CustomThemeRecord } from "../services/themeStore";
 import { BUILTIN_THEME_IDS } from "../styles/themeTokens";
-import { IMPORTED_THEMES } from "../styles/importedThemes";
-import { CURATED_THEMES } from "../styles/curatedThemes";
+import { defaultFontSettings } from "../services/fontSettings";
+import { PRESET_THEMES } from "../styles/themeCatalog";
+import { normalizeAppearanceOverrides, type ThemeAppearance } from "../styles/themeAppearance";
 import type { BuiltinThemeId } from "../styles/themeTokens";
 import {
   findWorkspaceByPath,
@@ -22,6 +23,7 @@ import { resetCommandBindingOverrides } from "../commands/commandBindingRuntime"
 import { createSettingsSlice, defaultSettings } from "./appState/settingsSlice";
 import {
   applyThemeState,
+  appearanceForTheme,
   baseModeForRef,
   createCustomThemeFromCurrent,
   defaultThemeState,
@@ -82,8 +84,7 @@ const initialState: AppDomainState = {
  */
 const STATIC_THEME_REFS: ActiveThemeRef[] = [
   ...BUILTIN_THEME_IDS.map<ActiveThemeRef>((id) => ({ kind: "builtin", id })),
-  ...IMPORTED_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
-  ...CURATED_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
+  ...PRESET_THEMES.map<ActiveThemeRef>((preset) => ({ kind: "preset", id: preset.id })),
 ];
 
 /**
@@ -228,6 +229,56 @@ function createStateStore() {
         return { ...state, theme };
       });
     },
+    setAppearance(patch: Partial<ThemeAppearance>) {
+      update(state => {
+        const theme = { ...state.theme, appearanceOverrides: normalizeAppearanceOverrides({ ...state.theme.appearanceOverrides, ...patch }) };
+        applyThemeState(theme);
+        scheduleDebouncedThemeSave(theme);
+        return { ...state, theme };
+      });
+    },
+    resetAppearance() {
+      update(state => {
+        const theme = { ...state.theme, appearanceOverrides: {} };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme, settings: { ...state.settings, coloredProjectFileIcons: true } };
+      });
+    },
+    applyFullThemeStyle() {
+      const state = getSnapshot();
+      const ref = resolveActiveTheme(state.theme);
+      const custom = ref.kind === "custom" ? state.theme.customThemes.find(c => c.id === ref.id) : undefined;
+      this.resetAppearance();
+      settingsSlice.setFontSettings(custom?.fontSettings ?? { ...defaultFontSettings });
+    },
+    saveAppearanceAsTheme() {
+      update(state => {
+        let theme = createCustomThemeFromCurrent(state.theme);
+        const last = theme.customThemes.length - 1;
+        const custom = { ...theme.customThemes[last], appearance: appearanceForTheme(state.theme), fontSettings: { ...state.settings.fontSettings } };
+        theme = { ...theme, mode: "manual", manualTheme: { kind: "custom", id: custom.id }, customThemes: theme.customThemes.map((c, i) => i === last ? custom : c), appearanceOverrides: {} };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
+    updateCustomThemeAppearance(id: string) {
+      update(state => {
+        const ref = resolveActiveTheme(state.theme);
+        if (ref.kind !== "custom" || ref.id !== id) return state;
+        const appearance = appearanceForTheme(state.theme);
+        const theme = {
+          ...state.theme,
+          appearanceOverrides: {},
+          customThemes: state.theme.customThemes.map(custom => custom.id === id
+            ? { ...custom, appearance, fontSettings: { ...state.settings.fontSettings } } : custom),
+        };
+        applyThemeState(theme);
+        persistThemeImmediate(theme);
+        return { ...state, theme };
+      });
+    },
     createCustomTheme() {
       update((state) => {
         const theme = createCustomThemeFromCurrent(state.theme);
@@ -263,12 +314,13 @@ function createStateStore() {
         // slot back to its builtin default so the rendered theme never dangles.
         const fallbackFor = (ref: ActiveThemeRef): ActiveThemeRef =>
           ref.kind === "custom" && ref.id === id
-            ? { kind: "builtin", id: baseModeForRef(ref, customThemes) === "light" ? "light-blue" : "dark-amber" }
+            ? { kind: "builtin", id: baseModeForRef(ref, state.theme.customThemes) === "light" ? "light-blue" : "dark-amber" }
             : ref;
         const theme: AppThemeState = {
           ...state.theme,
           darkTheme: fallbackFor(state.theme.darkTheme),
           lightTheme: fallbackFor(state.theme.lightTheme),
+          manualTheme: fallbackFor(state.theme.manualTheme),
           customThemes,
         };
         applyThemeState(theme);
@@ -304,7 +356,7 @@ function createStateStore() {
           return state;
         }
         applyThemeState(state.theme, prefersDark);
-        return state;
+        return { ...state };
       });
     },
     async loadTheme(options?: {
@@ -320,6 +372,7 @@ function createStateStore() {
         lightTheme: file.lightTheme,
         manualTheme: file.manualTheme,
         customThemes: file.customThemes,
+        appearanceOverrides: file.appearanceOverrides,
       };
       set({ ...getSnapshot(), theme });
       applyThemeState(theme);
@@ -411,6 +464,14 @@ function createStateStore() {
           decoratePlaintextSymbols: value,
         },
       }));
+    },
+    setColoredProjectFileIcons(value: boolean) {
+      update(state => {
+        const theme = { ...state.theme, appearanceOverrides: { ...state.theme.appearanceOverrides, icons: value ? "color" as const : "monochrome" as const } };
+        applyThemeState(theme);
+        scheduleDebouncedThemeSave(theme);
+        return { ...state, theme, settings: { ...state.settings, coloredProjectFileIcons: value } };
+      });
     },
     setShowMinimap(value: boolean) {
       update((state) => ({

@@ -1,4 +1,5 @@
-import { normalizePathSync } from "./diskFingerprint";
+import { normalizePathForStorage, normalizePathSync } from "./diskFingerprint";
+import { mapWithConcurrency } from "./mapWithConcurrency";
 import { loadDirectoryChildren, type ProjectTreeNode } from "./projectTree";
 
 export interface ProjectTreeControllerState {
@@ -23,6 +24,13 @@ export interface ProjectTreeControllerDeps {
    * signature actually differs from the last report.
    */
   onExpandedPathsChange?: (workspaceRoot: string, paths: string[]) => void;
+  /**
+   * Drops shared directory-listing caches for the given directories. Called at
+   * the start of a revalidation pass: the tree reads through a cached
+   * `loadDirectoryChildren`, so without this the pass would re-read its own
+   * cache and conclude that nothing changed.
+   */
+  invalidateDirectoryCache?: (directoryPaths: readonly string[]) => void;
 }
 
 export interface LoadProjectTreeRootOptions {
@@ -52,8 +60,19 @@ function cloneState(state: ProjectTreeControllerState): ProjectTreeControllerSta
   };
 }
 
+/**
+ * Case-folded (on macOS/Windows) key used for containment checks, cache
+ * bookkeeping and de-duplication. Never use it as a key into `childrenByPath` /
+ * `expandedPaths`: those are spelled exactly as the tree rows are — see
+ * {@link normalizeDisplayPath}.
+ */
 function normalizePathForComparison(path: string): string {
   return normalizePathSync(path).replace(/\/+$/, "");
+}
+
+/** Case-preserving form: how tree rows, and therefore tree map keys, spell a path. */
+function normalizeDisplayPath(path: string): string {
+  return normalizePathForStorage(path).replace(/\/+$/, "");
 }
 
 function isPathInsideRoot(path: string, workspaceRoot: string): boolean {
@@ -71,13 +90,17 @@ export function expandedAncestorPathsForFile(
   if (!normalizedPath.startsWith(`${normalizedRoot}/`)) {
     return [];
   }
-  const relative = normalizedPath.slice(normalizedRoot.length + 1);
+  // Containment is decided on the case-folded keys, but these ancestors are fed
+  // back into `expandedPaths` / `childrenByPath`, so they must carry the tree's
+  // own spelling: slice the case-preserving form (same segment layout).
+  const displayRoot = normalizeDisplayPath(workspaceRoot);
+  const relative = normalizeDisplayPath(activePath).slice(displayRoot.length + 1);
   const parts = relative.split("/").filter(Boolean);
   if (parts.length <= 1) {
     return [];
   }
   const paths: string[] = [];
-  let cursor = normalizedRoot;
+  let cursor = displayRoot;
   for (const part of parts.slice(0, -1)) {
     cursor = `${cursor}/${part}`;
     paths.push(cursor);
@@ -95,6 +118,31 @@ const FILESYSTEM_CHANGE_DEBOUNCE_MS = 400;
  * causing the project tree to visibly re-render a second time after a drag-drop.
  */
 const RELOAD_FRESH_COOLDOWN_MS = 500;
+
+/**
+ * Minimum gap between two automatic revalidation passes (window focus,
+ * workspace switch) of the same loaded tree. Focus fires on every window
+ * activation — including the rapid back-and-forth of alt-tabbing — and a
+ * workspace switch can follow one immediately, so without this the tree would
+ * re-list its whole expanded set several times a second.
+ */
+const REVALIDATE_MIN_INTERVAL_MS = 2000;
+
+/** Directory listings read in parallel during one revalidation pass. */
+const REVALIDATE_CONCURRENCY = 4;
+
+/**
+ * Order-sensitive fingerprint of one directory listing. Two listings with equal
+ * signatures are indistinguishable in the tree, so a revalidation that produces
+ * only equal signatures publishes nothing and the UI never re-renders.
+ */
+function listingSignature(nodes: readonly ProjectTreeNode[]): string {
+  let signature = "";
+  for (const node of nodes) {
+    signature += `${node.kind === "directory" ? "d" : "f"}\u0001${node.name}\u0002`;
+  }
+  return signature;
+}
 
 function parentDirectoryPath(path: string): string {
   const normalized = normalizePathForComparison(path);
@@ -138,11 +186,17 @@ export function directoriesToInvalidateForChange(
  * Directories the project-tree UI should reload for a filesystem change.
  * Only parents that are the workspace root or currently expanded are included,
  * so collapsed branches are not fetched into the tree view.
+ *
+ * Returns comparison-form paths. `expandedPaths` holds the tree's own spelling,
+ * so membership is tested on the folded keys — comparing a folded parent
+ * against the raw set matched nothing on macOS/Windows for any path with an
+ * uppercase segment (which, with `/Users/...`, is every path), and the change
+ * was silently dropped.
  */
 export function directoriesToRefreshForChange(
   workspaceRoot: string,
   changedPath: string,
-  expandedPaths: Set<string>,
+  expandedPaths: ReadonlySet<string>,
 ): string[] {
   const normalizedRoot = normalizePathForComparison(workspaceRoot);
   const normalizedChanged = normalizePathForComparison(changedPath);
@@ -153,17 +207,21 @@ export function directoriesToRefreshForChange(
     return [];
   }
 
+  const expandedKeys = new Set<string>();
+  for (const path of expandedPaths) {
+    expandedKeys.add(normalizePathForComparison(path));
+  }
   const dirs = new Set<string>();
   const parent = parentDirectoryPath(normalizedChanged);
-  if (parent === normalizedRoot || expandedPaths.has(parent)) {
+  if (parent === normalizedRoot || expandedKeys.has(parent)) {
     dirs.add(parent);
   }
-  if (expandedPaths.has(normalizedChanged)) {
+  if (expandedKeys.has(normalizedChanged)) {
     dirs.add(normalizedChanged);
   }
   if (normalizedChanged !== normalizedRoot && parent !== normalizedRoot) {
     const grandparent = parentDirectoryPath(parent);
-    if (grandparent === normalizedRoot || expandedPaths.has(grandparent)) {
+    if (grandparent === normalizedRoot || expandedKeys.has(grandparent)) {
       dirs.add(grandparent);
     }
   }
@@ -175,11 +233,16 @@ export function createProjectTreeController(
   deps: ProjectTreeControllerDeps = {},
 ): {
   getState: () => ProjectTreeControllerState;
+  collapseAll: () => void;
   setShowHidden: (next: boolean) => void;
   loadProjectTreeRoot: (options: LoadProjectTreeRootOptions) => Promise<void>;
   loadProjectTreeChildren: (workspaceRoot: string | null, directoryPath: string) => Promise<void>;
   handleToggleProjectTreeDirectory: (workspaceRoot: string | null, path: string) => Promise<void>;
   refreshProjectTree: (workspaceRoot: string | null, isSessionTabActive: boolean) => Promise<void>;
+  revalidateProjectTree: (
+    workspaceRoot: string | null,
+    options?: { force?: boolean },
+  ) => Promise<boolean>;
   ensureExpandedForActiveFile: (
     workspaceRoot: string | null,
     activePath: string | null,
@@ -196,8 +259,16 @@ export function createProjectTreeController(
   const loadChildren = deps.loadDirectoryChildrenFn ?? loadDirectoryChildren;
   const probeAccess = deps.probeWorkspaceReadAccessFn;
   const onExpandedPathsChange = deps.onExpandedPathsChange;
+  const invalidateDirectoryCache = deps.invalidateDirectoryCache;
   let state = createInitialState();
   let lastLoadedWorkspaceRoot: string | null = null;
+  /**
+   * The loaded root in the tree's own spelling. `lastLoadedWorkspaceRoot` is the
+   * case-folded comparison key, which cannot be handed to `loadChildren`: the
+   * node paths it builds are `${dirPath}/${name}`, so a folded root would mint
+   * folded row paths that no longer match `childrenByPath` / `expandedPaths`.
+   */
+  let lastLoadedWorkspaceRootDisplay: string | null = null;
   /** Bumped on every root load/reset so slower in-flight loads cannot overwrite a newer workspace. */
   let rootLoadGeneration = 0;
   let filesystemChangeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -333,11 +404,15 @@ export function createProjectTreeController(
     rootLoadGeneration += 1;
     state = createInitialState(state.showHidden);
     lastLoadedWorkspaceRoot = null;
+    lastLoadedWorkspaceRootDisplay = null;
     recentlyReloadedDirs.clear();
     lastExpandedSignature = null;
     suppressNextExpandedPathsPublish = false;
     publish();
   };
+
+  let revalidateInFlight = false;
+  let lastRevalidateAt = 0;
 
   const loadProjectTreeChildren = async (
     workspaceRoot: string | null,
@@ -431,6 +506,7 @@ export function createProjectTreeController(
       if (cached) {
         rootLoadGeneration += 1;
         lastLoadedWorkspaceRoot = normalizedWorkspaceRoot;
+        lastLoadedWorkspaceRootDisplay = normalizeDisplayPath(workspaceRoot);
         state = {
           ...cloneState(cached.state),
           showHidden: state.showHidden,
@@ -457,6 +533,7 @@ export function createProjectTreeController(
     if (lastLoadedWorkspaceRoot !== normalizedWorkspaceRoot) {
       state = createInitialState(state.showHidden);
       lastLoadedWorkspaceRoot = null;
+      lastLoadedWorkspaceRootDisplay = null;
       publish();
     }
     const rootNodes = await loadChildren(workspaceRoot, workspaceRoot, {
@@ -471,6 +548,12 @@ export function createProjectTreeController(
       rootNodes,
     };
     lastLoadedWorkspaceRoot = normalizedWorkspaceRoot;
+    lastLoadedWorkspaceRootDisplay = normalizeDisplayPath(workspaceRoot);
+    // This listing came straight off disk, so the revalidation that follows a
+    // workspace switch has nothing to add: seed the throttle window as if a
+    // pass had just run. Entering a workspace served from the in-memory cache
+    // leaves the window open, which is exactly when revalidation is useful.
+    lastRevalidateAt = Date.now();
     publish();
 
     if (isSessionTabActive && probeAccess) {
@@ -482,6 +565,59 @@ export function createProjectTreeController(
         onWorkspaceBlocked?.();
       }
     }
+  };
+
+  /**
+   * Re-list one directory and apply the result only if it differs from what is
+   * on screen. Used when a folder is expanded again: its listing may have been
+   * loaded minutes ago and the revalidation passes only cover the root and the
+   * folders that were expanded at the time, so a collapsed folder's cached
+   * children can outlive the directory itself. Silent when nothing changed, so
+   * re-expanding an unchanged folder never re-renders the tree.
+   */
+  const revalidateDirectoryListing = async (
+    workspaceRoot: string,
+    directoryPath: string,
+  ): Promise<void> => {
+    const normalizedRoot = normalizePathForComparison(workspaceRoot);
+    if (lastLoadedWorkspaceRoot !== normalizedRoot) {
+      return;
+    }
+    const key = normalizePathForComparison(directoryPath);
+    // Just reloaded (in-app mutation, watcher flush) — that listing is current.
+    if (filterFreshDirs([key]).length === 0) {
+      return;
+    }
+    const loadGeneration = rootLoadGeneration;
+    const showHiddenAtStart = state.showHidden;
+    invalidateDirectoryCache?.([key]);
+    let children: ProjectTreeNode[];
+    try {
+      children = await loadChildren(workspaceRoot, directoryPath, {
+        showHidden: showHiddenAtStart,
+      });
+    } catch {
+      return;
+    }
+    if (
+      loadGeneration !== rootLoadGeneration ||
+      lastLoadedWorkspaceRoot !== normalizedRoot ||
+      state.showHidden !== showHiddenAtStart
+    ) {
+      return;
+    }
+    const current = state.childrenByPath.get(directoryPath);
+    if (!current || listingSignature(current) === listingSignature(children)) {
+      return;
+    }
+    markDirsFresh([key]);
+    const nextChildren = new Map(state.childrenByPath);
+    nextChildren.set(directoryPath, children);
+    state = {
+      ...state,
+      childrenByPath: nextChildren,
+    };
+    publish();
   };
 
   const handleToggleProjectTreeDirectory = async (
@@ -505,6 +641,11 @@ export function createProjectTreeController(
     };
     if (!shouldLoadChildren) {
       publish();
+      // Show the known children immediately, then quietly check them against
+      // disk — they were listed while the folder was open some time ago.
+      if (workspaceRoot && isPathInsideRoot(path, workspaceRoot)) {
+        void revalidateDirectoryListing(workspaceRoot, path);
+      }
       return;
     }
     if (!workspaceRoot || !isPathInsideRoot(path, workspaceRoot)) {
@@ -521,6 +662,16 @@ export function createProjectTreeController(
     if (!workspaceRoot) {
       return;
     }
+    const normalizedRoot = normalizePathForComparison(workspaceRoot);
+    if (lastLoadedWorkspaceRoot === normalizedRoot && state.rootNodes.length > 0) {
+      // Manual refresh of the loaded tree is a *forced revalidation*, not a
+      // rebuild: dropping `childrenByPath` first collapsed every row, which
+      // re-rendered the whole panel and let the scroll container clamp
+      // `scrollTop` to 0. Callers clear the shared directory cache before this
+      // runs, so the re-listings hit disk.
+      await revalidateProjectTree(workspaceRoot, { force: true });
+      return;
+    }
     const expanded = [...state.expandedPaths];
     state = {
       ...state,
@@ -534,6 +685,124 @@ export function createProjectTreeController(
     });
     for (const path of expanded) {
       await loadProjectTreeChildren(workspaceRoot, path);
+    }
+  };
+
+  /**
+   * Quiet refresh of the loaded workspace tree: re-lists the root plus every
+   * currently expanded directory and applies only the listings that actually
+   * changed, in a single publish.
+   *
+   * Unlike {@link refreshProjectTree} it never clears `childrenByPath` first, so
+   * the tree does not collapse and repopulate (which re-renders every row and
+   * lets the scroll container clamp `scrollTop` to 0), and the reads run with
+   * bounded concurrency instead of one sequential await per expanded folder.
+   * When nothing changed on disk — the common case for a focus event — it
+   * publishes nothing at all.
+   *
+   * Resolves true when tree state was updated.
+   */
+  const revalidateProjectTree = async (
+    workspaceRoot: string | null,
+    options: { force?: boolean } = {},
+  ): Promise<boolean> => {
+    if (!workspaceRoot) {
+      return false;
+    }
+    const normalizedRoot = normalizePathForComparison(workspaceRoot);
+    // Only the loaded tree can be revalidated in place; a root that is only in
+    // the LRU cache is revalidated when it is next entered.
+    if (lastLoadedWorkspaceRoot !== normalizedRoot || state.rootNodes.length === 0) {
+      return false;
+    }
+    // A forced pass (manual refresh, hidden-files toggle) is never dropped for
+    // an automatic one already running: both apply against the state as it is
+    // after their own listings resolve, so the later apply simply wins.
+    if (revalidateInFlight && !options.force) {
+      return false;
+    }
+    const startedAt = Date.now();
+    if (!options.force && startedAt - lastRevalidateAt < REVALIDATE_MIN_INTERVAL_MS) {
+      return false;
+    }
+    revalidateInFlight = true;
+    lastRevalidateAt = startedAt;
+    const loadGeneration = rootLoadGeneration;
+    const showHiddenAtStart = state.showHidden;
+    // Expanded paths are keyed exactly as the tree rows are (the on-disk
+    // casing), so read and write `childrenByPath` with those same keys; only
+    // the cache/freshness bookkeeping uses the comparison form.
+    const expandedTargets = [...state.expandedPaths].filter(
+      (path) =>
+        normalizePathForComparison(path) !== normalizedRoot &&
+        isPathInsideRoot(path, normalizedRoot),
+    );
+    const targets = [workspaceRoot, ...expandedTargets];
+    const normalizedTargets = [
+      ...new Set(targets.map((path) => normalizePathForComparison(path))),
+    ];
+    try {
+      invalidateDirectoryCache?.(normalizedTargets);
+      const listings = await mapWithConcurrency(
+        targets,
+        REVALIDATE_CONCURRENCY,
+        async (directoryPath) => {
+          try {
+            return await loadChildren(workspaceRoot, directoryPath, {
+              showHidden: showHiddenAtStart,
+            });
+          } catch {
+            // A directory that vanished or became unreadable between listings
+            // is left untouched; the watcher's own change event drops it from
+            // the parent listing.
+            return null;
+          }
+        },
+      );
+      // A workspace switch, manual refresh, or hidden-files toggle that landed
+      // while the listings were in flight owns the tree now — discard.
+      if (
+        loadGeneration !== rootLoadGeneration ||
+        lastLoadedWorkspaceRoot !== normalizedRoot ||
+        state.showHidden !== showHiddenAtStart
+      ) {
+        return false;
+      }
+      let nextRootNodes: ProjectTreeNode[] | null = null;
+      let nextChildren: Map<string, ProjectTreeNode[]> | null = null;
+      for (const [index, directoryPath] of targets.entries()) {
+        const children = listings[index];
+        if (!children) {
+          continue;
+        }
+        if (index === 0) {
+          if (listingSignature(children) !== listingSignature(state.rootNodes)) {
+            nextRootNodes = children;
+          }
+          continue;
+        }
+        const current = state.childrenByPath.get(directoryPath);
+        if (current && listingSignature(current) === listingSignature(children)) {
+          continue;
+        }
+        nextChildren ??= new Map(state.childrenByPath);
+        nextChildren.set(directoryPath, children);
+      }
+      if (!nextRootNodes && !nextChildren) {
+        return false;
+      }
+      // These listings are authoritative as of now: keep the debounced watcher
+      // flush from reloading them again a moment later.
+      markDirsFresh(normalizedTargets);
+      state = {
+        ...state,
+        ...(nextRootNodes ? { rootNodes: nextRootNodes } : {}),
+        ...(nextChildren ? { childrenByPath: nextChildren } : {}),
+      };
+      publish();
+      return true;
+    } finally {
+      revalidateInFlight = false;
     }
   };
 
@@ -638,6 +907,57 @@ export function createProjectTreeController(
     );
   };
 
+  /**
+   * The tree's spelling of a workspace root. Callers reach `reloadDirectories`
+   * from both sides — the app passes the workspace's real root, the debounced
+   * watcher flush passes the folded comparison key — and only the former may be
+   * used to build node paths.
+   */
+  const treeWorkspaceRoot = (workspaceRoot: string): string => {
+    if (
+      lastLoadedWorkspaceRootDisplay &&
+      normalizePathForComparison(workspaceRoot) === lastLoadedWorkspaceRoot
+    ) {
+      return lastLoadedWorkspaceRootDisplay;
+    }
+    return normalizeDisplayPath(workspaceRoot);
+  };
+
+  /**
+   * The tree's spelling of a directory that some other layer (the OS watcher,
+   * the cache bookkeeping) named with a folded key. Falls back to the caller's
+   * own spelling, and finally to the key itself for a directory the tree has
+   * never seen.
+   */
+  const treeDirectoryPath = (comparisonKey: string, fallback: string): string => {
+    if (state.childrenByPath.has(fallback) || state.expandedPaths.has(fallback)) {
+      return fallback;
+    }
+    for (const path of state.childrenByPath.keys()) {
+      if (normalizePathForComparison(path) === comparisonKey) {
+        return path;
+      }
+    }
+    for (const path of state.expandedPaths) {
+      if (normalizePathForComparison(path) === comparisonKey) {
+        return path;
+      }
+    }
+    for (const node of state.rootNodes) {
+      if (node.kind === "directory" && normalizePathForComparison(node.path) === comparisonKey) {
+        return node.path;
+      }
+    }
+    for (const nodes of state.childrenByPath.values()) {
+      for (const node of nodes) {
+        if (node.kind === "directory" && normalizePathForComparison(node.path) === comparisonKey) {
+          return node.path;
+        }
+      }
+    }
+    return fallback;
+  };
+
   const reloadDirectories = async (
     workspaceRoot: string | null,
     directoryPaths: string[],
@@ -645,20 +965,35 @@ export function createProjectTreeController(
     if (!workspaceRoot || directoryPaths.length === 0) {
       return;
     }
-    const normalizedRoot = normalizePathForComparison(workspaceRoot);
-    const unique = [...new Set(directoryPaths.map((path) => normalizePathForComparison(path)))];
+    const rootPath = treeWorkspaceRoot(workspaceRoot);
+    const normalizedRoot = normalizePathForComparison(rootPath);
+    // De-duplicate on the comparison key, but remember a real spelling for each
+    // directory: `childrenByPath` is keyed exactly as the tree rows are, so a
+    // listing stored under a folded key is a listing no row will ever read.
+    const spellingByKey = new Map<string, string>();
+    for (const path of directoryPaths) {
+      const key = normalizePathForComparison(path);
+      if (!spellingByKey.has(key)) {
+        spellingByKey.set(key, normalizeDisplayPath(path));
+      }
+    }
+    const unique = [...spellingByKey.keys()];
     // Record these directories as freshly reloaded so the debounced
     // filesystem-change flush (which fires ~400ms later for the same paths via
     // both the in-app notify and the OS watcher) does not re-render them.
     markDirsFresh(unique);
-    if (unique.includes(normalizedRoot)) {
+    // This is an authoritative re-read: drop the shared cached listings first,
+    // or the reload just re-reads the very listing the change invalidated and
+    // concludes that nothing moved.
+    invalidateDirectoryCache?.(unique);
+    if (spellingByKey.has(normalizedRoot)) {
       // Capture the generation before the await so a workspace switch (or a
       // manual refresh) that lands while the root listing is in flight cannot
       // overwrite the now-active workspace's tree with this stale result. The
       // non-root branch gets the same protection from `loadProjectTreeChildren`.
       const loadGeneration = rootLoadGeneration;
       const showHiddenAtSchedule = state.showHidden;
-      const rootNodes = await loadChildren(workspaceRoot, workspaceRoot, {
+      const rootNodes = await loadChildren(rootPath, rootPath, {
         showHidden: showHiddenAtSchedule,
       });
       if (
@@ -673,14 +1008,14 @@ export function createProjectTreeController(
       };
       publish();
     }
-    for (const directoryPath of unique) {
-      if (directoryPath === normalizedRoot) {
+    for (const [key, spelling] of spellingByKey) {
+      if (key === normalizedRoot) {
         continue;
       }
-      if (!isPathInsideRoot(directoryPath, workspaceRoot)) {
+      if (!isPathInsideRoot(key, normalizedRoot)) {
         continue;
       }
-      await loadProjectTreeChildren(workspaceRoot, directoryPath);
+      await loadProjectTreeChildren(rootPath, treeDirectoryPath(key, spelling));
     }
   };
 
@@ -778,10 +1113,15 @@ export function createProjectTreeController(
       };
       publish();
     },
+    collapseAll: () => {
+      state = { ...state, expandedPaths: new Set() };
+      publish();
+    },
     loadProjectTreeRoot,
     loadProjectTreeChildren,
     handleToggleProjectTreeDirectory,
     refreshProjectTree,
+    revalidateProjectTree,
     ensureExpandedForActiveFile,
     restoreExpandedPaths,
     handleFilesystemChange,

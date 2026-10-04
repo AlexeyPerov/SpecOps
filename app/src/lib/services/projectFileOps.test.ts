@@ -58,6 +58,11 @@ describe("isBlockedProjectTreeDirectory", () => {
     expect(isBlockedProjectTreeDirectory("/tmp/ws/.git")).toBe(true);
     expect(isBlockedProjectTreeDirectory("/tmp/ws/src")).toBe(false);
   });
+
+  it("does not treat dot-prefixed ancestors above the workspace as blocked", () => {
+    expect(isBlockedProjectTreeDirectory("/tmp/.parents/workspace/src", "/tmp/.parents/workspace"))
+      .toBe(false);
+  });
 });
 
 describe("canMoveEntry", () => {

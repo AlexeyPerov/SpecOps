@@ -21,6 +21,7 @@
     showFoldGutter = true,
     autoClosePairs = true,
     autoSuggest = false,
+    textColumnWidthPx = null as number | null,
     markdownEnabled = true,
     markdownHtml = "",
     storedMarkdownViewMode = "edit" as "edit" | "split" | "preview",
@@ -46,6 +47,7 @@
     showFoldGutter?: boolean;
     autoClosePairs?: boolean;
     autoSuggest?: boolean;
+    textColumnWidthPx?: number | null;
     markdownEnabled?: boolean;
     markdownHtml?: string;
     storedMarkdownViewMode?: "edit" | "split" | "preview";
@@ -68,8 +70,10 @@
     waitForLayout: () => tick(),
   });
 
+  const markdownModesAvailable = $derived(markdownEnabled && content.length > 0);
+
   const markdownViewMode = $derived(
-    !markdownEnabled
+    !markdownModesAvailable
       ? "edit"
       : storedMarkdownViewMode === "split" && !canFitSplit
         ? "edit"
@@ -110,33 +114,35 @@
 </script>
 
 <div class="markdown-layout">
-  <div class="markdown-mode-bar" hidden={!markdownEnabled}>
-    <div class="markdown-mode-actions">
-      <button
-        class={`btn btn-sm btn-ghost ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
-        type="button"
-        onclick={() => onMarkdownViewModeChange("edit")}
-      >
-        edit
-      </button>
-      <button
-        class={`btn btn-sm btn-ghost ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
-        type="button"
-        onclick={() => onMarkdownViewModeChange("split")}
-      >
-        split
-      </button>
-      <button
-        class={`btn btn-sm btn-ghost ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
-        type="button"
-        onclick={() => onMarkdownViewModeChange("preview")}
-      >
-        preview
-      </button>
+  {#if markdownModesAvailable}
+    <div class="markdown-mode-bar">
+      <div class="markdown-mode-actions">
+        <button
+          class={`btn btn-sm btn-ghost ${markdownViewMode === "edit" ? "mode-button-active" : ""}`}
+          type="button"
+          onclick={() => onMarkdownViewModeChange("edit")}
+        >
+          edit
+        </button>
+        <button
+          class={`btn btn-sm btn-ghost ${markdownViewMode === "split" ? "mode-button-active" : ""}`}
+          type="button"
+          onclick={() => onMarkdownViewModeChange("split")}
+        >
+          split
+        </button>
+        <button
+          class={`btn btn-sm btn-ghost ${markdownViewMode === "preview" ? "mode-button-active" : ""}`}
+          type="button"
+          onclick={() => onMarkdownViewModeChange("preview")}
+        >
+          preview
+        </button>
+      </div>
     </div>
-  </div>
+  {/if}
 
-  {#if markdownEnabled && markdownViewMode === "preview"}
+  {#if markdownModesAvailable && markdownViewMode === "preview"}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
@@ -147,7 +153,7 @@
       {@html markdownHtml}
     </div>
   {:else}
-    <div class:markdown-split={markdownEnabled && markdownViewMode === "split"} class="markdown-body">
+    <div class:markdown-split={markdownModesAvailable && markdownViewMode === "split"} class="markdown-body">
       <div class="markdown-editor-pane" class:markdown-editor-single={markdownViewMode !== "split"} bind:this={markdownEditorPaneEl}>
         <DocumentEditor
           {content}
@@ -163,13 +169,14 @@
           {showFoldGutter}
           {autoClosePairs}
           {autoSuggest}
+          {textColumnWidthPx}
           {onStatusMessage}
           {onUntitledTitleRefresh}
           {onScrollTopChange}
           {visible}
         />
       </div>
-      {#if markdownEnabled && markdownViewMode === "split"}
+      {#if markdownModesAvailable && markdownViewMode === "split"}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div

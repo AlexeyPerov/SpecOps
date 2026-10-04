@@ -150,6 +150,7 @@ describe("sanitizeWindowSnapshot", () => {
       content: "",
       sizeBytes: 42,
       contentKind: "image",
+      fingerprint: { mtimeMs: 1, sizeBytes: 42 },
     });
     const snapshot = windowSnapshot({
       notepad: {

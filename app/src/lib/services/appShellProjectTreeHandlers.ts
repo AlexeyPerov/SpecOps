@@ -16,9 +16,12 @@ import {
   openActivePathInPane,
 } from "./openActivePath";
 import { promptEntryName } from "./entryNamePrompt";
+import { promoteTransientTabForDocument } from "./transientTabs";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { createProjectTreeController } from "./projectTreeController";
 import type { FileWatcherEventKind } from "./fileWatcher";
+import type { ContextId } from "../domain/contracts";
+import { normalizePathSync } from "./diskFingerprint";
 
 export interface AppShellProjectTreeHandlersDeps {
   getActiveWorkspaceRoot: () => string | null;
@@ -93,9 +96,34 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     );
   }
 
-  async function handleOpenProjectTreeFile(path: string): Promise<void> {
-    const result = await openActivePath(path, getCurrentWindowId());
+  async function handleOpenProjectTreeFile(
+    path: string,
+    options: { transient?: boolean } = {},
+  ): Promise<void> {
+    const result = await openActivePath(path, getCurrentWindowId(), options);
     notify(describeOpenActivePathResult(result));
+  }
+
+  /**
+   * Single click in the tree: open as the pane's transient ("preview") tab, so
+   * the next single click reuses the slot instead of stacking tabs.
+   */
+  async function handlePreviewProjectTreeFile(path: string): Promise<void> {
+    await handleOpenProjectTreeFile(path, { transient: true });
+  }
+
+  /**
+   * Double click in the tree: keep the tab. The single click of the same
+   * gesture already opened the file as a preview, so this only has to promote
+   * it (and still opens the file when the click was somehow missed).
+   */
+  async function handleKeepProjectTreeFile(path: string): Promise<void> {
+    const documentId = appState.findDocumentIdByPath(path);
+    if (!documentId) {
+      await handleOpenProjectTreeFile(path);
+      return;
+    }
+    promoteTransientTabForDocument(documentId);
   }
 
   /**
@@ -112,12 +140,53 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     notify(describeOpenActivePathResult(result));
   }
 
+  async function handleOpenProjectTreeFileInContext(
+    path: string,
+    contextId: ContextId,
+  ): Promise<void> {
+    await handleOpenProjectTreeFile(path);
+    appState.moveFileTabToContext(normalizePathSync(path), contextId);
+  }
+
   async function refreshProjectTree(): Promise<void> {
     onBeforeProjectTreeRefresh?.();
     await deps.projectTreeController.refreshProjectTree(
       getActiveWorkspaceRoot(),
       getIsSessionTabActive(),
     );
+  }
+
+  /**
+   * Collapse toggle for the project panel. Expanding it reveals a tree that
+   * has been ignoring focus/workspace-switch revalidation while hidden, so it
+   * is re-listed once on the way back in.
+   */
+  function handleProjectPanelCollapsedChange(collapsed: boolean): void {
+    if (!collapsed) {
+      void deps.projectTreeController.revalidateProjectTree(getActiveWorkspaceRoot(), {
+        force: true,
+      });
+    }
+  }
+
+  /**
+   * Quiet background revalidation of the active workspace tree — used by the
+   * window-focus and workspace-switch triggers. Re-lists the root and the
+   * expanded folders and applies only real differences, so an unchanged tree
+   * costs a few directory reads and zero re-renders. Throttled and
+   * de-duplicated inside the controller.
+   */
+  async function revalidateProjectTree(): Promise<void> {
+    const workspaceRoot = getActiveWorkspaceRoot();
+    if (!workspaceRoot) {
+      return;
+    }
+    // Nothing is on screen to go stale while the panel is closed; reopening it
+    // runs a pass of its own (see `handleProjectPanelCollapsedChange`).
+    if (appState.getActiveWorkspaceLayout().projectPanelCollapsed) {
+      return;
+    }
+    await deps.projectTreeController.revalidateProjectTree(workspaceRoot);
   }
 
   function notifyProjectTreeFilesystemChange(
@@ -183,49 +252,57 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     await afterProjectTreeMutation(sourcePath, result.path, destDirPath);
   }
 
-  async function handleNewProjectFile(parentDirPath: string): Promise<void> {
+  async function handleNewProjectFile(
+    parentDirPath: string,
+    requestedName?: string,
+  ): Promise<boolean> {
     const activeWorkspaceRoot = getActiveWorkspaceRoot();
     if (!activeWorkspaceRoot) {
-      return;
+      return false;
     }
-    const name = await promptEntryName({
+    const name = requestedName ?? await promptEntryName({
       title: "New file name",
       defaultValue: "untitled.txt",
       confirmLabel: "Create",
     });
     if (name === null) {
-      return;
+      return false;
     }
     const result = await createProjectFile(activeWorkspaceRoot, parentDirPath, name);
     if (!result.ok) {
       notify(result.reason);
-      return;
+      return false;
     }
     notify(`Created ${name}`);
     await afterProjectTreeMutation(result.path);
     await handleOpenProjectTreeFile(result.path);
+    return true;
   }
 
-  async function handleNewProjectFolder(parentDirPath: string): Promise<void> {
+  async function handleNewProjectFolder(
+    parentDirPath: string,
+    requestedName?: string,
+  ): Promise<boolean> {
     const activeWorkspaceRoot = getActiveWorkspaceRoot();
     if (!activeWorkspaceRoot) {
-      return;
+      return false;
     }
-    const name = await promptEntryName({
+    const name = requestedName ?? await promptEntryName({
       title: "New folder name",
       defaultValue: "New Folder",
       confirmLabel: "Create",
     });
     if (name === null) {
-      return;
+      return false;
     }
     const result = await createProjectFolder(activeWorkspaceRoot, parentDirPath, name);
     if (!result.ok) {
       notify(result.reason);
-      return;
+      return false;
     }
     notify(`Created folder ${name}`);
     await afterProjectTreeMutation(result.path);
+    return true;
   }
 
   async function handleRenameProjectEntry(
@@ -301,8 +378,13 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     loadProjectTreeChildren,
     handleToggleProjectTreeDirectory,
     handleOpenProjectTreeFile,
+    handlePreviewProjectTreeFile,
+    handleKeepProjectTreeFile,
     handleOpenProjectTreeFileInPane,
+    handleOpenProjectTreeFileInContext,
     refreshProjectTree,
+    revalidateProjectTree,
+    handleProjectPanelCollapsedChange,
     notifyProjectTreeFilesystemChange,
     handleMoveProjectTreeEntry,
     handleNewProjectFile,

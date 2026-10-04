@@ -71,6 +71,12 @@ export type EditorViewControllerDeps = {
   onStatusMessage: (message: string) => void;
   onDocumentDirty: (nextContent: string) => void;
   onScrollTopChange: (documentId: string, scrollTop: number) => void;
+  /**
+   * A caret/selection move the *user* made (click, arrow key, selection
+   * gesture) — not a programmatic one from restoring a session or applying a
+   * store update. Drives promotion of a transient ("preview") tab.
+   */
+  onUserSelection?: (documentId: string) => void;
 };
 
 export type EditorViewController = {
@@ -319,6 +325,22 @@ export function createEditorViewController(
         }
         if (update.selectionSet) {
           updateCursor();
+          // Only a deliberate move counts: CodeMirror tags user gestures with
+          // a `select`/`input`/`delete` user event, while a session restore or
+          // a store-driven document swap carries none, so opening a file never
+          // looks like the user touched it.
+          if (
+            trackedDocumentId &&
+            update.transactions.some(
+              (transaction) =>
+                transaction.isUserEvent("select") ||
+                transaction.isUserEvent("input") ||
+                transaction.isUserEvent("delete") ||
+                transaction.isUserEvent("move"),
+            )
+          ) {
+            deps.onUserSelection?.(trackedDocumentId);
+          }
         }
       }),
     });

@@ -73,6 +73,17 @@ export function buildQueryCommitsArgs(options: QueryCommitsOptions = {}): string
     args.push(`--skip=${options.skip}`);
   }
   args.push(`-${limit}`);
+
+  const paths = (options.paths ?? []).filter((path) => path.length > 0);
+  if (paths.length > 0) {
+    // `--follow` is only valid for exactly one path; git errors out otherwise.
+    if (options.follow && paths.length === 1) {
+      args.push("--follow");
+    }
+    // `--` separates revisions from paths, and the literal pathspec magic stops
+    // names containing `*`, `?`, `[` or a leading `:` from being interpreted.
+    args.push("--", ...paths.map((path) => asLiteralPathspec(path)));
+  }
   return args;
 }
 

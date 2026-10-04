@@ -19,6 +19,7 @@
     type TabDragState,
   } from "./tabDragController";
   import type { PaneDropTargetElements } from "./paneDropTargets";
+  import { promoteTransientTab } from "../services/transientTabs";
 
   interface Props {
     openTabs?: TabState[];
@@ -104,6 +105,14 @@
 
   const documentById = $derived(getDocumentByIdMap(documents));
 
+  /**
+   * Transient ("preview") tabs render in italics, the long-standing convention
+   * for "this tab will be reused by the next single click".
+   */
+  function isTransientTab(tab: TabState): boolean {
+    return tab.kind === "file" && tab.transient === true;
+  }
+
   function tabDocument(tab: TabState): DocumentState | undefined {
     return tabDocumentFromMap(tab, documentById);
   }
@@ -122,6 +131,9 @@
       if (!fromTab) {
         return;
       }
+      // Arranging a tab is deliberate: a previewed file being dragged around
+      // is one the user means to keep.
+      promoteTransientTab(fromTab.id);
       const fromIndex = openTabs.findIndex((entry) => entry.id === fromTab.id);
       const toIndex =
         toVisibleIndex >= visibleTabs.length
@@ -132,8 +144,10 @@
       }
       appState.reorderTabs(fromIndex, toIndex);
     },
-    onMoveBetweenPanes: (fromPaneId, tabId, toPaneId, toIndex) =>
-      onMoveBetweenPanes?.(fromPaneId, tabId, toPaneId, toIndex),
+    onMoveBetweenPanes: (fromPaneId, tabId, toPaneId, toIndex) => {
+      promoteTransientTab(tabId);
+      onMoveBetweenPanes?.(fromPaneId, tabId, toPaneId, toIndex);
+    },
     getWindowId: () => windowId,
     notify: (message) => notify(message),
     onStateChange: (nextState) => {
@@ -226,10 +240,11 @@
     {:else}
       <div class="tab-shell">
         <button
-          class={`tab ${tab.id === selectedTabId ? "tab-active" : ""}`}
+          class={`tab ${tab.id === selectedTabId ? "tab-active" : ""} ${isTransientTab(tab) ? "tab-transient" : ""}`}
           data-tab-id={tab.id}
           type="button"
           title={tabTooltip(tab)}
+          ondblclick={() => promoteTransientTab(tab.id)}
           oncontextmenu={(event) => contextMenuComponent?.openContextMenu(event, tab)}
           onpointerdown={(event) => {
             if (isSessionTab(tab)) {
@@ -362,6 +377,10 @@
   .tab-active {
     background: var(--color-hover);
     border-color: var(--color-border-subtle);
+  }
+
+  .tab-transient .tab-label {
+    font-style: italic;
   }
 
   .tab:hover {

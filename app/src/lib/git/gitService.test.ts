@@ -1908,7 +1908,7 @@ describe("git command logging", () => {
 
     expect(logDiagnostic).toHaveBeenCalledWith(
       expect.objectContaining({
-        level: "info",
+        level: "debug",
         message: "git status → exit 0",
         metadata: expect.objectContaining({
           exitCode: 0,

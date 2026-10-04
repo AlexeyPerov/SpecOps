@@ -60,7 +60,7 @@ function domainState(overrides: {
     contexts: {
       activeContextId: "notepad",
       notepad: snapshot,
-      chatHttp: snapshot,
+
       workspaces: [],
     },
     settings: {
@@ -113,7 +113,7 @@ describe("P7 optimization regression guardrails", () => {
       return {
         runtimeReady: true,
         activeWorkspaceRoot: "/repo",
-        isChatHttpActive: false,
+
         projectTreeController: {
           clearFilesystemChangeDebounce: vi.fn(),
         } as unknown as SyncProjectTreeWatcherEffectInput["projectTreeController"],

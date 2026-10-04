@@ -100,7 +100,7 @@
 
     // --- Editor chrome (L15 leaf selectors) ---
     activityRailWidthPx: number;
-    editorPreviewMode: MarkdownViewMode;
+    editorPreviewMode: "editor" | "markdown" | "diff";
     editorWrapLines: boolean;
     editorZoomPercent: number;
     editorCursorLine: number;
@@ -332,6 +332,8 @@
     },
     getMenuEl: () => workspaceContextMenuEl,
     getWorkspaceIds: () => workspaces.map((workspace) => workspace.id),
+    getWorkspaceRootPath: (workspaceId) =>
+      workspaces.find((workspace) => workspace.id === workspaceId)?.rootPath ?? null,
     getPreviousActiveContextId: () => previousActiveContextId,
     setPreviousActiveContextId: (contextId) => {
       previousActiveContextId = contextId;
@@ -402,9 +404,11 @@
     handleKeydown: commandHandlers.handleKeydown,
     onTabActivated: fileHandlers.onTabActivated,
     openAndActivatePath: fileHandlers.openAndActivatePath,
+    openDroppedPathsInContext: fileHandlers.openDroppedPathsInContext,
     consumeOpenedPaths: fileHandlers.consumeOpenedPaths,
     restoreWorkspaceSession: agentHandlers.restoreWorkspaceSession,
     loadProjectTreeRoot: projectTreeHandlers.loadProjectTreeRoot,
+    revalidateProjectTree: projectTreeHandlers.revalidateProjectTree,
     notifyProjectTreeFilesystemChange: projectTreeHandlers.notifyProjectTreeFilesystemChange,
     setupLayoutObserver: layoutHandlers.setupLayoutObserver,
     disconnectLayoutObserver: layoutHandlers.disconnectLayoutObserver,
@@ -581,6 +585,7 @@
   bind:workspaceContextMenuEl
   bind:consoleHeightPx
   {consoleOpen}
+  compactNotepad={currentWindowId !== "main" && activeContextId === "notepad"}
   onConsoleHeightCommit={layoutHandlers.persistConsoleHeightNow}
   projectSearch={{
     open: psPanel.open,
@@ -644,15 +649,30 @@
     state: projectTreeControllerState,
     activeFilePath: documentView.activeDocumentPath,
     statusByPath: fileStatusByPath,
+    // Null until the catalog has listed the workspace at least once (a rebuild
+    // keeps the previous entries), so the `.md` filter does not hide folders
+    // it simply has not seen yet.
+    markdownPaths:
+      quickOpenCatalogSnapshot.status === "ready" || quickOpenCatalogSnapshot.entries.length > 0
+        ? quickOpenCatalogSnapshot.entries.map((entry) => entry.absolutePath)
+        : null,
     collapsed: !showProjectPanel,
     panelWidthPx: workspaceLayout.projectPanelWidthPx,
-    onRefresh: projectTreeHandlers.refreshProjectTree,
     onOpenSearch: () => overlayHost?.api.openOverlay("projectSearch"),
+    onRefresh: () => {
+      workspaceFileCatalogRegistry.refresh();
+      return projectTreeHandlers.refreshProjectTree();
+    },
+    onCollapseAll: () => projectTreeController.collapseAll(),
     onToggleHidden: projectTreeHandlers.toggleProjectTreeHidden,
-    onToggleCollapsed: layoutHandlers.toggleProjectPanelCollapsed,
+    onToggleCollapsed: (next: boolean) => {
+      layoutHandlers.toggleProjectPanelCollapsed(next);
+      projectTreeHandlers.handleProjectPanelCollapsedChange(next);
+    },
     onPanelWidthChange: layoutHandlers.handleProjectPanelWidthChange,
     onToggleDirectory: projectTreeHandlers.handleToggleProjectTreeDirectory,
-    onOpenFile: projectTreeHandlers.handleOpenProjectTreeFile,
+    onOpenFile: projectTreeHandlers.handlePreviewProjectTreeFile,
+    onKeepFile: projectTreeHandlers.handleKeepProjectTreeFile,
     onMoveEntry: projectTreeHandlers.handleMoveProjectTreeEntry,
     onNewFile: projectTreeHandlers.handleNewProjectFile,
     onNewFolder: projectTreeHandlers.handleNewProjectFolder,
@@ -660,6 +680,8 @@
     onDeleteEntry: projectTreeHandlers.handleDeleteProjectEntry,
     getPaneElements: handleProjectTreeGetPaneElements,
     onOpenFileInPane: projectTreeHandlers.handleOpenProjectTreeFileInPane,
+    onOpenFileInContext: projectTreeHandlers.handleOpenProjectTreeFileInContext,
+    onMarkdownFilterEnable: () => workspaceFileCatalogRegistry.ensureReady(),
     onFileDropPaneChange: handleProjectTreeFileDropPaneChange,
     notify,
   }}
@@ -738,6 +760,7 @@
     onMoveDown: handleWorkspaceContextMenuMoveDown,
     onOpenSettings: workspaceContextMenuActions.openSettings,
     onOpenVersionControl: workspaceContextMenuActions.openVersionControl,
+    onCopyPath: workspaceContextMenuActions.copyPath,
     onCloseWorkspace: workspaceContextMenuActions.closeWorkspace,
   }}
   overlays={{

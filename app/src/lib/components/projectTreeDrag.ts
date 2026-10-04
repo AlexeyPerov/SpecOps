@@ -1,3 +1,4 @@
+import type { ContextId } from "../domain/contracts";
 import type { ProjectTreeNode } from "../services/projectTree";
 import { canMoveEntry } from "../services/projectFileOps";
 import { hitTestPaneElements, type PaneDropTargetElements } from "./paneDropTargets";
@@ -15,6 +16,7 @@ export interface ProjectTreeDragState {
    * pointer isn't over a pane.
    */
   dropPaneId: string | null;
+  dropContextId: ContextId | null;
   didDrag: boolean;
   startX: number;
   startY: number;
@@ -36,6 +38,8 @@ export interface ProjectTreeDragControllerDeps {
    * lands on a pane and not on a folder.
    */
   onOpenFileInPane?: (filePath: string, paneId: string) => void | Promise<void>;
+  getContextDropTargetElements?: () => HTMLElement[];
+  onOpenFileInContext?: (filePath: string, contextId: ContextId) => void | Promise<void>;
   /**
    * Live directory-row elements in the project tree, each stamped with a
    * `data-path` attribute. Used for coordinate-based folder drop-target
@@ -54,6 +58,7 @@ function createInitialState(): ProjectTreeDragState {
     sourceKind: null,
     dropTargetPath: null,
     dropPaneId: null,
+    dropContextId: null,
     didDrag: false,
     startX: 0,
     startY: 0,
@@ -77,6 +82,16 @@ function hitTestDropTargetElements(x: number, y: number, elements: HTMLElement[]
       if (path) {
         return path;
       }
+    }
+  }
+  return null;
+}
+
+function hitTestContextElements(x: number, y: number, elements: HTMLElement[]): ContextId | null {
+  for (const element of elements) {
+    const rect = element.getBoundingClientRect();
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      return (element.dataset.fileDropContext as ContextId | undefined) ?? null;
     }
   }
   return null;
@@ -108,6 +123,7 @@ export function createProjectTreeDragController(deps: ProjectTreeDragControllerD
       sourceKind: node.kind,
       dropTargetPath: null,
       dropPaneId: null,
+      dropContextId: null,
       didDrag: false,
       startX: event.clientX,
       startY: event.clientY,
@@ -157,6 +173,16 @@ export function createProjectTreeDragController(deps: ProjectTreeDragControllerD
         state = { ...state, dropPaneId: nextDropPaneId };
         emit();
       }
+      const contextElements = deps.getContextDropTargetElements?.() ?? [];
+      const nextDropContextId = hitTestContextElements(
+        event.clientX,
+        event.clientY,
+        contextElements,
+      );
+      if (nextDropContextId !== state.dropContextId) {
+        state = { ...state, dropContextId: nextDropContextId };
+        emit();
+      }
     }
   }
 
@@ -174,6 +200,7 @@ export function createProjectTreeDragController(deps: ProjectTreeDragControllerD
     const sourceKind = state.sourceKind;
     const destDir = state.dropTargetPath;
     const dropPaneId = state.dropPaneId;
+    const dropContextId = state.dropContextId;
     const didDrag = state.didDrag;
     reset();
     if (!didDrag || !workspaceRoot || !sourcePath) {
@@ -194,6 +221,10 @@ export function createProjectTreeDragController(deps: ProjectTreeDragControllerD
     // (folders can't open in a pane).
     if (sourceKind === "file" && dropPaneId && deps.onOpenFileInPane) {
       await deps.onOpenFileInPane(sourcePath, dropPaneId);
+      return true;
+    }
+    if (sourceKind === "file" && dropContextId && deps.onOpenFileInContext) {
+      await deps.onOpenFileInContext(sourcePath, dropContextId);
       return true;
     }
     return false;

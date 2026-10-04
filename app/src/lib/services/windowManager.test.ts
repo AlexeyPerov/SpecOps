@@ -84,15 +84,7 @@ function snapshotWithBounds(bounds: WindowBounds | null): AppDomainState {
           windowBounds: bounds,
         },
       },
-      chatHttp: {
-        documents: [],
-        session: {
-          editorLayout: createSinglePaneLayout([], null),
-          lastActiveSessionId: null,
-          lastActiveWindowId: "main",
-          windowBounds: bounds,
-        },
-      },
+
       workspaces: [],
     },
     settings: {} as AppDomainState["settings"],

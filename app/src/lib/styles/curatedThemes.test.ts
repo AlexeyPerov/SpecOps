@@ -11,10 +11,10 @@ const EXPECTED_IDS = [
 ];
 
 describe("CURATED_THEMES", () => {
-  it("contains the four hand-authored presets", () => {
+  it("includes the original presets and new collections", () => {
     const ids = CURATED_THEMES.map((p) => p.id);
     expect(ids).toEqual(expect.arrayContaining(EXPECTED_IDS));
-    expect(CURATED_THEMES).toHaveLength(EXPECTED_IDS.length);
+    expect(CURATED_THEMES.length).toBeGreaterThan(EXPECTED_IDS.length);
   });
 
   it("has unique ids", () => {

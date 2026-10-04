@@ -19,13 +19,47 @@ import {
   setActivePaneTabs,
   type ViewTabState,
 } from "../../domain/contracts";
-import { removeTabFromPane } from "../../domain/editorLayout";
+import { removeTabFromPane, type EditorLayout } from "../../domain/editorLayout";
 import { isEmptyUnsavedDocument } from "../../services/untitledDocument";
 import { createImplicitDraftPair } from "../../services/implicitDraftTab";
 import { nextDocAndTabIds, nextTabId, patchActiveContext, patchContextById } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
 import { closeTabInPaneForceOnContext } from "./closeTabInPane";
 import { selectTabAcrossPanes } from "./closeTabInPane";
+
+/**
+ * Clear the transient ("preview") flag from the file tab showing `documentId`.
+ *
+ * Returns the same layout reference when nothing was transient, so the hot
+ * callers (one per keystroke, one per caret move) allocate nothing in the
+ * overwhelmingly common case where the tab is already an ordinary one.
+ */
+export function promoteTransientTabInLayout(
+  layout: EditorLayout,
+  documentId: string,
+): EditorLayout {
+  let changed = false;
+  const panes = layout.panes.map((pane) => {
+    let paneChanged = false;
+    const tabs = pane.tabs.map((tab) => {
+      if (!isFileTab(tab) || tab.documentId !== documentId || !tab.transient) {
+        return tab;
+      }
+      paneChanged = true;
+      const { transient: _previous, ...rest } = tab;
+      return rest;
+    });
+    if (!paneChanged) {
+      return pane;
+    }
+    changed = true;
+    return { ...pane, tabs };
+  });
+  if (!changed) {
+    return layout;
+  }
+  return { ...layout, panes };
+}
 
 export function moveArrayItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
   if (

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { isUnbornRepoLogError, queryCommits } from "./gitHistory";
+import { buildQueryCommitsArgs, isUnbornRepoLogError, queryCommits } from "./gitHistory";
 import { resetGitCommandQueueForTests } from "./gitCommandQueue";
 import { runGit } from "./gitRun";
 import type { RunGitResponse } from "./types";
@@ -75,5 +75,32 @@ describe("isUnbornRepoLogError", () => {
         durationMs: 1,
       }),
     ).toBe(false);
+  });
+});
+
+describe("buildQueryCommitsArgs path filtering", () => {
+  it("appends a literal pathspec after the revision separator", () => {
+    const args = buildQueryCommitsArgs({ limit: 5, paths: ["src/main.ts"] });
+    expect(args.slice(-2)).toEqual(["--", ":(literal)src/main.ts"]);
+  });
+
+  it("follows renames for a single file", () => {
+    const args = buildQueryCommitsArgs({ paths: ["src/main.ts"], follow: true });
+    expect(args).toContain("--follow");
+    expect(args.indexOf("--follow")).toBeLessThan(args.indexOf("--"));
+  });
+
+  it("omits --follow for multiple paths (git rejects it)", () => {
+    const args = buildQueryCommitsArgs({ paths: ["a.ts", "b.ts"], follow: true });
+    expect(args).not.toContain("--follow");
+    expect(args.slice(-3)).toEqual(["--", ":(literal)a.ts", ":(literal)b.ts"]);
+  });
+
+  it("adds no separator without paths", () => {
+    expect(buildQueryCommitsArgs({ limit: 3 })).not.toContain("--");
+  });
+
+  it("ignores empty path entries", () => {
+    expect(buildQueryCommitsArgs({ paths: [""] })).not.toContain("--");
   });
 });

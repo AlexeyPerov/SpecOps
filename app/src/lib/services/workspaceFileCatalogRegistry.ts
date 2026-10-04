@@ -30,7 +30,11 @@ export interface WorkspaceFileCatalogRegistry {
   getActiveSnapshot(): WorkspaceFileCatalogSnapshot;
   /** Returns the active catalog diagnostics, or null when none is active. */
   getActiveDiagnostics(): WorkspaceFileCatalogDiagnostics | null;
-  /** Watcher hint forwarded to the active catalog. */
+  /**
+   * Watcher hint forwarded to every retained catalog (each ignores paths
+   * outside its own root). Inactive catalogs must see it too: revisiting a
+   * root reuses its cached catalog without re-enumerating.
+   */
   notifyFilesystemChange(changedPath?: string, kind?: FileWatcherEventKind): void;
   /** Start enumeration for the active catalog when still idle. */
   ensureReady(): void;
@@ -105,7 +109,13 @@ export function createWorkspaceFileCatalogRegistry(
     },
 
     notifyFilesystemChange(changedPath, kind) {
-      this.getActive()?.notifyFilesystemChange(changedPath, kind);
+      if (!changedPath) {
+        this.getActive()?.notifyFilesystemChange(changedPath, kind);
+        return;
+      }
+      for (const catalog of catalogs.values()) {
+        catalog.notifyFilesystemChange(changedPath, kind);
+      }
     },
 
     ensureReady() {

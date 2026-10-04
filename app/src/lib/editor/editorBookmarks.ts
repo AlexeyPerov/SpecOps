@@ -370,7 +370,7 @@ export function bookmarkLandmarksExtension(): Extension {
       // toggled bookmarks on every click and interfered with focus/selection.
       domEventHandlers: {
         mousedown(view, line, event) {
-          if (event.button !== 0) {
+          if ((event as MouseEvent).button !== 0) {
             return false;
           }
           view.dispatch({

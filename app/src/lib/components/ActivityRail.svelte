@@ -250,17 +250,20 @@
 >
   {#if expanded}
     <button
-      class={`rail-workspace-card ${activeContextId === "notepad" ? "rail-workspace-card-active" : ""}`}
+      class={`rail-workspace-card rail-notepad-card ${activeContextId === "notepad" ? "rail-workspace-card-active" : ""}`}
+      data-file-drop-context="notepad"
       type="button"
       aria-label="Notepad"
       onclick={() => onSelectContext("notepad")}
     >
       <span class="rail-workspace-avatar rail-notepad-avatar"><NotepadIcon size={16} /></span>
       <span class="rail-workspace-info">
-        <span class="rail-workspace-name">Notepad</span>
+        <!-- No "Notepad" heading here: the avatar icon already names the card,
+             and dropping the row lifts the tab count + open-file list to the
+             top of the rail. -->
         <span class="rail-workspace-path">Tabs: {notepadOpenTabCount}</span>
         {#if notepadRecentTabs.length > 0}
-          <span class="rail-workspace-stats">
+          <span class="rail-workspace-stats rail-notepad-tabs">
             {#each notepadRecentTabs as tab (tab.tabId)}
               <!-- Nested interactive trigger inside the card button: a span with
                    role=button (nested <button>/<a> are invalid here). -->
@@ -292,6 +295,7 @@
     <HoverTooltip label="Notepad">
       <button
         class={`rail-button rail-button-notepad ${activeContextId === "notepad" ? "rail-button-active" : ""}`}
+        data-file-drop-context="notepad"
         type="button"
         aria-label="Notepad"
         onclick={() => onSelectContext("notepad")}
@@ -321,6 +325,7 @@
         >
           <button
             class={`rail-workspace-card ${activeContextId === workspace.id ? "rail-workspace-card-active" : ""}`}
+            data-file-drop-context={workspace.id}
             data-workspace-id={workspace.id}
             type="button"
             aria-label={`Workspace ${workspaceName(workspace)}`}
@@ -366,6 +371,7 @@
         >
           <button
             class={`rail-button rail-button-workspace ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
+            data-file-drop-context={workspace.id}
             data-workspace-id={workspace.id}
             type="button"
             aria-label={`Workspace ${workspaceName(workspace)}`}
@@ -462,6 +468,12 @@
   .activity-rail-dragging,
   .activity-rail-resizing {
     user-select: none;
+  }
+
+  :global([data-file-drop-context].file-drop-context-hover) {
+    outline: 1px solid var(--color-accent);
+    outline-offset: -1px;
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
   }
 
   /* Expanded rail behaves like a column panel: left-aligned content, room for
@@ -684,6 +696,27 @@
     text-transform: none;
   }
 
+  /* The card has no heading row, so it starts tight against the rail top and
+     its labels sit where the workspace cards' names do. The min-height that
+     keeps workspace cards uniform is dropped: this card grows with the number
+     of listed files instead. */
+  .rail-notepad-card {
+    min-height: 0;
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-2);
+  }
+
+  /* Open files are a vertical list, not the wrapped stat row the workspace
+     cards use: file names are long and wrap badly side by side. */
+  .rail-notepad-tabs {
+    margin-top: var(--space-1);
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 0;
+    min-width: 0;
+  }
+
   .rail-notepad-tab {
     border: none;
     background: transparent;
@@ -692,7 +725,10 @@
     font-size: 11px;
     line-height: 1.3;
     text-align: left;
-    padding: var(--space-1) var(--space-2);
+    /* Negative inline margin pulls the hover target's padding back out so the
+       file names line up with the "Tabs:" label above them. */
+    padding: 1px var(--space-2);
+    margin-inline: calc(-1 * var(--space-2));
     border-radius: var(--radius-sm);
     cursor: pointer;
     overflow: hidden;

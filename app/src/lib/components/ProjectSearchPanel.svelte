@@ -7,6 +7,7 @@
   } from "../services/consoleTabPrefs";
   import type { ProjectSearchMatch, ProjectSearchResult } from "../services/projectSearch";
   import { startPointerDrag } from "./pointerDrag";
+  import { emptySet } from "../collections/emptyCollections";
 
   interface Props {
     heightPx?: number;
@@ -80,7 +81,7 @@
   let replaceInputEl: HTMLInputElement | null = $state(null);
 
   /** Navigation and replacement are disabled when the query is blank or invalid. */
-  const canSearch = $derived(query.trim().length > 0 && !queryError);
+  const canSearch = $derived(query.length > 0 && !queryError);
   const canReplace = $derived(canSearch && results.length > 0);
 
   function clampHeight(next: number): number {
@@ -197,8 +198,8 @@
     // (e.g. a status update) does not wipe the user's manual expansions.
     const signature = results.map((r) => r.path).join("\0");
     void signature;
-    collapsedFiles = new Set();
-    expandedMatchFiles = new Set();
+    collapsedFiles = emptySet<string>();
+    expandedMatchFiles = emptySet<string>();
   });
 
   function handleKeydown(event: KeyboardEvent): void {

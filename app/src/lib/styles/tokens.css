@@ -41,11 +41,33 @@
   --statusbar-height: 25px;
   --console-height: 180px;
   --editor-content-padding-x: var(--space-8);
+
+  /* Editor text column. The space on either side of the text is flexible: the
+     column is centred inside the editor once the editor is wider than
+     `--editor-text-max-width`, and hugs the gutter below that width. Set the
+     max width to `none` for the classic always-left-aligned layout. Long lines
+     still scroll horizontally (CodeMirror sets a `min-width`, which wins). */
+  --editor-text-max-width: 1200px;
+  --editor-text-padding-x: var(--space-4);
   --settings-pane-width: 385px;
   --activity-rail-width: 48px;
   --editor-min-width: 400px;
   --project-panel-width: 276px;
-  --tree-indent: 4px;
+
+  /* Project pane metrics. Every indent/padding knob for the project tree lives
+     here so the pane's density is tuned in one place; `ProjectTreeView` reads
+     the row height and row spacing back at runtime for its virtualization
+     spacer math, so changing them here needs no code change. */
+  --project-tree-padding: var(--space-2);
+  /* Per-depth indent of a tree row. */
+  --project-tree-indent: 10px;
+  /* Horizontal padding inside a row, and the base offset depth is added to. */
+  --project-tree-row-padding-x: var(--space-2);
+  /* Gap between the file symbol or folder chevron and the label. */
+  --project-tree-row-gap: var(--space-3);
+  --project-tree-row-height: 19px;
+  /* Vertical gap between rows (the list's grid gap). */
+  --project-tree-row-spacing: 2px;
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -65,6 +87,14 @@
 }
 
 :root[data-theme="light"] {
+  --project-pane-color-pending: #087e8b;
+  --project-pane-color-favorite: #947000;
+  --project-file-icon-blue: #247bb0;
+  --project-file-icon-yellow: #93800a;
+  --project-file-icon-orange: #be6537;
+  --project-file-icon-purple: #8257b3;
+  --project-file-icon-green: #438459;
+  --project-file-icon-red: #bf4d59;
   --color-bg-root: #f3f6fa;
   --color-surface-1: #ffffff;
   --color-surface-overlay: rgb(255 255 255 / var(--opacity-overlay-tint));
@@ -124,6 +154,14 @@
 }
 
 :root[data-theme="dark"] {
+  --project-pane-color-pending: #65d9e6;
+  --project-pane-color-favorite: #f4d35e;
+  --project-file-icon-blue: #61aed5;
+  --project-file-icon-yellow: #c6cf49;
+  --project-file-icon-orange: #dd9469;
+  --project-file-icon-purple: #b693dd;
+  --project-file-icon-green: #82b591;
+  --project-file-icon-red: #df8390;
   --color-bg-root: #0f141b;
   --color-surface-1: #131a23;
   --color-surface-overlay: rgb(25 31 40 / var(--opacity-overlay-tint));

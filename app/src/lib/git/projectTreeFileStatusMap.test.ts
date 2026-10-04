@@ -68,3 +68,9 @@ describeIfGitInstalled("mapWorkingTreeStatusToAbsoluteBadges integration", () =>
     });
   });
 });
+
+it("keeps all unmerged porcelain codes distinct from ordinary changes", () => {
+  for (const code of ["DD", "AU", "UD", "UA", "DU", "AA", "UU"]) {
+    expect(mapPorcelainStatusCodeToBadge(code)).toBe("conflicted");
+  }
+});

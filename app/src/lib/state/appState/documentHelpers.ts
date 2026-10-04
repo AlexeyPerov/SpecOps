@@ -4,6 +4,7 @@ import type {
   DocumentState,
   MarkdownViewMode,
 } from "../../domain/contracts";
+import { normalizeTextColumnWidthPx } from "../../domain/contracts";
 import { inferEditorLanguage } from "../../editor/editorLanguage";
 import { emptyUnsavedDocumentTitle } from "../../services/untitledDocument";
 import type { DocumentLineEnding } from "../../services/textEncoding";
@@ -119,5 +120,6 @@ export function normalizeDocument(documentState: DocumentState): DocumentState {
     lineEnding: documentState.lineEnding === "crlf" ? "crlf" : "lf",
     hasBom: documentState.hasBom ?? false,
     markdownViewMode,
+    textColumnWidthPx: normalizeTextColumnWidthPx(documentState.textColumnWidthPx),
   };
 }

@@ -31,7 +31,7 @@ import {
   indentWithTab,
 } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
-import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
+import { EditorView, ViewPlugin, drawSelection, keymap, lineNumbers } from "@codemirror/view";
 import { createSyntaxHighlightExtension } from "./editorHighlight";
 import {
   getLanguageSupport,
@@ -170,21 +170,17 @@ function zoomFontSizeExtension(zoomPercent: number): Extension {
   if (zoomPercent === 100) {
     return baseFontSizeExtension();
   }
-  const base = resolveEditorBaseFontSizePx();
-  const px = Math.round((base * zoomPercent) / 100);
-  // Keyed on the resolved pixel size, not the percent: that is the only value
-  // that reaches CSS, so a changed base font size still produces a fresh theme
-  // while repeated zooms to the same size reuse one.
-  const cached = zoomFontSizeThemes.get(px);
+  // Keep the base size live so appearance changes also affect zoomed editors.
+  const cached = zoomFontSizeThemes.get(zoomPercent);
   if (cached) {
     return cached;
   }
   const theme = EditorView.theme({
     "&": {
-      fontSize: `${px}px`,
+      fontSize: `calc(var(--font-size-editor, 13px) * ${zoomPercent / 100})`,
     },
   });
-  zoomFontSizeThemes.set(px, theme);
+  zoomFontSizeThemes.set(zoomPercent, theme);
   return theme;
 }
 
@@ -213,21 +209,43 @@ function plaintextDecorationExtension(
   return [createPlaintextSymbolDecorations()];
 }
 
+const appearanceMeasure = ViewPlugin.define(view => {
+  const changed = () => view.requestMeasure();
+  const root = view.dom.ownerDocument.documentElement;
+  const fonts = view.dom.ownerDocument.fonts;
+  root.addEventListener("appearancechange", changed);
+  fonts?.addEventListener("loadingdone", changed);
+  return { destroy() { root.removeEventListener("appearancechange", changed); fonts?.removeEventListener("loadingdone", changed); } };
+});
+
 function editorSurfaceTheme(): Extension {
   surfaceTheme ??= EditorView.theme({
     "&": {
       height: "100%",
       width: "100%",
       maxWidth: "100%",
-      fontFamily: "var(--font-family-ui)",
+      fontFamily: "var(--font-family-mono)",
       color: "var(--color-text-primary)",
       backgroundColor: "var(--color-surface-1)",
+    },
+    ".cm-scroller": {
+      fontFamily: "var(--font-family-mono)",
+      lineHeight: "var(--line-height-code, 1.5)",
+      fontVariantLigatures: "var(--code-ligatures, none)",
+      letterSpacing: "var(--text-letter-spacing, 0px)",
     },
     ".cm-content, .cm-gutter": {
       minHeight: "100%",
     },
     ".cm-content": {
       caretColor: "var(--color-text-primary)",
+      // The area on either side of the text is flexible: `auto` inline margins
+      // absorb whatever the editor is wider than the text column, so the text
+      // sits centred in a wide pane instead of pinned to the gutter. With
+      // `--editor-text-max-width: none` the column fills the pane as before.
+      maxWidth: "var(--editor-text-max-width, none)",
+      marginInline: "auto",
+      paddingInline: "var(--editor-text-padding-x, 4px)",
     },
     ".cm-gutters": {
       backgroundColor: "var(--color-surface-1)",
@@ -243,7 +261,7 @@ function editorSurfaceTheme(): Extension {
     ".cm-cursor, .cm-dropCursor": {
       borderLeftColor: "var(--color-text-primary)",
     },
-    ".cm-selectionBackground, .cm-content ::selection": {
+    "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
       backgroundColor: "var(--color-selection, rgba(48, 100, 180, 0.3))",
     },
     ".cm-minimap-gutter": {
@@ -362,7 +380,7 @@ export function buildNamedExtensionGroups(
     },
     {
       name: "theme",
-      extensions: [editorSurfaceTheme()],
+      extensions: [editorSurfaceTheme(), appearanceMeasure],
     },
     {
       name: "updateListener",
@@ -387,21 +405,6 @@ export function applyWrap(
   view.dispatch({
     effects: lineWrapCompartment.reconfigure(wrapLinesExtension(nextWrap)),
   });
-}
-
-function resolveEditorBaseFontSizePx(): number {
-  if (typeof document !== "undefined") {
-    const raw = getComputedStyle(document.documentElement)
-      .getPropertyValue("--font-size-editor")
-      .trim();
-    if (raw.length > 0) {
-      const parsed = Number.parseFloat(raw);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        return parsed;
-      }
-    }
-  }
-  return 13;
 }
 
 export function applyZoom(

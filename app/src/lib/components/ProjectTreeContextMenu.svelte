@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { normalizePathSync } from "../services/diskFingerprint";
   import { onDestroy } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
   import { revealInFileManagerLabel } from "../services/platform";
   import { revealInFileManager } from "../services/revealInFileManager";
   import { workspaceRelativePath } from "../services/workspacePaths";
   import { clampFixedOverlayPosition } from "./clampFixedOverlayPosition";
+  import { emptySet } from "../collections/emptyCollections";
 
   const revealLabel = revealInFileManagerLabel();
 
@@ -14,7 +16,13 @@
   }
 
   interface Props {
+    favoritePaths?: ReadonlySet<string>;
+    onToggleFavorite?: (node: ProjectTreeNode) => void;
     workspaceRoot?: string;
+    /** Opens the git-log popup for `path` at the menu's position. */
+    onShowGitLog?: (event: MouseEvent, path: string, isFile: boolean) => void;
+    /** False when git integration is off — the Git Log item is then hidden. */
+    gitEnabled?: boolean;
     onOpenFile?: (path: string) => void;
     onNewFile?: (parentDirPath: string) => void;
     onNewFolder?: (parentDirPath: string) => void;
@@ -23,7 +31,11 @@
   }
 
   let {
+    favoritePaths = emptySet<string>(),
+    onToggleFavorite = () => {},
     workspaceRoot = "",
+    onShowGitLog,
+    gitEnabled = false,
     onOpenFile = () => {},
     onNewFile = () => {},
     onNewFolder = () => {},
@@ -78,7 +90,6 @@
 
   const menuTarget = $derived(contextMenu?.target ?? null);
   const isFile = $derived(menuTarget?.node?.kind === "file");
-  const isDirectory = $derived(menuTarget?.node?.kind === "directory");
   const hasNode = $derived(menuTarget?.node !== null && menuTarget?.node !== undefined);
   const nodePath = $derived(menuTarget?.node?.path ?? null);
   const parentDirPath = $derived(menuTarget?.parentDirPath ?? "");
@@ -167,8 +178,7 @@
         Open
       </button>
     {/if}
-    {#if isDirectory || !hasNode}
-      <button
+    <button
         class="project-tree-context-item"
         type="button"
         role="menuitem"
@@ -179,8 +189,8 @@
         }}
       >
         New File…
-      </button>
-      <button
+    </button>
+    <button
         class="project-tree-context-item"
         type="button"
         role="menuitem"
@@ -191,6 +201,10 @@
         }}
       >
         New Folder…
+    </button>
+    {#if menuTarget.node}
+      <button class="project-tree-context-item" type="button" role="menuitem" onclick={() => { if (menuTarget.node) onToggleFavorite(menuTarget.node); closeContextMenu(); }}>
+        {favoritePaths.has(normalizePathSync(menuTarget.node.path)) ? "Remove from Favorites" : "Add to Favorites"}
       </button>
     {/if}
     {#if hasNode && nodePath}
@@ -225,6 +239,32 @@
           Copy Relative Path
         </button>
       {/if}
+    {/if}
+    {#if hasNode && nodePath && gitEnabled && onShowGitLog}
+      <div class="ui-rule" role="separator"></div>
+      <button
+        class="project-tree-context-item"
+        type="button"
+        role="menuitem"
+        onpointerdown={(event) => {
+          event.stopPropagation();
+          const path = nodePath;
+          const isFile = nodeKind === "file";
+          const anchor = contextMenu;
+          closeContextMenu();
+          if (path && anchor) {
+            // Re-anchor the popup where the menu was opened, not where the
+            // item happened to be clicked.
+            onShowGitLog(
+              new MouseEvent("contextmenu", { clientX: anchor.x, clientY: anchor.y }),
+              path,
+              isFile,
+            );
+          }
+        }}
+      >
+        Git Log…
+      </button>
     {/if}
     {#if hasNode && nodePath && nodeKind}
       <div class="ui-rule" role="separator"></div>

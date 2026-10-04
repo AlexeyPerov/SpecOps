@@ -179,6 +179,7 @@ function navigationFingerprint(snapshot: WindowSessionSnapshot): string {
         doc.language,
         doc.fileMissing ? "M" : "_",
         String(doc.markdownViewMode),
+        `tcw=${doc.textColumnWidthPx ?? 0}`,
       );
     }
     parts.push(layoutFingerprint(context.session.editorLayout));

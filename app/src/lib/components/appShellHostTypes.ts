@@ -8,29 +8,26 @@
  * constructing the factory bundles itself.
  */
 
-import type { ContextId } from "../domain/contracts";
-import type {
-  OpenActivePathResult,
-  OpenPathActivationOptions,
-} from "../services/openActivePath";
+import type { AppCommandId, ContextId } from "../domain/contracts";
+import type { FileWatcherEventKind } from "../services/fileWatcher";
+import type { OpenActivePathResult, OpenPathActivationOptions } from "../services/openActivePath";
 
 export interface AppShellHostApi {
-  runCommand: (commandId: string) => void | Promise<void>;
+  runCommand: (commandId: AppCommandId) => void;
   handleKeydown: (event: KeyboardEvent) => void;
   onTabActivated: (tabId: string) => Promise<void>;
-  openAndActivatePath: (
-    path: string,
-    options?: OpenPathActivationOptions,
-  ) => Promise<OpenActivePathResult | void>;
-  consumeOpenedPaths: () => string[];
+  openAndActivatePath: (path: string, options?: OpenPathActivationOptions) => Promise<OpenActivePathResult | void>;
+  openDroppedPathsInContext: (paths: string[], contextId: ContextId) => Promise<void>;
+  consumeOpenedPaths: (paths: string[]) => Promise<void>;
   restoreWorkspaceSession: (
     workspaceRoot: string,
     options?: { preferCachedIndex?: boolean },
   ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
+  revalidateProjectTree: () => Promise<void>;
   notifyProjectTreeFilesystemChange: (
     path: string,
-    kind: import("../services/fileWatcher").FileWatcherEventKind,
+    kind?: FileWatcherEventKind,
   ) => void;
   setupLayoutObserver: () => void;
   disconnectLayoutObserver: () => void;

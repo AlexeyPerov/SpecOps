@@ -1,7 +1,7 @@
 import { tick } from "svelte";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { AppCommandId, AppDomainState } from "../domain/contracts";
+import type { AppCommandId, AppDomainState, ContextId } from "../domain/contracts";
 import { allTabs, getSessionSelectedTabId, isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
 import type { EditorCommandRunner } from "../types/editor";
@@ -19,6 +19,8 @@ import {
   type OpenActivePathResult,
   type OpenPathActivationOptions,
 } from "./openActivePath";
+import { openDroppedPath } from "./openDroppedPath";
+import { normalizePathSync } from "./diskFingerprint";
 import { logDiagnostic } from "./logging";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import type { SettingsDialogTab } from "./settingsDialogUi";
@@ -113,6 +115,16 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
     return result;
   }
 
+  async function openDroppedPathsInContext(
+    paths: string[],
+    targetContextId: ContextId,
+  ): Promise<void> {
+    for (const droppedPath of paths) {
+      await openDroppedPath(droppedPath, openAndActivatePath, deps.notify);
+      appState.moveFileTabToContext(normalizePathSync(droppedPath), targetContextId);
+    }
+  }
+
   /**
    * Batch-open paths from the app icon / OS open-files event.
    * Notifies with the successful open count only; failures and cross-window
@@ -198,6 +210,7 @@ export function createAppShellFileHandlers(deps: AppShellFileHandlersDeps) {
 
   return {
     openAndActivatePath,
+    openDroppedPathsInContext,
     consumeOpenedPaths,
     onTabActivated,
   };
@@ -298,13 +311,12 @@ export interface AppShellMountDeps {
   startAppShellRuntime: (options: {
     notify: (message: string) => void;
     runCommand: (commandId: AppCommandId) => void;
-    openAndActivatePath: (
-      path: string,
-      options?: OpenPathActivationOptions,
-    ) => Promise<OpenActivePathResult | void>;
+    openAndActivatePath: (path: string, options?: OpenPathActivationOptions) => Promise<OpenActivePathResult | void>;
+    openDroppedPathsInContext?: (paths: string[], contextId: ContextId) => Promise<void>;
     consumeOpenedPaths: (paths: string[]) => Promise<void>;
     restoreWorkspaceSession: (workspaceRoot: string) => Promise<void>;
     loadProjectTreeRoot: () => Promise<void>;
+    revalidateProjectTree?: () => Promise<void>;
     onFilesystemChange: (path: string) => void;
     setConsoleHeightPx: (height: number) => void;
   }) => Promise<{
@@ -314,14 +326,16 @@ export interface AppShellMountDeps {
   }>;
   notify: (message: string) => void;
   runCommand: (commandId: AppCommandId) => void;
-  openAndActivatePath: (
-    path: string,
-    options?: OpenPathActivationOptions,
-  ) => Promise<OpenActivePathResult | void>;
+  openAndActivatePath: (path: string, options?: OpenPathActivationOptions) => Promise<OpenActivePathResult | void>;
+  openDroppedPathsInContext: (paths: string[], contextId: ContextId) => Promise<void>;
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
-  restoreWorkspaceSession: (workspaceRoot: string) => Promise<void>;
+  restoreWorkspaceSession: (
+    workspaceRoot: string,
+    options?: { preferCachedIndex?: boolean },
+  ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
-  notifyProjectTreeFilesystemChange: (path: string) => void;
+  revalidateProjectTree: () => Promise<void>;
+  notifyProjectTreeFilesystemChange: (path: string, kind?: import("./fileWatcher").FileWatcherEventKind) => void;
   setConsoleHeightPx: (heightPx: number) => void;
   setRuntimeSyncExternalFileWatcher: (
     sync: ((state: AppDomainState) => Promise<void>) | null,
@@ -332,7 +346,6 @@ export interface AppShellMountDeps {
   routePathToLastActiveWindow: (path: string) => Promise<void>;
   getCurrentWebviewWindowLabel: () => string;
   handleKeydown: (event: KeyboardEvent) => void;
-  stopChatAccessMonitor: () => void;
   flushSessionBeforeUnload: () => void | Promise<void>;
   /**
    * Runs on an intercepted window close. Resolves true when the close may proceed
@@ -370,9 +383,11 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
       notify: deps.notify,
       runCommand: deps.runCommand,
       openAndActivatePath: deps.openAndActivatePath,
+      openDroppedPathsInContext: deps.openDroppedPathsInContext,
       consumeOpenedPaths: deps.consumeOpenedPaths,
       restoreWorkspaceSession: deps.restoreWorkspaceSession,
       loadProjectTreeRoot: deps.loadProjectTreeRoot,
+      revalidateProjectTree: deps.revalidateProjectTree,
       onFilesystemChange: deps.notifyProjectTreeFilesystemChange,
       setConsoleHeightPx: deps.setConsoleHeightPx,
     })
@@ -484,7 +499,11 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
             // startup prune in appShellRuntime catches leftovers next launch.
           }
         }
-        await getCurrentWindow().close();
+        // `close()` emits another close-requested event. Re-entering the same
+        // intercepted flow is unreliable on secondary webviews. The user has
+        // already confirmed and persistence has completed, so bypass that
+        // event and tear down this window directly.
+        await getCurrentWindow().destroy();
       }
     } catch (error: unknown) {
       await logDiagnostic({
@@ -497,7 +516,7 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
       // Never trap the user in a window they asked to close because our own prompt
       // broke. Fall back to closing, having at least tried to flush.
       closeConfirmed = true;
-      await getCurrentWindow().close();
+      await getCurrentWindow().destroy();
     } finally {
       closeInFlight = false;
     }
@@ -582,7 +601,6 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     deps.setRuntimeReady(false);
     deps.setRuntimeSyncExternalFileWatcher(null);
     runtimeCleanup?.();
-    deps.stopChatAccessMonitor();
     window.removeEventListener("keydown", onKeydown);
     window.removeEventListener("dragover", preventBrowserDragOver);
     window.removeEventListener("pagehide", onPageHide);

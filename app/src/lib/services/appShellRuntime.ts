@@ -1,7 +1,7 @@
 import { emit, emitTo, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { AppCommandId, AppDomainState } from "../domain/contracts";
+import type { AppCommandId, AppDomainState, ContextId } from "../domain/contracts";
 import { appState, setThemeSaveErrorNotifier } from "../state/appState";
 import { subscribeSystemColorScheme } from "../state/appState/themeController";
 import { applyFontSettingsToDom } from "../state/appState/fontSettingsSlice";
@@ -103,16 +103,20 @@ export function normalizeFileWatcherKind(raw: unknown): FileWatcherEventKind {
 export interface AppShellRuntimeOptions {
   notify: (message: string) => void;
   runCommand: (commandId: AppCommandId) => void;
-  openAndActivatePath: (
-    path: string,
-    options?: OpenPathActivationOptions,
-  ) => Promise<OpenActivePathResult | void>;
+  openAndActivatePath: (path: string, options?: OpenPathActivationOptions) => Promise<OpenActivePathResult | void>;
+  openDroppedPathsInContext?: (paths: string[], contextId: ContextId) => Promise<void>;
   consumeOpenedPaths: (paths: string[]) => Promise<void>;
   restoreWorkspaceSession: (
     normalizedRoot: string,
     options?: { preferCachedIndex?: boolean },
   ) => Promise<void>;
   loadProjectTreeRoot: () => Promise<void>;
+  /**
+   * Quiet revalidation of the active workspace's project tree, run when this
+   * window regains focus. The controller throttles and diffs the pass, so an
+   * unchanged tree costs a few directory listings and no re-render.
+   */
+  revalidateProjectTree?: () => Promise<void>;
   onFilesystemChange?: (path: string, kind: FileWatcherEventKind) => void;
   syncProjectTreeWatcher?: (roots: readonly string[]) => Promise<void>;
   setConsoleHeightPx: (heightPx: number) => void;
@@ -219,12 +223,25 @@ async function startAppShellRuntimeInner(
   cleanupCallbacks.push(
     await currentWindow.onDragDropEvent(async (event) => {
       const payload = event.payload;
-      if (payload.type === "enter" || payload.type === "over") {
-        fileDragActive.set(true);
+      document.querySelectorAll(".file-drop-context-hover").forEach((element) => {
+        element.classList.remove("file-drop-context-hover");
+      });
+      fileDragActive.set(payload.type === "enter" || payload.type === "over");
+      if (payload.type === "leave") {
         return;
       }
-      fileDragActive.set(false);
-      if (payload.type === "drop") {
+      const scaleFactor = await currentWindow.scaleFactor();
+      const target = document
+        .elementFromPoint(payload.position.x / scaleFactor, payload.position.y / scaleFactor)
+        ?.closest<HTMLElement>("[data-file-drop-context]") ?? null;
+      if (payload.type === "enter" || payload.type === "over") {
+        target?.classList.add("file-drop-context-hover");
+        return;
+      }
+      const contextId = target?.dataset.fileDropContext as ContextId | undefined;
+      if (contextId && options.openDroppedPathsInContext) {
+        await options.openDroppedPathsInContext(payload.paths, contextId);
+      } else {
         await openDroppedPaths(payload.paths);
       }
     }),
@@ -385,6 +402,7 @@ async function startAppShellRuntimeInner(
         zoomPercent: persistedSettings.zoomPercent,
         externalFiles: toExternalFilesSettings(persistedSettings),
         decoratePlaintextSymbols: persistedSettings.decoratePlaintextSymbols,
+        coloredProjectFileIcons: persistedSettings.coloredProjectFileIcons,
         showMinimap: persistedSettings.showMinimap,
         showFoldGutter: persistedSettings.showFoldGutter,
         autoClosePairs: persistedSettings.autoClosePairs,
@@ -512,6 +530,11 @@ async function startAppShellRuntimeInner(
     await markWindowActive(windowId);
     if (runtimeReady) {
       await runFocusExternalChecks();
+      // Changes made by other tools while this window was in the background
+      // (git checkout, a build, an editor elsewhere) may have arrived without a
+      // watcher event, or before the watcher was armed. Revalidating on focus
+      // closes that gap; it is throttled and publishes only on real diffs.
+      await options.revalidateProjectTree?.();
     }
   });
   cleanupCallbacks.push(unlistenFocusChanged);

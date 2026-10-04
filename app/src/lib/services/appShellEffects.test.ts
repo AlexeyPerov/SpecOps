@@ -125,6 +125,27 @@ describe("syncProjectTreeWatcherEffect", () => {
     expect(syncWatcher).toHaveBeenCalledWith(["/repo"]);
   });
 
+  it("revalidates the tree after a workspace switch, not on tab churn", async () => {
+    const loadProjectTreeRoot = vi.fn(async () => {});
+    const revalidateProjectTree = vi.fn(async () => {});
+
+    syncProjectTreeWatcherEffect(
+      makeInput({ loadProjectTreeRoot, revalidateProjectTree, activeWorkspaceRoot: "/repo-a" }),
+    );
+    syncProjectTreeWatcherEffect(
+      makeInput({ loadProjectTreeRoot, revalidateProjectTree, activeWorkspaceRoot: "/repo-b" }),
+    );
+    // Tab churn on the same root must not queue another pass.
+    syncProjectTreeWatcherEffect(
+      makeInput({ loadProjectTreeRoot, revalidateProjectTree, activeWorkspaceRoot: "/repo-b" }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(loadProjectTreeRoot).toHaveBeenCalledTimes(2);
+    expect(revalidateProjectTree).toHaveBeenCalledTimes(2);
+  });
+
   it("does not reload when only tab/session context would have re-run the effect", () => {
     const loadProjectTreeRoot = vi.fn(async () => {});
     const input = makeInput({ loadProjectTreeRoot });
@@ -471,7 +492,8 @@ describe("syncWorkspaceFileCatalogEffect", () => {
     const setActiveRoot = vi.fn();
     const ensureReady = vi.fn();
     syncWorkspaceFileCatalogEffect({
-      activeWorkspaceRoot: "/repo",      registry: { setActiveRoot, ensureReady },
+      activeWorkspaceRoot: "/repo",
+      registry: { setActiveRoot },
     });
     expect(setActiveRoot).toHaveBeenCalledTimes(1);
     expect(setActiveRoot).toHaveBeenCalledWith("/repo");

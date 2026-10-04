@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWorkspaceFileCatalog } from "./workspaceFileCatalog";
+import { normalizePathSync } from "./diskFingerprint";
 import type { EnumerateOpenableFilesResult } from "./workspaceTraversal";
 
 function deferred<T>() {
@@ -58,6 +59,28 @@ describe("createWorkspaceFileCatalog", () => {
     expect(snap.partialErrors).toEqual(["/ws/locked"]);
     expect(catalog.getOpenablePaths()).toHaveLength(2);
     expect(enumerate).toHaveBeenCalledTimes(1);
+    catalog.dispose();
+  });
+
+  it("preserves path casing in entries while folding the comparison key", async () => {
+    const enumerate = vi.fn(async () => ({
+      paths: ["/Users/Me/Ws/Src/App.ts"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    const catalog = createWorkspaceFileCatalog({ enumerate });
+    catalog.setWorkspaceRoot("/Users/Me/Ws");
+    catalog.ensureReady();
+    await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
+
+    const snap = catalog.getSnapshot();
+    expect(snap.entries[0]).toMatchObject({
+      absolutePath: "/Users/Me/Ws/Src/App.ts",
+      relativePath: "Src/App.ts",
+      basename: "App.ts",
+      directory: "/Users/Me/Ws/Src",
+    });
+    expect(snap.entries[0]!.key).toBe(normalizePathSync("/Users/Me/Ws/Src/App.ts"));
     catalog.dispose();
   });
 
@@ -344,6 +367,43 @@ describe("createWorkspaceFileCatalog", () => {
     expect(catalog.getSnapshot().entries).toHaveLength(2);
     catalog.dispose();
     vi.useRealTimers();
+  });
+
+  it("lets a running enumeration finish before a watcher rebuild starts", async () => {
+    vi.useFakeTimers();
+    const pending: Array<(value: EnumerateOpenableFilesResult) => void> = [];
+    const cancelledFlags: Array<() => boolean> = [];
+    const enumerate = vi.fn(
+      (_root: string, options: { isCancelled: () => boolean }) =>
+        new Promise<EnumerateOpenableFilesResult>((res) => {
+          pending.push(res);
+          cancelledFlags.push(options.isCancelled);
+        }),
+    );
+    const catalog = createWorkspaceFileCatalog({ enumerate, invalidateDebounceMs: 50 });
+    catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
+    // A steady trickle of events during a slow enumeration must not restart it.
+    for (let i = 0; i < 5; i += 1) {
+      catalog.notifyFilesystemChange(`/ws/f${i}.ts`, "modify");
+      await vi.advanceTimersByTimeAsync(60);
+    }
+    expect(enumerate).toHaveBeenCalledTimes(1);
+    expect(cancelledFlags[0]!()).toBe(false);
+
+    pending[0]!({ paths: ["/ws/a.md"], partialErrors: [], cancelled: false });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(catalog.getSnapshot().status).toBe("loading");
+    expect(catalog.getSnapshot().entries).toHaveLength(1);
+    // The deferred rebuild runs once, right after the first build finished.
+    expect(enumerate).toHaveBeenCalledTimes(2);
+
+    pending[1]!({ paths: ["/ws/a.md", "/ws/b.md"], partialErrors: [], cancelled: false });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(catalog.getSnapshot().status).toBe("ready");
+    expect(catalog.getSnapshot().entries).toHaveLength(2);
+    expect(enumerate).toHaveBeenCalledTimes(2);
+    catalog.dispose();
   });
 
   it("reports content-free diagnostics", async () => {

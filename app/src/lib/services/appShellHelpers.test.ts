@@ -28,7 +28,7 @@ function domainState(overrides: {
     contexts: {
       activeContextId: "notepad",
       notepad: snapshot,
-      chatHttp: snapshot,
+
       workspaces: [],
     },
     settings: {
@@ -214,14 +214,7 @@ describe("externalFileWatcherSyncKey", () => {
             windowBounds: null,
           },
         },
-        chatHttp: {
-          documents: [],
-          session: {
-            editorLayout: createSinglePaneLayout([], null),
-            lastActiveWindowId: "main",
-            windowBounds: null,
-          },
-        },
+
         workspaces: [
           { id: "ws-1", rootPath: "/ws", snapshot: wsSnapshotA },
           { id: "ws-2", rootPath: "/ws", snapshot: wsSnapshotB },

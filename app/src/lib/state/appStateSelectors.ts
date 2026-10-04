@@ -242,6 +242,7 @@ export function settingsPersistenceFingerprint(state: AppDomainState): string {
     zoomPercent: editor.zoomPercent,
     externalFiles: settings.externalFiles,
     decoratePlaintextSymbols: settings.decoratePlaintextSymbols,
+    coloredProjectFileIcons: settings.coloredProjectFileIcons,
     showMinimap: settings.showMinimap,
     showFoldGutter: settings.showFoldGutter,
     autoClosePairs: settings.autoClosePairs,

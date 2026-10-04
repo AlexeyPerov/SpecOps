@@ -301,7 +301,7 @@ export interface OpencodeSessionFileDiff {
   status: OpencodeFileChangeStatus;
 }
 
-export type OpencodeFileChangeStatus = "added" | "deleted" | "modified";
+export type OpencodeFileChangeStatus = "added" | "deleted" | "modified" | "conflicted";
 
 /** File status entry from `file.status` (the `File` shape: git working tree). */
 export interface OpencodeFileStatusEntry {

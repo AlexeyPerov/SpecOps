@@ -41,12 +41,14 @@ export interface WorkspaceContextMenuActionsDeps {
   setMenu: (menu: WorkspaceContextMenuState | null) => void;
   getMenuEl: () => HTMLDivElement | null;
   getWorkspaceIds: () => readonly ContextId[];
+  getWorkspaceRootPath: (workspaceId: ContextId) => string | null;
   getPreviousActiveContextId: () => ContextId | null;
   setPreviousActiveContextId: (contextId: ContextId) => void;
   setConsoleOpen: (open: boolean) => void;
   setMarkdownViewMode: (mode: "edit" | "split" | "preview") => void;
   loadProjectTreeRoot: () => Promise<void>;
   notify: (message: string) => void;
+  writeClipboardText?: (text: string) => Promise<void>;
 }
 
 export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActionsDeps) {
@@ -170,6 +172,22 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     close();
   }
 
+  async function copyPath(workspaceId: ContextId): Promise<void> {
+    const rootPath = deps.getWorkspaceRootPath(workspaceId);
+    if (!rootPath) {
+      close();
+      return;
+    }
+    try {
+      await (deps.writeClipboardText ?? navigator.clipboard.writeText.bind(navigator.clipboard))(
+        rootPath,
+      );
+    } catch {
+      // clipboard is best-effort from the workspace menu
+    }
+    close();
+  }
+
   function closeWorkspace(workspaceId: ContextId): void {
     void closeWorkspaceWithConfirm(workspaceId, deps.notify).then((closed) => {
       if (closed) {
@@ -188,6 +206,7 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     menuIndex,
     move,
     closeWorkspace,
+    copyPath,
     openSettings,
     openVersionControl,
     handleActiveContextSwitch,

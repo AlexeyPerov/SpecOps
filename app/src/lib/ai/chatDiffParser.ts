@@ -161,6 +161,7 @@ export function summarizeSessionDiffs(
 
 /** Short label for a status (used in the file list + filter chips). */
 export function diffStatusBadgeLabel(status: OpencodeFileChangeStatus): string {
+  if (status === "conflicted") return "!";
   switch (status) {
     case "added":
       return "A";

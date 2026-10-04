@@ -55,6 +55,7 @@ export interface PersistedSettings {
   maxBinaryOpenAsTextBytes: number;
   maxOpenWithoutConfirmBytes: number;
   decoratePlaintextSymbols: boolean;
+  coloredProjectFileIcons: boolean;
   showMinimap: boolean;
   showFoldGutter: boolean;
   autoClosePairs: boolean;
@@ -88,6 +89,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   zoomPercent: 100,
   ...defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
+  coloredProjectFileIcons: true,
   showMinimap: true,
   showFoldGutter: true,
   autoClosePairs: true,
@@ -178,6 +180,9 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         decoratePlaintextSymbols: isBoolean(parsed.decoratePlaintextSymbols)
           ? parsed.decoratePlaintextSymbols
           : defaultPersistedSettings.decoratePlaintextSymbols,
+        coloredProjectFileIcons: isBoolean(parsed.coloredProjectFileIcons)
+          ? parsed.coloredProjectFileIcons
+          : defaultPersistedSettings.coloredProjectFileIcons,
         showMinimap: isBoolean(parsed.showMinimap)
           ? parsed.showMinimap
           : defaultPersistedSettings.showMinimap,
@@ -262,6 +267,7 @@ export function toPersistedSettings(input: {
   zoomPercent: number;
   externalFiles: ExternalFilesSettings;
   decoratePlaintextSymbols: boolean;
+  coloredProjectFileIcons: boolean;
   showMinimap: boolean;
   showFoldGutter: boolean;
   autoClosePairs: boolean;
@@ -283,6 +289,7 @@ export function toPersistedSettings(input: {
     zoomPercent: input.zoomPercent,
     ...input.externalFiles,
     decoratePlaintextSymbols: input.decoratePlaintextSymbols,
+    coloredProjectFileIcons: input.coloredProjectFileIcons,
     showMinimap: isBoolean(input.showMinimap)
       ? input.showMinimap
       : defaultPersistedSettings.showMinimap,

@@ -37,6 +37,9 @@ import {
 const WORKING_TREE_STATUS_ARGS = ["status", "--porcelain=v2", "-z"] as const;
 
 function gitNullDevicePath(): string {
+  if (typeof process !== "undefined" && process.platform) {
+    return process.platform === "win32" ? "NUL" : "/dev/null";
+  }
   return isWindows() ? "NUL" : "/dev/null";
 }
 

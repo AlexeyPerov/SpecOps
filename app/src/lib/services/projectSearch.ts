@@ -79,6 +79,8 @@ export type ProjectSearchOutcome =
       scannedFiles: number;
       /** Files skipped because `stat` or `readTextFile` failed (permissions, gone, binary…). */
       unreadableFiles: number;
+      skippedLarge?: number;
+      skippedUnreadable?: number;
     }
   | { ok: false; reason: string };
 
@@ -157,7 +159,8 @@ export async function searchInProject(
   let truncated = false;
   let aborted = false;
   let scannedFiles = 0;
-  let unreadableFiles = 0;
+  let skippedLarge = 0;
+  let skippedUnreadable = 0;
 
   await mapWithConcurrency(files, PROJECT_SEARCH_CONCURRENCY, async (path) => {
     if (aborted) {
@@ -175,10 +178,11 @@ export async function searchInProject(
     try {
       const info = await stat(path);
       if (Number(info.size) > MAX_SEARCH_FILE_BYTES) {
+        skippedLarge += 1;
         return;
       }
     } catch {
-      unreadableFiles += 1;
+      skippedUnreadable += 1;
       return;
     }
     if (aborted) {
@@ -188,7 +192,7 @@ export async function searchInProject(
     try {
       content = await readTextFile(path);
     } catch {
-      unreadableFiles += 1;
+      skippedUnreadable += 1;
       return;
     }
     if (aborted) {
@@ -218,5 +222,6 @@ export async function searchInProject(
     results.push({ path, matches });
     totalMatches += matches.length;
   });
-  return { ok: true, results, truncated, scannedFiles, unreadableFiles };
+  results.sort((a, b) => a.path.localeCompare(b.path));
+  return { ok: true, results, truncated, scannedFiles, unreadableFiles: skippedUnreadable, skippedLarge, skippedUnreadable };
 }

@@ -19,6 +19,9 @@ export {
   normalizeTabState,
   tryNormalizeTabState,
   tabDocumentId,
+  normalizeTextColumnWidthPx,
+  MIN_TEXT_COLUMN_WIDTH_PX,
+  MAX_TEXT_COLUMN_WIDTH_PX,
 } from "./document";
 export type {
   EditorLayout,

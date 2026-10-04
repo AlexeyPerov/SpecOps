@@ -371,7 +371,7 @@
 
     // If a previously-deferred tab is now active (or closed), drop it from the
     // pending idle set so it doesn't hydrate late and overwrite a newer state.
-    const nextPending = new Set<string>();
+    const nextPending = emptySet<string>();
     for (const tabId of deferred) {
       if (pendingIdleTabIds.has(tabId)) {
         nextPending.add(tabId);
@@ -558,7 +558,6 @@
             <MarkdownEditorPane
               markdownEnabled={
                 entryView.isMarkdownDocument &&
-                entry.document.content.length > 0 &&
                 !entry.document.fileMissing
               }
               content={entry.document.content}
@@ -575,6 +574,7 @@
               {showFoldGutter}
               {autoClosePairs}
               {autoSuggest}
+              textColumnWidthPx={entry.document.textColumnWidthPx ?? null}
               markdownHtml={isEntryActive ? activePreviewHtml : ""}
               storedMarkdownViewMode={entry.document.markdownViewMode ?? "edit"}
               canFitSplit={canFitMarkdownSplit}

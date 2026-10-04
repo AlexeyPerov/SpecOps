@@ -51,6 +51,7 @@ describe("settings mapping", () => {
         maxOpenWithoutConfirmBytes: 512 * 1024,
       },
       decoratePlaintextSymbols: false,
+      coloredProjectFileIcons: false,
       defaultMarkdownViewMode: "split",
       showMinimap: false,
       showFoldGutter: true,
@@ -68,6 +69,7 @@ describe("settings mapping", () => {
       showHiddenFiles: false,
     });
 
+    expect(persisted.coloredProjectFileIcons).toBe(false);
     expect(toExternalFilesSettings(persisted)).toEqual({
       watchExternalChanges: false,
       autoReloadCleanFiles: false,
@@ -90,6 +92,16 @@ describe("loadPersistedSettings", () => {
   it("returns parsed settings for a valid file", async () => {
     readTextFileMock.mockResolvedValue(JSON.stringify(defaultPersistedSettings));
     await expect(loadPersistedSettings()).resolves.toEqual(defaultPersistedSettings);
+  });
+
+  it.each([true, false])("restores the file icon color choice %s", async (coloredProjectFileIcons) => {
+    readTextFileMock.mockResolvedValue(JSON.stringify({ ...defaultPersistedSettings, coloredProjectFileIcons }));
+    expect((await loadPersistedSettings())?.coloredProjectFileIcons).toBe(coloredProjectFileIcons);
+  });
+
+  it("uses colored file icons when the setting is invalid", async () => {
+    readTextFileMock.mockResolvedValue(JSON.stringify({ ...defaultPersistedSettings, coloredProjectFileIcons: "false" }));
+    expect((await loadPersistedSettings())?.coloredProjectFileIcons).toBe(true);
   });
 
   it("defaults missing external-file booleans", async () => {

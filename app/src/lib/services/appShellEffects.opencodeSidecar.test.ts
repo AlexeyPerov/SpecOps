@@ -77,7 +77,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: false,
+
       isSessionTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
@@ -105,7 +105,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: false,
+
       isSessionTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
@@ -131,7 +131,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: false,
+
       isSessionTabActive: false,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
@@ -144,29 +144,13 @@ describe("syncOpencodeSidecarEffect", () => {
     expect(getStatusMock).not.toHaveBeenCalled();
   });
 
-  it("skips attach when chat-http is active", () => {
-    syncOpencodeSidecarEffect({
-      runtimeReady: true,
-      workspaceLifecycleActive: true,
-      activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: true,
-      isSessionTabActive: true,
-      opencodeEnabled: true,
-      opencodeMode: "sidecar",
-      opencodeBaseUrl: "http://127.0.0.1:4096",
-      opencodeSidecarPort: 4096,
-      setOpencodeHealth: vi.fn(),
-    });
-
-    expect(attachMock).not.toHaveBeenCalled();
-  });
 
   it("skips probe when workspace lifecycle has not started", () => {
     syncOpencodeSidecarEffect({
       runtimeReady: true,
       workspaceLifecycleActive: false,
       activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: false,
+
       isSessionTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
@@ -184,7 +168,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: false,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: false,
+
       isSessionTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "sidecar",
@@ -203,7 +187,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: false,
+
       isSessionTabActive: true,
       opencodeEnabled: false,
       opencodeMode: "sidecar",
@@ -227,7 +211,7 @@ describe("syncOpencodeSidecarEffect", () => {
     const baseInput = {
       runtimeReady: true,
       workspaceLifecycleActive: true,
-      isChatHttpActive: false,
+
       isSessionTabActive: true,
       opencodeEnabled: false,
       opencodeMode: "sidecar" as const,
@@ -250,7 +234,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: false,
+
       isSessionTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "url",
@@ -280,7 +264,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: false,
+
       isSessionTabActive: true,
       opencodeEnabled: true,
       opencodeMode: "url",
@@ -305,7 +289,7 @@ describe("syncOpencodeSidecarEffect", () => {
       runtimeReady: true,
       workspaceLifecycleActive: true,
       activeWorkspaceRoot: "/tmp/workspace",
-      isChatHttpActive: false,
+
       isSessionTabActive: false,
       opencodeEnabled: true,
       opencodeMode: "url",

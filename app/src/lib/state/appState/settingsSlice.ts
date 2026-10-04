@@ -70,6 +70,7 @@ export const defaultSettings: AppSettingsState = {
   statusBarVisible: true,
   externalFiles: defaultExternalFilesSettings,
   decoratePlaintextSymbols: true,
+  coloredProjectFileIcons: true,
   showMinimap: true,
   showFoldGutter: true,
   autoClosePairs: true,
@@ -251,6 +252,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       zoomPercent?: number;
       externalFiles?: ExternalFilesSettings;
       decoratePlaintextSymbols?: boolean;
+      coloredProjectFileIcons?: boolean;
       showMinimap?: boolean;
       showFoldGutter?: boolean;
       autoClosePairs?: boolean;
@@ -297,6 +299,15 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             settings: {
               ...next.settings,
               decoratePlaintextSymbols: partial.decoratePlaintextSymbols,
+            },
+          };
+        }
+        if (typeof partial.coloredProjectFileIcons === "boolean") {
+          next = {
+            ...next,
+            settings: {
+              ...next.settings,
+              coloredProjectFileIcons: partial.coloredProjectFileIcons,
             },
           };
         }

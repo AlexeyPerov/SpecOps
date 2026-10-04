@@ -6,7 +6,9 @@ import type { NativeSessionId, SpecOpsTurnId } from "../ids";
 const sid = "fake-native-1" as NativeSessionId;
 const tid = "sos-turn-1" as SpecOpsTurnId;
 
-function ev(partial: Omit<SessionEvent, "nativeSessionId" | "seq" | "at"> & {
+type EventPayload<T> = T extends SessionEvent ? Omit<T, "nativeSessionId" | "seq" | "at"> : never;
+
+function ev(partial: EventPayload<SessionEvent> & {
   nativeSessionId?: NativeSessionId;
   seq?: number;
   at?: string;

@@ -108,13 +108,13 @@ describe("editorDocumentSessionCache", () => {
     const cache = createEditorDocumentSessionCache();
     cache.save(key("p1", "a"), makeState("a1"));
     cache.save(key("p2", "a"), makeState("a2"));
-    cache.save(key("p1", "a", "ws-other"), makeState("a-other"));
+    cache.save(key("p1", "a", "ws-3"), makeState("a-other"));
 
     cache.invalidateSession(key("p1", "a"));
 
     expect(cache.has(key("p1", "a"))).toBe(false);
     expect(cache.has(key("p2", "a"))).toBe(true);
-    expect(cache.has(key("p1", "a", "ws-other"))).toBe(true);
+    expect(cache.has(key("p1", "a", "ws-3"))).toBe(true);
   });
 
   it("invalidatePane drops only that pane's sessions", () => {

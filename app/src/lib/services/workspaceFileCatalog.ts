@@ -4,7 +4,7 @@
  * Does not read file contents during construction.
  */
 
-import { normalizePathSync } from "./diskFingerprint";
+import { normalizePathForStorage, normalizePathSync } from "./diskFingerprint";
 import {
   enumerateOpenableWorkspaceFiles,
   normalizeWorkspaceRoot,
@@ -22,14 +22,14 @@ import type { FileWatcherEventKind } from "./fileWatcher";
 export type CatalogFileChangeKind = FileWatcherEventKind | undefined;
 
 export interface WorkspaceFileEntry {
-  /** Normalized absolute path. */
+  /** Slash-normalized absolute path (original casing preserved). */
   absolutePath: string;
-  /** Path relative to the workspace root (forward slashes). */
+  /** Path relative to the workspace root (forward slashes, casing preserved). */
   relativePath: string;
   basename: string;
   /** Parent directory absolute path. */
   directory: string;
-  /** Stable key (= absolutePath). */
+  /** Stable case-folded comparison key. */
   key: string;
 }
 
@@ -135,13 +135,15 @@ export function shouldSkipCatalogPath(root: string, normalizedPath: string): boo
 }
 
 function toEntry(root: string, absolutePath: string): WorkspaceFileEntry {
-  const normalized = normalizePathSync(absolutePath);
+  // Keep the real on-disk casing for the path fields (they feed open requests,
+  // tab file paths, and Copy Path); fold case only into the comparison key.
+  const path = normalizePathForStorage(absolutePath);
   return {
-    absolutePath: normalized,
-    relativePath: relativePathFromRoot(normalized, root),
-    basename: basenameOf(normalized),
-    directory: directoryOf(normalized),
-    key: normalized,
+    absolutePath: path,
+    relativePath: relativePathFromRoot(path, root),
+    basename: basenameOf(path),
+    directory: directoryOf(path),
+    key: normalizePathSync(path),
   };
 }
 
@@ -166,6 +168,8 @@ export function createWorkspaceFileCatalog(
   let partialErrors: string[] = [];
   let errorMessage: string | null = null;
   let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
+  /** A watcher rebuild came due while an enumeration was still running. */
+  let rebuildAfterLoad = false;
   const listeners = new Set<() => void>();
 
   // Diagnostics counters for incremental invalidation. No file contents.
@@ -190,17 +194,41 @@ export function createWorkspaceFileCatalog(
     clearInvalidateTimer();
     invalidateTimer = setTimeout(() => {
       invalidateTimer = null;
-      if (!disposed && workspaceRoot) {
-        debouncedRebuilds += 1;
-        onBeforeRebuild?.(workspaceRoot);
-        beginEnumerate(workspaceRoot);
+      if (disposed || !workspaceRoot) {
+        return;
       }
+      // Never cancel an enumeration that is still running: on a large or busy
+      // workspace a steady trickle of watcher events would restart it forever
+      // and the catalog would never become ready. Rebuild once it finishes.
+      if (status === "loading") {
+        rebuildAfterLoad = true;
+        return;
+      }
+      runWatcherRebuild(workspaceRoot);
     }, invalidateDebounceMs);
   }
 
-  /** True when `path` is the root or nested under it (post-normalization). */
+  function runWatcherRebuild(root: string): void {
+    debouncedRebuilds += 1;
+    onBeforeRebuild?.(root);
+    beginEnumerate(root);
+  }
+
+  /** Starts the rebuild deferred by {@link scheduleRebuild}, if one is pending. */
+  function flushRebuildAfterLoad(root: string): void {
+    if (!rebuildAfterLoad || disposed || workspaceRoot !== root) {
+      return;
+    }
+    rebuildAfterLoad = false;
+    runWatcherRebuild(root);
+  }
+
+  /** True when `path` is the root or nested under it (case-folded compare). */
   function pathIsUnderRoot(normalizedPath: string, root: string): boolean {
-    return normalizedPath === root || normalizedPath.startsWith(`${root}/`);
+    const foldedRoot = normalizePathSync(root);
+    return (
+      normalizedPath === foldedRoot || normalizedPath.startsWith(`${foldedRoot}/`)
+    );
   }
 
   /**
@@ -240,17 +268,19 @@ export function createWorkspaceFileCatalog(
    * Synchronously add an entry for a newly created openable file. Returns true
    * when a new entry was inserted (caller emits + bumps diagnostics). No-ops
    * when the path is a directory (handled by debounced rebuild) or already
-   * present, and never reads file contents.
+   * present, and never reads file contents. Accepts the raw watcher path —
+   * casing is preserved for display, folding happens on the entry key.
    */
-  function addEntry(root: string, normalizedPath: string): boolean {
-    if (!isOpenableFilePath(normalizedPath) || shouldSkipCatalogPath(root, normalizedPath)) {
+  function addEntry(root: string, path: string): boolean {
+    const key = normalizePathSync(path);
+    if (!isOpenableFilePath(path) || shouldSkipCatalogPath(root, path)) {
       return false;
     }
-    const existing = entries.find((entry) => entry.key === normalizedPath);
+    const existing = entries.find((entry) => entry.key === key);
     if (existing) {
       return false;
     }
-    const next = [...entries, toEntry(root, normalizedPath)];
+    const next = [...entries, toEntry(root, path)];
     next.sort((a, b) => a.absolutePath.localeCompare(b.absolutePath));
     entries = next;
     incrementalAdds += 1;
@@ -271,6 +301,7 @@ export function createWorkspaceFileCatalog(
   function beginEnumerate(root: string): void {
     generation += 1;
     const gen = generation;
+    rebuildAfterLoad = false;
     status = "loading";
     errorMessage = null;
     emit();
@@ -291,6 +322,7 @@ export function createWorkspaceFileCatalog(
         status = "ready";
         errorMessage = null;
         emit();
+        flushRebuildAfterLoad(root);
       } catch (error: unknown) {
         if (disposed || gen !== generation) {
           return;
@@ -300,6 +332,7 @@ export function createWorkspaceFileCatalog(
         status = "error";
         errorMessage = error instanceof Error ? error.message : String(error);
         emit();
+        flushRebuildAfterLoad(root);
       }
     })();
   }
@@ -412,7 +445,7 @@ export function createWorkspaceFileCatalog(
             if (shouldSkipCatalogPath(root, normalizedChanged)) {
               return;
             }
-            if (addEntry(root, normalizedChanged)) {
+            if (addEntry(root, changedPath)) {
               emit();
             }
             // If the created path is a directory, addEntry no-ops (the file

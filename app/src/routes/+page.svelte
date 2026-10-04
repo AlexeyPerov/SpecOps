@@ -181,6 +181,12 @@
       onExpandedPathsChange: (_workspaceRoot, paths) => {
         appState.updateActiveWorkspaceLayout({ expandedProjectTreePaths: paths });
       },
+      // The tree reads through the shared directory cache, so a revalidation
+      // pass has to drop the listings it is about to re-read or it would just
+      // compare the cache against itself.
+      invalidateDirectoryCache: (directoryPaths) => {
+        workspaceDirectoryCache.invalidate(directoryPaths);
+      },
     },
   );
   const workspaceFileCatalogRegistry: WorkspaceFileCatalogRegistry =
@@ -450,11 +456,13 @@
       isSessionTabActive,
     );
   });
+  /** How many open notepad files the rail card lists at most. */
+  const NOTEPAD_RAIL_TAB_LIMIT = 3;
   // Notepad rail card data — reads the notepad context directly so it is
   // available regardless of which context is currently active. Most recently
-  // opened file tab in append order (newest-opened last). Kept to a single
-  // row so the notepad card stays compact and its divider lands near the
-  // editor tab-bar bottom line.
+  // opened file tabs in append order (newest-opened last), capped at
+  // NOTEPAD_RAIL_TAB_LIMIT so the card cannot push the workspace list down the
+  // rail.
   const notepadSession = $derived($appContexts.notepad.session);
   const notepadOpenTabCount = $derived(allTabs(notepadSession.editorLayout).length);
   // P03-08-24f: memoize on the notepad session + documents references so the
@@ -483,8 +491,8 @@
         // real saved files.
         return Boolean(doc?.filePath);
       });
-    const lastOne = fileTabs.slice(-1);
-    notepadRecentTabsOutput = lastOne.map((tab) => {
+    const recent = fileTabs.slice(-NOTEPAD_RAIL_TAB_LIMIT);
+    notepadRecentTabsOutput = recent.map((tab) => {
       const doc = notepadDocs.find((documentState) => documentState.id === tab.documentId);
       return {
         tabId: tab.id,
@@ -590,10 +598,15 @@
       runCommand: (commandId) => appShellHost?.api.runCommand(commandId),
       openAndActivatePath: (path, options) =>
         appShellHost?.api.openAndActivatePath(path, options) ?? Promise.resolve(),
-      consumeOpenedPaths: () => appShellHost?.api.consumeOpenedPaths() ?? [],
+      openDroppedPathsInContext: (paths, contextId) =>
+        appShellHost?.api.openDroppedPathsInContext(paths, contextId) ?? Promise.resolve(),
+      consumeOpenedPaths: (paths) =>
+        appShellHost?.api.consumeOpenedPaths(paths) ?? Promise.resolve(),
       restoreWorkspaceSession: (root, options) =>
         appShellHost?.api.restoreWorkspaceSession(root, options) ?? Promise.resolve(),
       loadProjectTreeRoot: () => appShellHost?.api.loadProjectTreeRoot() ?? Promise.resolve(),
+      revalidateProjectTree: () =>
+        appShellHost?.api.revalidateProjectTree() ?? Promise.resolve(),
       notifyProjectTreeFilesystemChange: (path, kind) =>
         appShellHost?.api.notifyProjectTreeFilesystemChange(path, kind),
       setConsoleHeightPx: (heightPx) => {
@@ -790,6 +803,8 @@
       openWorkspaceRoots: workspaces.map((workspace) => workspace.rootPath),
       projectTreeController,
       loadProjectTreeRoot: () => appShellHost?.api.loadProjectTreeRoot() ?? Promise.resolve(),
+      revalidateProjectTree: () =>
+        appShellHost?.api.revalidateProjectTree() ?? Promise.resolve(),
     });
     void logPerfTiming(
       "project tree shell effect scheduled",

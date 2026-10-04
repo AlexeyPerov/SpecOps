@@ -3,6 +3,7 @@ import { createAppShellAgentHandlers } from "./appShellAgentHandlers";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { WorkspaceAccessReason } from "../ai/capabilities";
+import { defaultSettings } from "../state/appState/settingsSlice";
 import { createSinglePaneLayout } from "../domain/contracts";
 
 const { agentHostClientMock, entryNamePromptMock } = vi.hoisted(() => ({
@@ -71,7 +72,9 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     appStateMock.getSnapshot.mockReturnValue({
+      ...appStateMock.getSnapshot(),
       settings: {
+        ...defaultSettings,
         opencode: { enabled: true, mode: "sidecar", baseUrl: "http://127.0.0.1:4096", sidecarPort: 4096 },
       },
     });
@@ -155,7 +158,9 @@ describe("createAppShellAgentHandlers.restoreWorkspaceSession", () => {
 
   it("clears the active session when the sessions gate is disabled", async () => {
     appStateMock.getSnapshot.mockReturnValue({
+      ...appStateMock.getSnapshot(),
       settings: {
+        ...defaultSettings,
         opencode: { enabled: false, mode: "sidecar", baseUrl: "http://127.0.0.1:4096", sidecarPort: 4096 },
       },
     });

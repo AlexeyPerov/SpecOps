@@ -129,7 +129,7 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
 
   function buildProjectSearchQuery(state: ProjectSearchQueryState): SearchQuery {
     return createSearchQuery({
-      text: state.text.trim(),
+      text: state.text,
       replacement: state.replacement,
       caseSensitive: state.caseSensitive,
       wholeWord: state.wholeWord,
@@ -192,12 +192,13 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       const matches = totalMatchCount(results);
       const unreadableSuffix =
         outcome.unreadableFiles > 0 ? `, ${outcome.unreadableFiles} unreadable` : "";
+      const largeSuffix = outcome.skippedLarge ? `, ${outcome.skippedLarge} oversized skipped` : "";
       deps.setProjectSearchStatus(
         matches === 0
-          ? `No results (${outcome.scannedFiles} files scanned${unreadableSuffix})`
+          ? `No results (${outcome.scannedFiles} files scanned${unreadableSuffix}${largeSuffix})`
           : `${matches} result${matches === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"}${
               outcome.truncated ? " (capped — refine the search to see all matches)" : ""
-            }${unreadableSuffix}`,
+            }${unreadableSuffix}${largeSuffix}`,
       );
     } catch (error: unknown) {
       if (generation === deps.getProjectSearchGeneration()) {
@@ -550,7 +551,7 @@ export function computeProjectSearchQueryError(query: string, regex: boolean): s
     return "";
   }
   try {
-    void new RegExp(query.trim());
+    void new RegExp(query);
     return "";
   } catch (error: unknown) {
     return error instanceof Error ? error.message : "Invalid regular expression.";

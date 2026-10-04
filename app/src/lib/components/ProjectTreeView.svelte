@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { normalizePathSync } from "../services/diskFingerprint";
+  import { projectTreeChangeTones } from "../services/projectTreeDecorations";
   import { onDestroy } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
+  import type { ContextId } from "../domain/contracts";
   import type { OpencodeFileChangeStatus } from "../ai/backends/workspaceAgentBackend";
   import {
     flattenProjectTree,
@@ -15,8 +18,8 @@
   } from "./projectTreeDrag";
   import type { PaneDropTargetElements } from "./paneDropTargets";
   import { emptyMap, emptySet } from "../collections/emptyCollections";
-  import DirectoryIcon from "./icons/DirectoryIcon.svelte";
-  import FileIcon from "./icons/FileIcon.svelte";
+  import ProjectFileIcon from "./icons/ProjectFileIcon.svelte";
+  import TreeChevron from "./icons/TreeChevron.svelte";
 
   /**
    * H35 — the tree renders as ONE flattened `{#each}` over the visible rows
@@ -27,16 +30,24 @@
    */
 
   interface Props {
+    revealPath?: string | null;
+    favoritePaths?: ReadonlySet<string>;
     nodes?: ProjectTreeNode[];
     workspaceRoot?: string;
-    expandedPaths?: Set<string>;
-    childrenByPath?: Map<string, ProjectTreeNode[]>;
-    loadingPaths?: Set<string>;
+    coloredFileIcons?: boolean;
+    expandedPaths?: ReadonlySet<string>;
+    childrenByPath?: ReadonlyMap<string, ProjectTreeNode[]>;
+    loadingPaths?: ReadonlySet<string>;
+    draft?: { kind: "file" | "directory"; parentDirPath: string; defaultValue: string } | null;
+    onCommitDraft?: (name: string) => Promise<boolean>;
+    onCancelDraft?: () => void;
     activeFilePath?: string | null;
     /** M5-T3 — absolute path → git change status, for badges. */
     statusByPath?: ReadonlyMap<string, OpencodeFileChangeStatus> | null;
     onToggleDirectory?: (path: string) => void;
     onOpenFile?: (path: string) => void;
+    /** Double click on a file row: keep its (preview) tab. */
+    onKeepFile?: (path: string) => void;
     onContextMenuRoot?: (event: MouseEvent) => void;
     onContextMenuNode?: (event: MouseEvent, node: ProjectTreeNode) => void;
     onMoveEntry?: (sourcePath: string, destDirPath: string) => Promise<void>;
@@ -47,18 +58,26 @@
     onOpenFileInPane?: (filePath: string, paneId: string) => void | Promise<void>;
     /** Phase 6 — reports the hovered pane id during a file drag (for affordance). */
     onFileDropPaneChange?: (paneId: string | null) => void;
+    onOpenFileInContext?: (filePath: string, contextId: ContextId) => void | Promise<void>;
   }
 
   let {
+    revealPath = null,
+    favoritePaths = emptySet<string>(),
     nodes = [],
     workspaceRoot = "",
+    coloredFileIcons = true,
     expandedPaths = emptySet<string>(),
     childrenByPath = emptyMap<string, ProjectTreeNode[]>(),
     loadingPaths = emptySet<string>(),
+    draft = null,
+    onCommitDraft = async () => false,
+    onCancelDraft = () => {},
     activeFilePath = null,
     statusByPath = null,
     onToggleDirectory = () => {},
     onOpenFile = () => {},
+    onKeepFile = () => {},
     onContextMenuRoot = () => {},
     onContextMenuNode = () => {},
     onMoveEntry = async () => {},
@@ -66,7 +85,10 @@
     getPaneElements = () => [],
     onOpenFileInPane,
     onFileDropPaneChange = () => {},
+    onOpenFileInContext,
   }: Props = $props();
+
+  const changeTones = $derived(projectTreeChangeTones(statusByPath));
 
   let ignoreNextActivation = false;
 
@@ -76,6 +98,7 @@
     sourceKind: null,
     dropTargetPath: null,
     dropPaneId: null,
+    dropContextId: null,
     didDrag: false,
     startX: 0,
     startY: 0,
@@ -93,6 +116,10 @@
     notify: (message) => notify(message),
     getPaneElements: () => getPaneElements(),
     onOpenFileInPane: (filePath, paneId) => onOpenFileInPane?.(filePath, paneId),
+    getContextDropTargetElements: () =>
+      Array.from(document.querySelectorAll<HTMLElement>("[data-file-drop-context]")),
+    onOpenFileInContext: (filePath, contextId) =>
+      onOpenFileInContext?.(filePath, contextId),
     // Directory-row elements for coordinate-based folder drop-target
     // hit-testing. `pointerenter`/`pointerleave` on sibling rows are suppressed
     // by the implicit pointer capture of an active mouse drag, so the controller
@@ -178,6 +205,17 @@
     }
   }
 
+  /**
+   * Double click keeps the file: the preceding single click already opened it
+   * as the pane's preview tab, so this promotes that tab to an ordinary one.
+   */
+  function handleRowDoubleClick(row: Extract<ProjectTreeRow, { kind: "node" }>): void {
+    if (row.node.kind !== "file") {
+      return;
+    }
+    onKeepFile(row.node.path);
+  }
+
   function handleRowClick(row: Extract<ProjectTreeRow, { kind: "node" }>): void {
     if (row.node.kind === "directory") {
       if (!row.canExpand) {
@@ -200,14 +238,83 @@
   const VIRTUALIZE_ROW_THRESHOLD = 200;
   /** Extra rows rendered above/below the viewport to absorb measurement slop. */
   const OVERSCAN_ROWS = 12;
-  /** Fallback pitch (row height + list gap) until a real pair is measured. */
+  /**
+   * Fallback pitch (row height + list gap) used until either a real pair of
+   * rows is measured or the metric tokens are read off the list element.
+   */
   const FALLBACK_ROW_PITCH = 21;
-  /** Matches `--space-1` on `.project-tree-list` (F72 spacer correction). */
-  const LIST_GAP_PX = 2;
+  /** Fallback for `--project-tree-row-spacing` (F72 spacer correction). */
+  const FALLBACK_LIST_GAP_PX = 2;
+
+  /**
+   * Read one `px`-valued custom property off an element. The project-tree
+   * metrics live in `tokens.css` (`--project-tree-*`), and the windowing math
+   * needs their numeric values, so they are read back instead of being
+   * duplicated as constants here.
+   */
+  function readPxCustomProperty(
+    element: HTMLElement,
+    name: string,
+    fallback: number,
+  ): number {
+    const raw = getComputedStyle(element).getPropertyValue(name).trim();
+    const parsed = Number.parseFloat(raw);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  }
 
   const rows = $derived(
     flattenProjectTree(nodes, expandedPaths, childrenByPath, loadingPaths),
   );
+
+  type DisplayRow = ProjectTreeRow | { kind: "draft"; depth: number };
+  const displayRows = $derived.by<DisplayRow[]>(() => {
+    if (!draft) return rows;
+    const next: DisplayRow[] = [...rows];
+    if (draft.parentDirPath === workspaceRoot) {
+      next.unshift({ kind: "draft", depth: 0 });
+      return next;
+    }
+    const parentIndex = rows.findIndex(
+      (row) => row.kind === "node" && row.node.path === draft.parentDirPath,
+    );
+    const parent = parentIndex >= 0 ? rows[parentIndex] : null;
+    const depth = parent?.kind === "node" ? parent.depth + 1 : 0;
+    next.splice(parentIndex >= 0 ? parentIndex + 1 : 0, 0, { kind: "draft", depth });
+    return next;
+  });
+
+  let draftValue = $state("");
+  let committingDraft = $state(false);
+  $effect(() => {
+    draftValue = draft?.defaultValue ?? "";
+  });
+
+  function focusDraftInput(node: HTMLInputElement): void {
+    queueMicrotask(() => {
+      node.focus();
+      node.select();
+    });
+  }
+
+  async function handleDraftKeydown(event: KeyboardEvent): Promise<void> {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onCancelDraft();
+      return;
+    }
+    if (event.key !== "Enter" || committingDraft) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const name = draftValue.trim();
+    if (!name) return;
+    committingDraft = true;
+    try {
+      await onCommitDraft(name);
+    } finally {
+      committingDraft = false;
+    }
+  }
 
   let listEl = $state<HTMLElement | null>(null);
   let scrollParent = $state<HTMLElement | null>(null);
@@ -215,6 +322,7 @@
   let viewportHeight = $state(800);
   let listOffsetTop = $state(0);
   let rowPitch = $state(FALLBACK_ROW_PITCH);
+  let listGapPx = $state(FALLBACK_LIST_GAP_PX);
 
   function findScrollParent(el: HTMLElement): HTMLElement | null {
     let parent = el.parentElement;
@@ -255,6 +363,7 @@
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(measure);
       resizeObserver.observe(parent);
+      if (el.parentElement) resizeObserver.observe(el.parentElement);
     }
     return () => {
       parent.removeEventListener("scroll", onScroll);
@@ -263,13 +372,30 @@
     };
   });
 
+  let appearanceRevision = $state(0);
+  $effect(() => {
+    const root = document.documentElement;
+    const changed = () => { appearanceRevision += 1; };
+    root.addEventListener("appearancechange", changed);
+    document.fonts?.addEventListener("loadingdone", changed);
+    return () => {
+      root.removeEventListener("appearancechange", changed);
+      document.fonts?.removeEventListener("loadingdone", changed);
+    };
+  });
+
   // Measure the real row pitch (row height + list gap) from two consecutive
   // rendered rows; keeps the window math correct across zoom/font changes.
   $effect(() => {
     void rows;
+    void appearanceRevision;
     const el = listEl;
     if (!el) {
       return;
+    }
+    const gap = readPxCustomProperty(el, "--project-tree-row-spacing", FALLBACK_LIST_GAP_PX);
+    if (Math.abs(gap - listGapPx) > 0.5) {
+      listGapPx = gap;
     }
     const rowEls = el.querySelectorAll<HTMLElement>("li[data-tree-row]");
     if (rowEls.length >= 2) {
@@ -277,11 +403,19 @@
       if (pitch > 8 && Math.abs(pitch - rowPitch) > 0.5) {
         rowPitch = pitch;
       }
+      return;
+    }
+    // Fewer than two rows rendered (a short or freshly windowed list): derive
+    // the pitch from the metric tokens rather than the hardcoded fallback.
+    const tokenPitch =
+      readPxCustomProperty(el, "--project-tree-row-height", FALLBACK_ROW_PITCH - gap) + gap;
+    if (tokenPitch > 8 && Math.abs(tokenPitch - rowPitch) > 0.5) {
+      rowPitch = tokenPitch;
     }
   });
 
   const visibleRange = $derived.by(() => {
-    const total = rows.length;
+    const total = displayRows.length;
     if (!scrollParent || total <= VIRTUALIZE_ROW_THRESHOLD) {
       return { start: 0, end: total };
     }
@@ -294,21 +428,21 @@
     return { start, end };
   });
 
-  const visibleRows = $derived(rows.slice(visibleRange.start, visibleRange.end));
+  const visibleRows = $derived(displayRows.slice(visibleRange.start, visibleRange.end));
   // Spacers sit in the same CSS grid as rows, so each spacer also contributes
   // one `gap`. Subtract that gap so windowed scroll height matches the
   // unwindowed list (F72).
   const topPadPx = $derived(
     visibleRange.start > 0
-      ? visibleRange.start * rowPitch - LIST_GAP_PX
+      ? visibleRange.start * rowPitch - listGapPx
       : 0,
   );
   const bottomPadPx = $derived.by(() => {
-    const remaining = rows.length - visibleRange.end;
+    const remaining = displayRows.length - visibleRange.end;
     if (remaining <= 0) {
       return 0;
     }
-    return remaining * rowPitch - LIST_GAP_PX;
+    return remaining * rowPitch - listGapPx;
   });
 
   // Reveal the active file even when its row is outside the rendered window
@@ -317,7 +451,7 @@
   // an auto-expand that adds the row later can still retry (F71).
   let lastRevealedPath: string | null = null;
   $effect(() => {
-    const path = activeFilePath;
+    const path = revealPath ?? activeFilePath;
     if (path === lastRevealedPath) {
       return;
     }
@@ -331,7 +465,7 @@
       lastRevealedPath = path;
       return;
     }
-    const index = rows.findIndex(
+    const index = displayRows.findIndex(
       (row) => row.kind === "node" && row.node.path === path,
     );
     if (index < 0) {
@@ -371,8 +505,24 @@
     {#if topPadPx > 0}
       <li class="project-tree-spacer" style={`height:${topPadPx}px`} aria-hidden="true"></li>
     {/if}
-    {#each visibleRows as row (projectTreeRowKey(row))}
-      {#if row.kind === "loading"}
+    {#each visibleRows as row (row.kind === "draft" ? "draft" : projectTreeRowKey(row))}
+      {#if row.kind === "draft"}
+        <li class="project-tree-draft" style={`--node-depth:${row.depth}`} data-tree-row>
+          {#if draft?.kind === "directory"}
+            <TreeChevron visible={false} />
+          {:else}
+            <ProjectFileIcon name={draftValue} colored={coloredFileIcons} />
+          {/if}
+          <input
+            use:focusDraftInput
+            bind:value={draftValue}
+            aria-label={draft?.kind === "directory" ? "New folder name" : "New file name"}
+            disabled={committingDraft}
+            onkeydown={handleDraftKeydown}
+            onblur={() => { if (!committingDraft) onCancelDraft(); }}
+          />
+        </li>
+      {:else if row.kind === "loading"}
         <li
           class="project-tree-loading"
           style={`--node-depth:${row.depth}`}
@@ -386,6 +536,7 @@
         </li>
       {:else}
         {@const labelTone = classifyProjectTreeLabelTone(row.node.name, row.node.kind)}
+        {@const changeTone = changeTones.get(normalizePathSync(row.node.path))}
         {@const fileChangeStatus = statusByPath?.get(row.node.path) ?? null}
         <li
           role="treeitem"
@@ -402,22 +553,21 @@
             title={row.node.path}
             style={`--node-depth:${row.depth}`}
             onclick={() => handleRowClick(row)}
+            ondblclick={() => handleRowDoubleClick(row)}
             oncontextmenu={(event) => onContextMenuNode(event, row.node)}
             onpointerdown={(event) => handlePointerDown(event, row.node)}
             onpointerenter={() => handlePointerEnter(row.node)}
             onpointerleave={handlePointerLeave}
           >
-            <span
-              class={`project-tree-chevron ${row.node.kind === "directory" && row.canExpand && row.expanded ? "project-tree-chevron-open" : ""}`}
-            >
-              {row.node.kind === "directory" && row.canExpand ? "▶" : ""}
-            </span>
             {#if row.node.kind === "directory"}
-              <DirectoryIcon />
+              <TreeChevron expanded={row.expanded && row.canExpand} visible={row.canExpand} />
             {:else}
-              <FileIcon />
+              <ProjectFileIcon name={row.node.name} colored={coloredFileIcons} />
             {/if}
-            <span class="project-tree-label project-tree-label-{labelTone}">{row.node.name}</span>
+            <span class={`project-tree-label project-tree-label-${labelTone} ${changeTone ? `project-tree-label-${changeTone}` : ""}`}>{row.node.name}</span>
+            {#if favoritePaths.has(normalizePathSync(row.node.path))}
+              <span class="project-tree-star" title="Favorite" aria-label="Favorite">★</span>
+            {/if}
             {#if fileChangeStatus}
               <span
                 class={`project-tree-status-badge project-tree-status-${fileChangeStatus}`}
@@ -438,7 +588,7 @@
 <style>
   .project-tree-view {
     min-height: 0;
-    padding: var(--space-2);
+    padding: var(--project-tree-padding);
   }
 
   .project-tree-view[data-dragging="true"] {
@@ -450,7 +600,7 @@
     margin: 0;
     padding: 0;
     display: grid;
-    gap: var(--space-1);
+    gap: var(--project-tree-row-spacing);
   }
 
   .project-tree-spacer {
@@ -463,24 +613,51 @@
     list-style: none;
     color: var(--color-text-secondary);
     font-size: var(--font-size-status);
-    padding: 0 var(--space-8);
-    padding-left: calc(var(--space-8) + var(--node-depth, 1) * var(--tree-indent));
+    padding: 0 var(--project-tree-row-padding-x);
+    padding-left: calc(
+      var(--project-tree-row-padding-x) + var(--node-depth, 1) * var(--project-tree-indent)
+    );
+  }
+
+  .project-tree-draft {
+    min-height: calc(var(--project-tree-row-height) + 2px);
+    display: flex;
+    align-items: center;
+    gap: var(--project-tree-row-gap);
+    padding-left: calc(
+      var(--project-tree-row-padding-x) + var(--node-depth) * var(--project-tree-indent)
+    );
+  }
+
+  .project-tree-draft input {
+    min-width: 0;
+    flex: 1;
+    height: 20px;
+    border: 1px solid var(--color-focus-ring);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    color: var(--color-text-primary);
+    font: inherit;
+    padding: 0 var(--space-3);
+    outline: none;
   }
 
   .project-tree-row {
     width: 100%;
-    min-height: 19px;
+    min-height: var(--project-tree-row-height);
     display: flex;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--project-tree-row-gap);
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--color-text-primary);
     font: inherit;
     text-align: left;
-    padding: 0 var(--space-2);
-    padding-left: calc(var(--space-2) + var(--node-depth) * var(--tree-indent));
+    padding: 0 var(--project-tree-row-padding-x);
+    padding-left: calc(
+      var(--project-tree-row-padding-x) + var(--node-depth) * var(--project-tree-indent)
+    );
   }
 
   .project-tree-row:hover {
@@ -500,17 +677,6 @@
 
   .project-tree-row-dragging {
     opacity: 0.45;
-  }
-
-  .project-tree-chevron {
-    width: 10px;
-    color: var(--color-text-secondary);
-    transform: rotate(0deg);
-    transition: transform var(--motion-fast) var(--easing-standard);
-  }
-
-  .project-tree-chevron-open {
-    transform: rotate(90deg);
   }
 
   .project-tree-label {
@@ -555,4 +721,7 @@
     color: var(--color-diff-removed);
     background: color-mix(in srgb, var(--color-diff-removed) 16%, transparent);
   }
+  .project-tree-label-pending { color: var(--project-pane-color-pending); }
+  .project-tree-label-conflicted, .project-tree-status-conflicted { color: var(--color-danger); }
+  .project-tree-star { color: var(--project-pane-color-favorite); flex-shrink: 0; }
 </style>

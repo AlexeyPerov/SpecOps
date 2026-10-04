@@ -139,11 +139,44 @@ metadata is allowed). The [Release](.github/workflows/release.yml) workflow
 rejects non-semver `v*` tags before building, then publishes a universal macOS
 bundle and Windows x64 installers as assets on that GitHub release.
 
-Before tagging, keep these version fields in sync:
+Use the release helper from the repository root (Node.js 24+, Git on `PATH`):
 
-- `app/package.json` → `version`
-- `app/src-tauri/tauri.conf.json` → `version`
-- `app/src-tauri/Cargo.toml` → `package.version`
+```sh
+# Increase 0.2.0 to 0.2.1, update all version files and changelog, then commit
+node scripts/release.mjs bump
+
+# Other version changes
+node scripts/release.mjs bump minor
+node scripts/release.mjs bump major
+node scripts/release.mjs bump 0.3.0
+
+# Push master and v<current-version> together to start the GitHub release build
+node scripts/release.mjs build
+
+# Alternatively, build local bundles with installed dependencies and sidecar
+node scripts/release.mjs build --local
+# Optional Tauri arguments
+node scripts/release.mjs build --local --bundles app
+```
+
+`bump` synchronizes the npm package and lockfile, Tauri config, Cargo manifest
+and Cargo lockfile. It adds a dated changelog entry and commits the version
+change on `master`; it does not push or start a release build. `build` pushes
+`master` and an annotated version tag atomically to `origin`, which triggers
+the Release workflow. Monitor progress in [GitHub Actions](https://github.com/AlexeyPerov/spec-ops/actions/workflows/release.yml).
+
+Both release commands require a clean checkout on `master`. `build` refuses an
+already published tag and requires local `master` to include remote `master`.
+For another published release, bump the version first. If a push fails, rerun
+`build`; a local tag is reused only when it points to the current commit.
+If the version commit fails (for example, a commit hook fails), the updated
+files stay staged so you can resolve the failure and commit them.
+`build --local` uses the current checkout without committing, pushing or
+creating a tag. The script resolves repository paths itself, so it also works
+when invoked by its path from another directory.
+On macOS, a successful local DMG build opens the finished installer in Finder.
+It stays mounted until you eject it; the temporary window shown during packaging
+still closes when the builder finishes configuring the disk image.
 
 ## Docs
 

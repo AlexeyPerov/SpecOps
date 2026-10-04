@@ -1,3 +1,4 @@
+import { relocateProjectFavorites } from "./projectFavorites";
 import { join } from "@tauri-apps/api/path";
 import { exists, mkdir, readFile, remove, rename } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
@@ -73,9 +74,20 @@ export function validateEntryName(name: string): string | null {
   return null;
 }
 
-export function isBlockedProjectTreeDirectory(dirPath: string): boolean {
+export function isBlockedProjectTreeDirectory(
+  dirPath: string,
+  workspaceRoot?: string,
+): boolean {
   const normalized = normalizePathSync(dirPath).replace(/\/+$/, "");
-  const segments = normalized.split("/").filter(Boolean);
+  const normalizedRoot = workspaceRoot
+    ? normalizePathSync(workspaceRoot).replace(/\/+$/, "")
+    : null;
+  const relative =
+    normalizedRoot &&
+    (normalized === normalizedRoot || normalized.startsWith(`${normalizedRoot}/`))
+      ? normalized.slice(normalizedRoot.length + (normalized === normalizedRoot ? 0 : 1))
+      : normalized;
+  const segments = relative.split("/").filter(Boolean);
   for (const segment of segments) {
     if (segment.startsWith(".")) {
       return true;
@@ -141,7 +153,7 @@ export async function createProjectFile(
   if (!isPathUnderRoot(parentDirPath, workspaceRoot)) {
     return { ok: false, reason: "Parent folder is outside the workspace." };
   }
-  if (isBlockedProjectTreeDirectory(parentDirPath)) {
+  if (isBlockedProjectTreeDirectory(parentDirPath, workspaceRoot)) {
     return { ok: false, reason: "Cannot create files in this folder." };
   }
   const targetPath = await join(parentDirPath, name.trim());
@@ -177,7 +189,7 @@ export async function replaceInProjectFile(
   if (!isPathUnderRoot(filePath, workspaceRoot)) {
     return { ok: false, reason: "File is outside the workspace.", count: 0 };
   }
-  if (isBlockedProjectTreeDirectory(filePath)) {
+  if (isBlockedProjectTreeDirectory(parentDirectory(filePath), workspaceRoot)) {
     return { ok: false, reason: "Cannot modify files in this folder.", count: 0 };
   }
   // Read raw bytes and strict-decode, mirroring the open-file path (C5). A
@@ -261,7 +273,7 @@ export async function createProjectFolder(
   if (!isPathUnderRoot(parentDirPath, workspaceRoot)) {
     return { ok: false, reason: "Parent folder is outside the workspace." };
   }
-  if (isBlockedProjectTreeDirectory(parentDirPath)) {
+  if (isBlockedProjectTreeDirectory(parentDirPath, workspaceRoot)) {
     return { ok: false, reason: "Cannot create folders in this folder." };
   }
   const targetPath = await join(parentDirPath, name.trim());
@@ -302,6 +314,7 @@ export async function renameProjectEntry(
   }
   try {
     await rename(entryPath, targetPath);
+    await relocateProjectFavorites(workspaceRoot, entryPath, targetPath).catch(() => {});
     await syncDocumentsAfterPathRelocation(workspaceRoot, entryPath, targetPath, windowId);
     return { ok: true, path: targetPath };
   } catch (error: unknown) {
@@ -324,6 +337,7 @@ export async function deleteProjectEntry(
   }
   try {
     await remove(entryPath, { recursive: true });
+    await relocateProjectFavorites(workspaceRoot, entryPath, null).catch(() => {});
     markDocumentsMissingUnderPath(workspaceRoot, entryPath);
     closeTabsForDeletedDocumentsUnderPath(workspaceRoot, entryPath);
     return { ok: true, path: entryPath };
@@ -349,6 +363,7 @@ export async function moveProjectEntry(
   }
   try {
     await rename(sourcePath, targetPath);
+    await relocateProjectFavorites(workspaceRoot, sourcePath, targetPath).catch(() => {});
     await syncDocumentsAfterPathRelocation(workspaceRoot, sourcePath, targetPath, windowId);
     return { ok: true, path: targetPath };
   } catch (error: unknown) {

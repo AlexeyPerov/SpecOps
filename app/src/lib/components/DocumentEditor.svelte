@@ -5,6 +5,7 @@
   import { listEnabledMarkdownSnippetsMemoized } from "../editor/markdownSnippetSettings";
   import { appState } from "../state/appState";
   import type { ResolvedMarkdownSnippet } from "../domain/snippets";
+  import { promoteTransientTabForDocument } from "../services/transientTabs";
 
   /**
    * Stable empty array for the non-markdown path (P03-08-24a). Returning a new
@@ -27,6 +28,7 @@
     showFoldGutter = true,
     autoClosePairs = true,
     autoSuggest = false,
+    textColumnWidthPx = null as number | null,
     onStatusMessage = () => {},
     onUntitledTitleRefresh = undefined as
       | ((documentId: string) => void)
@@ -47,6 +49,7 @@
     showFoldGutter?: boolean;
     autoClosePairs?: boolean;
     autoSuggest?: boolean;
+    textColumnWidthPx?: number | null;
     onStatusMessage?: (message: string) => void;
     onUntitledTitleRefresh?: ((documentId: string) => void) | undefined;
     onScrollTopChange?: (documentId: string, scrollTop: number) => void;
@@ -73,6 +76,27 @@
     }
   }
 
+  /**
+   * The user moved the caret or changed the selection in this document —
+   * enough of a commitment to keep a previewed file, so its transient tab is
+   * promoted to an ordinary one.
+   */
+  function handleUserSelection(documentId: string): void {
+    promoteTransientTabForDocument(documentId);
+  }
+
+  /**
+   * Commits the width set by dragging the text column's edge handle. Written
+   * straight to the store like the dirty-content path — the surface already
+   * knows which document it hosts, so the width needs no prop chain back up.
+   */
+  function handleTextColumnWidthChange(
+    targetDocumentId: string,
+    widthPx: number | null,
+  ): void {
+    appState.setDocumentTextColumnWidthForContext(contextId, targetDocumentId, widthPx);
+  }
+
   function handleScrollTopChange(documentId: string, nextScrollTop: number): void {
     if (appState.getSnapshot().contexts.activeContextId === contextId) {
       onScrollTopChange(documentId, nextScrollTop);
@@ -97,8 +121,11 @@
   {autoClosePairs}
   {autoSuggest}
   {enabledSnippets}
+  {textColumnWidthPx}
   {onStatusMessage}
   onDocumentDirty={handleDocumentDirty}
   onScrollTopChange={handleScrollTopChange}
+  onUserSelection={handleUserSelection}
+  onTextColumnWidthChange={handleTextColumnWidthChange}
   {visible}
 />

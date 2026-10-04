@@ -28,6 +28,7 @@ export class ClaudeTurn {
   private streamed = new Set<string>();
   private messageId = "";
   private settling?: Promise<void>;
+  private failureMessage = "Native turn failed or was interrupted; resume explicitly.";
   private timer: ReturnType<typeof setTimeout>;
   constructor(
     readonly request: AgentTurnRequest,
@@ -263,6 +264,7 @@ export class ClaudeTurn {
     }
     if (m.type === "assistant") {
       if (m.error) {
+        this.nativeFailure(m.error);
         void this.stop("turn.failed");
         return;
       }
@@ -378,6 +380,8 @@ export class ClaudeTurn {
             ? this.cost(m.total_cost_usd)
             : undefined,
         });
+      if (m.subtype === "error_max_turns") this.failureMessage = "Native turn limit reached. Explicit resume keeps this session limit; create a new session to choose another limit.";
+      if (m.subtype === "error_max_budget_usd") this.failureMessage = "Native query budget reached. Explicit resume keeps this session budget; create a new session to choose another budget.";
       this.finish(
         m.subtype === "success" && !m.is_error
           ? "turn.finished"
@@ -392,6 +396,24 @@ export class ClaudeTurn {
       message: "Unmapped native session event",
       redactedRaw: redactForSerialization(this.clean(m, 2048), 2048),
     });
+  }
+  private nativeFailure(error: unknown) {
+    // Only pinned SDK categories select recovery text. Native payloads never become UI errors.
+    const messages: Record<string, string> = {
+      authentication_failed: "Selected profile authentication was rejected. Verify its API key, then resume explicitly.",
+      oauth_org_not_allowed: "Selected authentication is not supported. Use the selected profile API key.",
+      cloud_credential_error: "Selected authentication is not supported. Use the selected profile API key.",
+      account_on_hold: "Selected account is on hold. Resolve its account status, then resume explicitly.",
+      verification_required: "Selected account requires verification. Resolve its account status, then resume explicitly.",
+      billing_error: "Selected account billing or quota prevented this turn. Check that account, then resume explicitly.",
+      rate_limit: "Selected account is rate limited. Wait before explicitly resuming this session.",
+      overloaded: "Native service is overloaded. Wait before explicitly resuming this session.",
+      server_error: "Native service failed. Check connectivity, then resume explicitly.",
+      invalid_request: "Native request was rejected. Check the selected model and session settings before resuming.",
+      model_not_found: "Selected model is unavailable. Review model access; the existing session binding remains unchanged.",
+      max_output_tokens: "Native output limit interrupted this turn. Resume explicitly to continue.",
+    };
+    if (typeof error === "string" && Object.hasOwn(messages, error)) this.failureMessage = messages[error]!;
   }
   finish(type: "turn.finished" | "turn.failed" | "turn.cancelled") {
     if (this.ended || this.finishing) return;
@@ -415,8 +437,7 @@ export class ClaudeTurn {
         ? {
             type,
             turnId: this.request.turnId,
-            message:
-              "Native turn failed or was interrupted; resume explicitly.",
+            message: this.failureMessage,
           }
         : { type, turnId: this.request.turnId },
     );

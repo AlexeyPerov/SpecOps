@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 22:10 MSK — Harden native runtime recovery and common secret boundaries
+
+- Implemented AS05-D source fault/security matrix and static actionable native error/limit recovery. Failed turns preserve selected account credentials/generation/session/settings, do not replay prompts or rotate bindings, and leave siblings usable. Native history identity fields and normalized envelopes are now redacted at the full common hydration boundary.
+- Added actual pinned SDK child-exit/stderr-canary checks, production three-runtime host SIGKILL with pending native approval, credential-bearing persisted/corrupt-cache hydration and three-runtime support-export coverage. Host/frontend checks/builds and copied-assets account-free control smoke passed.
+- Published dedicated API key setup, immutable session recovery, native feature/support limitations and a blocked expanded subset release record. Actual credentials/provider enforcement, signed installed/legal/platform cleanup and immediate unobserved descendant-exit acceptance remain open. No migrations or compatibility shims.
+
 ## 2026-10-04 21:58 MSK — Add native third-runtime interactions and immutable policy controls
 
 - Implemented AS05-C source correlated native permission/question callbacks, once-only resolution, safe session-scoped rule approval, unsupported-dialog cancellation, deadline/Stop/reconnect interruption and stale profile/turn/generation rejection. Authenticated native source turns are enabled; installed/live acceptance remains open. The actual pinned SDK control dispatcher is covered by a child-process wire fixture, without credentials or inference.

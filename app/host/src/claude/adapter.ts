@@ -793,7 +793,9 @@ export class ClaudeRuntimeAdapter
         }
       }
       flush();
-      return { ...binding.native, history };
+      // Native identity fields are untrusted transcript data too. Redact the full
+      // common history boundary, including IDs and normalized event envelopes.
+      return { ...binding.native, history: safe(history) };
     } finally {
       done();
     }

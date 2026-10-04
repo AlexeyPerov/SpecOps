@@ -37,3 +37,5 @@ Shared activity and installed packaging/diagnostics are independent early gates 
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
 
 AS04-C extends early shared activity and host/Node/native asset/support source infrastructure; source and external acceptance are separated in [04-C evidence](../04-opencode-adapter/implementation-notes-phase-c.md) and [the blocked subset baseline](../08-release-gates/baseline-04-c.md). Installed/live evidence remains open; this does not mark the phase Done.
+
+AS05-D extends the early source security/support matrix with native recovery categories, full-history identity redaction, production three-runtime host-loss and persisted/cache/export canaries. [Source evidence](../05-claude-adapter/implementation-notes-phase-d.md) and [blocked subset decision](../08-release-gates/baseline-05-d.md) retain installed/writer/platform acceptance as open.

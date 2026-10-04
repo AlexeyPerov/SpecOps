@@ -16,7 +16,8 @@ it('actual whole-host death settles two native streams including a pending appro
   const host = spawn(process.execPath, [join(hostDir, 'dist/index.js')], { detached: true, env: { ...process.env, SPECOPS_CODEX_EXECUTABLE: executable, SPECOPS_PROFILE_ROOT: join(root, 'profiles') } });
   cleanup.push(() => { try { process.kill(-host.pid!, 'SIGKILL'); } catch {} });
   let exited = false; let id = 0; let carry = ''; const listeners = new Set<(value: unknown) => void>(); const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
-  host.on('exit', () => { exited = true; for (const request of pending.values()) request.reject(new Error('Host exited')); pending.clear(); });
+  let hostErrors = ''; host.stderr.setEncoding('utf8');host.stderr.on('data', chunk=>{hostErrors += chunk;});
+  host.on('exit', () => { exited = true; for (const request of pending.values()) request.reject(new Error('Host exited: '+hostErrors)); pending.clear(); });
   host.stdout.setEncoding('utf8'); host.stdout.on('data', chunk => {
     carry += chunk; let end: number;
     while ((end = carry.indexOf('\n')) >= 0) { const line = carry.slice(0, end); carry = carry.slice(end + 1); if (!line) continue; const frame = JSON.parse(line);
@@ -40,15 +41,36 @@ it('actual whole-host death settles two native streams including a pending appro
   const requests = readFileSync(join(root, 'profiles', profile.id, 'home', 'fixture-requests.jsonl'), 'utf8'); expect(requests.match(/thread\/start/g)).toHaveLength(2); const history = JSON.parse(readFileSync(join(root, 'profiles', profile.id, 'home', 'fixture-history.json'), 'utf8')); expect(Object.values(history).map(value => (value as { turns: unknown[] }).turns.length)).toEqual([1, 1]);
 }, 15000);
 
-it('actual whole-host death settles Codex and OpenCode streams together without replay', async () => {
+it.each([false, true])('actual whole-host death settles Codex/OpenCode and optional Claude=%s without replay', async (withClaude) => {
   const root = mkdtempSync(join(tmpdir(), 'specops-host-death-')); cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const executable = join(root, 'native.cjs'); writeFileSync(executable, threadFixture, { mode: 0o700 });
   const openExecutable = join(root, 'native.mjs'); copyFileSync(resolve('host/src/opencode/nativeFixture.mjs'), openExecutable); chmodSync(openExecutable, 0o700);
   const hostDir = resolve('host'); const built = spawnSync(process.execPath, ['scripts/build.mjs'], { cwd: hostDir, encoding: 'utf8' }); expect(built.status).toBe(0);
-  const host = spawn(process.execPath, [join(hostDir, 'dist/index.js')], { detached: true, env: { ...process.env, SPECOPS_CODEX_EXECUTABLE: executable, SPECOPS_OPENCODE_EXECUTABLE: openExecutable, SPECOPS_PROFILE_ROOT: join(root, 'profiles') } });
+  let entry = join(hostDir, 'dist/index.js');
+  if (withClaude) {
+    // Only the Claude driver/auth verifier are injected. Production host framing,
+    // dispatcher, adapters and client own transport failure and other runtimes.
+    const harness = join(root, 'host-fixture.mjs');
+    const source = join(root, 'host-fixture.ts');
+    writeFileSync(source, `
+      import { createHost } from ${JSON.stringify(join(hostDir,'src/host.ts'))};
+      import { ClaudeRuntimeAdapter } from ${JSON.stringify(join(hostDir,'src/claude/adapter.ts'))};
+      import { ClaudeFixtureDriver, fixturePath } from ${JSON.stringify(join(hostDir,'src/claude/fixtures.ts'))};
+      import { CLAUDE_SDK_VERSION, CLAUDE_NATIVE_VERSION } from ${JSON.stringify(join(hostDir,'src/claude/runtime.ts'))};
+      const profileRoot = ${JSON.stringify(join(root,'profiles','claude'))};
+      const driver = new ClaudeFixtureDriver(fixturePath(profileRoot));
+      const adapter = new ClaudeRuntimeAdapter({profileRoot,assets:()=>({sdk:'fixture',executable:'fixture',sdkVersion:CLAUDE_SDK_VERSION,nativeVersion:CLAUDE_NATIVE_VERSION}),verifyKey:async()=>{},probe:async()=>[{value:'native-model',displayName:'Native model'}],sessionDriver:()=>driver});
+      createHost({extraAdapters:[adapter]}).run().then(code=>process.exit(code));
+    `);
+    const bundled = spawnSync(join(hostDir,'../node_modules/.bin/esbuild'),[source,'--bundle','--platform=node','--format=esm',`--outfile=${harness}`,"--banner:js=import { createRequire as harnessCreateRequire } from 'node:module'; const require = harnessCreateRequire(import.meta.url);"],{encoding:'utf8'});
+    expect(bundled.status, bundled.stderr).toBe(0);
+    entry = harness;
+  }
+  const host = spawn(process.execPath, [entry], { detached: true, env: { ...process.env, SPECOPS_CODEX_EXECUTABLE: executable, SPECOPS_OPENCODE_EXECUTABLE: openExecutable, SPECOPS_PROFILE_ROOT: join(root, 'profiles') } });
   cleanup.push(() => { try { process.kill(-host.pid!, 'SIGKILL'); } catch {} });
   let exited = false; let id = 0; let carry = ''; const listeners = new Set<(value: unknown) => void>(); const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
-  host.on('exit', () => { exited = true; for (const request of pending.values()) request.reject(new Error('Host exited')); pending.clear(); });
+  let hostErrors = ''; host.stderr.setEncoding('utf8');host.stderr.on('data', chunk=>{hostErrors += chunk;});
+  host.on('exit', () => { exited = true; for (const request of pending.values()) request.reject(new Error('Host exited: '+hostErrors)); pending.clear(); });
   host.stdout.setEncoding('utf8'); host.stdout.on('data', chunk => {
     carry += chunk; let end: number;
     while ((end = carry.indexOf('\n')) >= 0) { const line = carry.slice(0, end); carry = carry.slice(end + 1); if (!line) continue; const frame = JSON.parse(line);
@@ -90,8 +112,25 @@ it('actual whole-host death settles Codex and OpenCode streams together without 
   const resumed = await client.resumeSession({ native: b, workspaceRootPath: root }); expect(resumed.nativeSessionId).toBe(b.nativeSessionId);
   second = client.sendTurn({ native: b, turnId: asSpecOpsTurnId('turn-b-recovered'), workspaceRootPath: root, prompt: 'cancel' })[Symbol.asyncIterator](); await second.next();
   await waitForNativePrompt(2);
+  let claudeStream: AsyncIterator<unknown> | undefined;
+  let claudeBinding: Awaited<ReturnType<typeof client.createSession>> | undefined;
+  if (withClaude) {
+    const profile = (await client.authenticate({runtimeId:'claude',workspaceRootPath:root,options:{action:'create-profile'}})).profile!;
+    writeFileSync(join(root,'profiles','claude',profile.id,'api-key'),'host-death-private-key-canary',{mode:0o600});
+    await client.authenticate({runtimeId:'claude',workspaceRootPath:root,connectionProfileId:profile.id,credential:{kind:'api-key',ref:'profile-api-key'},options:{action:'login-api-key'}});
+    claudeBinding = await client.createSession({runtimeId:'claude',workspaceRootPath:root,connectionProfileId:profile.id,modelId:'native-model'});
+    const stream = client.sendTurn({native:claudeBinding,turnId:asSpecOpsTurnId('claude-pending'),workspaceRootPath:root,prompt:'approve'})[Symbol.asyncIterator]();
+    let value = await stream.next(); while(value.value?.type !== 'permission.requested') value = await stream.next();
+    claudeStream = stream;
+  }
   const failedA = expect(first.next()).rejects.toThrow(/Host.*(?:exited|stopped)/); const failedB = (async () => { try { for (;;) { const value = await second.next(); if (value.done) break; } throw new Error('unexpected completion'); } catch (error) { expect(String(error)).toMatch(/Host.*(?:exited|stopped)/); } })();
-  host.kill('SIGKILL'); await failedA; await failedB;
+  const failedClaude = claudeStream ? expect(claudeStream.next()).rejects.toThrow(/Host.*(?:exited|stopped)/) : Promise.resolve();
+  host.kill('SIGKILL'); await failedA; await failedB; await failedClaude;
+  if (claudeBinding) {
+    expect(claudeBinding.runtimeId).toBe('claude');
+    const history = JSON.parse(readFileSync(join(root,'profiles','claude','fixture-history.json'),'utf8'));
+    expect(Object.keys(history)).toEqual([claudeBinding.nativeSessionId]); expect(history[claudeBinding.nativeSessionId]).toHaveLength(1);
+  }
   expect(exited).toBe(true); expect(listeners.size).toBe(0); expect(a.nativeSessionId).not.toBe(b.nativeSessionId); expect(a.connectionProfileId).toBe(profile.id);
   const requests = readFileSync(join(root, 'profiles', profile.id, 'home', 'fixture-requests.jsonl'), 'utf8'); expect(requests.match(/thread\/start/g)).toHaveLength(2); const history = JSON.parse(readFileSync(join(root, 'profiles', profile.id, 'home', 'fixture-history.json'), 'utf8')); expect(Object.values(history).map(value => (value as { turns: unknown[] }).turns.length)).toEqual([1, 1]);
   expect(b.runtimeId).toBe('opencode'); expect(b.connectionProfileId).toBe(otherProfile.id); const otherHistory = JSON.parse(readFileSync(join(root, 'profiles', 'opencode', otherProfile.id, 'fixture-sessions.json'), 'utf8')); expect(Object.values(otherHistory).map(value => (value as { messages: unknown[] }).messages.length)).toEqual([2]);

@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** Source recovery/security and setup/subset evidence implemented; installed/live baseline acceptance open
 
 **Prerequisites:** AS05-A/AS05-B/AS05-C accepted; early 03-A/03-B extended for Claude.
 
@@ -52,3 +52,7 @@ Document current setup/auth/policy evidence, config/native feature scope, limits
 ## Exit and next work
 
 Mark Claude baseline accepted only with evidence; proceed to scheduled handoff/native extensions. Codex remains an earlier baseline. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+
+## Recorded source evidence
+
+[AS05-D notes](implementation-notes-phase-d.md) records implemented fault/security checks, actual SDK child-death wire, production triple-runtime host-loss and persisted-cache/export canaries. D-01/D-02 source scope passes; D-03 actual credential/signed installed/platform acceptance remains open. D-04 source setup/recovery/subset decision is published; the [expanded subset](../08-release-gates/baseline-05-d.md) is blocked and Claude baseline is not accepted. No broad Done claim or Codex dependency follows from source fixtures.

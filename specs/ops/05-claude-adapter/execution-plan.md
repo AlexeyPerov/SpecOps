@@ -2,9 +2,9 @@
 
 **Updated:** 2026-10-04
 
-**Status:** A–C source native sessions/interactions/policies implemented; D and installed/live gates remain open.
+**Status:** A–D source native sessions/interactions/policies/recovery/security implemented; installed/live baseline gates remain open.
 
-**Evidence:** [Phase A notes](implementation-notes-phase-a.md) · [Phase B notes](implementation-notes-phase-b.md) · [Phase C notes](implementation-notes-phase-c.md)
+**Evidence:** [Phase A notes](implementation-notes-phase-a.md) · [Phase B notes](implementation-notes-phase-b.md) · [Phase C notes](implementation-notes-phase-c.md) · [Phase D notes](implementation-notes-phase-d.md)
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 

@@ -230,6 +230,8 @@ import { ClaudeRuntimeAdapter } from '../../../host/src/claude/adapter';
 import { ClaudeFixtureDriver, fixturePath } from '../../../host/src/claude/fixtures';
 import { CLAUDE_NATIVE_VERSION, CLAUDE_SDK_VERSION } from '../../../host/src/claude/runtime';
 it.each(['divergent','corrupt'] as const)('Claude native %s cache uses production dispatcher/client/pipeline/disk and profile-bound authoritative history',async cache=>{
+ const firstPrompt = cache === 'corrupt' ? 'secret' : 'hello';
+ const firstAnswer = cache === 'corrupt' ? '[redacted] private' : 'Native fixture answer';
  const root=join(dataDir,'workspace');await mkdir(root);
  const profileRoot=join(dataDir,'profiles');const driver=new ClaudeFixtureDriver(fixturePath(profileRoot));
  const options={profileRoot,enableNativeTurns:true,assets:()=>({sdk:'fixture',executable:'fixture',sdkVersion:CLAUDE_SDK_VERSION,nativeVersion:CLAUDE_NATIVE_VERSION}),probe:async()=>[{value:'native-model',displayName:'Native model'}],verifyKey:async()=>{},sessionDriver:()=>driver};
@@ -237,20 +239,21 @@ it.each(['divergent','corrupt'] as const)('Claude native %s cache uses productio
  const client=await nativeClient(first,1);bindAgentHostClientForTests(()=>client);
  chatStore.setActiveWorkspaceRoot(root);const sessionId=chatStore.createDraftSession()!;
  chatStore.updateThreadMetadata({runtimeId:'claude',connectionProfileId:profile.id,selectedModelId:'native-model'});
- chatStore.appendMessage({id:'user-first',role:'user',content:'hello',createdAt:'t'},{sessionId});chatStore.beginTurn('first',sessionId);
+ chatStore.appendMessage({id:'user-first',role:'user',content:firstPrompt,createdAt:'t'},{sessionId});chatStore.beginTurn('first',sessionId);
  expect(await executeProviderTurn({root,activeSessionId:sessionId,turnId:'first'})).toMatchObject({ok:true});
  const binding=chatStore.getSessionLink(sessionId,root)!;expect(binding).toMatchObject({runtimeId:'claude',connectionProfileId:profile.id,modelId:'native-model',runtimeMetadata:{workspaceRootPath:realpathSync(root),configScope:'isolated',toolSet:'native',permissionMode:'default',writeCapability:'possible'}});
- const saved=chatStore.getActiveThreadSnapshot(sessionId)!;const turn=saved.messages.find(m=>m.role==='assistant')!.nativeTurnId;
+ const saved=chatStore.getActiveThreadSnapshot(sessionId)!;expect(JSON.stringify(saved)).not.toContain('fixture-private-key-canary');const turn=saved.messages.find(m=>m.role==='assistant')!.nativeTurnId;
  if(cache==='divergent')saved.messages=saved.messages.map(m=>({...m,content:'stale cache'}));
  await persistSessionThreadSnapshot(root,sessionId,saved);await flushSessionIndexPersistence(root);
+ const {getSessionThreadFilePath:cachedPath}=await import('./chatPersistencePaths');expect(await readFile(await cachedPath(root,sessionId),'utf8')).not.toContain('fixture-private-key-canary');
  if(cache==='corrupt'){const {getSessionThreadFilePath}=await import('./chatPersistencePaths');await writeFile(await getSessionThreadFilePath(root,sessionId),'{broken');}
  first.close();chatStore.reset();chatStore.setActiveWorkspaceRoot(root);await chatStore.loadWorkspaceSessions(root);expect(chatStore.getSessionLink(sessionId,root)).toEqual(binding);
  const fresh=new ClaudeRuntimeAdapter(options);nativeRuntimes.push(fresh);const freshClient=await nativeClient(fresh,2);bindAgentHostClientForTests(()=>freshClient);chatStore.setActiveSessionId(sessionId);
  chatStore.appendMessage({id:'user-next',role:'user',content:'hello',createdAt:'t2'},{sessionId});chatStore.beginTurn('next',sessionId);expect(await executeProviderTurn({root,activeSessionId:sessionId,turnId:'next'})).toMatchObject({ok:true});
  const messages=chatStore.getMessages(sessionId);expect(messages.filter(m=>m.id==='user-first')).toHaveLength(1);expect(messages.filter(m=>m.role==='assistant')).toHaveLength(2);expect(messages.some(m=>m.content==='stale cache')).toBe(false);
- const previous=messages.find(m=>m.role==='assistant'&&m.nativeTurnId===turn)!;expect(previous.content).toBe('Native fixture answer');expect(previous.toolCalls).toHaveLength(1);expect(previous.completionState).toBe('completed');expect(previous.parts?.some(p=>p.type==='reasoning')).toBe(true);
+ const previous=messages.find(m=>m.role==='assistant'&&m.nativeTurnId===turn)!;expect(previous.content).toBe(firstAnswer);expect(previous.toolCalls).toHaveLength(1);expect(previous.completionState).toBe('completed');expect(previous.parts?.some(p=>p.type==='reasoning')).toBe(true);
  expect(chatStore.getSessionLink(sessionId,root)).toEqual(binding);
- const resumed=await fresh.resumeSession({native:{...binding,nativeSessionId:binding.nativeSessionId as never},workspaceRootPath:root});expect(resumed.history?.filter(m=>m.role==='user').map(m=>m.content)).toEqual(['hello','hello']);
+ const resumed=await fresh.resumeSession({native:{...binding,nativeSessionId:binding.nativeSessionId as never},workspaceRootPath:root});expect(resumed.history?.filter(m=>m.role==='user').map(m=>m.content)).toEqual([firstPrompt,'hello']);
  const nativeDb=JSON.parse(await readFile(fixturePath(profileRoot),'utf8'));expect(Object.keys(nativeDb)).toHaveLength(1);expect(driver.calls.filter(c=>c.sessionId)).toHaveLength(2); // One control-only initialization plus first native prompt.
  expect(JSON.stringify(messages)).not.toContain('fixture-private-key-canary');
  delete nativeDb[binding.nativeSessionId];await writeFile(fixturePath(profileRoot),JSON.stringify(nativeDb));fresh.close();chatStore.appendMessage({id:'missing',role:'user',content:'continue',createdAt:'t3'},{sessionId});chatStore.beginTurn('missing',sessionId);

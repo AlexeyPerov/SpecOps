@@ -1,3 +1,4 @@
+import { consumeHandoffSendPermit } from "../services/handoffPersistence";
 import { confirmConcurrentWorkspaceWork } from "../services/sessionActivity";
 import { notifyVersionControlMutation } from "../git/versionControlRefresh";
 import { reconcileNativeHistory } from "../session/history";
@@ -398,6 +399,7 @@ export async function executeProviderTurn(params: {
   turnId: string;
   modelId?: string;
   modeId?: string;
+  handoffPermit?: string;
   previousError?: ChatTurnError | null;
   context?: ChatSendContext;
 }): Promise<SendChatMessageResult> {
@@ -432,6 +434,11 @@ export async function executeProviderTurn(params: {
     };
   }
 
+  const handoff = chatStore.getWorkspaceSessionsState(root)?.sessionIndex.find(entry => entry.id === activeSessionId)?.handoff ?? thread.metadata.handoff;
+  if (handoff && userMessage.id === handoff.initialMessageId && !consumeHandoffSendPermit(params.handoffPermit, root, activeSessionId, userMessage.content)) {
+    chatStore.completeTurn(activeSessionId, root);
+    return { ok: false, reason: "provider_unavailable", message: "The handoff first prompt may already have been accepted. Open the known target and inspect native history; continue with a new message. It was not resubmitted." };
+  }
   const assistantMessage = createAssistantPlaceholder(turnId);
   chatStore.appendMessage(assistantMessage, { sessionId: activeSessionId, skipCompaction: true });
   let hasScheduledStreamingPersistence = false;

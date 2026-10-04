@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Planned
+**Status:** Handoff source implemented; external acceptance and B/C remain open
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -20,7 +20,7 @@ Group later work without blocking initial native baselines: handoff, retained Op
 
 | Phase | Plan | State |
 | --- | --- | --- |
-| AS06-A | [Reviewable handoff and lineage](execution-plan-phase-a-handoff.md) | Planned |
+| AS06-A | [Reviewable handoff and lineage](execution-plan-phase-a-handoff.md) | Source verified; live/installed pending |
 | AS06-B | [OpenCode native extensions](execution-plan-phase-b-opencode-extensions.md) | Planned |
 | AS06-C | [Simultaneous Codex profiles](execution-plan-phase-c-codex-profiles.md) | Planned |
 
@@ -37,3 +37,5 @@ Default order is after Claude baseline. A technically needs at least two accepte
 - [ ] Setup/support limitations, accepted evidence and changelog updated when implementation lands.
 
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
+
+**AS06-A source evidence:** [Review packet, durable intent and ordered native adapter fixtures](implementation-notes-phase-a.md). Nine fixture pairs and common source regression pass; paid/provider/account and signed installed acceptance remains open. Unix durable storage is mandatory; unsupported platforms fail closed before native creation. [Selected 08-A recommendation](../08-release-gates/baseline-06-a.md) remains blocked.

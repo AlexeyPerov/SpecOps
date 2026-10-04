@@ -1,4 +1,6 @@
 <script lang="ts">
+  import SessionHandoffDialog from "./SessionHandoffDialog.svelte";
+  let handoffSource = $state<{ sessionId: string; root: string } | null>(null);
   import { persistSessionConnectionSelection } from "../ai/composerSendActions";
   import { workspaceActivity } from "../services/sessionActivity";
   import ConnectionProfilePanel from "./ConnectionProfilePanel.svelte";
@@ -252,6 +254,9 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
   }
 </script>
 
+{#if handoffSource}
+  <SessionHandoffDialog sourceSessionId={handoffSource.sessionId} workspaceRootPath={handoffSource.root} onClose={() => { handoffSource = null; }} />
+{/if}
 <section class="chat-panel" aria-label="Session chat">
   <div class="chat-panel-header">
     <div class="chat-panel-title-group">
@@ -285,6 +290,9 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
           Restart host
         </button>
       {/if}
+      {#if sessionIndexEntry?.nativeSessionId && activeSessionId}
+        <button type="button" class="btn btn-sm" disabled={isGenerating || isBlocked} onclick={() => { if (activeSessionId) handoffSource = { sessionId: activeSessionId, root: workspaceRootPath }; }}>Handoff</button>
+      {/if}
       {#if canDeleteSession}
         <button
           type="button"
@@ -299,6 +307,11 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
   </div>
 
   <div class="chat-panel-stack">
+    {#if metadata?.handoff}
+      <p>Handoff from SpecOps session {metadata.handoff.sourceSessionId}; target {metadata.handoff.targetSessionId}, profile {metadata.handoff.targetProfileId ?? 'none'}.
+        <button onclick={() => chatStore.setActiveSessionId(metadata!.handoff!.sourceSessionId)}>Open source</button>
+      </p>
+    {/if}
     <ChatBlockedState isAccessBlocked={isBlocked} {accessBlockedCopy} />
 
     <ChatMessageList

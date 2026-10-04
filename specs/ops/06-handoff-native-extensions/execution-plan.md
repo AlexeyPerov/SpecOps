@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Planned
+**Status:** A source verified with external gates open; B/C planned
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -26,3 +26,7 @@ Default order is after Claude baseline. A technically needs at least two accepte
 ## Task tracking
 
 Task prefix is `AS06-<phase>-<NN>`. Numeric folders reflect the default delivery sequence; cross-stage gates and later/recurring work are explicit above. Mark only implemented and verified tasks `[DONE]`, record pinned contracts and actual smoke/support scope, and update `specs/changelog.md`. Completed records live in [done](../done/README.md); open acceptance remains active.
+
+## AS06-A source result
+
+[Implementation evidence](implementation-notes-phase-a.md): exact reviewed prompt, fresh native target, immutable profile/policy, neutral lineage and strict before-action intent CAS are implemented. All nine ordered source-adapter fixture pairs pass; real account/provider/installed acceptance is pending. No automatic repeat of an unknown creation or possibly accepted prompt is permitted. B/C remain independent later plans.

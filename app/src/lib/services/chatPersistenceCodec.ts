@@ -91,6 +91,8 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
   if (value.runtimeId !== undefined && typeof value.runtimeId !== "string") {
     return null;
   }
+  const handoff = value.handoff;
+  if (handoff !== undefined && (!isRecord(handoff) || !['attemptId', 'sourceSessionId', 'targetSessionId', 'initialMessageId'].every(key => typeof handoff[key] === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,159}$/.test(handoff[key])) || handoff.targetSessionId !== value.sessionId)) return null;
   return {
     sessionId: value.sessionId,
     threadId: value.threadId,
@@ -100,6 +102,7 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
     compactionCount: value.compactionCount,
     lastCompactedAt: value.lastCompactedAt,
     compactedMessageCount: value.compactedMessageCount,
+    handoff: isRecord(value.handoff) && typeof value.handoff.attemptId === "string" && typeof value.handoff.sourceSessionId === "string" && typeof value.handoff.targetSessionId === "string" && typeof value.handoff.initialMessageId === "string" ? { attemptId: value.handoff.attemptId, sourceSessionId: value.handoff.sourceSessionId, targetSessionId: value.handoff.targetSessionId, initialMessageId: value.handoff.initialMessageId, ...(typeof value.handoff.targetProfileId === "string" ? { targetProfileId: value.handoff.targetProfileId } : {}) } : undefined,
     selectedModelId: value.selectedModelId,
     selectedModeId: value.selectedModeId,
     runtimeId: value.runtimeId,
@@ -394,7 +397,10 @@ function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
   if (value.parentSessionId !== undefined && typeof value.parentSessionId !== "string") {
     return null;
   }
+  const handoff = value.handoff;
+  if (handoff !== undefined && (!isRecord(handoff) || !['attemptId', 'sourceSessionId', 'targetSessionId', 'initialMessageId'].every(key => typeof handoff[key] === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,159}$/.test(handoff[key])) || handoff.targetSessionId !== value.id)) return null;
   return {
+    handoff: isRecord(handoff) ? { attemptId: String(handoff.attemptId), sourceSessionId: String(handoff.sourceSessionId), targetSessionId: String(handoff.targetSessionId), initialMessageId: String(handoff.initialMessageId), ...(typeof handoff.targetProfileId === 'string' ? { targetProfileId: handoff.targetProfileId } : {}) } : undefined,
     id: value.id,
     title: value.title,
     lastUsedAt: value.lastUsedAt,

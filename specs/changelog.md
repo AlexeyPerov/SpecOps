@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 22:36 MSK — Add reviewed native session handoff and durable lineage
+
+- Implemented AS06-A common Handoff review with separately editable/removable bounded context sections, safe workspace excerpts/patches, target runtime/profile/model/policy selection and frozen exact first-prompt preview. Source native history stays independent; cancellation creates no target. Private paths/raw tool output/common secret values are excluded by default.
+- Added private strict Unix no-follow/CAS/lock/fsync create/send intent storage, explicit uncertain outcomes, fresh native targets, immutable neutral lineage and single-use initial-send permits. Unknown creation/possibly accepted prompts are never automatically retried. Index lineage survives corrupt thread caches; draft promotion preserves a precreated native binding to prevent a second hidden target.
+- Verified nine ordered source-adapter pairs through production dispatcher/client/pipeline/store/disk, review/security/fault/concurrency fixtures and full frontend/host regressions. Real provider/account pairs, signed installed/platform/legal/cleanup gates remain open; unsupported durable storage fails before native creation. Published the selected blocked release baseline; B/C remain separate work. No migrations or compatibility shims.
+
 ## 2026-10-04 22:10 MSK — Harden native runtime recovery and common secret boundaries
 
 - Implemented AS05-D source fault/security matrix and static actionable native error/limit recovery. Failed turns preserve selected account credentials/generation/session/settings, do not replay prompts or rotate bindings, and leave siblings usable. Native history identity fields and normalized envelopes are now redacted at the full common hydration boundary.

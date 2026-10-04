@@ -116,11 +116,11 @@ const server = createServer(async (req, res) => {
     return;
   }
   if (req.url === "/config/providers") {
-    res.end(JSON.stringify({ providers: [], default: {} }));
+    res.end(JSON.stringify({ providers: [{ id: "fixture", name: "Fixture provider", models: { model: { id: "model", name: "Fixture model" } } }], default: { fixture: "model" } }));
     return;
   }
   if (req.url === "/agent") {
-    res.end("[]");
+    res.end(JSON.stringify([{ name: "build", mode: "primary", hidden: false }]));
     return;
   }
   if (path === "/session" && req.method === "POST") {

@@ -1,4 +1,5 @@
 mod agent_host;
+mod handoff;
 mod file_watcher;
 mod git;
 mod git_askpass;
@@ -94,6 +95,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            handoff::handoff_workspace_excerpts,
+            handoff::handoff_write_journal,
+            handoff::handoff_read_journal,
             take_pending_opened_paths,
             quit_app,
             git::git_available,

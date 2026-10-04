@@ -8,7 +8,7 @@ import { getOrCreateWorkspaceState, patchWorkspaceState, threadForSession } from
 type ChatStoreUpdate = (mutator: (state: ChatStoreState) => ChatStoreState) => void;
 
 type ThreadMetadataPatch = Partial<
-  Pick<ChatThreadMetadata, "summary" | "selectedModelId" | "selectedModeId" | "runtimeId" | "connectionProfileId" | "runtimeMetadata">
+  Pick<ChatThreadMetadata, "handoff" | "summary" | "selectedModelId" | "selectedModeId" | "runtimeId" | "connectionProfileId" | "runtimeMetadata">
 >;
 
 export function createThreadMetadataSlice(deps: {
@@ -101,6 +101,7 @@ export function createThreadMetadataSlice(deps: {
 
         const binding = workspace.sessionIndex.find(entry => entry.id === targetSessionId);
         if (binding?.nativeSessionId && ((patch.runtimeId !== undefined && patch.runtimeId !== binding.runtimeId) || ("connectionProfileId" in patch && patch.connectionProfileId !== binding.connectionProfileId))) return state;
+        if (binding?.handoff && ((patch.selectedModelId !== undefined && patch.selectedModelId !== binding.modelId) || (patch.selectedModeId !== undefined && patch.selectedModeId !== binding.modeId) || (patch.runtimeMetadata !== undefined && JSON.stringify(patch.runtimeMetadata) !== JSON.stringify(binding.runtimeMetadata)))) return state;
         const thread = workspace.threadsBySessionId[targetSessionId];
         if (!thread) {
           updatedMetadata = true;

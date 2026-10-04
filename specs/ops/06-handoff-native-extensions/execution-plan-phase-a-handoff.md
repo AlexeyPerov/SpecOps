@@ -2,11 +2,15 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** Source implemented and fixture-verified; real enabled-pair/account and installed acceptance pending
 
 **Prerequisites:** At least two accepted native runtime baselines, each with profile-bound sessions, plus early AS03-A/AS03-B. Default stage 06 after Claude baseline; technically eligible after Codex 02-D and OpenCode 04-C.
 
 **Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+**Source evidence:** [Implementation notes](implementation-notes-phase-a.md) · [Selected release baseline](../08-release-gates/baseline-06-a.md)
+
+All five task implementations are present with source/fixture evidence. External acceptance below remains open; prior runtime baselines are not declared accepted solely to advance this plan.
 
 ## Goal
 
@@ -47,6 +51,12 @@ Create a new target-native thread and send exactly approved context. Persist cre
 Test enabled ordered runtime pairs, later target profiles, edit/cancel/retry, auth unavailable, unsupported settings, large input and security. Expand matrix when each new adapter is enabled.
 
 **Acceptance:** Actual enabled-pair matrix passes; no Cursor/four-runtime prerequisite for initial handoff. Missing capabilities are explicit rather than emulated.
+
+## Recorded source verification
+
+- AS06-A-01–04 source pass: bounded safe review packet; frozen exact approval; native fresh target; neutral index/thread lineage; durable CAS/lock intent boundaries and no duplicate dispatch.
+- AS06-A-05 fixture pass: all nine ordered Codex/OpenCode/Claude pairs through actual adapter implementations and production dispatcher/client/pipeline/disk; selected later profiles, unchanged source, retry/cache corruption/security. Actual account/provider pairs remain pending.
+- Focused 64 passed; full frontend 2,913 passed; full host 223 passed/4 opt-in skips; native Unix storage/excerpt test passed; Svelte 0/0 and build passed. See notes for exact scope and limits.
 
 ## Verification
 

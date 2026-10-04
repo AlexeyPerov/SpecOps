@@ -105,7 +105,13 @@ export interface ChatMessage {
   parts?: ChatMessagePart[];
 }
 
+export interface HandoffLineage {
+  attemptId: string; sourceSessionId: string; targetSessionId: string; targetProfileId?: string;
+  initialMessageId: string;
+}
+
 export interface ChatThreadMetadata {
+  handoff?: HandoffLineage;
   sessionId: string;
   threadId: string;
   createdAt: string;
@@ -134,6 +140,7 @@ export interface ChatThreadSnapshot {
 }
 
 export interface SessionIndexEntry {
+  handoff?: HandoffLineage;
   id: string;
   title: string;
   lastUsedAt: string;
@@ -150,7 +157,7 @@ export interface SessionIndexEntry {
   modeId?: string;
   /** Public share URL when the linked session has been shared. */
   shareUrl?: string;
-  /** Native session this one was forked from, if any. */
+  /** SpecOps source session for lineage, if any. */
   parentSessionId?: string;
 }
 

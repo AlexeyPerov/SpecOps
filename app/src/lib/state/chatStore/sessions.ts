@@ -164,7 +164,9 @@ export function promoteDraftSessionIndexEntry(
   firstUserMessageContent: string,
   lastUsedAt: string,
 ): SessionIndexEntry {
+  const { isDraft: _draft, ...persisted } = entry;
   return {
+    ...persisted,
     id: entry.id,
     title: deriveSessionTitle({ firstUserMessage: firstUserMessageContent }),
     lastUsedAt,
@@ -186,6 +188,7 @@ export function patchSessionIndexEntry(
  * a new session, never re-linking an existing one.
  */
 export interface SessionBinding {
+  handoff?: ChatThreadSnapshot["metadata"]["handoff"];
   runtimeId: AgentRuntimeId;
   nativeSessionId: string;
   connectionProfileId?: string;
@@ -201,6 +204,7 @@ function sessionBindingFromEntry(entry: SessionIndexEntry): SessionBinding | nul
     return null;
   }
   return {
+    handoff: entry.handoff,
     runtimeId: entry.runtimeId,
     nativeSessionId: entry.nativeSessionId,
     connectionProfileId: entry.connectionProfileId,
@@ -222,6 +226,7 @@ function applySessionBinding(
   }
   return {
     ...entry,
+    handoff: binding.handoff ?? entry.handoff,
     runtimeId: binding.runtimeId,
     nativeSessionId: binding.nativeSessionId,
     connectionProfileId: binding.connectionProfileId,
@@ -239,6 +244,7 @@ function didSessionBindingChange(
 ): boolean {
   const next = applySessionBinding(entry, binding);
   return (
+    JSON.stringify(next.handoff) !== JSON.stringify(entry.handoff) ||
     next.runtimeId !== entry.runtimeId ||
     next.nativeSessionId !== entry.nativeSessionId ||
     next.connectionProfileId !== entry.connectionProfileId ||
@@ -424,6 +430,7 @@ export function createSessionsSlice(deps: {
         if (!entry) {
           return nextState;
         }
+        if (entry.handoff && binding && (JSON.stringify(binding.handoff ?? entry.handoff) !== JSON.stringify(entry.handoff) || binding.modelId !== entry.modelId || binding.modeId !== entry.modeId || JSON.stringify(binding.runtimeMetadata) !== JSON.stringify(entry.runtimeMetadata))) return nextState;
         if (binding && binding.nativeSessionId.trim().length > 0) {
           if (!isAgentRuntimeId(binding.runtimeId)) {
             // Unknown runtime ids are rejected outright.

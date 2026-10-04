@@ -3,6 +3,11 @@ import { mkdtemp, mkdir, readFile, writeFile, rename, rm } from "node:fs/promise
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 let dataDir: string;
+vi.mock("@tauri-apps/api/core", () => ({ invoke: async (command: string, args: {path:string;content?:string;expected?:string|null}) => {
+  if(command === 'handoff_read_journal') { try { return await readFile(args.path,'utf8'); } catch(e) { if((e as NodeJS.ErrnoException).code==='ENOENT')return null; throw e; } }
+  if(command === 'handoff_write_journal') { let old:string|null=null;try{old=await readFile(args.path,'utf8');}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;} if(old!==args.expected)throw new Error('CAS conflict');await writeFile(args.path+'.intent.tmp',args.content!,{mode:0o600});await rename(args.path+'.intent.tmp',args.path);return; }
+  throw new Error('Unexpected native command in integration fixture');
+} }));
 vi.mock("@tauri-apps/plugin-fs", () => ({
   mkdir: (path: string) => mkdir(path, { recursive: true }),
   readTextFile: (path: string) => readFile(path, "utf8"),
@@ -259,3 +264,38 @@ it.each(['divergent','corrupt'] as const)('Claude native %s cache uses productio
  delete nativeDb[binding.nativeSessionId];await writeFile(fixturePath(profileRoot),JSON.stringify(nativeDb));fresh.close();chatStore.appendMessage({id:'missing',role:'user',content:'continue',createdAt:'t3'},{sessionId});chatStore.beginTurn('missing',sessionId);
  expect((await executeProviderTurn({root,activeSessionId:sessionId,turnId:'missing'})).ok).toBe(false);expect(chatStore.getSessionLink(sessionId,root)).toEqual(binding);expect(chatStore.getMessages(sessionId).some(m=>m.content==='Native fixture answer')).toBe(true);
 });
+
+
+import { confirmHandoff, openKnownHandoffTarget } from './handoffController';
+import { buildHandoffDraft, handoffFirstPrompt, type HandoffTarget } from './sessionHandoff';
+import { readHandoffJournal } from './handoffPersistence';
+import type { AgentRuntimeId } from '../session';
+async function handoffNativeFixture(runtimeId: AgentRuntimeId, suffix: string, root: string) {
+ const base=join(dataDir,suffix);await mkdir(base);let adapter: CodexRuntimeAdapter|OpenCodeRuntimeAdapter|ClaudeRuntimeAdapter;let modelId:string;let modeId:string|undefined;
+ if(runtimeId==='codex'){const executable=join(base,'native.cjs');writeFileSync(executable,threadFixture,{mode:0o700});adapter=new CodexRuntimeAdapter({profileRoot:join(base,'profiles'),executable});modelId='fixture-model';modeId='default';}
+ else if(runtimeId==='opencode'){const executable=join(base,'native.mjs');copyFileSync(join(process.cwd(),'host/src/opencode/nativeFixture.mjs'),executable);chmodSync(executable,0o700);adapter=new OpenCodeRuntimeAdapter({profileRoot:join(base,'profiles'),executable});modelId='fixture/model';modeId='build';}
+ else {const profileRoot=join(base,'profiles');const driver=new ClaudeFixtureDriver(fixturePath(profileRoot));adapter=new ClaudeRuntimeAdapter({profileRoot,enableNativeTurns:true,assets:()=>({sdk:'fixture',executable:'fixture',sdkVersion:CLAUDE_SDK_VERSION,nativeVersion:CLAUDE_NATIVE_VERSION}),probe:async()=>[{value:'native-model',displayName:'Native model'}],verifyKey:async()=>{},sessionDriver:()=>driver});modelId='native-model';}
+ nativeRuntimes.push(adapter);const profile=adapter.store.create(suffix);
+ if(adapter instanceof CodexRuntimeAdapter)await adapter.authenticate({runtimeId,connectionProfileId:profile.id,workspaceRootPath:root,options:{action:'experimental-on'}});
+ else if(adapter instanceof OpenCodeRuntimeAdapter){writeFileSync(join(adapter.store.home(profile.id),'api-key'),'fixture-test-key',{mode:0o600});await adapter.authenticate({runtimeId,connectionProfileId:profile.id,workspaceRootPath:root,options:{action:'login-api-key',providerId:'fixture'},credential:{kind:'api-key',ref:'profile-api-key'}});}
+ else adapter.store.saveKey(profile.id,'fixture-test-key');
+ const client=await nativeClient(adapter,1);return {adapter,client,target:{runtimeId,connectionProfileId:profile.id,modelId,modeId} satisfies HandoffTarget};
+}
+const handoffPairs = (['codex','opencode','claude'] as const).flatMap(source => (['codex','opencode','claude'] as const).map(target=>[source,target] as const));
+it.each(handoffPairs)('reviewed %s → %s pair uses real source adapters/dispatcher/client/pipeline/disk with separate profiles, fresh target and no replay',async(sourceRuntime,targetRuntime)=>{
+ const root=join(dataDir,'workspace');await mkdir(root);const source=await handoffNativeFixture(sourceRuntime,'source-account',root);const target=await handoffNativeFixture(targetRuntime,'later-target-account',root);
+ chatStore.setActiveWorkspaceRoot(root);const sourceId=chatStore.createDraftSession()!;bindAgentHostClientForTests(()=>source.client);chatStore.updateThreadMetadata({runtimeId:sourceRuntime,connectionProfileId:source.target.connectionProfileId,selectedModelId:source.target.modelId,selectedModeId:source.target.modeId});chatStore.appendMessage({id:'source-first',role:'user',content:'Continue the reviewed goal',createdAt:'t'},{sessionId:sourceId});chatStore.beginTurn('source-first-turn',sourceId);expect((await executeProviderTurn({root,activeSessionId:sourceId,turnId:'source-first-turn'})).ok).toBe(true);
+ const sourceBinding=chatStore.getSessionLink(sourceId,root)!;const sourceBefore=await source.client.resumeSession({native:{...sourceBinding,nativeSessionId:sourceBinding.nativeSessionId as never},workspaceRootPath:root});
+ const draft=buildHandoffDraft({sourceSessionId:sourceId,sourceRuntimeId:sourceRuntime,sourceConnectionProfileId:sourceBinding.connectionProfileId,workspaceRootPath:root,messages:chatStore.getMessages(sourceId)});draft.sections[0].text='Exactly edited approval';draft.sections.find(s=>s.id==='summary')!.included=false;
+ const prompt=handoffFirstPrompt(draft,target.target,'handoff-target');bindAgentHostClientForTests(()=>target.client);const approval={version:1 as const,id:'ordered-pair',sourceSessionId:sourceId,targetSessionId:'handoff-target',workspaceRootPath:root,target:target.target,approvedPrompt:prompt,approvedAt:new Date().toISOString(),stage:'approved' as const};
+ const result=await confirmHandoff(approval);expect(result.outcome).toBe('completed');expect(result.native?.connectionProfileId).toBe(target.target.connectionProfileId);expect(chatStore.getMetadata('handoff-target')?.handoff?.sourceSessionId).toBe(sourceId);const firstPrompt=chatStore.getMessages('handoff-target').find(m=>m.role==='user');expect(firstPrompt?.content).toBe(prompt);
+ expect(chatStore.getSessionLink(sourceId,root)).toEqual(sourceBinding);const sourceAfter=await source.client.resumeSession({native:{...sourceBinding,nativeSessionId:sourceBinding.nativeSessionId as never},workspaceRootPath:root});const stable = (history: typeof sourceBefore.history) => history?.map(({events,...message}) => message);expect(stable(sourceAfter.history)).toEqual(stable(sourceBefore.history));
+ const before=await target.client.resumeSession({native:result.native!,workspaceRootPath:root});expect(before.history?.filter(m=>m.role==='user')).toHaveLength(1);await confirmHandoff(approval);const after=await target.client.resumeSession({native:result.native!,workspaceRootPath:root});expect(stable(after.history)).toEqual(stable(before.history));
+ // Ordinary Retry cannot repeat the possibly accepted initial handoff prompt.
+ chatStore.beginTurn('retry-handoff','handoff-target');expect((await executeProviderTurn({root,activeSessionId:'handoff-target',turnId:'retry-handoff'})).ok).toBe(false);expect((await target.client.resumeSession({native:result.native!,workspaceRootPath:root})).history?.map(({events,...message})=>message)).toEqual(stable(before.history));
+ await flushSessionIndexPersistence(root);const persisted=chatStore.getActiveThreadSnapshot('handoff-target')!;await persistSessionThreadSnapshot(root,'handoff-target',persisted);chatStore.reset();chatStore.setActiveWorkspaceRoot(root);await chatStore.loadWorkspaceSessions(root);const saved=(await readHandoffJournal(root)).attempts[0];await openKnownHandoffTarget(saved);expect(chatStore.getMetadata('handoff-target')?.handoff?.sourceSessionId).toBe(sourceId);expect(chatStore.getSessionLink('handoff-target',root)?.nativeSessionId).toBe(result.native?.nativeSessionId);expect((await target.client.resumeSession({native:result.native!,workspaceRootPath:root})).history?.map(({events,...message})=>message)).toEqual(stable(before.history));
+ // A lost/divergent thread cache cannot remove the index-level initial-send guard.
+ const {getSessionThreadFilePath}=await import('./chatPersistencePaths');await writeFile(await getSessionThreadFilePath(root,'handoff-target'),'{corrupt');chatStore.reset();chatStore.setActiveWorkspaceRoot(root);await chatStore.loadWorkspaceSessions(root);chatStore.setActiveSessionId('handoff-target');chatStore.appendMessage({id:`handoff-message-${approval.id}`,role:'user',content:prompt,createdAt:'t'},{sessionId:'handoff-target'});chatStore.beginTurn('corrupt-retry','handoff-target');expect((await executeProviderTurn({root,activeSessionId:'handoff-target',turnId:'corrupt-retry'})).ok).toBe(false);expect((await target.client.resumeSession({native:result.native!,workspaceRootPath:root})).history?.map(({events,...message})=>message)).toEqual(stable(before.history));
+ await openKnownHandoffTarget(saved);expect(chatStore.getMetadata('handoff-target')?.handoff?.sourceSessionId).toBe(sourceId);
+ expect(chatStore.updateThreadMetadata({selectedModelId:'another-model'},undefined,'handoff-target')).toBe(false);
+},30_000);

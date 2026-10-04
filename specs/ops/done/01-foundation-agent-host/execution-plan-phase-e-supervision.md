@@ -1,0 +1,58 @@
+# 01 — Phase E: Tauri supervision and process-tree cleanup
+
+> Completed implementation record. Original task IDs are preserved as historical evidence. Open acceptance and current delivery are in [active stabilization](../../01-foundation-stabilization/execution-plan.md) and the [roadmap](../../roadmap.md); archiving is not new acceptance.
+
+**Date:** 2026-08-11
+**Status:** Historical implementation complete; open acceptance tracked in 01-S / 02-A / 03-B.
+**Prerequisite:** Phase D Done
+**Scope:** [`README.md`](README.md)
+**Index:** [`execution-plan.md`](execution-plan.md)
+**Goal:** Make Agent Host a resilient, observable, fully reaped application child.
+
+## Agent handoff boundary
+
+Own Rust/Tauri spawning, IPC bridge, lifecycle policy, and process cleanup.
+Do not add runtime-specific lifecycle code to Tauri.
+
+## Tasks
+
+### AS01-E-01 [DONE] — Implement reusable host supervisor
+
+Track process generation, path/version, health, stdout/stderr drainers, pending
+requests, exit reason, restart eligibility, and crash-loop breaker.
+
+**Acceptance:** At most one active host generation owns requests; stale events
+cannot mutate the new generation.
+
+### AS01-E-02 [DONE] — Bridge commands and events
+
+Route validated UI requests through Tauri to host JSON-RPC and route normalized
+events back with session/turn correlation and bounded buffering.
+
+**Acceptance:** WebView never spawns, connects to, or imports a vendor/host
+runtime directly; protocol failures become typed UI errors.
+
+### AS01-E-03 [DONE] — Implement shutdown and recovery policy
+
+Handle normal quit, settings/runtime changes, host crash, hung shutdown, forced
+termination, and process-group cleanup for children and grandchildren.
+
+**Acceptance:** Every path drains pipes, resolves pending calls, and reaps the
+entire process tree within bounded time.
+
+### AS01-E-04 [DONE] — Supervision tests
+
+Use controllable fixture processes for healthy exit, crash loops, ignored
+shutdown, noisy stderr, child spawning, and stale-generation events.
+
+**Acceptance:** Tests prove no orphan process remains on supported platforms.
+
+## Verification
+
+- Run Rust/Tauri unit and integration tests.
+- Manually kill/hang host during an active fake turn and verify recovery state.
+- Quit the app during a child-spawning fixture and inspect the process tree.
+
+## Current follow-up
+
+Use [01 stabilization](../../01-foundation-stabilization/execution-plan.md), then [02 Codex](../../02-codex-adapter/execution-plan.md). Historical IDs and original task descriptions are not active dependency instructions.

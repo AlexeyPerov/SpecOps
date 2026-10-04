@@ -1,51 +1,39 @@
-# 04 — OpenCode core cutover, then native extensions
+# 04 — OpenCode core cutover
 
-**Date:** 2026-10-04
+**Updated:** 2026-10-04
 
 **Status:** Planned
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
-**Evidence:** [Implementation audit](../audit-2026-10-04.md)
+**Evidence:** [Archived audit](../done/reviews/audit-2026-10-04.md) · [Completed implementation records](../done/README.md)
 
-OpenCode is the scheduled second production runtime. Existing code/fixtures are input to a new host adapter; they are not proof of current Sessions parity.
+OpenCode is the second native runtime. Existing code/fixtures are input, not proof of new-host readiness. Core A–C ships before rich extensions in 06-B.
 
 ## Decisions
 
-- Use one native owner in every intermediate state; host becomes sole owner at D.
-- Maintain required/retained/deferred ledger from A, before core implementation.
-- Execute A → B → D; optional C follows later and cannot block Codex/OpenCode baseline.
-- No frontend vendor SDK after core cutover; provider details remain native host extensions.
+- Inventory required/retained/deferred legacy features in A; finite core gate.
+- Exactly one native runtime owner in every intermediate state.
+- Remove legacy frontend SDK/supervisor at C; profile credentials and native details remain host-side.
 
-## Scope and current state
+## Active scope
 
-| Phase | Work | State |
+| Phase | Plan | State |
 | --- | --- | --- |
-| AS04-A | [Ownership and finite parity ledger](execution-plan-phase-a-host-lifecycle.md) | Legacy implementation; host adapter missing |
-| AS04-B | [Core session/event parity](execution-plan-phase-b-core-parity.md) | Legacy implementation; host core missing |
-| AS04-D | [Core cutover and acceptance](execution-plan-phase-d-cutover-exit.md) | Missing |
-| AS04-C | [Later optional native extensions](execution-plan-phase-c-extensions-ui.md) | Later; missing |
+| AS04-A | [Ownership and finite parity ledger](execution-plan-phase-a-host-lifecycle.md) | Planned |
+| AS04-B | [Core session/event parity](execution-plan-phase-b-core-parity.md) | Planned |
+| AS04-C | [Core cutover and acceptance](execution-plan-phase-c-cutover-exit.md) | Planned |
 
 ## Dependencies and delivery
 
-Codex 03-D → A → B → D. D extends early 06-B/C for this runtime and unblocks default Claude slot. C follows D in slot 6. Handoff is eligible once this second baseline is accepted; no Claude prerequisite for core.
-
-## Expected outcomes
-
-- Codex/OpenCode native histories and profiles coexist independently.
-- Core cutover removes legacy frontend SDK and supervisor path.
-- Rich features ship later only with explicit ledger evidence.
-
-## Out of scope
-
-- Persisted-state migration or complete rich-feature parity as a core release gate.
-- Mandatory core methods for vendor-specific capabilities.
-- New unscoped feature expansion.
+02-D → 04-A → 04-B → 04-C. Extend 03-A/B for this runtime before C acceptance. Accepted C unblocks scheduled Claude 05 and permits later handoff. Optional extensions 06-B do not gate core cutover.
 
 ## Definition of done
 
-- [ ] A/B/D core baseline, profile isolation and installed coexistence accepted.
-- [ ] Legacy execution and frontend SDK path removed at D.
-- [ ] Every legacy category has core/retained/deferred disposition and docs.
-- [ ] Retained C features accepted separately before full milestone Done, or explicit scope revision.
-- [ ] Applicable 06-D evidence, runtime setup/recovery docs and changelog recorded.
+- [ ] A/B/C core parity, profile/history and Codex coexistence accepted.
+- [ ] No direct vendor SDK in WebView or legacy competing runtime owner.
+- [ ] Every rich feature is explicitly retained/deferred with owner; implement retained features later in 06-B.
+- [ ] Installed/core security and selected-scope 08-A evidence recorded.
+- [ ] Setup/support limitations, accepted evidence and changelog updated when implementation lands.
+
+No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.

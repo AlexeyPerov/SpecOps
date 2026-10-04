@@ -4,7 +4,7 @@
 
 **Status:** Active plan; foundation implemented with acceptance gaps, production adapters pending.
 
-**Source of truth:** This roadmap and the linked milestone scope/execution plans. The [2026-10-04 audit](audit-2026-10-04.md) is historical evidence; its proposed order is adopted here. Folder prefixes and existing task IDs stay stable and do not prescribe delivery order.
+**Source of truth:** This roadmap and the linked milestone scope/execution plans. The [2026-10-04 audit](done/reviews/audit-2026-10-04.md) is historical evidence; its proposed order is adopted here. Active folders and task IDs are numbered in the default delivery order; shared early gates and repeated release acceptance are explicit exceptions. Completed records are in [done](done/README.md).
 
 ## Product goal
 
@@ -18,46 +18,48 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 
 | Milestone | Actual state | Next work |
 | --- | --- | --- |
-| [01 — Foundation](01-foundation-agent-host/README.md) | Historical A–F implemented; acceptance gaps open | Stabilization S before real-account work |
-| [03 — Codex](03-codex-adapter/README.md) | Missing production adapter | A → B → C → D; optional later E |
-| [04 — OpenCode](04-opencode-adapter/README.md) | Legacy SDK/client/sidecar code exists; no new-host adapter | A → B → D core cutover; C extensions later |
-| [02 — Claude](02-claude-adapter/README.md) | Missing production adapter | A → B → C → D after Codex preview and OpenCode core |
-| [06 — Shared delivery](06-handoff-release-polish/README.md) | Partial health/supervision; missing release acceptance | B/C early; A after two runtimes; D per release |
-| [05 — Cursor](05-cursor-adapter/README.md) | Missing production adapter | Feasibility/auth/packaging spike → A–D after initial integrations |
+| [01 — Stabilization](01-foundation-stabilization/README.md) | Historical foundation implemented; acceptance gaps open | S before live account work |
+| [02 — Codex](02-codex-adapter/README.md) | Missing production adapter | A → B → C → D, with early preview gates |
+| [03 — Preview delivery](03-codex-preview-delivery/README.md) | Partial shared infrastructure; acceptance missing | Independent A activity and B packaging/recovery before 02-D |
+| [04 — OpenCode](04-opencode-adapter/README.md) | Legacy code exists; new-host adapter missing | A → B → C core cutover |
+| [05 — Claude](05-claude-adapter/README.md) | Missing production adapter | A → B → C → D |
+| [06 — Handoff/native extensions](06-handoff-native-extensions/README.md) | Missing | A handoff, B OpenCode depth, C simultaneous Codex profiles |
+| [07 — Cursor](07-cursor-adapter/README.md) | Missing production adapter | A feasibility → B → C → D |
+| [08 — Release gates](08-release-gates/README.md) | Missing acceptance records | A per selected release; final closure after full scope |
 
 A completed implementation marker is not a release acceptance record. All new phases below are Planned until their checks actually pass.
 
 ## Delivery order
 
-| Slot | Plan | Result and gate |
+| Stage | Plan | Result and gate |
 | --- | --- | --- |
-| 0 | [AS01-S](01-foundation-agent-host/execution-plan-phase-s-stabilization.md) | Production binding survives fresh-process restart; bounded I/O/shutdown; settled streams, safe errors and strengthened contract tests |
-| 1 | [AS03-A](03-codex-adapter/execution-plan-phase-a-protocol-auth.md) | Pinned app-server, isolated profile/home, official account login/read/logout and neutral Sessions discovery/creation |
-| 2 | [AS03-B](03-codex-adapter/execution-plan-phase-b-thread-events.md) | Developer slice: coding task, tools, approvals/questions, cancel and minimum native-thread resume |
-| 3 | [AS03-C](03-codex-adapter/execution-plan-phase-c-capabilities-history.md), [AS06-B](06-handoff-release-polish/execution-plan-phase-b-observability.md), [AS06-C](06-handoff-release-polish/execution-plan-phase-c-packaging-diagnostics.md), then [AS03-D](03-codex-adapter/execution-plan-phase-d-hardening-exit.md) and AS06-D release gate | First usable installed Codex preview on macOS, account-B isolation, history reconciliation, quota/recovery, writer visibility and support diagnostics |
-| 4 | [AS04-A → B → D](04-opencode-adapter/execution-plan.md) | Second native runtime; core parity and removal of legacy frontend/supervisor path; optional features explicitly deferred |
-| 5 | [AS02-A → B → C → D](02-claude-adapter/execution-plan.md) | Third native runtime, current auth policy and tested capability coverage |
-| 6 | [AS06-A](06-handoff-release-polish/execution-plan-phase-a-handoff.md), [AS04-C](04-opencode-adapter/execution-plan-phase-c-extensions-ui.md), [AS03-E](03-codex-adapter/execution-plan-phase-e-multi-profile.md) | Reviewable handoff, valuable native extensions and multiple simultaneous SpecOps Codex profiles |
-| 7 | [AS05-A → B → C → D](05-cursor-adapter/execution-plan.md) | Cursor with pinned SDK and verified auth, capabilities, history and native assets |
-| 8 | [AS06-D](06-handoff-release-polish/execution-plan-phase-d-release-exit.md) | Final matrix and roadmap closure after all active scope is verified; the same gate already runs for earlier subset releases |
+| 01 | [AS01-S](01-foundation-stabilization/execution-plan-phase-s-stabilization.md) | Production binding survives fresh-process restart; bounded I/O/shutdown; settled streams, safe errors and strengthened contract tests |
+| 02 | [AS02-A](02-codex-adapter/execution-plan-phase-a-protocol-auth.md) | Pinned app-server, isolated profile/home, official account login/read/logout and neutral Sessions discovery/creation |
+| 02 | [AS02-B](02-codex-adapter/execution-plan-phase-b-thread-events.md) | Developer slice: coding task, tools, approvals/questions, cancel and minimum native-thread resume |
+| 02 / 03 | [AS02-C](02-codex-adapter/execution-plan-phase-c-capabilities-history.md), [AS03-A](03-codex-preview-delivery/execution-plan-phase-a-observability.md), [AS03-B](03-codex-preview-delivery/execution-plan-phase-b-packaging-diagnostics.md), then [AS02-D](02-codex-adapter/execution-plan-phase-d-hardening-exit.md) and AS08-A release gate | First usable installed Codex preview on macOS, account-B isolation, history reconciliation, quota/recovery, writer visibility and support diagnostics |
+| 04 | [AS04-A → B → C](04-opencode-adapter/execution-plan.md) | Second native runtime; core parity and removal of legacy frontend/supervisor path; optional features explicitly deferred |
+| 05 | [AS05-A → B → C → D](05-claude-adapter/execution-plan.md) | Third native runtime, current auth policy and tested capability coverage |
+| 06 | [AS06-A](06-handoff-native-extensions/execution-plan-phase-a-handoff.md), [AS06-B](06-handoff-native-extensions/execution-plan-phase-b-opencode-extensions.md), [AS06-C](06-handoff-native-extensions/execution-plan-phase-c-codex-profiles.md) | Reviewable handoff, valuable native extensions and multiple simultaneous SpecOps Codex profiles |
+| 07 | [AS07-A → B → C → D](07-cursor-adapter/execution-plan.md) | Cursor with pinned SDK and verified auth, capabilities, history and native assets |
+| 08 | [AS08-A](08-release-gates/execution-plan-phase-a-release-exit.md) | Final matrix and roadmap closure after all active scope is verified; the same gate already runs for earlier subset releases |
 
-OpenCode is second because code and fixtures already exist. If its core cutover proves larger than a new Claude adapter, record an explicit swap of slots 4/5 without moving Codex off the critical path. Handoff is technically eligible after two accepted runtimes; its default delivery slot is 6. No implementation needs to wait for Cursor to release Codex.
+OpenCode is second because code and fixtures already exist. If its core cutover proves larger than a new Claude adapter, record an explicit scheduling swap of stages 04/05 without moving Codex off the critical path. Handoff is technically eligible after two accepted runtimes; its default delivery stage is 06. No implementation needs to wait for Cursor to release Codex.
 
 ### Dependency graph
 
 ```text
-01-S → 03-A → 03-B → 03-C ───────────────┐
-                    ├→ 06-B ───────────┼→ 03-D → 06-D (Codex release)
-                    └→ 06-C ───────────┘
-03-D → 04-A → 04-B → 04-D → 02-A → 02-B → 02-C → 02-D
-04-D → 04-C (later optional extensions)
-03-D → 03-E (later multiple SpecOps profiles)
-accepted runtimes >= 2 + 06-B/C → 06-A (later handoff)
-accepted core/contract evidence → 05-A → 05-B → 05-C → 05-D
-selected adapter gates + 06-B/C + advertised handoff → 06-D (each release)
+01-S → 02-A → 02-B → 02-C ───────────────┐
+                    ├→ 03-A ───────────┼→ 02-D → 08-A (Codex release)
+                    └→ 03-B ───────────┘
+02-D → 04-A → 04-B → 04-C → 05-A → 05-B → 05-C → 05-D
+04-C → 06-B (later optional extensions)
+02-D → 06-C (later multiple SpecOps profiles)
+accepted runtimes >= 2 + 03-A/B → 06-A (later handoff)
+accepted core/contract evidence → 07-A → 07-B → 07-C → 07-D
+selected adapter gates + 03-A/B + advertised handoff → 08-A (each release)
 ```
 
-06-B and 06-C have no dependency on handoff or later adapters. Packaging design/build preparation may start after 01-S; its runtime smoke uses 03-B. Readiness for future adapters is validated when they are added, not by blocking the Codex preview.
+03-A and 03-B have no dependency on handoff or later adapters. Packaging design/build preparation may start after 01-S; its runtime smoke uses 02-B. Readiness for future adapters is validated when they are added, not by blocking the Codex preview.
 
 ## Session and connection model
 
@@ -131,9 +133,9 @@ After two runtimes are accepted, user reviews a bounded packet with goal, decisi
 
 ## Release policy and acceptance
 
-- First usable preview targets macOS and Codex only. Its gates are 01-S, 03-A–D, 06-B/C and a selected-scope 06-D record.
+- First usable preview targets macOS and Codex only. Its gates are 01-S, 02-A–D, 03-A/B and a selected-scope 08-A record.
 - Bundle Agent Host and a compatible Node runtime; developer PATH is not installed-build evidence. Vendor binary may be bundled/installed where permitted or explicitly user-managed with version/setup diagnostics.
-- 03-B is a developer slice, not an installed-product readiness claim. Minimal history/cancel/approvals are required there, not deferred to final polish.
+- 02-B is a developer slice, not an installed-product readiness claim. Minimal history/cancel/approvals are required there, not deferred to final polish.
 - Neutral Sessions gate replaces provider-shaped settings. Each adapter/profile has independent setup/health state. No beta release is gated on complete legacy feature parity or all four runtimes.
 - API-key and account smokes are explicit opt-in runs. Record selected version, account access category, support scope and unavailable auth methods without inferring model entitlement from catalog listing.
 - Before adding Linux/Windows support, verify install, auth, resume, crash, cancel and child/grandchild cleanup on each advertised target.
@@ -148,8 +150,9 @@ Each phase records automated checks, pinned contracts and actual smoke/support e
 
 | Date | Change |
 | --- | --- |
+| 2026-10-04 | Renumber active stages 01–08, split preview/extensions/release plans, move completed evidence to done |
 | 2026-10-04 | Adopt Codex-first order; reopen foundation acceptance as S; isolated account profiles; early activity/packaging; OpenCode core before extensions; subset release gates |
 | 2026-08-15 | Historical foundation implementation A–F marked Done; acceptance gaps subsequently recorded |
 | 2026-08-11 | Replaced Chat/Cloud/per-workspace roadmap with native per-session runtime direction |
 
-Historical completed/cancelled plans remain under `specs/archive/ops-done` and `specs/archive/ops-postponed`. Historical implementation notes and audit snapshots are evidence, not active task dependencies.
+Completed foundation phases, implementation notes and review/audit snapshots moved out of this queue live in [done](done/README.md). Older completed/cancelled archives retain their historical location under `specs/archive/ops-done` and `specs/archive/ops-postponed`. Archived evidence does not close active acceptance gaps.

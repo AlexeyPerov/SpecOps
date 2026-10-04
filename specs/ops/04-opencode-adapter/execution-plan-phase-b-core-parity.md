@@ -14,7 +14,7 @@ Make OpenCode a second native runtime through common profile-bound Sessions.
 
 ## Implementation boundary
 
-Own required core create/resume/send/cancel/history/tools/interactions/catalog and normalized fixtures. Optional rich UI features remain ledger entries for C.
+Own required core create/resume/send/cancel/history/tools/interactions/catalog and normalized fixtures. Optional rich UI features remain ledger entries for 06-B.
 
 ## Tasks
 
@@ -40,7 +40,7 @@ Use shared capability extensions for correlated native allow/deny/answer/cancel/
 
 Run core history/catalog/settings/stream/tools/interaction/failure/restart fixtures plus shared contract and real-native opt-in smoke. Finalize required vs later ledger classifications without treating unimplemented rich features as preserved.
 
-**Acceptance:** Core is accepted for D; no unknown required category remains. Optional C features are explicitly unavailable until implemented, and Codex regression checks pass.
+**Acceptance:** Core is accepted for 04-C; no unknown required category remains. Optional 06-B features are explicitly unavailable until implemented, and Codex regression checks pass.
 
 ## Verification
 
@@ -49,4 +49,4 @@ Run core history/catalog/settings/stream/tools/interaction/failure/restart fixtu
 
 ## Exit and next work
 
-D performs core cutover next. C is not a prerequisite and moves to later native-extension slot. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+04-C performs core cutover next. 06-B is not a prerequisite and moves to later native-extension slot. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

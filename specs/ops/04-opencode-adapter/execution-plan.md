@@ -1,6 +1,6 @@
-# 04 — Execution plan index: core cutover before extensions
+# 04 — Execution plan index: OpenCode core cutover
 
-**Date:** 2026-10-04
+**Updated:** 2026-10-04
 
 **Status:** Planned
 
@@ -8,26 +8,21 @@
 
 ## Execution order
 
-03-D → A → B → D; **D does not require C**. C follows accepted D at default slot 6. Early 06-B/C runtime-specific extensions are accepted by D; no prerequisite implementation of Claude.
+02-D → 04-A → 04-B → 04-C. Extend 03-A/B for this runtime before C acceptance. Accepted C unblocks scheduled Claude 05 and permits later handoff. Optional extensions 06-B do not gate core cutover.
 
-| Phase | Plan | Effort | Delivery gate |
-| --- | --- | --- | --- |
-| A | [Ownership and finite parity ledger](execution-plan-phase-a-host-lifecycle.md) | L | Second-runtime baseline |
-| B | [Core session/event parity](execution-plan-phase-b-core-parity.md) | L | Second-runtime baseline |
-| D | [Core cutover and acceptance](execution-plan-phase-d-cutover-exit.md) | L | Second-runtime baseline |
-| C | [Later optional native extensions](execution-plan-phase-c-extensions-ui.md) | L | Later native depth |
+| Phase | Plan | Effort |
+| --- | --- | --- |
+| A | [Ownership and finite parity ledger](execution-plan-phase-a-host-lifecycle.md) | L |
+| B | [Core session/event parity](execution-plan-phase-b-core-parity.md) | L |
+| C | [Core cutover and acceptance](execution-plan-phase-c-cutover-exit.md) | L |
 
-## Delivery policy
+## Acceptance
 
-Freeze finite core/parity ledger in A. Keep legacy only as temporary reference, never double-own child processes; remove direct path in D even if rich features are explicitly deferred. Baseline Done and full milestone Done are different statuses.
-
-## Exit verification
-
-- Codex/OpenCode core and profile-bound restart parity.
-- Exactly one native runtime owner; no frontend SDK after D.
-- Required/retained/deferred ledger is complete before cutover.
-- Installed/native/security and subset-release evidence, later extension gate separate.
+- A/B/C core parity, profile/history and Codex coexistence accepted.
+- No direct vendor SDK in WebView or legacy competing runtime owner.
+- Every rich feature is explicitly retained/deferred with owner; implement retained features later in 06-B.
+- Installed/core security and selected-scope 08-A evidence recorded.
 
 ## Task tracking
 
-Use `AS04-<phase>-<NN>` for task IDs. Folder prefixes are stable milestone identities, not delivery order. Planned dependencies are conditions to satisfy, not claims that upstream work is Done. Keep scope bounded by task acceptance; record fixtures, version/support scope and residual gaps. Mark only implemented and verified tasks `[DONE]` and log changes in `specs/changelog.md`.
+Task prefix is `AS04-<phase>-<NN>`. Numeric folders reflect the default delivery sequence; cross-stage gates and later/recurring work are explicit above. Mark only implemented and verified tasks `[DONE]`, record pinned contracts and actual smoke/support scope, and update `specs/changelog.md`. Completed records live in [done](../done/README.md); open acceptance remains active.

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-04 14:53 MSK — Reorder operations folders and archive completed records
+
+- Renumbered the active queue: 01 foundation stabilization, 02 Codex, 03 early preview delivery, 04 OpenCode core, 05 Claude, 06 handoff/native extensions, 07 Cursor and 08 recurring release gates.
+- Split early activity/packaging, later handoff/OpenCode extensions/Codex profiles and release acceptance into their corresponding ordered directories; renamed phase files and active task IDs to match.
+- Moved implemented foundation A–F, implementation notes and completed review/audit artifacts into `specs/ops/done`. Historical task IDs are preserved; unresolved acceptance remains assigned to active plans.
+- Added active/done navigation and updated roadmap, scopes, indexes, dependencies and links, including references in historical changelog entries.
+- Validation: all 22 active phases and 98 tasks retain their acceptance criteria; active prefixes and local links verified. Repository-wide Markdown checking retains the same two pre-existing issues. Runtime code and credentials unchanged.
+
 ## 2026-10-04 14:38 MSK — Adopt Codex-first operations composition and delivery order
 
 - Rewrote the active roadmap and all milestone scope/index/phase plans around foundation stabilization, isolated Codex accounts, usable installed Codex delivery, OpenCode core, Claude, later handoff/native extensions and Cursor.
@@ -108,7 +116,7 @@ instantly.
 Full-milestone review of the phase A–F implementation (session domain, adapter
 contract + fake runtime, Agent Host package, Tauri supervision, frontend
 Sessions integration) recorded in
-[`specs/ops/01-foundation-agent-host/review-issues-1.md`](ops/01-foundation-agent-host/review-issues-1.md).
+[`specs/ops/done/01-foundation-agent-host/review-issues-1.md`](ops/done/01-foundation-agent-host/review-issues-1.md).
 All targeted suites are green, but the review found 3 Critical and ~29 Major
 issues concentrated in shutdown/recovery paths, binding persistence, and the
 shared contract suite; several phase acceptance criteria are only partially met.
@@ -277,7 +285,7 @@ payload; the WebView imports no host code.
 - **Tests (B-04):** 37 domain/codec tests covering every union variant,
   immutable binding, unknown→diagnostic, malformed data, and restart
   round-trips.
-- Implementation notes: `specs/ops/01-foundation-agent-host/implementation-notes-phase-b.md`.
+- Implementation notes: `specs/ops/done/01-foundation-agent-host/implementation-notes-phase-b.md`.
 - Out of scope (later phases): rewiring the live OpenCode workspace-session
   store/UI onto the new domain (Phase F), host transport (D/E), real adapters
   (C / 02–05). No persisted data is migrated (the new schema is additive).
@@ -312,7 +320,7 @@ carrying HTTP provider/mode/connection metadata are ignored on load.
   parts) and the OpenCode backend path — these feed Phase B's runtime-neutral
   session domain.
 - Implementation notes and the checked removal list live in
-  `specs/ops/01-foundation-agent-host/implementation-notes-phase-a.md`.
+  `specs/ops/done/01-foundation-agent-host/implementation-notes-phase-a.md`.
 ## 2026-10-04 12:48 MSK — Keep the local installer available
 
 - On macOS, `build --local` now mounts and opens the finished DMG after a

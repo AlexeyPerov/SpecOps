@@ -18,7 +18,6 @@ import type {
   AgentAuthResult,
   AgentAuthStatus,
   AgentCredentialHandle,
-  AgentCatalogSummary,
   AdapterHealth,
   AgentRuntimeCapabilities,
   CancelReason,
@@ -105,7 +104,7 @@ export interface RpcRequest {
 
 export interface RpcResponse {
   readonly jsonrpc: "2.0";
-  readonly id: RequestId;
+  readonly id: RequestId | null;
   readonly result?: unknown;
   readonly error?: RpcError;
 }
@@ -120,7 +119,7 @@ export function makeResponse(id: RequestId, result: unknown): RpcResponse {
   return { jsonrpc: "2.0", id, result };
 }
 
-export function makeErrorResponse(id: RequestId, error: RpcError): RpcResponse {
+export function makeErrorResponse(id: RequestId | null, error: RpcError): RpcResponse {
   return { jsonrpc: "2.0", id, error };
 }
 
@@ -216,7 +215,6 @@ export interface CatalogModesParams {
   readonly modelId?: string;
 }
 
-export type { AgentCatalogSummary };
 
 export interface SessionCreateParams {
   readonly runtimeId: AgentRuntimeId;
@@ -293,7 +291,7 @@ export type IncomingMessage =
   | { readonly kind: "invalid"; readonly reason: string };
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Classify a parsed JSON value as a request / notification / invalid. */
@@ -305,6 +303,9 @@ export function classifyIncoming(message: unknown): IncomingMessage {
     return { kind: "invalid", reason: 'jsonrpc must be "2.0"' };
   }
   const hasId = message.id !== undefined;
+  if (hasId && !(typeof message.id === "string" || (typeof message.id === "number" && Number.isSafeInteger(message.id)))) {
+    return { kind: "invalid", reason: "id must be a string or safe integer" };
+  }
   const hasMethod = typeof message.method === "string";
   const hasResult = message.result !== undefined;
   const hasError = message.error !== undefined;

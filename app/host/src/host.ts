@@ -74,8 +74,13 @@ export function createHost(options: CreateHostOptions = {}): Host {
     },
   };
 
+  stdout.on("error", () => {
+    (stdin as NodeJS.ReadableStream & { destroy?: (error: Error) => void }).destroy?.(new Error("Host output closed"));
+  });
+
   const dispatcher = new HostDispatcher({
     registry,
+    onTransportFailure: () => { (stdin as NodeJS.ReadableStream & { destroy?: (error: Error) => void }).destroy?.(new Error("Host transport failed")); },
     stdout: stdout as unknown as HostWritable,
     stderr: stderrLogger,
     buildInfo: buildInfo(),
@@ -119,6 +124,7 @@ export function createHost(options: CreateHostOptions = {}): Host {
       await stop("stdin closed");
     } catch (error) {
       log(`host loop error: ${error instanceof Error ? error.message : String(error)}`);
+      await stop("transport failed");
       return 1;
     }
     return 0;

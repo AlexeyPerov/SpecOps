@@ -24,7 +24,6 @@ import type {
   NativeSessionRef,
   ResumeAgentSessionRequest,
   AgentTurnRequest,
-  AgentCatalogSummary,
 } from "../adapter";
 import { AGENT_CAPABILITY_SCHEMA_VERSION } from "../adapter";
 import type { AgentRuntimeAdapter } from "../adapter";
@@ -54,6 +53,8 @@ import { asNativeSessionId } from "../../ids";
 import type { DiffSnapshot, SessionEvent } from "../../events";
 import type { DiagnosticEvent } from "../../transcript";
 import {
+  redactForSerialization,
+  redactSecretStringValue,
   toMalformedDiagnostic,
   toUnknownNativeDiagnostic,
 } from "../../redact";
@@ -209,7 +210,7 @@ export function createFakeRuntimeAdapter(config: FakeRuntimeConfig = {}): FakeRu
         return [{ ...core(state), type: kind, turnId, step: scripted.step } as SessionEvent];
       }
       case "subtask":
-        return [{ ...core(state), type: "subtask.started", turnId, subtask: scripted.subtask } as SessionEvent];
+        return [{ ...core(state), type: scripted.subtask.status === "completed" ? "subtask.completed" : scripted.subtask.status === "failed" ? "subtask.failed" : "subtask.started", turnId, subtask: scripted.subtask } as SessionEvent];
       case "attachment":
         return [{ ...core(state), type: "attachment.posted", turnId, attachment: scripted.attachment } as SessionEvent];
       case "status":
@@ -242,9 +243,9 @@ export function createFakeRuntimeAdapter(config: FakeRuntimeConfig = {}): FakeRu
           ...core(state),
           type: "diagnostic",
           level: scripted.level,
-          message: scripted.message,
+          message: redactSecretStringValue(scripted.message ?? "Unrecognized native event"),
           ...(scripted.reason ? { reason: scripted.reason } : {}),
-          ...(scripted.raw !== undefined ? { redactedRaw: scripted.raw } : {}),
+          ...(scripted.raw !== undefined ? { redactedRaw: redactForSerialization(scripted.raw) } : {}),
         } as SessionEvent;
         state.diagnostics.push(event as DiagnosticEvent);
         return [event];
@@ -255,7 +256,7 @@ export function createFakeRuntimeAdapter(config: FakeRuntimeConfig = {}): FakeRu
           seq: nextSeq(state),
           at: now(),
           raw: scripted.raw,
-          message: scripted.message,
+          message: redactSecretStringValue(scripted.message ?? "Unrecognized native event"),
         });
         state.diagnostics.push(event);
         return [event];
@@ -266,7 +267,7 @@ export function createFakeRuntimeAdapter(config: FakeRuntimeConfig = {}): FakeRu
           seq: nextSeq(state),
           at: now(),
           raw: scripted.raw,
-          message: scripted.message,
+          message: redactSecretStringValue(scripted.message ?? "Unrecognized native event"),
         });
         state.diagnostics.push(event);
         return [event];
@@ -314,15 +315,6 @@ export function createFakeRuntimeAdapter(config: FakeRuntimeConfig = {}): FakeRu
         return { status: "challenge", ...(auth.challenge ? { challenge: auth.challenge } : {}) };
       }
       return { status: auth.status };
-    },
-
-    async describeCatalog(): Promise<AgentCatalogSummary> {
-      return {
-        models: models(),
-        modes: modes(),
-        ...(config.defaultModelId ? { defaultModelId: config.defaultModelId } : {}),
-        ...(config.defaultModeId ? { defaultModeId: config.defaultModeId } : {}),
-      };
     },
 
     async createSession(request: CreateAgentSessionRequest): Promise<NativeSessionRef> {

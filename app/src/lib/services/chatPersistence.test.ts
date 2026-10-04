@@ -448,6 +448,7 @@ describe("agent persistence reads and writes", () => {
         sessions: [
           {
             id: AGENT_ID,
+            isDraft: false,
             title: "hello",
             lastUsedAt: thread.metadata.updatedAt,
           },

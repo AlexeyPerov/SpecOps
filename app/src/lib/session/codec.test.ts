@@ -157,3 +157,41 @@ describe("session store index codec", () => {
 
 // Quiet the unused-import linter for the asSpecOpsTurnId helper kept for clarity.
 void asSpecOpsTurnId;
+
+describe("complete transcript codec evidence", () => {
+  const usage = { input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 } };
+  const parts = [
+    { kind: "subtask", subtask: { id: "sub", agent: "worker", status: "failed", description: "d", prompt: "p", output: "o", error: "e" } },
+    ...["started", "finished", "failed"].map((phase) => ({ kind: "step", step: { id: phase, phase, index: 1, reason: "reason", cost: 2, tokens: usage } })),
+    { kind: "attachment", attachment: { id: "a", mime: "text/plain", url: "file", filename: "file.txt" } },
+    { kind: "diff", diff: { id: "d", snapshot: "diff", files: ["file"] } },
+    { kind: "cost", cost: 2, usage },
+  ];
+  it("round-trips every part, tool status, reasoning, diagnostics and compaction", () => {
+    const record = sampleRecord();
+    record.transcript.turns[1] = { ...record.transcript.turns[1], parts: parts as never, usage, cost: 2, reasoning: [{ id: "r", text: "reasoning" }], toolCalls: ["pending", "running", "success", "failure"].map((status) => ({ callId: status, toolName: "tool", status: status as never, input: { a: 1 }, output: { b: 2 }, progress: { c: 3 } })) };
+    record.transcript.diagnostics = [{ type: "diagnostic", nativeSessionId: asNativeSessionId("native-1"), seq: 4, at: "t", level: "warn", message: "diagnostic", reason: "malformed", redactedRaw: { native: "unknown" } }];
+    record.transcript.compaction = { count: 1, lastAt: "t", removedMessageCount: 2 };
+    const encoded = encodeSessionRecord(record);
+    const decoded = decodeSessionRecord(encoded);
+    expect(decoded.ok, !decoded.ok ? decoded.reason : "").toBe(true);
+    if (decoded.ok) expect(encodeSessionRecord(decoded.value)).toBe(encoded);
+  });
+  it.each([
+    { kind: "subtask", subtask: { id: "s", agent: "a", status: "running", prompt: 3 } },
+    { kind: "step", step: { id: "s", phase: "failed", reason: 3 } },
+    { kind: "step", step: { id: "s", phase: "failed", tokens: { input: "lots" } } },
+    { kind: "attachment", attachment: { id: "a", mime: "text/plain", url: "f", filename: false } },
+    { kind: "diff", diff: { id: "d", files: [1] } },
+    { kind: "cost", cost: 2, usage: { input: "lots" } },
+  ])("rejects malformed part %#", (part) => {
+    const record = sampleRecord(); record.transcript.turns[1].parts = [part] as never;
+    expect(decodeSessionRecord(JSON.stringify(record)).ok).toBe(false);
+  });
+  it("rejects malformed usage and missing model IDs", () => {
+    const record = sampleRecord(); record.transcript.turns[1].usage = { input: "lots" } as never;
+    expect(decodeSessionRecord(JSON.stringify(record)).ok).toBe(false);
+    delete record.transcript.turns[1].usage;
+    expect(decodeSessionRecord(JSON.stringify({ ...record, session: { ...record.session, model: { name: "missing ID" } } })).ok).toBe(false);
+  });
+});

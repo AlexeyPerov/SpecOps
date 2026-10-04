@@ -33,14 +33,14 @@ export function isProtocolError(error: unknown): error is ProtocolError {
 /** Map any thrown value to a JSON-RPC error object (never throws). */
 export function toProtocolError(error: unknown): RpcError {
   if (error instanceof ProtocolError) {
-    return rpcError(error.code, error.message, error.data);
+    return rpcError(error.code, redactForLogs(error.message) as string, redactForLogs(error.data));
   }
   if (isAdapterError(error)) {
     const data: AdapterErrorData = { adapterCode: error.code };
-    return rpcError(ProtocolErrorCode.ADAPTER_ERROR, error.message, data);
+    return rpcError(ProtocolErrorCode.ADAPTER_ERROR, redactForLogs(error.message) as string, data);
   }
   if (error instanceof UnknownRuntimeError) {
-    return rpcError(ProtocolErrorCode.INVALID_PARAMS, error.message, { unknownRuntime: error.runtimeId });
+    return rpcError(ProtocolErrorCode.INVALID_PARAMS, redactForLogs(error.message) as string, { unknownRuntime: redactForLogs(error.runtimeId) });
   }
   const rawMessage = error instanceof Error ? error.message : String(error);
   const message = typeof rawMessage === "string" ? (redactForLogs(rawMessage) as string) : String(error);

@@ -235,3 +235,23 @@ describe("agent host over real stdio", () => {
     }
   });
 });
+
+it("resumes a serialized native reference in a new host process", async () => {
+  const first = new HostClient(); let native: unknown;
+  try {
+    await first.responseFor(initialize(first));
+    native = JSON.parse(JSON.stringify((await first.responseFor(first.request("session.create", { runtimeId: "fake", workspaceRootPath: "/ws" }))).result));
+    await first.responseFor(first.request("shutdown"));
+    expect(await first.waitForExit()).toBe(0);
+  } finally { first.proc.kill(); }
+  const replacement = new HostClient();
+  try {
+    await replacement.responseFor(initialize(replacement));
+    const resumed = await replacement.responseFor(replacement.request("session.resume", { native, workspaceRootPath: "/ws" }));
+    expect(resumed.result).toMatchObject(native as object);
+    await replacement.responseFor(replacement.request("turn.send", { native: resumed.result, turnId: "restart-turn", workspaceRootPath: "/ws", prompt: "ping" }));
+    await replacement.waitFor((m) => m.params?.event?.type === "turn.finished");
+    await replacement.responseFor(replacement.request("shutdown"));
+    expect(await replacement.waitForExit()).toBe(0);
+  } finally { replacement.proc.kill(); }
+});

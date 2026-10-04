@@ -140,6 +140,8 @@ export interface SessionIndexEntry {
   nativeSessionId?: string;
   /** Last model used with the linked native session (restore hint). */
   modelId?: string;
+  modeId?: string;
+  runtimeMetadata?: Readonly<Record<string, unknown>>;
   /** Public share URL when the linked session has been shared. */
   shareUrl?: string;
   /** Native session this one was forked from, if any. */

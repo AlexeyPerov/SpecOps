@@ -67,6 +67,8 @@ export function foldSessionEvent(state: TurnFoldState, event: SessionEvent): Tur
       };
 
     case "subtask.started":
+    case "subtask.completed":
+    case "subtask.failed":
       return {
         ...state,
         parts: applySubtaskStarted(state.parts, {

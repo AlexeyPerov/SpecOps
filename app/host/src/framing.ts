@@ -11,6 +11,8 @@
  * (redacted) and treats it as a separate diagnostic channel.
  */
 
+import { StringDecoder } from "node:string_decoder";
+
 import { MAX_MESSAGE_BYTES } from "./protocol";
 
 export interface FramingOptions {
@@ -32,6 +34,7 @@ export interface StreamLike {
   on(event: "data", listener: (chunk: Buffer | string) => void): unknown;
   on(event: "end", listener: () => void): unknown;
   on(event: "error", listener: (error: Error) => void): unknown;
+  off?(event: string, listener: (...args: any[]) => void): unknown;
   pause?(): unknown;
   resume?(): unknown;
 }
@@ -48,91 +51,105 @@ export interface StreamLike {
 export function readMessages(stream: StreamLike, options: FramingOptions = {}): AsyncIterable<FramingReadResult> {
   const limit = options.maxMessageBytes ?? MAX_MESSAGE_BYTES;
   const queue: FramingReadResult[] = [];
-  let resolveWaiter: ((result: IteratorResult<FramingReadResult>) => void) | null = null;
+  const decoder = new StringDecoder("utf8");
+  const capacity = 64;
+  let waiter: { resolve: (r: IteratorResult<FramingReadResult>) => void; reject: (e: Error) => void } | null = null;
   let finished = false;
   let streamError: Error | null = null;
   let buffer = "";
-
+  let discarding = false;
+  const cleanup = (): void => {
+    stream.off?.("data", onData);
+    stream.off?.("end", onEnd);
+    stream.off?.("error", onError);
+  };
+  const take = (): IteratorResult<FramingReadResult> => {
+    const value = queue.shift();
+    if (queue.length < capacity / 2 && !finished) stream.resume?.();
+    return value ? { value, done: false } : { value: undefined, done: true };
+  };
   const wake = (): void => {
-    if (!resolveWaiter) return;
-    const resolve = resolveWaiter;
-    resolveWaiter = null;
-    if (queue.length > 0) {
-      resolve({ value: queue.shift()!, done: false });
-    } else if (streamError) {
-      resolve({ value: undefined, done: true });
-    } else {
-      resolve({ value: undefined, done: true });
-    }
+    if (!waiter) return;
+    const pending = waiter;
+    waiter = null;
+    if (streamError) pending.reject(streamError);
+    else if (queue.length || finished) pending.resolve(take());
+    else waiter = pending;
   };
-
-  const push = (result: FramingReadResult): void => {
-    queue.push(result);
-    wake();
-  };
-
-  stream.on("data", (chunk: Buffer | string) => {
-    buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
-    let newlineIndex: number;
-    while ((newlineIndex = buffer.indexOf("\n")) >= 0) {
-      const line = buffer.slice(0, newlineIndex);
-      buffer = buffer.slice(newlineIndex + 1);
-      if (line.length === 0) continue;
-      if (Buffer.byteLength(line, "utf8") > limit) {
-        push({ ok: false, reason: "too-large", detail: `${line.length} bytes` });
-        continue;
-      }
-      try {
-        push({ ok: true, value: JSON.parse(line) });
-      } catch {
-        push({ ok: false, reason: "malformed-json", detail: line.slice(0, 120) });
-      }
-    }
-    // High-water guard: a single line accumulating past the limit without `\n`.
-    if (Buffer.byteLength(buffer, "utf8") > limit) {
-      push({ ok: false, reason: "too-large", detail: "unterminated oversized line" });
-      buffer = "";
-    }
-  });
-  stream.on("end", () => {
-    finished = true;
-    if (buffer.length > 0) {
-      const tail = buffer;
-      buffer = "";
-      if (Buffer.byteLength(tail, "utf8") > limit) {
-        push({ ok: false, reason: "too-large", detail: "trailing oversized line" });
-      } else {
-        try {
-          push({ ok: true, value: JSON.parse(tail) });
-        } catch {
-          push({ ok: false, reason: "malformed-json", detail: tail.slice(0, 120) });
-        }
-      }
-    }
-    wake();
-  });
-  stream.on("error", (error: Error) => {
+  const onError = (error: Error): void => {
     streamError = error;
     finished = true;
+    queue.length = 0;
+    buffer = "";
+    stream.pause?.();
+    cleanup();
     wake();
-  });
-
+  };
+  const push = (result: FramingReadResult): void => {
+    if (queue.length >= capacity) {
+      onError(new FramingError("input queue capacity exceeded"));
+      return;
+    }
+    queue.push(result);
+    if (queue.length >= capacity / 2) stream.pause?.();
+    wake();
+  };
+  const parse = (line: string): void => {
+    if (!line) return;
+    if (Buffer.byteLength(line, "utf8") > limit) {
+      push({ ok: false, reason: "too-large", detail: "oversized line" });
+    } else {
+      try { push({ ok: true, value: JSON.parse(line) }); }
+      catch { push({ ok: false, reason: "malformed-json", detail: "invalid JSON" }); }
+    }
+  };
+  const onData = (chunk: Buffer | string): void => {
+    if (finished) return;
+    const text = typeof chunk === "string" ? chunk : decoder.write(chunk);
+    // Accumulate one line at a time, dropping the rest of oversized frames.
+    for (const segment of text.split("\n").entries()) {
+      const [index, part] = segment;
+      if (index > 0) {
+        if (!discarding) parse(buffer);
+        buffer = "";
+        discarding = false;
+      }
+      if (finished) return;
+      if (!discarding) {
+        if (Buffer.byteLength(buffer, "utf8") + Buffer.byteLength(part, "utf8") > limit) {
+          push({ ok: false, reason: "too-large", detail: "oversized line" });
+          buffer = "";
+          discarding = true;
+        } else buffer += part;
+      }
+    }
+  };
+  const onEnd = (): void => {
+    if (finished) return;
+    buffer += decoder.end();
+    if (!discarding) parse(buffer);
+    buffer = "";
+    finished = true;
+    cleanup();
+    wake();
+  };
+  stream.on("data", onData);
+  stream.on("end", onEnd);
+  stream.on("error", onError);
   return {
     [Symbol.asyncIterator](): AsyncIterator<FramingReadResult> {
       return {
-        next(): Promise<IteratorResult<FramingReadResult>> {
-          if (queue.length > 0) {
-            return Promise.resolve({ value: queue.shift()!, done: false });
-          }
-          if (finished) {
-            if (streamError) return Promise.reject(streamError);
-            return Promise.resolve({ value: undefined, done: true });
-          }
-          return new Promise<IteratorResult<FramingReadResult>>((resolve) => {
-            resolveWaiter = resolve;
-          });
+        next() {
+          if (streamError) return Promise.reject(streamError);
+          if (queue.length || finished) return Promise.resolve(take());
+          return new Promise((resolve, reject) => { waiter = { resolve, reject }; });
         },
-        return(): Promise<IteratorResult<FramingReadResult>> {
+        return() {
+          finished = true;
+          queue.length = 0;
+          buffer = "";
+          cleanup();
+          wake();
           return Promise.resolve({ value: undefined, done: true });
         },
       };

@@ -21,6 +21,8 @@ import {
   mintSpecOpsTurnId,
   type SpecOpsTurnId,
 } from "../ids";
+import { isKnownCapability } from "../capabilities";
+import { isAdapterError } from "./errors";
 import type { SessionEvent } from "../events";
 import {
   CAPABILITY_EXTENSION_MAP,
@@ -39,6 +41,9 @@ export interface ContractAdapterFactory {
   readonly cancelPrompt: string;
   /** Optional workspace root passed to create/send. */
   readonly workspaceRootPath?: string;
+  /** Deterministic native fault fixtures, required for every adapter suite. */
+  readonly capabilityChecks?: Readonly<Record<string, (adapter: AgentRuntimeAdapter) => boolean>>;
+  createFaultAdapter(fault: "diagnostics" | "session-not-found"): Promise<AgentRuntimeAdapter>;
 }
 
 const TERMINAL_KINDS = new Set(["turn.finished", "turn.failed", "turn.cancelled"]);
@@ -67,14 +72,16 @@ async function createSession(
   return adapter.createSession({ runtimeId: adapter.runtimeId as never, workspaceRootPath });
 }
 
-async function drainTerminal(stream: AsyncIterable<SessionEvent>): Promise<SessionEvent[]> {
+export async function collectContractEvents(stream: AsyncIterable<SessionEvent>, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<SessionEvent[]> {
   const out: SessionEvent[] = [];
-  for await (const event of stream) {
-    out.push(event);
-    if (TERMINAL_KINDS.has(event.type)) {
-      return out;
-    }
+  const iterator = stream[Symbol.asyncIterator]();
+  while (true) {
+    const next = await withTimeout(iterator.next(), timeoutMs);
+    if (next.done) break;
+    out.push(next.value);
+    if (out.length > 4096) throw new Error("Contract event limit exceeded");
   }
+  if (out.filter((event) => TERMINAL_KINDS.has(event.type)).length !== 1 || !TERMINAL_KINDS.has(out.at(-1)?.type ?? "")) throw new Error("Expected exactly one terminal event, last in stream");
   return out;
 }
 
@@ -119,7 +126,8 @@ export function runAdapterContractSuite(factory: ContractAdapterFactory): void {
       const adapter = await factory.create();
       const capabilities = await adapter.describeCapabilities();
       for (const id of capabilities.supported) {
-        const checker = CAPABILITY_EXTENSION_MAP[id as keyof typeof CAPABILITY_EXTENSION_MAP];
+        const checker = CAPABILITY_EXTENSION_MAP[id as keyof typeof CAPABILITY_EXTENSION_MAP] ?? factory.capabilityChecks?.[id];
+        if (isKnownCapability(id)) expect(checker, `standard capability "${id}" requires extension evidence`).toBeDefined();
         if (checker) {
           expect(checker(adapter), `advertised "${id}" must be implemented`).toBe(true);
         }
@@ -146,7 +154,11 @@ export function runAdapterContractSuite(factory: ContractAdapterFactory): void {
 
     it("resumeSession() returns the (possibly refreshed) native ref", async () => {
       const { adapter, ref } = await setup();
-      const resumed = await adapter.resumeSession({ native: ref, workspaceRootPath: root });
+      const replacement = await factory.create();
+      const resumed = await withTimeout(replacement.resumeSession({ native: JSON.parse(JSON.stringify(ref)), workspaceRootPath: root }));
+      expect(resumed.nativeSessionId).toBe(ref.nativeSessionId);
+      const events = await collectContractEvents(replacement.send({ turnId: turnId(), native: resumed, workspaceRootPath: root, prompt: factory.finishPrompt }));
+      expect(events.filter((event) => TERMINAL_KINDS.has(event.type))).toHaveLength(1);
       expect(resumed.runtimeId).toBe(factory.runtimeId);
       expect(String(resumed.nativeSessionId).length).toBeGreaterThan(0);
     });
@@ -154,7 +166,7 @@ export function runAdapterContractSuite(factory: ContractAdapterFactory): void {
     it("send() emits turn.started first for the provided turn id", async () => {
       const { adapter, ref } = await setup();
       const id = turnId();
-      const events = await drainTerminal(
+      const events = await collectContractEvents(
         adapter.send({ turnId: id, native: ref, workspaceRootPath: root, prompt: factory.finishPrompt }),
       );
       expect(events.at(0)?.type).toBe("turn.started");
@@ -163,16 +175,17 @@ export function runAdapterContractSuite(factory: ContractAdapterFactory): void {
 
     it("send() ends with exactly one terminal event", async () => {
       const { adapter, ref } = await setup();
-      const events = await drainTerminal(
+      const events = await collectContractEvents(
         adapter.send({ turnId: turnId(), native: ref, workspaceRootPath: root, prompt: factory.finishPrompt }),
       );
       const terminals = events.filter((event) => TERMINAL_KINDS.has(event.type));
       expect(terminals).toHaveLength(1);
+      expect(TERMINAL_KINDS.has(events.at(-1)!.type)).toBe(true);
     });
 
     it("sequence ids are strictly monotonic within a turn", async () => {
       const { adapter, ref } = await setup();
-      const events = await drainTerminal(
+      const events = await collectContractEvents(
         adapter.send({ turnId: turnId(), native: ref, workspaceRootPath: root, prompt: factory.finishPrompt }),
       );
       for (let i = 1; i < events.length; i += 1) {
@@ -182,10 +195,10 @@ export function runAdapterContractSuite(factory: ContractAdapterFactory): void {
 
     it("sequence ids stay monotonic across a second turn on the same session", async () => {
       const { adapter, ref } = await setup();
-      const first = await drainTerminal(
+      const first = await collectContractEvents(
         adapter.send({ turnId: turnId(), native: ref, workspaceRootPath: root, prompt: factory.finishPrompt }),
       );
-      const second = await drainTerminal(
+      const second = await collectContractEvents(
         adapter.send({ turnId: turnId(), native: ref, workspaceRootPath: root, prompt: factory.finishPrompt }),
       );
       expect(second.at(0)!.seq).toBeGreaterThan(first.at(-1)!.seq);
@@ -209,7 +222,7 @@ export function runAdapterContractSuite(factory: ContractAdapterFactory): void {
             const next = await iterator.next();
             if (next.done) break;
             collected.push(next.value);
-            if (TERMINAL_KINDS.has(next.value.type)) break;
+
           }
         })(),
       );
@@ -223,6 +236,25 @@ export function runAdapterContractSuite(factory: ContractAdapterFactory): void {
       await expect(adapter.cancel({ native: ref })).resolves.toBeUndefined();
     });
 
+    it("preserves unknown/malformed events as secret-safe diagnostics", async () => {
+      const adapter = await factory.createFaultAdapter("diagnostics");
+      const ref = await createSession(adapter, root);
+      const events = await collectContractEvents(adapter.send({ turnId: turnId(), native: ref, workspaceRootPath: root, prompt: factory.finishPrompt }));
+      const diagnostics = events.filter((event) => event.type === "diagnostic");
+      expect(diagnostics.some((event) => event.reason === "unknown-native")).toBe(true);
+      expect(diagnostics.some((event) => event.reason === "malformed")).toBe(true);
+      for (const secret of ["contract-bearer-canary", "contract-token-canary", "contract-secret-canary"]) expect(JSON.stringify(diagnostics)).not.toContain(secret);
+    });
+    it("missing native history raises a typed error", async () => {
+      const adapter = await factory.createFaultAdapter("session-not-found");
+      try {
+        await withTimeout(adapter.resumeSession({ native: { runtimeId: adapter.runtimeId as never, nativeSessionId: "missing-history" as never }, workspaceRootPath: root }));
+        throw new Error("Expected typed error");
+      } catch (error) {
+        expect(isAdapterError(error)).toBe(true);
+        expect((error as { code: string }).code).toBe("session-not-found");
+      }
+    });
     it("health() reports a status for the adapter runtime", async () => {
       const adapter = await factory.create();
       const health = await adapter.health();

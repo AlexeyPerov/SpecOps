@@ -6,6 +6,7 @@
  * by Tauri in phase E. Run with `node dist/index.js`.
  */
 
+import { redactForLogs } from "./redact";
 import { createHost } from "./host";
 
 const host = createHost();
@@ -18,6 +19,6 @@ host
   .catch((error) => {
     // Redact and print to stderr; never echo raw error text that may carry secrets.
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`agent-host fatal: ${message}\n`);
+    process.stderr.write(`agent-host fatal: ${redactForLogs(message)}\n`);
     process.exit(1);
   });

@@ -118,8 +118,7 @@ describe("agent host client", () => {
     const collected: string[] = [];
     const drive = (async () => {
       // Wait for the listener + ack to settle.
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.waitFor(() => expect(fb.calls.some((call) => call.args?.method === "turn.send")).toBe(true));
       // The listen() fake captured the handler; emit three events.
       expect(fb.listen).toHaveBeenCalledWith(AGENT_HOST_EVENT, expect.any(Function));
       fb.emit({
@@ -162,8 +161,7 @@ describe("agent host client", () => {
       prompt: "ping",
     });
     const drive = (async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.waitFor(() => expect(fb.calls.some((call) => call.args?.method === "turn.send")).toBe(true));
       // Event for a different session — must be ignored.
       fb.emit({
         method: "session.event",
@@ -203,4 +201,24 @@ describe("agent host client", () => {
       code: -32006,
     });
   });
+});
+
+it("fails streams on listener setup rejection", async () => {
+  const fb = fakeBindings(); fb.listen = vi.fn().mockRejectedValue(new Error("listener unavailable"));
+  const iterator = createAgentHostClient(fb).sendTurn({ native: { runtimeId: "fake", nativeSessionId: "n" as never }, turnId: newTurnId(), workspaceRootPath: "/ws", prompt: "p" })[Symbol.asyncIterator]();
+  await expect(iterator.next()).rejects.toThrow("listener unavailable");
+});
+it.each(["death", "replacement", "cancel"])("settles a pending iterator on %s and closes subscriptions", async (failure) => {
+  const fb = fakeBindings(); const unlisten = vi.fn();
+  fb.listen = vi.fn(async (_event, handler) => { fb.handlerRef.current = handler; return unlisten; });
+  const client = createAgentHostClient(fb); await client.start();
+  const req = { native: { runtimeId: "fake" as const, nativeSessionId: "n" as never }, turnId: newTurnId(), workspaceRootPath: "/ws", prompt: "p" };
+  const iterator = client.sendTurn(req)[Symbol.asyncIterator]();
+  const pending = iterator.next();
+  const rejected = expect(pending).rejects.toThrow();
+  await vi.waitFor(() => expect(fb.calls.some((call) => call.args?.method === "turn.send")).toBe(true));
+  if (failure === "cancel") await client.cancelTurn(req);
+  else fb.invoke = vi.fn(async () => ({ running: failure !== "death", generation: 2 }));
+  await rejected;
+  expect(unlisten).toHaveBeenCalledOnce();
 });

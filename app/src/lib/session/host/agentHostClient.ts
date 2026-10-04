@@ -173,6 +173,8 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
   // Fan-out state for session.event notifications. Lazily wired on first use.
   const subscribers = new Map<string, Set<SessionSubscriber>>();
   let listenerPromise: Promise<UnlistenFn> | null = null;
+  const failures = new Map<string, (error: Error) => void>();
+  const failStreams = (message: string): void => { for (const fail of failures.values()) fail(new Error(message)); };
 
   function nativeKey(nativeSessionId: string): string {
     return nativeSessionId;
@@ -180,6 +182,7 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
 
   async function ensureListener(): Promise<void> {
     if (listenerPromise !== null) {
+      await listenerPromise;
       return;
     }
     listenerPromise = bindings.listen(AGENT_HOST_EVENT, (payload) => {
@@ -200,6 +203,7 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
         }
       }
     });
+    await listenerPromise.catch((error) => { listenerPromise = null; throw error; });
     // Swallow listener setup failures; callers will surface transport errors
     // when they try to use the client. Avoid an unhandled rejection.
     listenerPromise.catch(() => {
@@ -221,6 +225,11 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
         current.delete(subscriber);
         if (current.size === 0) {
           subscribers.delete(key);
+          if (subscribers.size === 0 && listenerPromise) {
+            const closing = listenerPromise;
+            listenerPromise = null;
+            void closing.then((unlisten) => unlisten()).catch(() => {});
+          }
         }
       }
     };
@@ -236,6 +245,7 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
 
   let lastStatus: AgentHostStatus | null = null;
   const rememberStatus = (status: AgentHostStatus): AgentHostStatus => {
+    if (!status.running || (lastStatus && status.generation !== lastStatus.generation)) failStreams("Agent Host stopped or was replaced. Resume the session to continue.");
     lastStatus = status;
     return status;
   };
@@ -249,9 +259,11 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
       return rememberStatus((await bindings.invoke("agent_host_start")) as AgentHostStatus);
     },
     async stop() {
+      failStreams("Agent Host stopped. Resume the session to continue.");
       return rememberStatus((await bindings.invoke("agent_host_stop")) as AgentHostStatus);
     },
     async restart() {
+      failStreams("Agent Host restarted. Resume the session to continue.");
       return rememberStatus((await bindings.invoke("agent_host_restart")) as AgentHostStatus);
     },
     async getStatus() {
@@ -293,7 +305,8 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
     },
 
     async cancelTurn(req) {
-      await request("turn.cancel", req);
+      try { await request("turn.cancel", req, 1000); }
+      finally { failures.get(String(req.turnId))?.(new Error("Turn cancelled")); }
     },
 
     async *sendTurn(req) {
@@ -304,6 +317,27 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
       let resolveNext: (() => void) | null = null;
       let terminal = false;
       let terminalError: Error | null = null;
+      const fail = (error: Error): void => {
+        if (terminal || terminalError) return;
+        terminalError = error;
+        resolveNext?.();
+      };
+      failures.set(String(req.turnId), fail);
+      let checking = false;
+      let generation = lastStatus?.generation;
+      const monitor = setInterval(() => {
+        if (checking || terminal || terminalError) return;
+        checking = true;
+        const statusCall = new Promise<unknown>((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error("Status timed out")), 1000);
+          bindings.invoke("agent_host_status").then(resolve, reject).finally(() => clearTimeout(timer));
+        });
+        void statusCall.then((raw) => {
+          const status = raw as AgentHostStatus;
+          if (generation === undefined) generation = status.generation;
+          if (!status.running || status.generation !== generation) fail(new Error("Agent Host exited or was replaced. Resume the session to continue."));
+        }, () => fail(new Error("Agent Host status unavailable"))).finally(() => { checking = false; });
+      }, 500);
 
       const unsubscribe = subscribe(req.native.nativeSessionId, (event) => {
         // Only forward events for this turn; other turns on the same session
@@ -313,6 +347,8 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
             return;
           }
         }
+        if (terminal || terminalError) return;
+        if (queue.length >= 256) { fail(new Error("Agent Host event queue overflow")); return; }
         queue.push(event);
         if (
           event.type === "turn.finished" ||
@@ -336,6 +372,7 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
         });
 
         while (!terminal) {
+          if (terminalError) throw terminalError;
           if (queue.length > 0) {
             yield queue.shift() as SessionEvent;
             continue;
@@ -353,6 +390,8 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
           yield queue.shift() as SessionEvent;
         }
       } finally {
+        clearInterval(monitor);
+        failures.delete(String(req.turnId));
         unsubscribe();
       }
     },

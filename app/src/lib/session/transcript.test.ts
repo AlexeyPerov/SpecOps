@@ -114,3 +114,21 @@ describe("transcript reducer", () => {
     expect(second).toEqual(first);
   });
 });
+
+it("keeps the first terminal immutable and sums usage increments", () => {
+  const turnId = mintSpecOpsTurnId();
+  const nativeSessionId = asNativeSessionId("native-1");
+  const common = { nativeSessionId, turnId, at: "t" };
+  const usage = { input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 } };
+  let transcript = applySessionEvent(emptyTranscript(), { ...common, seq: 1, type: "turn.started" });
+  transcript = applySessionEvent(transcript, { ...common, seq: 2, type: "usage.recorded", usage, cost: 2 });
+  transcript = applySessionEvent(transcript, { ...common, seq: 3, type: "usage.recorded", usage, cost: 3 });
+  expect(transcript.turns[0].usage?.input).toBe(2);
+  expect(transcript.turns[0].usage?.cache.read).toBe(8);
+  expect(transcript.turns[0].cost).toBe(5);
+  transcript = applySessionEvent(transcript, { ...common, seq: 4, type: "turn.failed", message: "failed" });
+  const finished = transcript;
+  transcript = applySessionEvent(transcript, { ...common, seq: 5, type: "turn.finished" });
+  transcript = applySessionEvent(transcript, { ...common, seq: 6, type: "text.delta", delta: "late text" });
+  expect(transcript).toEqual(finished);
+});

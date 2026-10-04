@@ -39,8 +39,12 @@ const factory: ContractAdapterFactory = {
   finishPrompt: "hello",
   cancelPrompt: "long-running",
   workspaceRootPath: ROOT,
-  async create() {
-    return makeAdapter();
+  async create() { return makeAdapter(); },
+  async createFaultAdapter(fault) {
+    return fault === "session-not-found" ? createFakeRuntimeAdapter({ failResumeUnknown: true }) : createFakeRuntimeAdapter({ defaultTurn: { events: [
+      { kind: "unknown-native", raw: { access_token: "contract-token-canary" } },
+      { kind: "malformed", message: "Bearer contract-bearer-canary", raw: { client_secret: "contract-secret-canary" } },
+    ], outcome: { outcome: "finish" } } });
   },
 };
 
@@ -294,7 +298,7 @@ describe("fake runtime — scripted behavior", () => {
     expect(capabilities.supported).toContain("fork");
   });
 
-  it("describeCatalog and health return populated summaries", async () => {
+  it("catalog extension and health return populated summaries", async () => {
     const adapter = createFakeRuntimeAdapter({ runtimeVersion: "fake-1.0", healthStatus: "degraded", healthMessage: "slow" });
     const models = await adapter.listModels();
     const modes = await adapter.listModes();

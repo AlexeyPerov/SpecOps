@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Planned
+**Status:** Done — AS01-S accepted for source-checkout macOS; downstream native/UI/installed gates remain open.
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -23,3 +23,5 @@ AS01-S precedes Codex AS02-A. Native profile/creation/catalog gaps belong to 02-
 ## Task tracking
 
 Task prefix is `AS01-<phase>-<NN>`. Numeric folders reflect the default delivery sequence; cross-stage gates and later/recurring work are explicit above. Mark only implemented and verified tasks `[DONE]`, record pinned contracts and actual smoke/support scope, and update `specs/changelog.md`. Completed records live in [done](../done/README.md); open acceptance remains active.
+
+AS01-S verification and review dispositions: [acceptance evidence](acceptance-evidence.md).

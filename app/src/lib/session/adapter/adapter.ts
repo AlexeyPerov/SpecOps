@@ -14,6 +14,8 @@
  *   session across the lifetime of the adapter (including after resume).
  * - **Terminal exclusivity.** A stream never emits more than one terminal turn
  *   event; after the terminal event the iterable ends.
+ * - **Usage.** `usage.recorded` carries per-call increments; reducers sum usage/cost.
+ * - **Text.** `text.finished` carries full accumulated text, replacing deltas.
  * - **Cancellation.** `cancel()` on an active turn causes the active stream to
  *   emit `turn.cancelled` and complete; `cancel()` with no active turn settles
  *   without throwing (callers may treat it as idempotent).
@@ -25,10 +27,6 @@
  */
 
 import type { AgentCapabilityValue } from "../capabilities";
-import type {
-  AgentModelDescriptor,
-  AgentModeDescriptor,
-} from "../binding";
 import type { AgentRuntimeDescriptor, AgentRuntimeId } from "../runtime";
 import type { NativeSessionId, SpecOpsTurnId } from "../ids";
 import type { AttachmentSnapshot, SessionEvent } from "../events";
@@ -193,9 +191,6 @@ export interface AgentRuntimeAdapter {
    */
   authenticate(request: AgentAuthRequest): Promise<AgentAuthResult>;
 
-  /** List models/modes the runtime offers (when supported); optional metadata. */
-  describeCatalog?(): Promise<AgentCatalogSummary>;
-
   /** Create a new native session bound to the given workspace. */
   createSession(request: CreateAgentSessionRequest): Promise<NativeSessionRef>;
 
@@ -222,18 +217,5 @@ export interface AgentRuntimeAdapter {
   health(): Promise<AdapterHealth>;
 }
 
-/** Optional catalog summary returned by `describeCatalog`. */
-export interface AgentCatalogSummary {
-  readonly models: readonly AgentModelDescriptor[];
-  readonly modes: readonly AgentModeDescriptor[];
-  readonly defaultModelId?: string;
-  readonly defaultModeId?: string;
-}
-
 /** Terminal turn event kinds — exactly one of these ends every turn stream. */
 export type TerminalTurnEventKind = "turn.finished" | "turn.failed" | "turn.cancelled";
-
-/** Type guard for the optional `describeCatalog` method. */
-export function supportsCatalog(adapter: AgentRuntimeAdapter): boolean {
-  return typeof (adapter as AgentRuntimeAdapter & { describeCatalog?: unknown }).describeCatalog === "function";
-}

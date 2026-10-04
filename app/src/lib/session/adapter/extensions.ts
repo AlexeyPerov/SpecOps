@@ -265,6 +265,8 @@ export function isDiagnosticsExtension(adapter: AdapterLike): adapter is Diagnos
  * Open capability ids (runtime-specific) are exempt.
  */
 export const CAPABILITY_EXTENSION_MAP: Readonly<Record<string, (a: AdapterLike) => boolean>> = {
+  catalogs: isCatalogExtension,
+  nativeTodos: isTodosExtension,
   permissions: isPermissionExtension,
   questions: isQuestionExtension,
   fork: isCheckpointExtension,
@@ -288,10 +290,6 @@ export function inferCapabilities(adapter: AdapterLike): AgentCapabilityValue[] 
     if (check(adapter)) {
       out.push(capability as AgentCapabilityValue);
     }
-  }
-  if (isTodosExtension(adapter)) out.push("nativeTodos");
-  if (hasMethod(adapter, "describeConfiguration")) {
-    // configuration is not a standalone capability id; surfaced via extension only.
   }
   return out;
 }

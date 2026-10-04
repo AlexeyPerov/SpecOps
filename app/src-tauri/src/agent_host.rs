@@ -21,14 +21,14 @@
 //!   the typed [`AgentHostError`].
 //! - Shutdown drains every path: a best-effort `shutdown` request, stdin close, a
 //!   bounded grace window, then process-group termination so the host's children
-//!   and grandchildren are reaped on every platform.
+//!   and grandchildren are reaped on supported Unix targets.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -45,8 +45,7 @@ const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const INITIALIZE_TIMEOUT: Duration = Duration::from_secs(10);
 /// Bounded buffer between the stdout reader and the WebView emitter. When full,
-/// notifications are dropped (the host contract treats drops as backpressure, not
-/// data loss — terminal events are always re-derived from request results).
+/// overflow retires the host generation so terminal delivery loss is detectable.
 const EVENT_CHANNEL_CAPACITY: usize = 256;
 /// Crash-loop breaker: refuse a restart after this many starts within the window.
 const CRASH_LOOP_WINDOW: Duration = Duration::from_secs(30);
@@ -181,7 +180,7 @@ impl PendingEntry {
 
 struct AgentHostInner {
     child: Option<Child>,
-    stdin: Option<ChildStdin>,
+    stdin: Option<SyncSender<(u64, Vec<u8>)>>,
     generation: u64,
     health: AgentHostHealth,
     host_version: Option<String>,
@@ -228,8 +227,16 @@ impl AgentHostInner {
         if let Some(child) = self.child.as_mut() {
             match child.try_wait() {
                 Ok(Some(_)) => {
-                    // Already exited but the handle is still installed — clear it
-                    // without bumping generation (no reader to retire).
+                    #[cfg(unix)]
+                    kill_process_group_pid(child.id());
+                    self.bump_generation();
+                    fail_all_pending(
+                        self,
+                        AgentHostError::HostExited {
+                            code: None,
+                            message: "Agent Host exited".into(),
+                        },
+                    );
                     self.child = None;
                     self.stdin = None;
                     if !matches!(self.health, AgentHostHealth::Error) {
@@ -266,20 +273,20 @@ impl AgentHostInner {
 #[derive(Clone)]
 pub struct AgentHostState {
     inner: Arc<Mutex<AgentHostInner>>,
+    lifecycle: Arc<Mutex<()>>,
 }
 
 impl AgentHostState {
     pub fn new() -> Self {
         AgentHostState {
             inner: Arc::new(Mutex::new(AgentHostInner::new())),
+            lifecycle: Arc::new(Mutex::new(())),
         }
     }
 
     /// Synchronous best-effort stop used by app shutdown. Idempotent.
     pub fn stop_sync(&self) {
-        if let Ok(mut inner) = self.inner.lock() {
-            let _ = stop_child(&mut inner, true);
-        }
+        let _ = self.shutdown();
     }
 }
 
@@ -292,10 +299,9 @@ enum LineRead {
     Truncated(usize),
 }
 
-/// Read one line (up to and including `delim`) into `buf`, capping memory at
-/// `max` bytes per line. Bytes past the ceiling are drained (not retained) up to
-/// the next delimiter so a runaway line cannot exhaust memory nor block the
-/// child's stdout pipe. Mirrors the proven stderr reader in `opencode_sidecar`.
+/// Read a line with bounded memory. Return immediately at the ceiling so a
+/// peer cannot hide an oversized frame by withholding the next delimiter.
+/// The protocol reader retires that generation; stderr discards bounded chunks.
 fn read_bounded_line<R: BufRead>(
     reader: &mut R,
     delim: u8,
@@ -327,46 +333,19 @@ fn read_bounded_line<R: BufRead>(
             buf.extend_from_slice(&available[..take]);
             reader.consume(take);
             if buf.len() >= max && !buf.contains(&delim) {
-                drain_until_delimiter(reader, delim);
                 return LineRead::Truncated(buf.len());
             }
             return LineRead::Line(buf.len());
         }
         let remaining = max.saturating_sub(buf.len());
         if remaining == 0 {
-            drain_until_delimiter(reader, delim);
             return LineRead::Truncated(buf.len());
         }
         let take = available.len().min(remaining);
         buf.extend_from_slice(&available[..take]);
         reader.consume(take);
         if buf.len() >= max {
-            drain_until_delimiter(reader, delim);
             return LineRead::Truncated(buf.len());
-        }
-    }
-}
-
-fn drain_until_delimiter<R: BufRead>(reader: &mut R, delim: u8) {
-    let mut discarded = 0u64;
-    loop {
-        let available = match reader.fill_buf() {
-            Ok(slice) => slice,
-            Err(_) => return,
-        };
-        if available.is_empty() {
-            return;
-        }
-        if let Some(pos) = available.iter().position(|b| *b == delim) {
-            reader.consume(pos + 1);
-            return;
-        }
-        let len = available.len();
-        reader.consume(len);
-        discarded = discarded.saturating_add(len as u64);
-        const MAX_DRAIN_PER_LINE: u64 = 16 * 1024 * 1024;
-        if discarded >= MAX_DRAIN_PER_LINE {
-            return;
         }
     }
 }
@@ -525,11 +504,6 @@ fn mark_exited(inner_arc: &Arc<Mutex<AgentHostInner>>, generation: u64, code: Op
     }
 }
 
-#[cfg(unix)]
-fn kill_process_group(child: &Child) {
-    kill_process_group_pid(child.id());
-}
-
 /// Signal the whole process group led by `pid` (Unix). The group survives the
 /// leader's exit as long as any member remains, so this must be called even
 /// after a cooperative exit to reap grandchildren the host left behind.
@@ -540,7 +514,7 @@ fn kill_process_group_pid(pid: u32) {
     // POSIX kill(2): a NEGATIVE pid signals the whole process group. A positive
     // pid would signal only the leader and orphan its grandchildren.
     let neg_pgid = -(pid as i32);
-    let _ = kill(Pid::from_raw(neg_pgid), Signal::SIGTERM);
+    let _ = kill(Pid::from_raw(neg_pgid), Signal::SIGKILL);
 }
 
 /// Reap a child and its process group. Always signal the group (when `force`) so
@@ -553,8 +527,18 @@ fn reap_child(mut child: Child, force: bool) {
     if force {
         kill_process_group_pid(pid);
     }
-    // SIGKILL the leader (no-op + logged if already dead), then always wait to
-    // reap so the process cannot linger as a zombie.
+    if !force {
+        let deadline = Instant::now() + SHUTDOWN_GRACE;
+        while Instant::now() < deadline {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+    #[cfg(unix)]
+    kill_process_group_pid(pid);
+
     if let Err(error) = child.kill() {
         log::warn!("[agent-host] failed to kill process: {error}");
     }
@@ -594,26 +578,27 @@ fn stdout_reader(
     let mut buf: Vec<u8> = Vec::new();
     loop {
         buf.clear();
-        match read_bounded_line(&mut reader, b'\n', &mut buf, MAX_MESSAGE_BYTES) {
+        match read_bounded_line(&mut reader, b'\n', &mut buf, MAX_MESSAGE_BYTES + 1) {
             LineRead::Eof | LineRead::Err => {
                 mark_exited(&inner_arc, generation, None);
                 break;
             }
             LineRead::Truncated(_) => {
-                // Line exceeded the ceiling; the remainder was drained. Skip — a
-                // truncated JSON-RPC message cannot be parsed.
+                // A truncated frame may hide terminal delivery loss; retire it.
                 log::warn!(
                     "[agent-host] dropped oversized stdout line (> {MAX_MESSAGE_BYTES} bytes)"
                 );
-                continue;
+                mark_exited(&inner_arc, generation, None);
+                break;
             }
             LineRead::Line(_) => {}
         }
         let value: Value = match serde_json::from_slice(&buf) {
             Ok(value) => value,
             Err(_) => {
-                log::warn!("[agent-host] dropped non-JSON stdout line");
-                continue;
+                log::warn!("[agent-host] invalid stdout frame; retiring generation");
+                mark_exited(&inner_arc, generation, None);
+                break;
             }
         };
         let obj = match value.as_object() {
@@ -669,11 +654,14 @@ fn stdout_reader(
             let params = obj.get("params").cloned();
             let event = HostEvent { method, params };
             if event_tx.try_send(event).is_err() {
-                log::warn!("[agent-host] event buffer full; dropping notification");
+                mark_exited(&inner_arc, generation, None);
+                break;
             }
             continue;
         }
-        // Anything else is unexpected; ignore.
+        // Unexpected frames can hide terminal delivery loss. Retire this generation.
+        mark_exited(&inner_arc, generation, None);
+        break;
     }
 }
 
@@ -706,14 +694,28 @@ fn stderr_drainer(mut stderr: std::process::ChildStderr) {
             line.truncate(end);
             line.push_str("…[truncated]");
         }
-        log::warn!("[agent-host] {line}");
+        log::warn!(
+            "[agent-host] stderr diagnostic received ({} bytes)",
+            line.len()
+        );
         logged += 1;
     }
 }
 
-fn event_emitter(app: AppHandle, rx: mpsc::Receiver<HostEvent>) {
+fn event_emitter(
+    app: AppHandle,
+    inner: Arc<Mutex<AgentHostInner>>,
+    generation: u64,
+    rx: mpsc::Receiver<HostEvent>,
+) {
     while let Ok(event) = rx.recv() {
-        let _ = app.emit(AGENT_HOST_EVENT, &event);
+        if inner.lock().map(|g| g.generation).ok() != Some(generation) {
+            break;
+        }
+        if app.emit(AGENT_HOST_EVENT, &event).is_err() {
+            mark_exited(&inner, generation, None);
+            break;
+        }
     }
 }
 
@@ -725,9 +727,9 @@ impl AgentHostState {
         params: Option<Value>,
         timeout: Duration,
     ) -> Result<Value, AgentHostError> {
-        let (id, entry, deadline) = {
+        let (id, entry, deadline, generation) = {
             let mut inner = self.inner.lock().map_err(|e| AgentHostError::io(e))?;
-            if inner.shutting_down {
+            if inner.shutting_down && method != "shutdown" {
                 return Err(AgentHostError::ShuttingDown {
                     message: "Agent Host is shutting down".to_string(),
                 });
@@ -744,25 +746,22 @@ impl AgentHostState {
             });
             let mut payload = serde_json::to_string(&request).map_err(|e| AgentHostError::io(e))?;
             payload.push('\n');
-            let stdin = inner
-                .stdin
-                .as_mut()
-                .ok_or_else(AgentHostError::not_running)?;
-            if let Err(error) = stdin
-                .write_all(payload.as_bytes())
-                .and_then(|_| stdin.flush())
-            {
-                // Broken pipe — the child is gone. Reflect that and bail.
-                inner.health = AgentHostHealth::Degraded;
-                return Err(AgentHostError::HostExited {
-                    code: None,
-                    message: format!("Failed to write to Agent Host stdin: {error}"),
-                });
+            if payload.len() > MAX_MESSAGE_BYTES + 1 || inner.pending.len() >= 64 {
+                return Err(AgentHostError::io("Agent Host request capacity exceeded"));
             }
+            let writer = inner
+                .stdin
+                .as_ref()
+                .ok_or_else(AgentHostError::not_running)?
+                .clone();
             let entry = PendingEntry::new();
             inner.pending.insert(id, entry.clone());
+            if writer.try_send((id, payload.into_bytes())).is_err() {
+                inner.pending.remove(&id);
+                return Err(AgentHostError::io("Agent Host writer queue full or closed"));
+            }
             let deadline = Instant::now() + timeout;
-            (id, entry, deadline)
+            (id, entry, deadline, inner.generation)
         };
         // Wait outside the lock so the stdout reader can resolve the entry.
         let mut guard = entry.result.lock().map_err(|e| AgentHostError::io(e))?;
@@ -774,7 +773,10 @@ impl AgentHostState {
             if now >= deadline {
                 drop(guard);
                 if let Ok(mut inner) = self.inner.lock() {
-                    inner.pending.remove(&id);
+                    if inner.generation == generation {
+                        inner.pending.remove(&id);
+                        let _ = stop_child(&mut inner, true);
+                    }
                 }
                 return Err(AgentHostError::RequestTimeout {
                     id,
@@ -791,7 +793,6 @@ impl AgentHostState {
     }
 
     /// Spawn (or reuse) the host and complete version negotiation.
-    /// Spawn (or reuse) the host and complete version negotiation.
     pub fn start(&self, app: &AppHandle) -> Result<AgentHostStatus, AgentHostError> {
         let command = build_host_command(app)?;
         self.start_command(command, Some(app.clone()))
@@ -806,6 +807,11 @@ impl AgentHostState {
         mut command: Command,
         emitter_app: Option<AppHandle>,
     ) -> Result<AgentHostStatus, AgentHostError> {
+        let _lifecycle = self.lifecycle.lock().map_err(AgentHostError::io)?;
+        #[cfg(windows)]
+        return Err(AgentHostError::LaunchFailure {
+            message: "Agent Host supervision is not supported on Windows yet".into(),
+        });
         // Fast path: a live, healthy host is reused. Otherwise stop any stale
         // handle, spawn a fresh child, install it under a new generation, and
         // start the reader/stderr/emitter threads.
@@ -855,7 +861,23 @@ impl AgentHostState {
             let stderr = child.stderr.take();
             let generation = inner.bump_generation();
             inner.child = Some(child);
-            inner.stdin = stdin;
+            let (writer_tx, writer_rx) = mpsc::sync_channel::<(u64, Vec<u8>)>(8);
+            inner.stdin = Some(writer_tx);
+            if let Some(mut pipe) = stdin {
+                let writer_inner = self.inner.clone();
+                thread::spawn(move || {
+                    while let Ok((id, payload)) = writer_rx.recv() {
+                        if writer_inner.lock().map(|g| g.generation).ok() != Some(generation) {
+                            break;
+                        }
+                        if pipe.write_all(&payload).and_then(|_| pipe.flush()).is_err() {
+                            mark_exited(&writer_inner, generation, None);
+                            break;
+                        }
+                        let _ = id;
+                    }
+                });
+            }
             inner.health = AgentHostHealth::Starting;
             inner.last_error = None;
             inner.record_restart();
@@ -879,12 +901,13 @@ impl AgentHostState {
             // Spawn the WebView event emitter when an app handle is present; in
             // tests (None) the channel closes and the reader drops notifications.
             if let Some(emitter_handle) = emitter_app {
+                let emitter_inner = self.inner.clone();
                 thread::Builder::new()
                     .name("agent-host-emitter".to_string())
-                    .spawn(move || event_emitter(emitter_handle, rx))
+                    .spawn(move || event_emitter(emitter_handle, emitter_inner, generation, rx))
                     .map_err(|e| AgentHostError::io(e))?;
             } else {
-                drop(rx);
+                thread::spawn(move || while rx.recv().is_ok() {});
             }
         }
 
@@ -936,9 +959,9 @@ impl AgentHostState {
         }
     }
 
-    /// Cooperative shutdown: best-effort `shutdown` request, then forced reap.
-    /// Cooperative shutdown: best-effort `shutdown` request, then forced reap.
+    /// Cooperative shutdown: best-effort `shutdown` request, then bounded reap.
     pub fn shutdown(&self) -> Result<(), AgentHostError> {
+        let _lifecycle = self.lifecycle.lock().map_err(AgentHostError::io)?;
         {
             let mut inner = self.inner.lock().map_err(|e| AgentHostError::io(e))?;
             inner.shutting_down = true;
@@ -946,13 +969,14 @@ impl AgentHostState {
         // Best-effort cooperative shutdown; ignore transport errors.
         let _ = self.request("shutdown", None, SHUTDOWN_GRACE);
         let mut inner = self.inner.lock().map_err(|e| AgentHostError::io(e))?;
-        stop_child(&mut inner, true)?;
+        stop_child(&mut inner, false)?;
         inner.shutting_down = false;
         Ok(())
     }
 
     /// Stop without sending a `shutdown` request (recovery / status reset).
     pub fn stop(&self) -> Result<(), AgentHostError> {
+        let _lifecycle = self.lifecycle.lock().map_err(AgentHostError::io)?;
         let mut inner = self.inner.lock().map_err(|e| AgentHostError::io(e))?;
         inner.shutting_down = true;
         let result = stop_child(&mut inner, true);
@@ -1038,7 +1062,8 @@ pub async fn agent_host_request(
     let state = state.inner().clone();
     let timeout = timeout_ms
         .map(Duration::from_millis)
-        .unwrap_or(DEFAULT_REQUEST_TIMEOUT);
+        .unwrap_or(DEFAULT_REQUEST_TIMEOUT)
+        .clamp(Duration::from_millis(1), DEFAULT_REQUEST_TIMEOUT);
     tauri::async_runtime::spawn_blocking(move || state.request(&method, params, timeout))
         .await
         .map_err(|e| AgentHostError::Io {
@@ -1398,5 +1423,91 @@ mod tests {
             "grandchild must be reaped (no orphan)"
         );
         let _ = std::fs::remove_file(&pidfile);
+    }
+    #[test]
+    fn blocked_stdin_does_not_block_status_or_stop() {
+        let mut command = Command::new(node_path());
+        command.arg("-e").arg(r#"
+          process.stdin.once('data', b => {
+            const r = JSON.parse(b.toString());
+            process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:r.id,result:{protocolVersion:1}})+'\n');
+            process.stdin.pause();
+          });
+          setInterval(() => {}, 1000);
+        "#);
+        let state = AgentHostState::new();
+        state.start_command(command, None).unwrap();
+        let requester = state.clone();
+        let started = Instant::now();
+        let request = thread::spawn(move || {
+            requester.request(
+                "health",
+                Some(Value::String("x".repeat(900_000))),
+                Duration::from_millis(250),
+            )
+        });
+        thread::sleep(Duration::from_millis(50));
+        assert!(state.status().unwrap().running);
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(request.join().unwrap().is_err());
+        assert!(!state.status().unwrap().running);
+        state.stop_sync();
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn simultaneous_starts_reuse_one_generation() {
+        ensure_host_built();
+        let state = AgentHostState::new();
+        let tasks: Vec<_> = (0..3)
+            .map(|_| {
+                let state = state.clone();
+                thread::spawn(move || {
+                    let mut command = Command::new(node_path());
+                    command.arg(host_dist());
+                    state.start_command(command, None).unwrap()
+                })
+            })
+            .collect();
+        let statuses: Vec<_> = tasks.into_iter().map(|t| t.join().unwrap()).collect();
+        assert!(statuses
+            .iter()
+            .all(|s| s.generation == statuses[0].generation && s.pid == statuses[0].pid));
+        state.shutdown().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn liveness_poll_after_crash_kills_term_resistant_descendants() {
+        let pidfile =
+            std::env::temp_dir().join(format!("specops-crash-tree-{}.pid", std::process::id()));
+        let mut command = Command::new(node_path());
+        command.arg("-e").arg(r#"
+          const {spawn} = require('node:child_process');
+          const fs = require('node:fs');
+          const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'], {stdio:'ignore'});
+          fs.writeFileSync(process.argv[1], String(child.pid));
+          let buffer = '';
+          process.stdin.on('data', b => { buffer += b; let i;
+            while((i=buffer.indexOf('\n')) >= 0) {
+              const r=JSON.parse(buffer.slice(0,i));buffer=buffer.slice(i+1);
+              if(r.method === 'health') process.exit(1);
+              process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:r.id,result:{protocolVersion:1}})+'\n');
+            }
+          });
+        "#).arg(&pidfile);
+        let state = AgentHostState::new();
+        state.start_command(command, None).unwrap();
+        let pid: u32 = std::fs::read_to_string(&pidfile).unwrap().parse().unwrap();
+        let request_state = state.clone();
+        let request =
+            thread::spawn(move || request_state.request("health", None, Duration::from_secs(2)));
+        for _ in 0..100 {
+            let _ = state.status();
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(request.join().unwrap().is_err());
+        assert!(wait_for_pid_exit(pid, Duration::from_secs(2)));
+        let _ = std::fs::remove_file(pidfile);
     }
 }

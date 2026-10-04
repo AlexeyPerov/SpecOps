@@ -1,7 +1,7 @@
 import type { ChatMessage } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore, type ChatTurnError } from "../state/chatStore";
-import { scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
+import { flushSessionIndexPersistence, scheduleSessionThreadFilePersistence } from "../services/chatPersistence";
 import {
   DEFAULT_SESSION_RUNTIME_ID,
   ensureAgentHostStarted,
@@ -120,6 +120,7 @@ function toNativeRef(binding: SessionBinding): NativeSessionRef {
     nativeSessionId: asNativeSessionId(binding.nativeSessionId),
     ...(binding.modelId ? { modelId: binding.modelId } : {}),
     ...(binding.modeId ? { modeId: binding.modeId } : {}),
+    ...(binding.runtimeMetadata ? { runtimeMetadata: binding.runtimeMetadata } : {}),
   };
 }
 
@@ -337,7 +338,11 @@ async function ensureNativeBinding(input: {
       native: toNativeRef(existing),
       workspaceRootPath: root,
     });
+    if (native.runtimeId !== existing.runtimeId || native.nativeSessionId !== existing.nativeSessionId) {
+      throw new Error("Resume returned a different native session. Create a new session explicitly to continue.");
+    }
     const binding: SessionBinding = {
+      ...existing,
       runtimeId: native.runtimeId,
       nativeSessionId: native.nativeSessionId,
       modelId: modelId || existing.modelId,
@@ -346,6 +351,7 @@ async function ensureNativeBinding(input: {
       ...(existing.parentSessionId ? { parentSessionId: existing.parentSessionId } : {}),
     };
     chatStore.setSessionLink(activeSessionId, binding, root);
+    await flushSessionIndexPersistence(root);
     return binding;
   }
   const metadataRuntimeId = chatStore.getMetadata(activeSessionId)?.runtimeId?.trim() ?? "";
@@ -362,9 +368,11 @@ async function ensureNativeBinding(input: {
     runtimeId: native.runtimeId,
     nativeSessionId: native.nativeSessionId,
     modelId: native.modelId ?? (modelId || undefined),
+    ...(native.runtimeMetadata ? { runtimeMetadata: native.runtimeMetadata } : {}),
     ...(modeId ? { modeId } : native.modeId ? { modeId: native.modeId } : {}),
   };
   chatStore.setSessionLink(activeSessionId, binding, root);
+  await flushSessionIndexPersistence(root);
   return binding;
 }
 

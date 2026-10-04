@@ -39,7 +39,7 @@ flow through one supervised local **Agent Host** (the WebView never loads agent
 SDKs or spawns runtimes).
 
 Currently the deterministic **dev runtime** is registered (no external
-dependencies — it exercises the full session lifecycle end to end). Real
+runtime credentials — it exercises the full session lifecycle end to end). Real
 runtime adapters — Claude, Codex, OpenCode, Cursor — arrive per the
 [roadmap](./specs/ops/roadmap.md).
 
@@ -50,7 +50,13 @@ runtime adapters — Claude, Codex, OpenCode, Cursor — arrive per the
 3. Use the **Sessions** sidebar: create a session, pick a model/mode in the
    composer, and send a prompt. The Agent Host starts lazily on first send;
    permission and question prompts appear in the chat panel, and a stuck host
-   can be restarted from the session header.
+   can be restarted from the session header. Restart does not replay the previous
+   prompt; the next user action resumes the saved native session.
+
+Agent Host supervision is currently accepted on **macOS from source**, with Node
+24+ on `PATH`. Windows host launch is disabled pending process-tree cleanup;
+Linux and installed-build support require platform verification. See the
+[stabilization evidence and limits](./specs/ops/01-foundation-stabilization/acceptance-evidence.md).
 
 ## What is planned
 

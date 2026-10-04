@@ -5,6 +5,12 @@ import type {
   AgentHostStatus,
 } from "../services/agentHostRuntime";
 
+vi.mock("../services/chatPersistence", async () => ({
+  ...await vi.importActual("../services/chatPersistence"),
+  persistSessionIndexEntry: vi.fn().mockResolvedValue(undefined),
+  flushSessionIndexPersistence: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../services/fileSystem", async () => {
   const actual = await vi.importActual("../services/fileSystem");
   return {
@@ -186,6 +192,19 @@ describe("chatSendPipeline (host-backed turns)", () => {
         workspaceRootPath: "/work/host-pipeline",
       }),
     );
+  });
+
+  it("rejects a changed native ID on resume without sending a prompt or replacing the binding", async () => {
+    const sessionId = await seedThreadWithUserMessage();
+    chatStore.setSessionLink(sessionId, { runtimeId: "fake", nativeSessionId: "original" }, "/work/host-pipeline");
+    harness.resumeSession.mockResolvedValue(nativeRef("replacement"));
+    const sending = vi.spyOn(harness.client, "sendTurn");
+    const result = await executeProviderTurn({ root: "/work/host-pipeline", activeSessionId: sessionId, turnId: "turn-test-1" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain("different native session");
+    expect(sending).not.toHaveBeenCalled();
+    expect(chatStore.getSessionLink(sessionId, "/work/host-pipeline")?.nativeSessionId).toBe("original");
+    expect(harness.createSession).not.toHaveBeenCalled();
   });
 
   it("replies to permission requests through the host client", async () => {

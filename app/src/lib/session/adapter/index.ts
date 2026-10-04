@@ -24,12 +24,10 @@ export type {
   AdapterHealthStatus,
   AgentRuntimeCapabilities,
   AgentCapabilityDetail,
-  AgentCatalogSummary,
   TerminalTurnEventKind,
 } from "./adapter";
 export {
   AGENT_CAPABILITY_SCHEMA_VERSION,
-  supportsCatalog,
 } from "./adapter";
 
 export type { AdapterErrorCode, AdapterErrorOptions } from "./errors";

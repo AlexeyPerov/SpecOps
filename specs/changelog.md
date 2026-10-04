@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-04 15:54 MSK — Stabilize foundation persistence, transport and supervision
+
+- Implemented AS01-S-01–05: full production binding/mode/runtime-settings persistence, per-session debounce and serialized index writes; native sends await binding storage. Resume rejects incompatible runtime/native IDs explicitly.
+- Moved supervisor stdin writes to a bounded background queue, serialized lifecycle operations, enforced request deadlines, repaired cooperative shutdown and generation-safe process-group cleanup. Event/framing loss retires the generation; untrusted stderr content is excluded from application logs.
+- Bounded host framing/output/dispatch and frontend stream queues; added stateful UTF-8 decoding, real response backpressure, bounded cancel/drain, broken-output settlement, listener/status/generation recovery and secret-safe error/diagnostic output.
+- Strengthened shared adapter contracts with complete iterator drain, mandatory fault/capability fixtures and fresh-instance/process resume. Fixed terminal replay, incremental usage totals, subtask terminal events, catalog extension ownership, target binding descriptors and strict codec round-trips.
+- Accepted source-checkout macOS scope; Windows host launch is explicitly disabled until tree cleanup is implemented. Linux/installed packaging and native creation/catalog gates remain assigned downstream. Added the full Critical/Major disposition ledger, support bounds, setup notes and updated plan/roadmap statuses. No persisted-data migration or compatibility shim.
+- Validation: 3,217 frontend tests, 61 host tests and 97 Rust tests passed (Rust serial); frontend/host type checks and production build passed. Process fixtures cover unread stdin, ignored shutdown/cancel, concurrent starts, host crash and TERM-resistant descendants. Existing canvas-stub notices, one unrelated Rust test warning and the same two pre-existing Markdown-link issues remain.
+
 ## 2026-10-04 14:53 MSK — Reorder operations folders and archive completed records
 
 - Renumbered the active queue: 01 foundation stabilization, 02 Codex, 03 early preview delivery, 04 OpenCode core, 05 Claude, 06 handoff/native extensions, 07 Cursor and 08 recurring release gates.

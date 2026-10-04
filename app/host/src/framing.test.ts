@@ -122,3 +122,34 @@ describe("framing write", () => {
     );
   });
 });
+
+describe("stabilized framing", () => {
+  it("round-trips Cyrillic and emoji split at every UTF-8 byte", async () => {
+    const source = new FakeReadable();
+    const reader = readMessages(source);
+    const bytes = Buffer.from(JSON.stringify({ text: "Привет 👋" }) + "\n");
+    for (const byte of bytes) source.emit("data", Buffer.from([byte]));
+    source.end();
+    expect(await drain(reader)).toEqual([{ ok: true, value: { text: "Привет 👋" } }]);
+    expect(source.listenerCount("data")).toBe(0);
+  });
+  it("rejects a pending read on stream error", async () => {
+    const source = new FakeReadable();
+    const iterator = readMessages(source)[Symbol.asyncIterator]();
+    const pending = iterator.next();
+    source.error(new Error("read failed"));
+    await expect(pending).rejects.toThrow("read failed");
+  });
+  it("bounds flooding peers and discards oversized remainders", async () => {
+    const source = new FakeReadable();
+    const reader = readMessages(source, { maxMessageBytes: 8 });
+    source.push("123456789");
+    source.push('12345\n{}\n');
+    source.end();
+    expect(await drain(reader)).toEqual([{ ok: false, reason: "too-large", detail: "oversized line" }, { ok: true, value: {} }]);
+    const flood = new FakeReadable();
+    const pending = readMessages(flood);
+    flood.push('{}\n'.repeat(1000));
+    await expect(drain(pending)).rejects.toThrow("capacity");
+  });
+});

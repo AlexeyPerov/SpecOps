@@ -321,7 +321,7 @@ describe("dispatcher: backpressure", () => {
     const ref = resultFor(stdout, 1) as { nativeSessionId: string };
 
     stdout.setBlocked(true);
-    await call(dispatcher, 2, RequestMethod.TurnSend, {
+    const sending = call(dispatcher, 2, RequestMethod.TurnSend, {
       turnId: "t1",
       native: { runtimeId: "fake", nativeSessionId: ref.nativeSessionId },
       workspaceRootPath: "/ws",
@@ -336,6 +336,7 @@ describe("dispatcher: backpressure", () => {
     }
     stdout.setBlocked(false);
     stdout.drain();
+    await sending;
     await waitForIdle(dispatcher);
 
     const events = eventsFor(stdout);
@@ -344,4 +345,90 @@ describe("dispatcher: backpressure", () => {
     expect(seqs).toEqual(sorted);
     expect(events.at(-1)?.params.event.type).toBe("turn.finished");
   });
+});
+
+describe("stabilization failure boundaries", () => {
+  it("answers invalid envelopes with recovered IDs", async () => {
+    const { dispatcher, stdout } = makeDispatcher();
+    await dispatcher.handle({ id: 7, jsonrpc: "2.0" });
+    expect(errorFor(stdout, 7).code).toBe(ProtocolErrorCode.INVALID_REQUEST);
+  });
+  it("times out hung dispatch and suppresses late responses", async () => {
+    const registry = new AdapterRegistry();
+    const adapter = createFakeRuntimeAdapter();
+    let resolve!: (value: never) => void;
+    adapter.health = () => new Promise((r) => { resolve = r; });
+    registry.register(adapter);
+    const stdout = new FakeStdout();
+    const dispatcher = new HostDispatcher({ registry, stdout, buildInfo: buildInfo(), requestTimeoutMs: 20 });
+    await initialize(dispatcher);
+    await call(dispatcher, 4, "health", { runtimeId: "fake" });
+    expect(errorFor(stdout, 4).code).toBe(ProtocolErrorCode.TIMEOUT);
+    resolve({ status: "healthy" } as never);
+    await new Promise((r) => setTimeout(r, 0));
+    expect((parsedMessages(stdout) as { id?: number }[]).filter((m) => m.id === 4)).toHaveLength(1);
+  });
+  it("redacts adapter and protocol errors and failed-turn diagnostics", async () => {
+    const { dispatcher, stdout, stderr } = makeDispatcher(createFakeRuntimeAdapter({
+      failCreate: "runtime-unavailable",
+      defaultTurn: { events: [{ kind: "diagnostic", level: "warn", message: "Bearer secret-canary", raw: { access_token: "oauth-canary", client_secret: "client-canary" } }], outcome: { outcome: "fail", message: "Bearer failure-canary" } },
+    }));
+    await initialize(dispatcher);
+    await call(dispatcher, 4, "turn.send", { native: { runtimeId: "fake", nativeSessionId: "n" }, turnId: "t", workspaceRootPath: "/ws", prompt: "secret" });
+    await waitForIdle(dispatcher);
+    const text = stdout.lines.join("") + stderr.lines.join("");
+    for (const secret of ["secret-canary", "oauth-canary", "client-canary", "failure-canary"]) expect(text).not.toContain(secret);
+  });
+  it("settles EPIPE without an unhandled pump rejection or a fatal second write", async () => {
+    const { dispatcher, stdout } = makeDispatcher();
+    await initialize(dispatcher);
+    let writes = 0;
+    stdout.write = (_payload, callback) => { writes++; callback?.(new Error("EPIPE")); return false; };
+    await call(dispatcher, 4, "turn.send", { native: { runtimeId: "fake", nativeSessionId: "n" }, turnId: "t", workspaceRootPath: "/ws", prompt: "ping" });
+    await waitForIdle(dispatcher);
+    expect(dispatcher.shouldExit).toBe(true);
+    expect(writes).toBe(1);
+  });
+  it("bounds shutdown when both cancel and the iterator hang", async () => {
+    const adapter = createFakeRuntimeAdapter();
+    adapter.cancel = () => new Promise(() => {});
+    adapter.send = async function* () { await new Promise(() => {}); };
+    const registry = new AdapterRegistry(); registry.register(adapter);
+    const dispatcher = new HostDispatcher({ registry, stdout: new FakeStdout(), buildInfo: buildInfo(), drainTimeoutMs: 20 });
+    await initialize(dispatcher);
+    await call(dispatcher, 4, "turn.send", { native: { runtimeId: "fake", nativeSessionId: "n" }, turnId: "t", workspaceRootPath: "/ws", prompt: "ping" });
+    const started = Date.now();
+    await dispatcher.gracefulShutdown("test");
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(dispatcher.activeTurnCount).toBe(0);
+  });
+});
+
+it("bounds cancellation of an adapter that acknowledges cancel but never ends its stream", async () => {
+  const adapter = createFakeRuntimeAdapter();
+  adapter.cancel = async () => {};
+  adapter.send = async function* () { await new Promise(() => {}); };
+  const registry = new AdapterRegistry(); registry.register(adapter);
+  const stdout = new FakeStdout();
+  const dispatcher = new HostDispatcher({ registry, stdout, buildInfo: buildInfo(), drainTimeoutMs: 20 });
+  await initialize(dispatcher);
+  const native = { runtimeId: "fake", nativeSessionId: "n" };
+  await call(dispatcher, 8, "turn.send", { native, turnId: "t", workspaceRootPath: "/ws", prompt: "hang" });
+  await call(dispatcher, 9, "turn.cancel", { native, turnId: "t" });
+  await waitForIdle(dispatcher);
+  expect(eventsFor(stdout).map((entry) => entry.params.event.type)).toEqual(["turn.cancelled"]);
+});
+
+it("turns oversized adapter events into one bounded failure and limits response frames", async () => {
+  const adapter = createFakeRuntimeAdapter({ defaultTurn: { events: [{ kind: "text", text: "x".repeat(2 * 1024 * 1024) }], outcome: { outcome: "finish" } } });
+  adapter.health = async () => ({ runtimeId: "fake", status: "healthy", checkedAt: "t", message: "x".repeat(2 * 1024 * 1024) });
+  const { dispatcher, stdout } = makeDispatcher(adapter);
+  await initialize(dispatcher);
+  await call(dispatcher, 8, "health", { runtimeId: "fake" });
+  expect(errorFor(stdout, 8).message).toContain("message limit");
+  await call(dispatcher, 9, "turn.send", { native: { runtimeId: "fake", nativeSessionId: "n" }, turnId: "t", workspaceRootPath: "/ws", prompt: "huge" });
+  await waitForIdle(dispatcher);
+  expect(eventsFor(stdout).filter((entry) => TERMINAL_KINDS.has(entry.params.event.type))).toHaveLength(1);
+  expect(eventsFor(stdout).at(-1)?.params.event.type).toBe("turn.failed");
+  expect(stdout.lines.every((line) => Buffer.byteLength(line) <= 1024 * 1024 + 1)).toBe(true);
 });

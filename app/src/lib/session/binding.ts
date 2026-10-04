@@ -200,9 +200,7 @@ export function rebindRuntime(
     workspaceRootPath: source.workspaceRootPath,
     modelId: next.modelId,
     modeId: next.modeId,
-    capabilities: source.capabilities,
-    model: source.model,
-    mode: source.mode,
+    capabilities: [],
     runtimeMetadata: next.runtimeMetadata,
     ...(next.linkAsParent ? { parentSessionId: source.id } : {}),
   });

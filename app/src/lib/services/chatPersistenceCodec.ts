@@ -1,3 +1,4 @@
+import { redactForSerialization } from "../session/redact";
 import type {
   ChatMessage,
   ChatMessagePart,
@@ -377,6 +378,8 @@ function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
   if (value.modelId !== undefined && typeof value.modelId !== "string") {
     return null;
   }
+  if (value.modeId !== undefined && typeof value.modeId !== "string") return null;
+  if (value.runtimeMetadata !== undefined && !isRecord(value.runtimeMetadata)) return null;
   if (value.shareUrl !== undefined && typeof value.shareUrl !== "string") {
     return null;
   }
@@ -391,6 +394,8 @@ function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
     runtimeId: value.runtimeId,
     nativeSessionId: value.nativeSessionId,
     modelId: value.modelId,
+    modeId: value.modeId,
+    runtimeMetadata: value.runtimeMetadata as Record<string, unknown> | undefined,
     shareUrl: value.shareUrl,
     parentSessionId: value.parentSessionId,
   };
@@ -461,7 +466,7 @@ export function encodeWorkspaceSessionsIndexSnapshot(snapshot: WorkspaceSessions
           version: CHAT_SESSIONS_INDEX_VERSION,
           sessions: snapshot.sessions,
         };
-  return JSON.stringify(normalizedSnapshot, null, 2);
+  return JSON.stringify(redactForSerialization(normalizedSnapshot), null, 2);
 }
 
 export function upsertSessionIndexEntry(

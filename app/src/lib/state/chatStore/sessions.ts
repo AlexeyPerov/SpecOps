@@ -3,6 +3,7 @@ import { isAgentRuntimeId, type AgentRuntimeId } from "../../session";
 import { draftEntryTitleForScope, deriveSessionTitle } from "../../services/chatSessions";
 import {
   deleteSessionPersistence,
+  persistSessionIndexEntry,
   readSessionThreadFileSnapshot,
   readWorkspaceSessionsIndexSnapshot,
 } from "../../services/chatPersistence";
@@ -189,6 +190,7 @@ export interface SessionBinding {
   nativeSessionId: string;
   modelId?: string;
   modeId?: string;
+  runtimeMetadata?: Readonly<Record<string, unknown>>;
   shareUrl?: string;
   parentSessionId?: string;
 }
@@ -201,6 +203,8 @@ function sessionBindingFromEntry(entry: SessionIndexEntry): SessionBinding | nul
     runtimeId: entry.runtimeId,
     nativeSessionId: entry.nativeSessionId,
     ...(entry.modelId ? { modelId: entry.modelId } : {}),
+    ...(entry.modeId ? { modeId: entry.modeId } : {}),
+    ...(entry.runtimeMetadata ? { runtimeMetadata: entry.runtimeMetadata } : {}),
     ...(entry.shareUrl ? { shareUrl: entry.shareUrl } : {}),
     ...(entry.parentSessionId ? { parentSessionId: entry.parentSessionId } : {}),
   };
@@ -211,14 +215,16 @@ function applySessionBinding(
   binding: SessionBinding | null,
 ): SessionIndexEntry {
   if (!binding || binding.nativeSessionId.trim().length === 0) {
-    const { runtimeId: _r, nativeSessionId: _n, modelId: _m, shareUrl: _s, parentSessionId: _p, ...rest } = entry;
+    const { runtimeId: _r, nativeSessionId: _n, modelId: _m, modeId: _mode, runtimeMetadata: _meta, shareUrl: _s, parentSessionId: _p, ...rest } = entry;
     return rest;
   }
   return {
     ...entry,
     runtimeId: binding.runtimeId,
     nativeSessionId: binding.nativeSessionId,
-    ...(binding.modelId ? { modelId: binding.modelId } : {}),
+    modelId: binding.modelId,
+    modeId: binding.modeId,
+    runtimeMetadata: binding.runtimeMetadata,
     ...(binding.shareUrl ? { shareUrl: binding.shareUrl } : {}),
     ...(binding.parentSessionId ? { parentSessionId: binding.parentSessionId } : {}),
   };
@@ -233,6 +239,8 @@ function didSessionBindingChange(
     next.runtimeId !== entry.runtimeId ||
     next.nativeSessionId !== entry.nativeSessionId ||
     next.modelId !== entry.modelId ||
+    next.modeId !== entry.modeId ||
+    JSON.stringify(next.runtimeMetadata) !== JSON.stringify(entry.runtimeMetadata) ||
     next.shareUrl !== entry.shareUrl ||
     next.parentSessionId !== entry.parentSessionId
   );
@@ -427,6 +435,15 @@ export function createSessionsSlice(deps: {
             return nextState;
           }
         }
+        void persistSessionIndexEntry(root, applySessionBinding(entry, binding)).catch(() => {
+          update((state) => {
+            const workspace = state.workspaces[root];
+            if (!workspace) return state;
+            const runtime = workspace.runtimeBySessionId[sessionId];
+            if (!runtime) return state;
+            return patchWorkspaceState(state, root, { ...workspace, runtimeBySessionId: { ...workspace.runtimeBySessionId, [sessionId]: { ...runtime, lastError: { message: "Could not save the session binding." } } } });
+          });
+        });
         if (!didSessionBindingChange(entry, binding)) {
           return nextState;
         }

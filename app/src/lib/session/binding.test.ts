@@ -125,3 +125,11 @@ describe("session id minting", () => {
     expect(mintSpecOpsSessionId()).toBe("sos-session-2");
   });
 });
+
+it("rebind clears source runtime capability and catalog descriptors", () => {
+  const source = createSessionRef({ runtimeId: "fake", nativeSessionId: "n", workspaceRootPath: "/ws", capabilities: ["share"], model: { id: "source-model" }, mode: { id: "source-mode" } });
+  const target = rebindRuntime(source, { runtimeId: "codex", nativeSessionId: "target" });
+  expect(target.capabilities).toEqual([]);
+  expect(target.model).toBeUndefined();
+  expect(target.mode).toBeUndefined();
+});

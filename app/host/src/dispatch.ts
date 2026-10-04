@@ -52,8 +52,10 @@ import {
   type TurnSendParams,
   type ServerBuildInfo,
 } from "./protocol";
+import { MAX_MESSAGE_BYTES, DEFAULT_REQUEST_TIMEOUT_MS, INITIALIZE_TIMEOUT_MS, MAX_CONCURRENT_TURNS } from "./protocol";
+import { redactForLogs } from "./redact";
 import type { ProtocolError } from "./errors";
-import { toProtocolError, isProtocolError } from "./errors";
+import { ProtocolError as HostProtocolError, toProtocolError, isProtocolError } from "./errors";
 import type { AdapterRegistry } from "./registry";
 import type { BuildInfo } from "./version";
 import { HOST_VERSION } from "./version";
@@ -78,6 +80,9 @@ export interface HostDispatcherDeps {
   readonly stderr?: { write(line: string): void } | undefined;
   readonly buildInfo: BuildInfo;
   readonly maxConcurrentTurns?: number;
+  readonly requestTimeoutMs?: number;
+  readonly drainTimeoutMs?: number;
+  readonly onTransportFailure?: () => void;
 }
 
 interface TurnController {
@@ -85,11 +90,16 @@ interface TurnController {
   readonly native: NativeSessionRef;
   readonly turnId: SpecOpsTurnId;
   lastSeq: number;
+  terminal: boolean;
+  stopped: boolean;
   resolveDone: () => void;
   readonly done: Promise<void>;
 }
 
 export class HostDispatcher {
+  private outputTail: Promise<void> = Promise.resolve();
+  private queuedBytes = 0;
+  private readonly answered = new Set<RequestId>();
   private initialized = false;
   private shuttingDown = false;
   private shouldExitFlag = false;
@@ -97,7 +107,7 @@ export class HostDispatcher {
   private readonly maxConcurrentTurns: number;
 
   constructor(private readonly deps: HostDispatcherDeps) {
-    this.maxConcurrentTurns = deps.maxConcurrentTurns ?? 64;
+    this.maxConcurrentTurns = deps.maxConcurrentTurns ?? MAX_CONCURRENT_TURNS;
   }
 
   get isInitialized(): boolean {
@@ -120,7 +130,9 @@ export class HostDispatcher {
   async handle(raw: unknown): Promise<void> {
     const message = classifyIncoming(raw);
     if (message.kind === "invalid") {
-      this.log(`invalid envelope ignored: ${message.reason}`);
+      const id = raw && typeof raw === "object" ? (raw as { id?: unknown }).id : undefined;
+      const recovered = typeof id === "string" || (typeof id === "number" && Number.isSafeInteger(id)) ? id : null;
+      await this.respond(makeErrorResponse(recovered, rpcError(ProtocolErrorCode.INVALID_REQUEST, message.reason)));
       return;
     }
     if (message.kind === "notification") {
@@ -133,24 +145,24 @@ export class HostDispatcher {
     const { id, method } = request;
 
     if (!isRequestMethod(method)) {
-      this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.METHOD_NOT_FOUND, `Unknown method: ${method}`)));
+      await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.METHOD_NOT_FOUND, `Unknown method: ${method}`)));
       return;
     }
 
     if (this.shuttingDown) {
-      this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.SHUTTING_DOWN, "Host is shutting down")));
+      await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.SHUTTING_DOWN, "Host is shutting down")));
       return;
     }
 
     if (method !== RequestMethod.Initialize && method !== RequestMethod.Shutdown && !this.initialized) {
-      this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.NOT_INITIALIZED, "initialize required first")));
+      await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.NOT_INITIALIZED, "initialize required first")));
       return;
     }
 
     try {
-      await this.route(method, id, request.params);
+      await this.bounded(this.route(method, id, request.params), this.deps.requestTimeoutMs ?? (method === RequestMethod.Initialize ? INITIALIZE_TIMEOUT_MS : DEFAULT_REQUEST_TIMEOUT_MS));
     } catch (error) {
-      this.respond(makeErrorResponse(id, toProtocolError(error)));
+      await this.respond(makeErrorResponse(id, toProtocolError(error)));
     }
   }
 
@@ -183,7 +195,7 @@ export class HostDispatcher {
       case RequestMethod.Health:
         return this.handleHealth(id, params);
       default:
-        this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.METHOD_NOT_FOUND, `Unknown method: ${method}`)));
+        await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.METHOD_NOT_FOUND, `Unknown method: ${method}`)));
     }
   }
 
@@ -192,11 +204,11 @@ export class HostDispatcher {
   private async handleInitialize(id: RequestId, params: unknown): Promise<void> {
     const decoded = decodeInitialize(params);
     if (!decoded.ok) {
-      this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.INVALID_PARAMS, decoded.reason)));
+      await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.INVALID_PARAMS, decoded.reason)));
       return;
     }
     if (decoded.value.protocolVersion !== PROTOCOL_VERSION) {
-      this.respond(
+      await this.respond(
         makeErrorResponse(
           id,
           rpcError(
@@ -209,8 +221,8 @@ export class HostDispatcher {
       this.shouldExitFlag = true;
       return;
     }
-    this.initialized = true;
     const runtimes = await this.deps.registry.descriptors();
+    this.initialized = true;
     const build: ServerBuildInfo = {
       hostVersion: HOST_VERSION,
       git: this.deps.buildInfo.git,
@@ -221,11 +233,11 @@ export class HostDispatcher {
       protocolVersion: PROTOCOL_VERSION,
       server: { name: PROTOCOL_NAME, build, runtimes },
     };
-    this.respond(makeResponse(id, result));
+    await this.respond(makeResponse(id, result));
   }
 
   private async handleShutdown(id: RequestId): Promise<void> {
-    this.respond(makeResponse(id, { ok: true }));
+    await this.respond(makeResponse(id, { ok: true }));
     this.shouldExitFlag = true;
     await this.gracefulShutdown("shutdown requested");
   }
@@ -239,7 +251,7 @@ export class HostDispatcher {
       }),
     );
     const result: DiscoverResult = { runtimes: entries };
-    this.respond(makeResponse(id, result));
+    await this.respond(makeResponse(id, result));
   }
 
   private async handleAuth(id: RequestId, params: unknown): Promise<void> {
@@ -247,7 +259,7 @@ export class HostDispatcher {
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const adapter = this.deps.registry.require(decoded.value.runtimeId);
     const result = await adapter.authenticate(decoded.value);
-    this.respond(makeResponse(id, result));
+    await this.respond(makeResponse(id, result));
   }
 
   private async handleCatalogModels(id: RequestId, params: unknown): Promise<void> {
@@ -257,7 +269,7 @@ export class HostDispatcher {
     const models = isCatalogExtension(adapter)
       ? await adapter.listModels({ ...(decoded.value.workspaceRootPath ? { workspaceRootPath: decoded.value.workspaceRootPath } : {}) })
       : [];
-    this.respond(makeResponse(id, { models }));
+    await this.respond(makeResponse(id, { models }));
   }
 
   private async handleCatalogModes(id: RequestId, params: unknown): Promise<void> {
@@ -267,7 +279,7 @@ export class HostDispatcher {
     const modes = isCatalogExtension(adapter)
       ? await adapter.listModes({ ...(decoded.value.modelId ? { modelId: decoded.value.modelId } : {}) })
       : [];
-    this.respond(makeResponse(id, { modes }));
+    await this.respond(makeResponse(id, { modes }));
   }
 
   private async handleSessionCreate(id: RequestId, params: unknown): Promise<void> {
@@ -275,7 +287,7 @@ export class HostDispatcher {
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const adapter = this.deps.registry.require(decoded.value.runtimeId);
     const result = await adapter.createSession(decoded.value);
-    this.respond(makeResponse(id, result));
+    await this.respond(makeResponse(id, result));
   }
 
   private async handleSessionResume(id: RequestId, params: unknown): Promise<void> {
@@ -283,7 +295,7 @@ export class HostDispatcher {
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const adapter = this.deps.registry.require(decoded.value.native.runtimeId);
     const result = await adapter.resumeSession(decoded.value);
-    this.respond(makeResponse(id, result));
+    await this.respond(makeResponse(id, result));
   }
 
   private async handleTurnSend(id: RequestId, params: unknown): Promise<void> {
@@ -293,27 +305,46 @@ export class HostDispatcher {
     const adapter = this.deps.registry.require(value.native.runtimeId);
     const key = this.turnKey(value.native);
     if (this.activeTurns.has(key)) {
-      this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.INVALID_PARAMS, `A turn is already active for session ${value.native.nativeSessionId}`)));
+      await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.INVALID_PARAMS, `A turn is already active for session ${value.native.nativeSessionId}`)));
       return;
     }
     if (this.activeTurns.size >= this.maxConcurrentTurns) {
-      this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.INTERNAL_ERROR, "Too many concurrent turns")));
+      await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.INTERNAL_ERROR, "Too many concurrent turns")));
       return;
     }
 
     const controller = this.createController(value);
     // Ack first; events are written only after the ack is flushed.
-    this.respond(makeResponse(id, { turnId: value.turnId }));
-    // Start the pump (fire-and-forget; tracked for cancellation/shutdown).
-    void this.pumpTurn(controller, adapter, value);
+    await this.respond(makeResponse(id, { turnId: value.turnId }));
+    if (this.shouldExitFlag) { this.activeTurns.delete(controller.key); controller.resolveDone(); return; }
+    // Start the pump (tracked for cancellation/shutdown).
+    void this.pumpTurn(controller, adapter, value).catch((error) => {
+      this.log(`turn transport failed: ${String(error)}`);
+      this.shouldExitFlag = true;
+      this.deps.onTransportFailure?.();
+    });
   }
 
   private async handleTurnCancel(id: RequestId, params: unknown): Promise<void> {
     const decoded = decodeTurnCancel(params);
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const adapter = this.deps.registry.require(decoded.value.native.runtimeId);
-    await adapter.cancel(decoded.value);
-    this.respond(makeResponse(id, { ok: true }));
+    const controller = this.activeTurns.get(this.turnKey(decoded.value.native));
+    try {
+      await this.bounded(adapter.cancel(decoded.value), this.deps.drainTimeoutMs ?? 1000);
+      if (controller) await this.bounded(controller.done, this.deps.drainTimeoutMs ?? 1000);
+    } catch {
+      if (controller && !controller.terminal) {
+        await this.writeEvent(controller.native.nativeSessionId, {
+          type: "turn.cancelled", nativeSessionId: controller.native.nativeSessionId,
+          turnId: controller.turnId, seq: controller.lastSeq + 1, at: new Date().toISOString(),
+        });
+        controller.terminal = true;
+      }
+    } finally {
+      if (controller) { controller.stopped = true; controller.resolveDone(); this.activeTurns.delete(controller.key); }
+    }
+    await this.respond(makeResponse(id, { ok: true }));
   }
 
   private async handlePermissionReply(id: RequestId, params: unknown): Promise<void> {
@@ -321,11 +352,11 @@ export class HostDispatcher {
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const adapter = this.deps.registry.require(decoded.value.native.runtimeId);
     if (!isPermissionExtension(adapter)) {
-      this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.ADAPTER_ERROR, "runtime does not support permissions", { adapterCode: "capability-not-supported" })));
+      await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.ADAPTER_ERROR, "runtime does not support permissions", { adapterCode: "capability-not-supported" })));
       return;
     }
     await adapter.replyPermission(decoded.value);
-    this.respond(makeResponse(id, { ok: true }));
+    await this.respond(makeResponse(id, { ok: true }));
   }
 
   private async handleQuestionReply(id: RequestId, params: unknown): Promise<void> {
@@ -333,11 +364,11 @@ export class HostDispatcher {
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const adapter = this.deps.registry.require(decoded.value.native.runtimeId);
     if (!isQuestionExtension(adapter)) {
-      this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.ADAPTER_ERROR, "runtime does not support questions", { adapterCode: "capability-not-supported" })));
+      await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.ADAPTER_ERROR, "runtime does not support questions", { adapterCode: "capability-not-supported" })));
       return;
     }
     await adapter.replyQuestion(decoded.value);
-    this.respond(makeResponse(id, { ok: true }));
+    await this.respond(makeResponse(id, { ok: true }));
   }
 
   private async handleHealth(id: RequestId, params: unknown): Promise<void> {
@@ -346,7 +377,7 @@ export class HostDispatcher {
     const result = decoded.value.runtimeId
       ? await this.deps.registry.require(decoded.value.runtimeId).health()
       : await this.deps.registry.health();
-    this.respond(makeResponse(id, result));
+    await this.respond(makeResponse(id, result));
   }
 
   // -- streaming ---------------------------------------------------------------
@@ -362,6 +393,8 @@ export class HostDispatcher {
       native: value.native,
       turnId: value.turnId,
       lastSeq: 0,
+      terminal: false,
+      stopped: false,
       resolveDone,
       done,
     };
@@ -370,6 +403,7 @@ export class HostDispatcher {
   }
 
   private async pumpTurn(controller: TurnController, adapter: AgentRuntimeAdapter, value: TurnSendParams): Promise<void> {
+    let iterator: AsyncIterator<SessionEvent> | undefined;
     try {
       const stream = adapter.send({
         turnId: value.turnId,
@@ -383,18 +417,28 @@ export class HostDispatcher {
       // guarantees a terminal (turn.cancelled on cancel, turn.finished/failed
       // otherwise), which ends this loop; cancellation is delivered via the
       // adapter, not by breaking here, so the UI always receives the terminal.
-      for await (const event of stream) {
+      iterator = stream[Symbol.asyncIterator]();
+      while (true) {
+        const next = await Promise.race([iterator.next(), controller.done.then(() => ({ done: true as const, value: undefined }))]);
+        if (next.done) break;
+        const event = next.value;
+        if (controller.stopped) break;
+        if (controller.terminal) throw new Error("Adapter emitted an event after terminal");
+        controller.terminal = ["turn.finished", "turn.failed", "turn.cancelled"].includes(event.type);
         controller.lastSeq = event.seq;
         await this.writeEvent(value.native.nativeSessionId, event);
       }
+      if (!controller.terminal && !controller.stopped) throw new Error("Adapter stream ended without terminal");
     } catch (error) {
       // Adapter stream rejected without a terminal — synthesize turn.failed.
       const reason = error instanceof Error ? error.message : String(error);
+      if (controller.terminal || controller.stopped || this.shouldExitFlag) return;
       await this.writeEvent(
         value.native.nativeSessionId,
         this.synthesizeFailure(value.native.nativeSessionId, value.turnId, controller.lastSeq + 1, reason),
       );
     } finally {
+      if (controller.stopped) void iterator?.return?.().catch(() => {});
       this.activeTurns.delete(controller.key);
       controller.resolveDone();
     }
@@ -407,7 +451,7 @@ export class HostDispatcher {
       seq,
       at: new Date(0).toISOString(),
       turnId,
-      message,
+      message: redactForLogs(message) as string,
     } as SessionEvent;
   }
 
@@ -426,11 +470,12 @@ export class HostDispatcher {
     await Promise.all(
       controllers.map(async (controller) => {
         try {
-          await this.deps.registry.require(controller.native.runtimeId).cancel({ native: controller.native, turnId: controller.turnId });
+          await this.bounded(this.deps.registry.require(controller.native.runtimeId).cancel({ native: controller.native, turnId: controller.turnId }), this.deps.drainTimeoutMs ?? 1000);
         } catch (error) {
           this.log(`cancel failed during shutdown: ${error instanceof Error ? error.message : String(error)}`);
         }
-        return controller.done;
+        try { await this.bounded(controller.done, this.deps.drainTimeoutMs ?? 1000); }
+        catch { controller.stopped = true; controller.resolveDone(); this.activeTurns.delete(controller.key); }
       }),
     );
   }
@@ -441,56 +486,84 @@ export class HostDispatcher {
     return `${native.runtimeId}:${String(native.nativeSessionId)}`;
   }
 
-  private invalidParams(id: RequestId, reason: string): void {
-    this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.INVALID_PARAMS, reason)));
+  private async invalidParams(id: RequestId, reason: string): Promise<void> {
+    await this.respond(makeErrorResponse(id, rpcError(ProtocolErrorCode.INVALID_PARAMS, reason)));
   }
 
-  private respond(response: RpcResponse): void {
-    try {
-      this.writeRaw(JSON.stringify(response) + "\n");
-    } catch (error) {
-      this.log(`failed to write response: ${error instanceof Error ? error.message : String(error)}`);
+  private async respond(response: RpcResponse): Promise<void> {
+    if (response.id !== null) {
+      if (this.answered.has(response.id)) return;
+      this.answered.add(response.id);
     }
+    // IDs are monotonic for the bridge; bounded bookkeeping also supports test peers.
+    if (this.answered.size > 4096) this.answered.delete(this.answered.values().next().value!);
+    try { await this.enqueue("error" in response ? redactForLogs(response) : response); }
+    catch (error) { this.shouldExitFlag = true; this.deps.onTransportFailure?.(); this.log(`failed to write response: ${String(error)}`); }
   }
 
   private async writeEvent(nativeSessionId: NativeSessionId, event: SessionEvent): Promise<void> {
-    await this.writeNotification(NotificationMethod.SessionEvent, { nativeSessionId, event });
+    const safe = event.type === "diagnostic" || event.type === "turn.failed" ? redactForLogs(event) : event;
+    await this.enqueue(makeNotification(NotificationMethod.SessionEvent, { nativeSessionId, event: safe }));
   }
 
-  private async writeNotification(method: string, params: unknown): Promise<void> {
-    const payload = JSON.stringify(makeNotification(method, params)) + "\n";
-    await this.writeAwaitingDrain(payload);
+  private enqueue(message: unknown): Promise<void> {
+    let payload = JSON.stringify(message);
+    if (Buffer.byteLength(payload) > MAX_MESSAGE_BYTES) {
+      if ("id" in (message as object)) payload = JSON.stringify(makeErrorResponse((message as RpcResponse).id, rpcError(ProtocolErrorCode.INTERNAL_ERROR, "Response exceeds message limit")));
+      else return Promise.reject(new Error("Event exceeds message limit"));
+    }
+    payload += "\n";
+    const bytes = Buffer.byteLength(payload);
+    if (this.queuedBytes + bytes > 4 * MAX_MESSAGE_BYTES) return Promise.reject(new Error("Output queue capacity exceeded"));
+    this.queuedBytes += bytes;
+    const next = this.outputTail.then(() => this.writeAwaitingDrain(payload)).catch((error) => {
+      this.shouldExitFlag = true;
+      this.deps.onTransportFailure?.();
+      throw error;
+    });
+    this.outputTail = next.catch(() => {});
+    return next.finally(() => { this.queuedBytes -= bytes; });
   }
 
-  private writeRaw(payload: string): void {
-    // Synchronous best-effort write for responses (acks/notifications order).
-    this.deps.stdout.write(payload);
+  private bounded<T>(work: Promise<T>, timeout: number): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new HostProtocolError(ProtocolErrorCode.TIMEOUT, "Host operation timed out")), timeout);
+      work.then(resolve, reject).finally(() => clearTimeout(timer));
+    });
   }
 
   private writeAwaitingDrain(payload: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      const onDrain = (): void => {
+      let settled = false;
+      const finish = (error?: Error | null): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         this.deps.stdout.off("drain", onDrain);
-        resolve();
+        if (error) reject(error); else resolve();
       };
-      const cb = (error?: Error | null): void => {
-        if (error) reject(error);
-      };
+      const onDrain = (): void => { drained = true; complete(); };
+      const timer = setTimeout(() => finish(new Error("Output drain timed out")), this.deps.drainTimeoutMs ?? 1000);
+      let returned = false;
+      let written = false;
+      let drained = false;
+      const complete = (): void => { if (returned && written && drained) finish(); };
       try {
-        const canContinue = this.deps.stdout.write(payload, cb);
-        if (canContinue) {
-          resolve();
-        } else {
-          this.deps.stdout.once("drain", onDrain);
-        }
-      } catch (error) {
-        reject(error instanceof Error ? error : new Error(String(error)));
-      }
+        const ready = this.deps.stdout.write(payload, (error) => {
+          if (error) { finish(error); return; }
+          written = true;
+          complete();
+        });
+        drained = ready;
+        returned = true;
+        if (!ready && !settled) this.deps.stdout.once("drain", onDrain);
+        complete();
+      } catch (error) { finish(error instanceof Error ? error : new Error(String(error))); }
     });
   }
 
   private log(line: string): void {
-    this.deps.stderr?.write(`${line}\n`);
+    this.deps.stderr?.write(`${redactForLogs(line)}\n`);
   }
 }
 

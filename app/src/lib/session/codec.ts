@@ -46,6 +46,44 @@ import type {
   SessionEvent,
 } from "./events";
 
+function validateOptionalFields(value: unknown, depth = 0): string | null {
+  if (depth > 64) return "record nesting exceeds limit";
+  if (Array.isArray(value)) {
+    for (const child of value) { const error = validateOptionalFields(child, depth + 1); if (error) return error; }
+    return null;
+  }
+  if (!isObject(value)) return null;
+  const strings = ["description", "prompt", "reason", "filename", "snapshot", "finishedAt", "modelId", "modeId", "parentSessionId", "lastTurnAt", "name"];
+  // Tool input/output are intentionally arbitrary JSON; validate only typed structures.
+  if ("agent" in value) {
+    for (const key of ["output", "error"]) if (value[key] !== undefined && typeof value[key] !== "string") return `${key} must be a string`;
+  }
+  for (const key of strings) {
+    if (value[key] !== undefined && typeof value[key] !== "string" && !(key === "output" && "callId" in value)) return `${key} must be a string`;
+  }
+  for (const key of ["cost", "index"]) {
+    if (value[key] !== undefined && readNumber(value[key]) === null) return `${key} must be finite`;
+  }
+  if (value.type === "diagnostic" && value.reason !== undefined && !["unknown-native", "malformed", "redacted"].includes(value.reason as string)) return "invalid diagnostic reason";
+  for (const key of ["model", "mode"]) {
+    if (value[key] !== undefined && (!isObject(value[key]) || typeof value[key].id !== "string" || !value[key].id)) return `invalid ${key}`;
+  }
+  if (value.files !== undefined && (!Array.isArray(value.files) || value.files.some((file) => typeof file !== "string"))) return "files must contain strings";
+  if (value.runtimeMetadata !== undefined && !isObject(value.runtimeMetadata)) return "runtimeMetadata must be an object";
+  for (const key of ["usage", "tokens"]) {
+    if (value[key] !== undefined && !validUsage(value[key])) return `invalid ${key}`;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (["input", "output", "progress", "runtimeMetadata", "redactedRaw"].includes(key)) continue;
+    const error = validateOptionalFields(child, depth + 1);
+    if (error) return error;
+  }
+  return null;
+}
+function validUsage(value: unknown): boolean {
+  return isObject(value) && isObject(value.cache) && [value.input, value.output, value.reasoning, value.cache.read, value.cache.write].every((v) => typeof v === "number" && Number.isFinite(v) && v >= 0);
+}
+
 export type DecodeResult<T> = { ok: true; value: T } | { ok: false; reason: string };
 
 function decodeFailure(reason: string): DecodeResult<never> {
@@ -53,7 +91,7 @@ function decodeFailure(reason: string): DecodeResult<never> {
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readString(value: unknown): string | null {
@@ -209,6 +247,7 @@ function decodePart(value: unknown): SessionTurnPart | null {
         ...(step.index !== undefined ? { index: readOptionalNumber(step.index) } : {}),
         ...(step.reason !== undefined ? { reason: readOptionalString(step.reason) } : {}),
         ...(step.cost !== undefined ? { cost: readOptionalNumber(step.cost) } : {}),
+        ...(step.tokens !== undefined ? { tokens: step.tokens as never } : {}),
       },
     };
   }
@@ -259,7 +298,7 @@ function decodePart(value: unknown): SessionTurnPart | null {
     if (cost === null) {
       return null;
     }
-    return { kind: "cost", cost };
+    return { kind: "cost", cost, ...(value.usage !== undefined ? { usage: value.usage as never } : {}) };
   }
   return null;
 }
@@ -505,6 +544,8 @@ export function decodeSessionRecord(raw: string): DecodeResult<SessionRecord> {
   if (parsed.version !== SESSION_RECORD_VERSION) {
     return decodeFailure(`record version ${String(parsed.version)} != ${SESSION_RECORD_VERSION}`);
   }
+  const invalid = validateOptionalFields(parsed);
+  if (invalid) return decodeFailure(invalid);
   const session = decodeSessionRef(parsed.session);
   if (!session.ok) {
     return decodeFailure(session.reason);
@@ -569,6 +610,8 @@ export function decodeSessionStoreIndex(raw: string): DecodeResult<SessionStoreI
   if (parsed.version !== SESSION_STORE_INDEX_VERSION) {
     return decodeFailure(`index version ${String(parsed.version)} != ${SESSION_STORE_INDEX_VERSION}`);
   }
+  const invalid = validateOptionalFields(parsed);
+  if (invalid) return decodeFailure(invalid);
   const workspaceRootPath = readString(parsed.workspaceRootPath);
   const sessionsArr = readArray(parsed.sessions);
   if (workspaceRootPath === null) {

@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Active plan; foundation implemented with acceptance gaps, production adapters pending.
+**Status:** Active plan; foundation stabilization accepted on macOS from source; native/UI/installed gates and production adapters pending.
 
 **Source of truth:** This roadmap and the linked milestone scope/execution plans. The [2026-10-04 audit](done/reviews/audit-2026-10-04.md) is historical evidence; its proposed order is adopted here. Active folders and task IDs are numbered in the default delivery order; shared early gates and repeated release acceptance are explicit exceptions. Completed records are in [done](done/README.md).
 
@@ -18,7 +18,7 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 
 | Milestone | Actual state | Next work |
 | --- | --- | --- |
-| [01 — Stabilization](01-foundation-stabilization/README.md) | Historical foundation implemented; acceptance gaps open | S before live account work |
+| [01 — Stabilization](01-foundation-stabilization/README.md) | S accepted on source-checkout macOS; downstream gates open | S before live account work |
 | [02 — Codex](02-codex-adapter/README.md) | Missing production adapter | A → B → C → D, with early preview gates |
 | [03 — Preview delivery](03-codex-preview-delivery/README.md) | Partial shared infrastructure; acceptance missing | Independent A activity and B packaging/recovery before 02-D |
 | [04 — OpenCode](04-opencode-adapter/README.md) | Legacy code exists; new-host adapter missing | A → B → C core cutover |

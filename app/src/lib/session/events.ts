@@ -104,6 +104,8 @@ export type SessionEventKind =
   | "tool.progress"
   | "tool.completed"
   | "subtask.started"
+  | "subtask.completed"
+  | "subtask.failed"
   | "step.started"
   | "step.finished"
   | "step.failed"
@@ -138,6 +140,8 @@ export type SessionEvent = BaseSessionEvent &
     | { readonly type: "tool.progress"; readonly turnId: SpecOpsTurnId; readonly callId: string; readonly progress: unknown }
     | { readonly type: "tool.completed"; readonly turnId: SpecOpsTurnId; readonly callId: string; readonly status: ToolCallStatus; readonly output?: unknown }
     | { readonly type: "subtask.started"; readonly turnId: SpecOpsTurnId; readonly subtask: SubtaskSnapshot }
+    | { readonly type: "subtask.completed"; readonly turnId: SpecOpsTurnId; readonly subtask: SubtaskSnapshot }
+    | { readonly type: "subtask.failed"; readonly turnId: SpecOpsTurnId; readonly subtask: SubtaskSnapshot }
     | { readonly type: "step.started"; readonly turnId: SpecOpsTurnId; readonly step: StepSnapshot }
     | { readonly type: "step.finished"; readonly turnId: SpecOpsTurnId; readonly step: StepSnapshot }
     | { readonly type: "step.failed"; readonly turnId: SpecOpsTurnId; readonly step: StepSnapshot }

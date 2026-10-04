@@ -141,3 +141,9 @@ describe("message builders", () => {
     expect(makeNotification("session.event", { x: 1 }).method).toBe("session.event");
   });
 });
+
+it("rejects malformed request IDs before dispatch", () => {
+  for (const id of [{ access_token: "canary" }, [], true, null, 1.5]) {
+    expect(classifyIncoming({ jsonrpc: "2.0", id, method: "health" }).kind).toBe("invalid");
+  }
+});

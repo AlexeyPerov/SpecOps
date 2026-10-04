@@ -194,6 +194,7 @@ export function applySessionEvent(transcript: SessionTranscript, event: SessionE
   }
 
   if (event.type === "turn.started") {
+    if (findAssistantTurn(transcript, event.turnId)) return transcript;
     const turn: SessionTurn = {
       id: event.turnId,
       role: "assistant",
@@ -208,7 +209,7 @@ export function applySessionEvent(transcript: SessionTranscript, event: SessionE
   }
 
   const found = findAssistantTurn(transcript, event.turnId);
-  if (!found) {
+  if (!found || found.turn.status !== "running") {
     return transcript;
   }
   const { index } = found;
@@ -246,6 +247,8 @@ export function applySessionEvent(transcript: SessionTranscript, event: SessionE
         toolCalls: applyToolStatus(t.toolCalls, event.callId, event.status, event.output),
       }));
     case "subtask.started":
+    case "subtask.completed":
+    case "subtask.failed":
       return withTurn(transcript, index, (t) => ({
         ...t,
         parts: [...t.parts.filter((part) => !(part.kind === "subtask" && part.subtask.id === event.subtask.id)), { kind: "subtask", subtask: event.subtask }],
@@ -270,9 +273,14 @@ export function applySessionEvent(transcript: SessionTranscript, event: SessionE
     case "usage.recorded":
       return withTurn(transcript, index, (t) => ({
         ...t,
-        parts: [...t.parts.filter((part) => part.kind !== "cost"), { kind: "cost", cost: event.cost ?? 0, usage: event.usage }],
-        usage: event.usage,
-        ...(event.cost !== undefined ? { cost: event.cost } : {}),
+        parts: [...t.parts, { kind: "cost", cost: event.cost ?? 0, usage: event.usage }],
+        usage: {
+          input: (t.usage?.input ?? 0) + event.usage.input,
+          output: (t.usage?.output ?? 0) + event.usage.output,
+          reasoning: (t.usage?.reasoning ?? 0) + event.usage.reasoning,
+          cache: { read: (t.usage?.cache.read ?? 0) + event.usage.cache.read, write: (t.usage?.cache.write ?? 0) + event.usage.cache.write },
+        },
+        ...(event.cost !== undefined ? { cost: (t.cost ?? 0) + event.cost } : {}),
       }));
     case "turn.finished":
       return withTurn(transcript, index, (t) => ({ ...t, status: "completed", finishedAt: event.at }));

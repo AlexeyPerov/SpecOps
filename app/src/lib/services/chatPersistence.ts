@@ -41,34 +41,14 @@ import {
  */
 const PERSIST_DEBOUNCE_MS = 700;
 
-type PendingSessionPersist = {
-  scopeKey: ChatScopeKey;
-  sessionId: string;
-  snapshot: ChatSessionThreadFileSnapshot;
-};
+const sessionTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const indexTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-type PendingIndexPersist = {
-  scopeKey: ChatScopeKey;
-  snapshot: WorkspaceSessionsIndexSnapshot;
-};
-
-let sessionPersistTimer: ReturnType<typeof setTimeout> | null = null;
-let indexPersistTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingSessionPersist: PendingSessionPersist | null = null;
-let pendingIndexPersist: PendingIndexPersist | null = null;
-
-/** Clears debounce timer state between unit tests. */
+/** Clears debounce state between tests. */
 export function resetChatPersistenceForTests(): void {
-  if (sessionPersistTimer) {
-    clearTimeout(sessionPersistTimer);
-    sessionPersistTimer = null;
-  }
-  if (indexPersistTimer) {
-    clearTimeout(indexPersistTimer);
-    indexPersistTimer = null;
-  }
-  pendingSessionPersist = null;
-  pendingIndexPersist = null;
+  for (const timer of [...sessionTimers.values(), ...indexTimers.values()]) clearTimeout(timer);
+  sessionTimers.clear();
+  indexTimers.clear();
 }
 
 export async function readWorkspaceSessionsIndexSnapshot(
@@ -83,7 +63,26 @@ export async function readWorkspaceSessionsIndexSnapshot(
   }
 }
 
-export async function writeWorkspaceSessionsIndexSnapshot(
+const indexWrites = new Map<string, Promise<unknown>>();
+function queueIndexWrite<T>(scope: string, work: () => Promise<T>): Promise<T> {
+  const next = (indexWrites.get(scope) ?? Promise.resolve()).catch(() => {}).then(work);
+  indexWrites.set(scope, next);
+  void next.finally(() => { if (indexWrites.get(scope) === next) indexWrites.delete(scope); }).catch(() => {});
+  return next;
+}
+
+export function persistSessionIndexEntry(scope: ChatScopeKey, entry: WorkspaceSessionsIndexSnapshot["sessions"][number]): Promise<void> {
+  return queueIndexWrite(scope, async () => {
+    const current = await readWorkspaceSessionsIndexSnapshot(scope);
+    await writeIndex(scope, upsertSessionIndexEntry(current, entry));
+  });
+}
+
+export function writeWorkspaceSessionsIndexSnapshot(scopeKey: ChatScopeKey, snapshot: WorkspaceSessionsIndexSnapshot): Promise<void> {
+  return queueIndexWrite(scopeKey, () => writeIndex(scopeKey, snapshot));
+}
+
+async function writeIndex(
   scopeKey: ChatScopeKey,
   snapshot: WorkspaceSessionsIndexSnapshot,
 ): Promise<void> {
@@ -119,14 +118,18 @@ export async function syncSessionIndexEntryForThread(
   sessionId: string,
   thread: ChatThreadSnapshot,
 ): Promise<WorkspaceSessionsIndexSnapshot> {
-  const currentIndex = await readWorkspaceSessionsIndexSnapshot(scopeKey);
-  const nextIndex = upsertSessionIndexEntry(currentIndex, {
-    id: sessionId,
-    title: deriveSessionTitleFromThread(thread),
-    lastUsedAt: thread.metadata.updatedAt,
+  return queueIndexWrite(scopeKey, async () => {
+    const currentIndex = await readWorkspaceSessionsIndexSnapshot(scopeKey);
+    const nextIndex = upsertSessionIndexEntry(currentIndex, {
+      ...currentIndex.sessions.find((entry) => entry.id === sessionId),
+      id: sessionId,
+      isDraft: false,
+      title: deriveSessionTitleFromThread(thread),
+      lastUsedAt: thread.metadata.updatedAt,
+    });
+    await writeIndex(scopeKey, nextIndex);
+    return nextIndex;
   });
-  await writeWorkspaceSessionsIndexSnapshot(scopeKey, nextIndex);
-  return nextIndex;
 }
 
 export async function persistSessionThreadSnapshot(
@@ -145,9 +148,9 @@ export async function deleteSessionThreadFileSnapshot(
   scopeKey: ChatScopeKey,
   sessionId: string,
 ): Promise<void> {
-  if (pendingSessionPersist?.scopeKey === scopeKey && pendingSessionPersist.sessionId === sessionId) {
-    pendingSessionPersist = null;
-  }
+  const key = `${scopeKey}\0${sessionId}`;
+  clearTimeout(sessionTimers.get(key));
+  sessionTimers.delete(key);
 
   try {
     const threadPath = await getSessionThreadFilePath(scopeKey, sessionId);
@@ -162,9 +165,10 @@ export async function deleteSessionPersistence(
   sessionId: string,
 ): Promise<void> {
   await deleteSessionThreadFileSnapshot(scopeKey, sessionId);
-  const currentIndex = await readWorkspaceSessionsIndexSnapshot(scopeKey);
-  const nextIndex = removeSessionIndexEntry(currentIndex, sessionId);
-  await writeWorkspaceSessionsIndexSnapshot(scopeKey, nextIndex);
+  await queueIndexWrite(scopeKey, async () => {
+    const currentIndex = await readWorkspaceSessionsIndexSnapshot(scopeKey);
+    await writeIndex(scopeKey, removeSessionIndexEntry(currentIndex, sessionId));
+  });
 }
 
 export function scheduleSessionThreadFilePersistence(
@@ -172,38 +176,29 @@ export function scheduleSessionThreadFilePersistence(
   sessionId: string,
   snapshot: ChatSessionThreadFileSnapshot,
 ): void {
-  pendingSessionPersist = { scopeKey, sessionId, snapshot };
-  if (sessionPersistTimer) {
-    clearTimeout(sessionPersistTimer);
-  }
-  sessionPersistTimer = setTimeout(() => {
-    const next = pendingSessionPersist;
-    pendingSessionPersist = null;
-    sessionPersistTimer = null;
-    if (!next) {
-      return;
-    }
-    void persistSessionThreadSnapshot(next.scopeKey, next.sessionId, next.snapshot.thread);
-  }, PERSIST_DEBOUNCE_MS);
+  const key = `${scopeKey}\0${sessionId}`;
+  clearTimeout(sessionTimers.get(key));
+  sessionTimers.set(key, setTimeout(() => {
+    sessionTimers.delete(key);
+    void persistSessionThreadSnapshot(scopeKey, sessionId, snapshot.thread).catch(() => {
+      console.error("Session persistence failed");
+    });
+  }, PERSIST_DEBOUNCE_MS));
 }
 
-export function scheduleWorkspaceSessionsIndexPersistence(
-  scopeKey: ChatScopeKey,
-  snapshot: WorkspaceSessionsIndexSnapshot,
-): void {
-  pendingIndexPersist = { scopeKey, snapshot };
-  if (indexPersistTimer) {
-    clearTimeout(indexPersistTimer);
-  }
-  indexPersistTimer = setTimeout(() => {
-    const next = pendingIndexPersist;
-    pendingIndexPersist = null;
-    indexPersistTimer = null;
-    if (!next) {
-      return;
-    }
-    void writeWorkspaceSessionsIndexSnapshot(next.scopeKey, next.snapshot);
-  }, PERSIST_DEBOUNCE_MS);
+export function scheduleWorkspaceSessionsIndexPersistence(scopeKey: ChatScopeKey, snapshot: WorkspaceSessionsIndexSnapshot): void {
+  clearTimeout(indexTimers.get(scopeKey));
+  indexTimers.set(scopeKey, setTimeout(() => {
+    indexTimers.delete(scopeKey);
+    void writeWorkspaceSessionsIndexSnapshot(scopeKey, snapshot).catch(() => {
+      console.error("Session index persistence failed");
+    });
+  }, PERSIST_DEBOUNCE_MS));
+}
+
+/** Await the production binding writer before sending a native turn. */
+export async function flushSessionIndexPersistence(scopeKey: ChatScopeKey): Promise<void> {
+  await indexWrites.get(scopeKey);
 }
 
 export {

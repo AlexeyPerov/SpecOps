@@ -23,7 +23,7 @@ it('runtime without profile-management capabilities exposes no Codex rename/remo
 it('Cursor profile uses opaque private import and keeps browser/cloud/native readiness limitations visible',async()=>{
  mocks.auth.mockResolvedValue({status:'challenge',profiles:[{...profile,runtimeId:'cursor',account:undefined,support:{apiKey:true,browser:false,device:false}}]});
  const {host}=mountComponent(ConnectionProfilePanel,{runtimeId:'cursor',connectionProfileId:profile.id,onSelect:vi.fn()});await settle();
- expect(host.textContent).toContain('Browser login and native sessions are awaiting host integration');expect(host.textContent).toContain('Cloud execution is unavailable');
+ expect(host.textContent).toContain('Browser login and interactive approvals are unavailable');expect(host.textContent).toContain('Cloud execution is unavailable');
  button(host,'Import private API key').click();await settle();
  expect(mocks.auth.mock.calls.some(([request])=>request.runtimeId==='cursor'&&request.connectionProfileId===profile.id&&request.credential?.ref==='profile-api-key'&&request.options.action==='login-api-key')).toBe(true);
  expect(host.querySelector('input[type="password"]')).toBeNull();expect([...host.querySelectorAll('button')].map(button=>button.textContent)).not.toContain('Sign in with ChatGPT');

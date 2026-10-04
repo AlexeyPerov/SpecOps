@@ -121,7 +121,7 @@
         <label class="session-catalog-field" title={field.description}>
           <span class="session-catalog-label">{field.label}</span>
           <select class="session-catalog-select" disabled={isCatalogDisabled || !options.length} value={String(runtimeMetadata[field.id] ?? field.defaultsByModel?.[activeModelId] ?? field.default ?? '')} onchange={e => onSettingsChange?.({ ...runtimeMetadata, [field.id]: e.currentTarget.value })}>
-            {#each options as option}<option value={option}>{option}</option>{/each}
+            {#each options as option}<option value={option}>{option || 'Native default'}</option>{/each}
           </select>
         </label>
       {:else if field.kind === 'number' || field.kind === 'string'}
@@ -137,7 +137,7 @@
         </label>
       {/if}
     {/each}
-    <span class="session-catalog-label" title={catalog.configuration.description}>Session settings</span>
+    <span class="session-catalog-settings-description">{catalog.configuration.description}</span>
   {/if}
 </div>
 
@@ -147,6 +147,13 @@
     align-items: center;
     gap: var(--space-4);
     min-width: 0;
+  }
+
+  .session-catalog-settings-description {
+    flex-basis: 100%;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    line-height: 1.4;
   }
 
   .session-catalog-runtime {

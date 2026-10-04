@@ -57,9 +57,9 @@ async function main(line) {
     const store = new sdk.JsonlLocalAgentStore(req.store);
     const options = {
       apiKey: req.key,
-      ...(req.modelId ? { model: { id: req.modelId } } : {}),
-      mode: "agent", tools: [], mcpServers: {},
-      local: { cwd: req.cwd, store, settingSources: [], enableAgentRetries: false },
+      ...(req.modelId ? { model: { id: req.modelId, params: req.binding.modelParams ?? [] } } : {}),
+      mode: "agent", tools: req.binding.tools ?? [], mcpServers: {},
+      local: { cwd: req.cwd, store, settingSources: [], sandboxOptions: {enabled: req.binding.sandbox !== "disabled"}, autoReview: false, enableAgentRetries: false },
     };
     if (stopped) throw new Error("cancelled");
     if (req.action === "create") {
@@ -104,7 +104,7 @@ async function main(line) {
       } else if (req.action === "send") {
         const all = await store.runs.list({ filter: { agentIds: [req.agentId], limit: 4097 } });
         if (all.nextCursor || all.items.some((r) => r.status === "running" || (r.status === "queued" && !(all.items.length === 1 && r.turnNumber === 1 && r.startedAt == null && r.requestId == null && r.latestCheckpointRef == null && row.status === "idle")))) throw new Error("active");
-        run = await agent.send(req.prompt, { model: { id: req.modelId }, mode: "agent" });
+        run = await agent.send(req.prompt, { model: { id: req.modelId, params: req.binding.modelParams ?? [] }, mode: "agent" });
         if (stopped) { await run.cancel(); throw new Error("cancelled"); }
         if (!["stream", "wait", "cancel"].every((op) => run.supports(op))) throw new Error("unsupported");
         await emit({ type: "started", runId: run.id, agentId: run.agentId });

@@ -133,7 +133,7 @@
       {:else if runtimeId === 'claude' || runtimeId === 'cursor'}
         <button onclick={() => action('login-api-key')} disabled={busy}>Import private API key</button>
         <button onclick={() => action('logout')} disabled={busy}>Remove credential</button>
-        <span class="note">Import reads a private 0600 api-key file in this profile’s app data home. {runtimeId === 'cursor' ? 'Browser login and native sessions are awaiting host integration. Cloud execution is unavailable.' : 'Subscription login and cloud credential import are unavailable.'}</span>
+        <span class="note">Import reads a private 0600 api-key file in this profile’s app data home. {runtimeId === 'cursor' ? 'Local native sessions use profile-bound settings. Browser login and interactive approvals are unavailable. Cloud execution is unavailable.' : 'Subscription login and cloud credential import are unavailable.'}</span>
       {:else}
         <label>Provider<select bind:value={providerId} disabled={busy} aria-label="Native provider">
           <option value="">Select provider</option>

@@ -2,7 +2,9 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** Selected source implementation verified; authenticated native enforcement/installed acceptance open.
+
+**Evidence:** [Implementation and finite ledger](implementation-notes-phase-c.md) · [Blocked release baseline](../08-release-gates/baseline-07-c.md)
 
 **Prerequisites:** AS07-B accepted.
 
@@ -18,25 +20,25 @@ Own tested native policy/tool/config feature ledger and UI; no cloud execution i
 
 ## Tasks
 
-### AS07-C-01 — Verify native policy and lifecycle behavior
+### [DONE — source] AS07-C-01 — Verify native policy and lifecycle behavior
 
 Observe read-only/ask/workspace-write, sandbox/native tools/hooks, approvals/user input, fork/checkpoint, usage/catalog and restart. Distinguish native SDK default tool execution from support for user approval UI.
 
 **Acceptance:** Ledger marks supported/conditional/unsupported/unknown with evidence; native quickstart behavior cannot accidentally imply interactive approvals.
 
-### AS07-C-02 — Implement supported settings/config extensions
+### [DONE — source] AS07-C-02 — Implement supported settings/config extensions
 
 Expose tested model/options/native sandbox/hooks/policy and optional config/tool extensions. Check workspace/profile rules, skills/MCP/subagent scope as supported and separate native execution/display/configuration.
 
 **Acceptance:** No invalid/no-op option or prompt-based read-only claim; common capabilities represent actual write behavior and writer visibility accurately.
 
-### AS07-C-03 — Gate unsupported interactions and lifecycle
+### [DONE — source] AS07-C-03 — Gate unsupported interactions and lifecycle
 
 Hide/explain missing native approvals/questions/fork/checkpoints/restore; only add a native hook bridge if verified enforcement/correlation semantics support it.
 
 **Acceptance:** Unsupported actions produce no request; no silent auto-approval is sold as an approval interaction and no prompt substitutes for native enforcement.
 
-### AS07-C-04 — Preserve cloud deferral boundary
+### [DONE — source] AS07-C-04 — Preserve cloud deferral boundary
 
 If the SDK exposes cloud metadata, model it as runtime-specific descriptor data
 without adding execution, routing, persistence, or a top-level Cloud context.
@@ -52,3 +54,5 @@ without adding execution, routing, persistence, or a top-level Cloud context.
 ## Exit and next work
 
 D follows finite native feature/capability ledger with no advertised unknown behavior. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+
+Source tasks record finite native options and unsupported boundaries, not accepted live enforcement. Native account/platform/sandbox and signed installed evidence remain D/release gates. No paid request or existing global account was used.

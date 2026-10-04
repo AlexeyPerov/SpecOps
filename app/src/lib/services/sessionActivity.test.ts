@@ -24,3 +24,11 @@ it('native approval planning never claims a read-only filesystem guarantee', () 
  expect(workspaceActivity(chatStore.getSnapshot(),'/workspace')[0].writeCapability).toBe('possible');
  chatStore.updateThreadMetadata({runtimeId:'claude',runtimeMetadata:{permissionMode:'plan',writeCapability:'read-only'}}); expect(workspaceActivity(chatStore.getSnapshot(),'/workspace')[0].writeCapability).toBe('unknown');
 });
+
+it('native file restrictions and sandbox never imply a read-only guarantee; enabled writes remain visible', () => {
+ chatStore.setActiveWorkspaceRoot('/workspace');const id=chatStore.createDraftSession()!;
+ chatStore.updateThreadMetadata({runtimeId:'cursor',connectionProfileId:'isolated',runtimeMetadata:{toolset:'files-read',sandbox:'enabled',writeCapability:'unknown'}});chatStore.beginTurn('native',id);
+ expect(workspaceActivity(chatStore.getSnapshot(),'/workspace')[0]).toMatchObject({profileId:'isolated',writeCapability:'unknown'});
+ chatStore.updateThreadMetadata({runtimeId:'cursor',runtimeMetadata:{toolset:'files-write',sandbox:'enabled',writeCapability:'possible'}});expect(workspaceActivity(chatStore.getSnapshot(),'/workspace')[0].writeCapability).toBe('possible');
+ chatStore.updateThreadMetadata({runtimeId:'cursor',runtimeMetadata:{toolset:'files-read',sandbox:'read-only',writeCapability:'read-only'}});expect(workspaceActivity(chatStore.getSnapshot(),'/workspace')[0].writeCapability).toBe('unknown');
+});

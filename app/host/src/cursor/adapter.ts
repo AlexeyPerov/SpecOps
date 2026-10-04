@@ -1,3 +1,4 @@
+import { cursorParameters, cursorPolicy, PARAM_PREFIX, type CursorParameter } from "./policy";
 import { realpathSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { asNativeSessionId } from "../../../src/lib/session/ids";
@@ -54,6 +55,7 @@ export class CursorRuntimeAdapter
   readonly store: CursorProfileStore;
   readonly snapshots = new Map<string, ConnectionProfileSnapshot>();
   private bindings: CursorBindings;
+  private parameters = new Map<string, CursorParameter[]>();
   private closed = false;
   private mutating = new Set<string>();
   private operations = new Map<string, { profileId: string; abort: AbortController; done: Promise<void>; turnId?: string; stop?: () => Promise<void> }>();
@@ -96,12 +98,12 @@ export class CursorRuntimeAdapter
         catalogs: {
           supported: true,
           notes:
-            "Official native SDK model catalog for the selected user/service API key. Model parameters await session configuration integration.",
+            "Official native SDK model catalog for the selected user/service API key. Model parameters come only from the selected profile native catalog.",
         },
         nativeTurns: {
           supported: true,
-          limits: { localOnly: true, builtinTools: 0, attachments: false },
-          notes: "Durable local native agents/runs with explicit model and no tools/settings sources. Interactive approval and native policy editing are unavailable.",
+          limits: { localOnly: true, builtinTools: 7, attachments: false },
+          notes: "Durable local native agents/runs with explicit model, tools disabled by default and finite file tool presets. File tools run without interactive approval; filesystem settings sources excluded.",
         },
         browserLogin: {
           supported: false,
@@ -115,21 +117,25 @@ export class CursorRuntimeAdapter
         permissions: {
           supported: false,
           notes:
-            "Local SDK has no programmatic interactive approval callback. Native file hooks and sandbox require separate integration.",
+            "Local SDK has no programmatic interactive approval callback. Native sandbox has no approval callback; file hooks are excluded.",
         },
         questions: {
           supported: false,
           notes: "No native interaction bridge is exposed.",
         },
+        nativeFileTools: { supported: true, limits: { interactiveApproval: false, enforcedReadOnly: false, shell: false, task: false, mcp: false }, notes: "Finite native file tool presets only. Writes execute automatically; selected restrictions apply on every resume." },
+        nativeSandbox: { supported: true, limits: { enforcementVerified: false }, notes: "Native enabled/disabled option; workspace and private profile native sandbox policy may also apply. Platform/native enforcement acceptance remains open." },
+        fork: { supported: false, notes: "No verified local fork/restore lifecycle is exposed." },
+        checkpoint: { supported: false, notes: "Native internal checkpoints are storage evidence, not an exposed restore action." },
         cloudExecution: {
           supported: false,
           notes:
             "Cloud execution is outside the supported local runtime scope.",
         },
         nativeConfiguration: {
-          supported: false,
+          supported: true,
           notes:
-            "No session policy or model parameter editor is exposed during bootstrap.",
+            "Immutable native file tool presets, sandbox option and selected-profile catalog model parameters. Enforcement remains native/platform acceptance.",
         },
       },
     };
@@ -180,6 +186,7 @@ export class CursorRuntimeAdapter
     delete s.message;
     delete s.recovery;
     this.catalogs.delete(id);
+    for (const key of this.parameters.keys()) if (key.startsWith(id + ":")) this.parameters.delete(key);
     this.publish(p);
     const current = () => !abort.signal.aborted && s.generation === generation;
     try {
@@ -217,7 +224,7 @@ export class CursorRuntimeAdapter
               ? "API key was rejected. Import a valid private key."
               : "Cursor is offline. Reconnect the selected profile.";
         } else {
-          const models = this.safeModels(result, key);
+          const models = this.safeModels(result, key, p.id);
           if (candidate) {
             this.store.saveKey(id, key);
             this.store.consumeImport(id, key);
@@ -246,7 +253,7 @@ export class CursorRuntimeAdapter
     }
     return this.safe(s);
   }
-  private safeModels(result: CursorControlResult, key: string) {
+  private safeModels(result: CursorControlResult, key: string, profileId: string) {
     const rows = result.models;
     if (
       !Array.isArray(rows) ||
@@ -270,6 +277,8 @@ export class CursorRuntimeAdapter
             ),
           ).slice(0, 200),
         });
+    for (const id of this.parameters.keys()) if (id.startsWith(profileId + ":")) this.parameters.delete(id);
+    for (const row of rows) if (unique.has(row.id)) this.parameters.set(profileId + ":" + row.id, cursorParameters(row.parameters, key));
     return [...unique.values()];
   }
   async authenticate(request: AgentAuthRequest): Promise<AgentAuthResult> {
@@ -308,6 +317,7 @@ export class CursorRuntimeAdapter
       s.generation++;
       this.store.logout(p.id);
       this.catalogs.delete(p.id);
+      for (const key of this.parameters.keys()) if (key.startsWith(p.id + ":")) this.parameters.delete(key);
       s.state = "auth-required";
       s.recovery = "auth-required";
       delete s.account;
@@ -343,12 +353,23 @@ export class CursorRuntimeAdapter
   async listModes() {
     return [{ id: "agent", name: "Agent", primary: true }];
   }
-  async describeSessionConfiguration() {
+  async describeSessionConfiguration(input?: {connectionProfileId?: string}) {
+    const profileId = this.store.require(input?.connectionProfileId).id;
+    const models = await this.listModels({connectionProfileId:profileId});
+    const parameters = new Map<string, {optionsByModel: Record<string,string[]>}>();
+    for (const model of models) for (const p of this.parameters.get(profileId + ":" + model.id) ?? []) {
+      const field = parameters.get(p.id) ?? {optionsByModel: Object.create(null)};
+      field.optionsByModel[model.id] = ["", ...p.values]; parameters.set(p.id,field);
+    }
+    if (parameters.size > 32 || Buffer.byteLength(JSON.stringify([...parameters])) > 65536) throw adapterErrors.capabilityNotSupported("native-model-parameter-catalog-capacity");
     return {
-      schemaVersion: 1 as const,
-      scope: "session" as const,
-      description: "Native session configuration awaits integration.",
-      fields: [],
+      schemaVersion: 1 as const, scope: "session" as const,
+      description: "Immutable native local settings. File tools run without approval. Sandbox enforcement depends on platform; native workspace sandbox policy may apply. No verified read-only or workspace confinement guarantee. Shell, task, MCP, questions and filesystem settings/hooks excluded.",
+      fields: [
+        {id:"toolset",label:"Native file tools",kind:"select" as const,options:["none","files-read","files-write"],default:"none",description:"File writes/deletes run without approval when enabled. Read tools provide no filesystem enforcement guarantee."},
+        {id:"sandbox",label:"Native sandbox",kind:"select" as const,options:["enabled","disabled"],default:"enabled",description:"Native sandbox request. Disabling allows selected tools without sandbox restrictions; enforcement remains platform dependent."},
+        ...[...parameters].map(([id,field])=>({id:PARAM_PREFIX+id,label:id,kind:"select" as const,default:"",...field,description:"Selected profile catalog values only; empty uses native default."})),
+      ],
     };
   }
   async health(connectionProfileId?: string) {
@@ -430,7 +451,7 @@ export class CursorRuntimeAdapter
     return this.options.driver?.(assets, env) ?? nativeCursorDriver(assets, env, this.options.turnTimeoutMs);
   }
   private nativeBinding(b: CursorBinding) {
-    return { runtimeId: "cursor", connectionProfileId: b.native.connectionProfileId, workspaceRootPath: b.native.runtimeMetadata!.workspaceRootPath, modelId: b.native.modelId, modeId: "agent", credentialDigest: b.credentialDigest, tools: [], settingSources: [] };
+    return { runtimeId: "cursor", connectionProfileId: b.native.connectionProfileId, workspaceRootPath: b.native.runtimeMetadata!.workspaceRootPath, modelId: b.native.modelId, modeId: "agent", credentialDigest: b.credentialDigest, ...b.native.runtimeMetadata };
   }
   private operation(b: CursorBinding, action: CursorOperation["action"]): CursorOperation {
     return { action, agentId: b.native.nativeSessionId, store: this.bindings.store(b.native.connectionProfileId!, b.storeId), cwd: String(b.native.runtimeMetadata!.workspaceRootPath), key: this.store.readKey(b.native.connectionProfileId!)!, modelId: b.native.modelId, binding: this.nativeBinding(b) };
@@ -450,12 +471,14 @@ export class CursorRuntimeAdapter
   }
   async createSession(request: CreateAgentSessionRequest): Promise<NativeSessionRef> {
     const p = this.store.require(request.connectionProfileId);
+if (request.runtimeId !== "cursor" || (request.modeId !== undefined && request.modeId !== "agent")) throw adapterErrors.capabilityNotSupported("native-session-settings");
+    const policy = cursorPolicy(request.runtimeMetadata, this.parameters.get(p.id + ":" + request.modelId));
     const reserved = this.reserve(p.id, p.id + ":create");
     try {
       await this.authenticated(p.id, reserved.abort.signal);
-      if (request.runtimeId !== "cursor" || (request.modeId !== undefined && request.modeId !== "agent") || Object.keys(request.runtimeMetadata ?? {}).length) throw adapterErrors.capabilityNotSupported("native-session-settings");
+      if (JSON.stringify(policy) !== JSON.stringify(cursorPolicy(request.runtimeMetadata, this.parameters.get(p.id + ":" + request.modelId)))) throw adapterErrors.capabilityNotSupported("changed-native-model-parameters");
       if (!request.modelId || !(this.catalogs.get(p.id) ?? []).some((m) => m.id === request.modelId)) throw new Error("Select an explicit native catalog model");
-      const b: CursorBinding = { native: { runtimeId: "cursor", nativeSessionId: asNativeSessionId("agent-pending"), connectionProfileId: p.id, modelId: request.modelId, modeId: "agent", runtimeMetadata: { workspaceRootPath: realpathSync(request.workspaceRootPath), tools: [], settingSources: [] } }, storeId: randomUUID(), credentialDigest: this.digest(p.id), cursor: 0, users: Object.create(null) };
+      const b: CursorBinding = { native: { runtimeId: "cursor", nativeSessionId: asNativeSessionId("agent-pending"), connectionProfileId: p.id, modelId: request.modelId, modeId: "agent", runtimeMetadata: { ...policy, workspaceRootPath: realpathSync(request.workspaceRootPath) } }, storeId: randomUUID(), credentialDigest: this.digest(p.id), cursor: 0, users: Object.create(null) };
       const generation = this.snapshot(p).generation;
       let created = false;
       const driver = this.driver(p.id);

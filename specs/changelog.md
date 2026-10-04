@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-05 00:15 MSK — Expose finite native local settings and capability boundaries
+
+- Implemented AS07-C immutable native file-tool presets, explicit sandbox option and bounded selected-profile catalog enum parameters through common session controls. Unsupported/no-op options fail before SDK requests; every native resume/send retains original settings and credential/workspace/model binding. Native automatic file execution and workspace sandbox policy qualifications are visible.
+- Recorded supported/conditional/unsupported/unknown native feature ledger. No approval/question/hook/fork/restore/MCP/skill/subagent or Cloud execution is invented; no filesystem read-only guarantee is advertised. Writer activity exposes possible native file writes.
+- Added native SDK account-free option acceptance, exact worker option forwarding, production dispatcher unsupported-action/canary and common UI/activity fixtures. Native enforcement/authenticated/signed installed/platform/distribution gates remain open; release recommendation stays blocked. No migrations or compatibility shims.
+
 ## 2026-10-05 00:01 MSK — Add durable local native agents and run recovery
 
 - Implemented AS07-B isolated local SDK session workers, per-agent native JSONL stores, canonical profile/workspace/model/settings/original-credential binding and native agent/run identities. Native stream/text/reasoning/tool/usage/status mapping, cancellation/disposal, static failures and authoritative restart history are bounded and secret-safe.

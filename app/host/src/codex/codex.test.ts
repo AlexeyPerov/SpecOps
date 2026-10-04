@@ -154,3 +154,36 @@ describe('profile-scoped usage and recovery', () => {
     const { settings } = await import('./settings'); expect(() => settings({ scope: 'global', effort: 'medium' })).toThrow('scope'); expect(() => settings({ sandbox: 'unknown' })).toThrow();
   });
 });
+
+describe('native fault retirement', () => {
+  it.each(['malformed', 'oversized', 'crash'])('bounds %s settlement and leaves the sibling connection usable', async fault => {
+    const a = new CodexTransport(fixture(), temporary()); const b = new CodexTransport(fixture(), temporary()); cleanup.push(() => { a.close(); b.close(); });
+    await a.start(); await b.start();
+    await expect(a.request(`fixture/${fault}`, {}, 1000)).rejects.toThrow();
+    expect(a.running).toBe(false); expect(await b.request('account/read')).toMatchObject({ account: null });
+    await a.start(); expect(a.generation).toBe(2);
+  });
+  it('retires a previously observed orphan after leader crash without signalling the sibling or host', async () => {
+    const a = new CodexTransport(fixture(), temporary()); const b = new CodexTransport(fixture(), temporary()); cleanup.push(() => { a.close(); b.close(); });
+    await a.start(); await b.start(); const { pid } = await a.request('fixture/descendant') as { pid: number };
+    await new Promise(resolve => setTimeout(resolve, 400)); await expect(a.request('fixture/crash')).rejects.toThrow(); await tick();
+    let state = ''; try { state = execFileSync('/bin/ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).trim(); } catch {}
+    expect(state === '' || state.startsWith('Z')).toBe(true); expect(await b.request('account/read')).toMatchObject({ account: null });
+  });
+  it('logout removes profile-owned credentials/import file and retains another private home', async () => {
+    const runtime = adapter(); const a = runtime.store.create('A'); const b = runtime.store.create('B');
+    writeFileSync(join(runtime.store.home(a.id), 'auth.json'), 'ACCOUNT-A-CANARY', { mode: 0o600 });
+    for (const name of ['auth.json', 'api-key']) writeFileSync(join(runtime.store.home(b.id), name), 'ACCOUNT-B-CANARY', { mode: 0o644 });
+    await runtime.authenticate({ runtimeId: 'codex', connectionProfileId: b.id, workspaceRootPath: '', options: { action: 'logout' } });
+    for (const name of ['auth.json', 'api-key']) expect(existsSync(join(runtime.store.home(b.id), name))).toBe(false);
+    expect(readFileSync(join(runtime.store.home(a.id), 'auth.json'), 'utf8')).toBe('ACCOUNT-A-CANARY');
+  });
+});
+it('direct auth results and notifications mask edited metadata and native usage labels before crossing the profile boundary', async () => {
+  const runtime = adapter(); const p = runtime.store.create('Private'); const path = join(runtime.store.root, p.id, 'profile.json');
+  writeFileSync(path, JSON.stringify({ ...p, label: 'Bearer OPAQUE-METADATA-CANARY' }));
+  const updates: ProfileAuthUpdate[] = []; runtime.onAuthUpdate = update => updates.push(update);
+  const c = await runtime.connect(p.id); await c.transport!.request('fixture/notify', { method: 'account/rateLimits/updated', params: { rateLimits: { limitId: 'coding', limitName: 'Bearer OPAQUE-LIMIT-CANARY' } } }); await tick();
+  const list = await runtime.authenticate({ runtimeId: 'codex', workspaceRootPath: '', options: { action: 'list-profiles' } });
+  expect(JSON.stringify(list) + JSON.stringify(updates)).not.toContain('OPAQUE-');
+});

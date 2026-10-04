@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-04 17:49 MSK — Harden experimental native faults and credential boundaries
+
+- Implemented AS02-D source fault/security closure: malformed/oversized/crashed native fixture retirement, bounded ignored cancel, profile-local observed descendant cleanup preserving the supervisor group, selected logout credential cleanup and safe direct auth results.
+- Masked supported secret shapes in native text/reasoning/tool events and hydrated history without truncating benign output. Streaming retains split credential fragments across unrelated item completions; cumulative state bounds hold even with draining consumers.
+- Verified actual bundled-host death with two active production-client native streams and a pending approval, retaining bindings/history without replay. Recorded setup/recovery procedures and a blocked AS08-A selected-scope matrix; immediate descendant spawn/crash race, human account-A/B and installed AS03-A/B remain open. Default-off experimental legacy coding stays unaccepted as baseline.
+- Validation: 118 host, 3,238 frontend and 17 Rust Agent Host tests; host/frontend checks and production builds passed. Native contracts unchanged. No live account credentials/default auth files read, installed acceptance, migration or compatibility shim.
+
 ## 2026-10-04 17:32 MSK — Add profile recovery, optional settings and authoritative native history
 
 - Implemented AS02-C supported source scope: optional neutral session configuration descriptors replace runtime-specific common-UI branches, with model-specific effort defaults, separate sandbox/approval/collaboration scope and validated session overrides. Profile config remains native-owned; the persisted experimental protocol gate defaults off.

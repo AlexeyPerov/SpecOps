@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** In progress — A/B/C implemented from source; experimental developer/live account acceptance pending
+**Status:** In progress — A–D source implemented; experimental developer/live account and installed acceptance pending
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -32,3 +32,5 @@ Task prefix is `AS02-<phase>-<NN>`. Numeric folders reflect the default delivery
 **Phase B evidence:** [Native coding implementation and pin/support ledger](implementation-notes-phase-b.md). Official 0.160.0 distribution requires explicit persisted profile experimental opt-in and legacy history for coding/resume; default coding creation fails before work. Native/shared/production/UI fixtures pass; real authenticated coding, whole-host recovery and installed acceptance remain open.
 
 **Phase C evidence:** [Configuration, usage/recovery and reconciliation ledger](implementation-notes-phase-c.md). Optional neutral session controls, profile-scoped sparse limits/auth recovery, host/child epoch guards, authoritative materialized-legacy hydration and divergent/corrupt/missing-cache recovery are fixture-verified. The pinned unavailable paginated-items API and native management panels remain explicit deferrals; default coding stays gated and authenticated/installed acceptance stays open.
+
+**Phase D evidence:** [Fault/security closure, setup/recovery and AS08-A selected-scope submission](implementation-notes-phase-d.md). Actual bundled-host death settles two native streams including pending approval; native split-secret masking, bounded accumulated state and observed descendant retirement are source-verified. Immediate orphan race, installed AS03-A/B and human account-A/B smoke remain open; baseline preview and milestone A–D are not Done.

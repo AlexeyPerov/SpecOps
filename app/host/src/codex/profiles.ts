@@ -32,7 +32,7 @@ export class ProfileStore {
       if (lstatSync(path).isSymbolicLink()) throw new Error('Unsafe profile metadata');
       const raw = JSON.parse(readFileSync(path, 'utf8')) as ConnectionProfile;
       if (raw.id !== id || raw.runtimeId !== 'codex' || typeof raw.label !== 'string' || typeof raw.createdAt !== 'string' || (raw.experimental !== undefined && typeof raw.experimental !== 'boolean')) throw new Error('Invalid profile metadata');
-      return [{ id, label: raw.label, runtimeId: 'codex' as const, createdAt: raw.createdAt, ...(raw.experimental === true ? { experimental: true } : {}) }];
+      return [{ id, label: String(redactForLogs(raw.label)), runtimeId: 'codex' as const, createdAt: raw.createdAt, ...(raw.experimental === true ? { experimental: true } : {}) }];
     });
   }
   create(label: string): ConnectionProfile {

@@ -38,6 +38,8 @@ export class CodexTransport {
   private nextId = 0;
   private lifecycle = 0;
   private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  private descendants = new Map<number, string>();
+  private descendantTimer?: ReturnType<typeof setInterval>;
   private startPromise: Promise<void> | null = null;
   generation = 0;
   unknownNotifications = 0;
@@ -58,6 +60,8 @@ export class CodexTransport {
     if (token !== this.lifecycle) throw new Error('Codex startup was cancelled');
     const child = spawn(this.executable, ['app-server', '--listen', 'stdio://', '-c', 'cli_auth_credentials_store="file"', '-c', 'model_provider="openai"'], { env, cwd: this.home, stdio: 'pipe' });
     this.child = child;
+    this.descendants.clear();
+    if (child.pid && process.platform !== 'win32') { this.descendantTimer = setInterval(() => this.pollDescendants(child.pid!), 250); this.descendantTimer.unref(); }
     const generation = ++this.generation;
     let buffer = '';
     const decoder = new StringDecoder('utf8');
@@ -76,6 +80,7 @@ export class CodexTransport {
     });
     const retire = (): void => {
       if (this.child !== child) return;
+      this.cleanupDescendants(child.pid);
       this.child = null; this.startPromise = null;
       for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('Codex profile process exited; reconnect this profile.')); }
       this.pending.clear(); this.onExit(generation);
@@ -124,21 +129,46 @@ export class CodexTransport {
       this.child!.stdin.write(JSON.stringify({ id, method, params }) + '\n', error => { if (error) { clearTimeout(timer); this.pending.delete(id); reject(new Error('Codex transport failed')); } });
     });
   }
+  private parseRows(output: string): { pid: number; ppid: number; stamp: string }[] {
+    return output.trim().split('\n').flatMap(row => {
+      const match = row.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);
+      return match ? [{ pid: Number(match[1]), ppid: Number(match[2]), stamp: match[3]! }] : [];
+    });
+  }
+  private processRows() { return this.parseRows(execFileSync('/bin/ps', ['-axo', 'pid=,ppid=,lstart='], { encoding: 'utf8', timeout: 1000, maxBuffer: 1024 * 1024 })); }
+  private pollPending = false;
+  private pollDescendants(parent: number): void {
+    if (this.pollPending) return; this.pollPending = true;
+    const generation = this.generation;
+    execFile('/bin/ps', ['-axo', 'pid=,ppid=,lstart='], { encoding: 'utf8', timeout: 1000, maxBuffer: 1024 * 1024 }, (error, output) => {
+      this.pollPending = false;
+      if (!error && this.child?.pid === parent && this.generation === generation) this.trackRows(parent, this.parseRows(output));
+    });
+  }
+  private trackRows(parent: number, rows: { pid: number; ppid: number; stamp: string }[]): void {
+      const parents = new Set([parent, ...rows.filter(row => this.descendants.get(row.pid) === row.stamp).map(row => row.pid)]);
+      for (let depth = 0; depth < 64; depth++) {
+        let changed = false;
+        for (const row of rows) if (parents.has(row.ppid) && row.pid !== process.pid && !parents.has(row.pid)) { parents.add(row.pid); this.descendants.set(row.pid, row.stamp); changed = true; }
+        if (!changed) break;
+      }
+  }
+  private cleanupDescendants(parent?: number): void {
+    if (this.descendantTimer) clearInterval(this.descendantTimer); this.descendantTimer = undefined;
+    try {
+      const rows = this.processRows();
+      if (parent) this.trackRows(parent, rows);
+      // Verify observed birth time before signalling; reduces the risk of signalling a recycled PID.
+      for (const row of rows.reverse()) if (this.descendants.get(row.pid) === row.stamp) { try { process.kill(row.pid, 'SIGKILL'); } catch {} }
+    } catch {}
+    this.descendants.clear();
+  }
   close(): void {
     this.lifecycle++;
     const child = this.child;
     if (child) {
       this.child = null;
-      if (child.pid && process.platform !== 'win32') {
-        // Keep the host supervisor's process group while retiring this profile's subtree.
-        try {
-          const rows = execFileSync('/bin/ps', ['-axo', 'pid=,ppid='], { encoding: 'utf8', timeout: 1000, maxBuffer: 1024 * 1024 }).trim().split('\n').map(row => row.trim().split(/\s+/).map(Number));
-          const descendants: number[] = [];
-          const collect = (parent: number, depth = 0): void => { if (depth > 64) return; for (const [pid, ppid] of rows) if (ppid === parent && pid && pid !== process.pid) { collect(pid, depth + 1); descendants.push(pid); } };
-          collect(child.pid);
-          for (const pid of descendants) { try { process.kill(pid, 'SIGKILL'); } catch {} }
-        } catch {}
-      }
+      this.cleanupDescendants(child.pid);
       child.kill('SIGTERM');
       const timer = setTimeout(() => { if (child.exitCode === null) child.kill('SIGKILL'); }, 1000); timer.unref();
       for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error('Codex profile connection closed')); }

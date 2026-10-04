@@ -25,8 +25,9 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
    const thread=db[p.threadId]; const turn={id:'native-turn-'+thread.turns.length,itemsView:'full',items:[{type:'userMessage',id:'native-user-'+thread.turns.length,clientId:p.clientUserMessageId??null,content:p.input}],status:'inProgress',startedAt:100,completedAt:null,error:null};thread.turns.push(turn);active.set(thread.id,turn);save();result={turn};
    frame({id:req.id,result});notify('turn/started',{threadId:thread.id,turn});
    const prompt=p.input[0].text;
+   if(prompt.startsWith('malformed-')) { const kind=prompt.slice(10);item(thread.id,turn.id,{type:kind,id:'malformed-item',status:'completed',changes:[{path:42,diff:'bad'}]},true);return;}
    if(prompt==='child-failure'){setTimeout(()=>process.exit(9),20);return;}
-   if(prompt==='cancel')return;
+   if(prompt==='cancel'||prompt==='ignored-cancel')return;
    if(prompt==='failure'){setTimeout(()=>end(thread.id,turn,'failed'),5);return;}
    if(prompt==='unknown'){notify('fixture/unknown',{threadId:thread.id,turnId:turn.id,secret:'discard'});notify('item/agentMessage/delta',{threadId:thread.id,turnId:turn.id,itemId:'malformed',delta:42,secret:'contract-token-canary'});}
    if(prompt==='question'){approval(thread.id,turn,'item/tool/requestUserInput',{questions:[{id:'q',header:'Pick',question:'Which?',isSecret:false,isOther:false,options:[{label:'One',description:'First'}]}],isBlocking:true},reply=>finishText(thread.id,turn,reply.answers?.q?.answers?.join(',')??'rejected'));return;}
@@ -41,7 +42,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
    const n=thread.turns.length;notify('thread/tokenUsage/updated',{threadId:thread.id,turnId:turn.id,tokenUsage:{total:{inputTokens:n*10,outputTokens:n*3,reasoningOutputTokens:n,cachedInputTokens:0,cacheWriteInputTokens:0},last:{inputTokens:10,outputTokens:3,reasoningOutputTokens:1,cachedInputTokens:0,cacheWriteInputTokens:0}}});
    setTimeout(()=>finishText(thread.id,turn,'Hello native'),5);return;
  }
- else if(req.method==='turn/interrupt') { const turn=active.get(p.threadId);result={};frame({id:req.id,result});if(turn)end(p.threadId,turn,'interrupted');return; }
+ else if(req.method==='turn/interrupt') { const turn=active.get(p.threadId);if(turn?.items[0]?.content[0]?.text==='ignored-cancel')return;result={};frame({id:req.id,result});if(turn)end(p.threadId,turn,'interrupted');return; }
  else if(req.method==='fixture/frames')result={experimental};
  fs.appendFileSync(path.join(home,'fixture-requests.jsonl'),JSON.stringify({method:req.method,params:p})+'\n');
  frame({id:req.id,result});

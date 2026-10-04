@@ -1,3 +1,4 @@
+import { redactForSerialization, redactSecretStringValue } from '../../../src/lib/session/redact';
 import { randomUUID } from 'node:crypto';
 import type { AgentTurnRequest } from '../../../src/lib/session/adapter';
 import type { SessionEvent, PermissionReply } from '../../../src/lib/session/events';
@@ -13,9 +14,12 @@ interface Interaction { id: string | number; method: string; generation: number;
 export class NativeTurn {
   nativeTurnId?: string;
   ended = false;
+  private finishing = false;
   cancelled = false;
   private queue: SessionEvent[] = [];
   private bytes = 0;
+  private stateBytes = 0;
+  private itemIds = new Set<string>();
   private wake?: () => void;
   private texts = new Map<string, string>();
   private reasonings = new Map<string, string>();
@@ -23,19 +27,47 @@ export class NativeTurn {
   private tools = new Set<string>();
   private pending = new Map<string, Interaction>();
   private buffered: (() => void)[] = [];
+  private streamCarry = new Map<string, string>();
   private totals?: { input: number; output: number; reasoning: number; read: number; write: number };
   readonly generation: number;
   constructor(readonly request: AgentTurnRequest, readonly transport: CodexTransport, private nextSeq: () => number, readonly interactionTimeoutMs = 300000) { this.generation = transport.generation; this.emit({ type: 'turn.started', turnId: request.turnId }); }
   emit(payload: Payload): void {
     if (this.ended) return;
-    const event = { ...payload, nativeSessionId: this.request.native.nativeSessionId, connectionProfileId: this.request.native.connectionProfileId, nativeGeneration: this.generation, nativeTurnId: this.nativeTurnId, seq: this.nextSeq(), at: new Date().toISOString() } as SessionEvent;
+    const event = { ...(redactForSerialization(payload, Infinity) as Payload), nativeSessionId: this.request.native.nativeSessionId, connectionProfileId: this.request.native.connectionProfileId, nativeGeneration: this.generation, nativeTurnId: this.nativeTurnId, seq: this.nextSeq(), at: new Date().toISOString() } as SessionEvent;
     const bytes = Buffer.byteLength(JSON.stringify(event));
     if (!['turn.finished','turn.failed','turn.cancelled'].includes(payload.type) && (this.queue.length >= 4096 || this.bytes + bytes > 4 * 1024 * 1024)) { const started = this.queue.find(e => e.type === 'turn.started'); this.queue = started ? [started] : []; this.bytes = started ? Buffer.byteLength(JSON.stringify(started)) : 0; this.texts.clear(); this.finish('turn.failed', 'Native event capacity exceeded; reconnect the thread.'); this.transport.close(); return; }
     this.queue.push(event); this.bytes += bytes; this.wake?.(); this.wake = undefined;
   }
+  private retain(text: string, itemId: string): boolean {
+    this.stateBytes += Buffer.byteLength(text); this.itemIds.add(itemId);
+    if (this.stateBytes <= 4 * 1024 * 1024 && this.itemIds.size <= 10000) return true;
+    this.texts.clear(); this.reasonings.clear(); this.streamCarry.clear(); this.streamWriters.clear();
+    this.finish('turn.failed', 'Native turn capacity exceeded; reconnect explicitly.'); this.transport.close(); return false;
+  }
+  private streamWriters = new Map<string, (text: string) => void>();
+  /** Hold the final lexical atom so split credential fragments cannot reach the UI. */
+  private stream(key: string, delta: string, write: (text: string) => void): void {
+    if (!this.retain(delta, key)) return;
+    const text = (this.streamCarry.get(key) ?? '') + delta;
+    this.streamWriters.set(key, write);
+    let end = Math.max(text.lastIndexOf(' '), text.lastIndexOf('\n'), text.lastIndexOf('\t')) + 1;
+    const prefix = text.slice(0, end).match(/(?:Bearer|["']?[\w-]*(?:token|secret)["']?|["']?(?:password|api[_-]?key|device[_-]?code|user[_-]?code|authUrl|verificationUrl)["']?)\s*(?:[=:]\s*["']?)?$/i);
+    if (prefix?.index !== undefined) end = prefix.index;
+    if (end) write(redactSecretStringValue(text.slice(0, end), Infinity));
+    const carry = text.slice(end);
+    if (carry.length > 1024 * 1024) { this.finish('turn.failed', 'Native text capacity exceeded; reconnect explicitly.'); this.transport.close(); return; }
+    this.streamCarry.set(key, carry);
+  }
+  private flushStreams(): void {
+    const pending = [...this.streamCarry].map(([key, text]) => [this.streamWriters.get(key), text] as const);
+    this.streamCarry.clear(); this.streamWriters.clear();
+    for (const [write, text] of pending) write?.(redactSecretStringValue(text, Infinity));
+  }
   bind(id: unknown): void { if (typeof id !== 'string' || !id || (this.nativeTurnId && this.nativeTurnId !== id)) throw new Error('Native turn identity mismatch'); this.nativeTurnId = id; for (const apply of this.buffered.splice(0)) apply(); }
   finish(type: 'turn.finished' | 'turn.failed' | 'turn.cancelled', message?: string): void {
-    if (this.ended) return;
+    if (this.ended || this.finishing) return;
+    this.finishing = true;
+    this.flushStreams();
     if (this.texts.size) this.emit({ type: 'text.finished', turnId: this.request.turnId, text: [...this.texts.values()].join('').slice(0, 512 * 1024) });
     for (const interaction of new Set(this.pending.values())) { clearTimeout(interaction.timer); try { this.transport.respond(interaction.id, interaction.questions ? { answers: {} } : { decision: 'cancel' }, interaction.generation); } catch {} }
     this.pending.clear(); this.buffered = [];
@@ -53,10 +85,10 @@ export class NativeTurn {
       const turnId = this.request.turnId;
       if (method === 'turn/completed' && object(p.turn)) { const status = p.turn.status; if (status === 'completed') this.finish('turn.finished'); else if (status === 'interrupted') this.finish(this.cancelled ? 'turn.cancelled' : 'turn.failed', 'Native turn interrupted; resume explicitly to continue.'); else this.finish('turn.failed', 'Native turn failed; inspect the thread and retry explicitly.'); }
       else if (method === 'turn/started') this.emit({ type: 'status.changed', status: 'running' });
-      else if (method === 'item/agentMessage/delta' && typeof p.itemId === 'string' && typeof p.delta === 'string' && !this.completed.has(p.itemId)) { this.texts.set(p.itemId, (this.texts.get(p.itemId) ?? '') + p.delta); this.emit({ type: 'text.delta', turnId, delta: p.delta, nativeItemId: p.itemId }); }
-      else if ((method === 'item/reasoning/summaryTextDelta' || method === 'item/reasoning/textDelta') && typeof p.itemId === 'string' && typeof p.delta === 'string') { const id = `${p.itemId}:${method.includes('summary') ? 'summary' : 'content'}:${p.summaryIndex ?? p.contentIndex ?? 0}`; this.reasonings.set(id, (this.reasonings.get(id) ?? '') + p.delta); this.emit({ type: 'reasoning.delta', turnId, reasoningId: id, delta: p.delta, nativeItemId: p.itemId }); }
+      else if (method === 'item/agentMessage/delta' && typeof p.itemId === 'string' && typeof p.delta === 'string' && !this.completed.has(p.itemId)) { if (!this.retain(p.delta, p.itemId)) return; this.texts.set(p.itemId, (this.texts.get(p.itemId) ?? '') + p.delta); this.stream(`text:${p.itemId}`, p.delta, delta => this.emit({ type: 'text.delta', turnId, delta, nativeItemId: p.itemId as string })); }
+      else if ((method === 'item/reasoning/summaryTextDelta' || method === 'item/reasoning/textDelta') && typeof p.itemId === 'string' && typeof p.delta === 'string' && !this.completed.has(p.itemId)) { if (!this.retain(p.delta, p.itemId)) return; const id = `${p.itemId}:${method.includes('summary') ? 'summary' : 'content'}:${p.summaryIndex ?? p.contentIndex ?? 0}`; this.reasonings.set(id, (this.reasonings.get(id) ?? '') + p.delta); this.stream(`reasoning:${id}`, p.delta, delta => this.emit({ type: 'reasoning.delta', turnId, reasoningId: id, delta, nativeItemId: p.itemId as string })); }
       else if ((method === 'item/started' || method === 'item/completed') && object(p.item)) this.item(p.item as unknown as ThreadItem, method === 'item/completed');
-      else if ((method === 'item/commandExecution/outputDelta' || method === 'item/fileChange/outputDelta') && typeof p.itemId === 'string' && typeof p.delta === 'string') this.emit({ type: 'tool.progress', turnId, callId: p.itemId, progress: p.delta });
+      else if ((method === 'item/commandExecution/outputDelta' || method === 'item/fileChange/outputDelta') && typeof p.itemId === 'string' && typeof p.delta === 'string' && !this.completed.has(p.itemId)) this.stream(`tool:${p.itemId}`, p.delta, progress => this.emit({ type: 'tool.progress', turnId, callId: p.itemId as string, progress }));
       else if (method === 'thread/tokenUsage/updated' && object(p.tokenUsage) && object(p.tokenUsage.last)) {
         const v = object(p.tokenUsage.total) ? p.tokenUsage.total : p.tokenUsage.last; const next = { input: Number(v.inputTokens), output: Number(v.outputTokens), reasoning: Number(v.reasoningOutputTokens), read: Number(v.cachedInputTokens), write: Number(v.cacheWriteInputTokens ?? 0) };
         if (Object.values(next).some(n => !Number.isFinite(n) || n < 0)) throw new Error('Invalid native usage');
@@ -70,7 +102,15 @@ export class NativeTurn {
     });
   }
   item(item: ThreadItem, done: boolean): void {
-    if (!('id' in item) || typeof item.id !== 'string') return;
+    if (done) {
+      // Authoritative completed item replaces its carry; other streams retain fragments.
+      for (const key of this.streamCarry.keys()) if (key === `text:${item.id}` || key === `tool:${item.id}` || key.startsWith(`reasoning:${item.id}:`)) { this.streamCarry.delete(key); this.streamWriters.delete(key); }
+    }
+    if (!object(item) || typeof item.id !== 'string' || !item.id || typeof item.type !== 'string') throw new Error('Invalid native item identity');
+    if ((item.type === 'agentMessage' || item.type === 'plan') && typeof item.text !== 'string') throw new Error('Invalid native text item');
+    if (item.type === 'reasoning' && (!Array.isArray(item.summary) || !Array.isArray(item.content) || [...item.summary, ...item.content].some(value => typeof value !== 'string'))) throw new Error('Invalid native reasoning item');
+    if (item.type === 'fileChange' && (!['inProgress', 'completed', 'failed', 'declined'].includes(item.status) || !Array.isArray(item.changes) || item.changes.some(change => !object(change) || typeof change.path !== 'string' || typeof change.diff !== 'string'))) throw new Error('Invalid native file item');
+    if (!this.retain(JSON.stringify(item), item.id)) return;
     const turnId = this.request.turnId;
     if (done && this.completed.has(item.id)) return;
     if (item.type === 'agentMessage' || item.type === 'plan') { if (done) this.texts.set(item.id, item.text); else if (!this.texts.has(item.id)) this.texts.set(item.id, ''); }

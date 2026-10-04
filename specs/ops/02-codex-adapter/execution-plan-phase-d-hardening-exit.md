@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** In progress — source fault/security closure verified; installed/account gates blocked by prerequisites
 
 **Prerequisites:** AS02-A/AS02-B/AS02-C, AS03-A and AS03-B accepted for the first macOS/Codex preview.
 
@@ -57,3 +57,5 @@ Document runtime setup, profile/config ownership, model/settings, limits, missin
 ## Exit and next work
 
 Accepted D unblocks OpenCode core. 06-C is the later multiple-SpecOps-profile slice; the desktop-A/SpecOps-B scenario is already required here. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+
+**Source evidence:** [D hardening, setup/recovery and selected release matrix](implementation-notes-phase-d.md). AS02-D-01/02 source work implemented and fixture-verified with explicit descendant race/security-shape limits; installed acceptance remains open. AS02-D-03 is pending human account-A/B smoke; AS02-D-04 is blocked by Planned AS03-A/B; AS02-D-05 source setup/recovery and AS08-A submission recorded, release closure pending. No task is fully Done from source checks alone.

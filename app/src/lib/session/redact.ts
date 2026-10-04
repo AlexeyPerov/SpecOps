@@ -30,27 +30,28 @@ const SECRET_VALUE_PATTERNS = [
   /AIza[0-9A-Za-z_-]{20,}/g,
   /(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{16,}/g,
   /(?:AKIA|ASIA)[A-Z0-9]{16}/g,
+  /["\']?(?:[\w-]*token|[\w-]*secret|password|api[_-]?key|device[_-]?(?:code|auth[_-]?code)|user[_-]?code|authUrl|verificationUrl)["\']?\s*[=:]\s*["\']?[^\s,;}"\']+/gi,
   /((?:[\w-]*token|[\w-]*secret|password|api[_-]?key)\s*[=:]\s*)[^\s,;]+/gi,
 ];
 
 const MAX_STRING_LENGTH = 4_096;
 
-export function redactSecretStringValue(value: string): string {
+export function redactSecretStringValue(value: string, maxLength = MAX_STRING_LENGTH): string {
   let redacted = value;
   for (const pattern of SECRET_VALUE_PATTERNS) {
     redacted = redacted.replace(pattern, "[redacted]");
   }
-  if (redacted.length > MAX_STRING_LENGTH) {
-    return `${redacted.slice(0, MAX_STRING_LENGTH)} …[redacted ${redacted.length - MAX_STRING_LENGTH} chars]`;
+  if (redacted.length > maxLength) {
+    return `${redacted.slice(0, maxLength)} …[redacted ${redacted.length - maxLength} chars]`;
   }
   return redacted;
 }
 
-export function redactForSerialization(value: unknown): unknown {
+export function redactForSerialization(value: unknown, maxStringLength = MAX_STRING_LENGTH): unknown {
   const seen = new WeakSet<object>();
   function redact(entry: unknown, depth: number): unknown {
     if (depth > 64) return "[redacted depth]";
-    if (typeof entry === "string") return redactSecretStringValue(entry);
+    if (typeof entry === "string") return redactSecretStringValue(entry, maxStringLength);
     if (!entry || typeof entry !== "object") return entry;
     if (entry instanceof Date) return entry.toISOString();
     if (seen.has(entry)) return "[redacted cycle]";

@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Active plan; foundation stabilization accepted on macOS from source; Codex A/B source implementation verified; experimental authenticated developer and installed gates pending.
+**Status:** Active plan; foundation stabilization accepted on macOS from source; Codex A–D source implementation verified; experimental authenticated developer and installed gates pending.
 
 **Source of truth:** This roadmap and the linked milestone scope/execution plans. The [2026-10-04 audit](done/reviews/audit-2026-10-04.md) is historical evidence; its proposed order is adopted here. Active folders and task IDs are numbered in the default delivery order; shared early gates and repeated release acceptance are explicit exceptions. Completed records are in [done](done/README.md).
 
@@ -19,7 +19,7 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 | Milestone | Actual state | Next work |
 | --- | --- | --- |
 | [01 — Stabilization](01-foundation-stabilization/README.md) | S accepted on source-checkout macOS; downstream gates open | S before live account work |
-| [02 — Codex](02-codex-adapter/README.md) | A profile/control plane and B experimental native turns/resume verified from source; manual live-account/coding gate open | C → D, with B live acceptance and early preview gates |
+| [02 — Codex](02-codex-adapter/README.md) | A–D experimental source/fixtures verified; manual live-account and installed gates open | Accept real account scenario and 03-A/B installed gates before D closure |
 | [03 — Preview delivery](03-codex-preview-delivery/README.md) | Partial shared infrastructure; acceptance missing | Independent A activity and B packaging/recovery before 02-D |
 | [04 — OpenCode](04-opencode-adapter/README.md) | Legacy code exists; new-host adapter missing | A → B → C core cutover |
 | [05 — Claude](05-claude-adapter/README.md) | Missing production adapter | A → B → C → D |
@@ -158,3 +158,5 @@ Each phase records automated checks, pinned contracts and actual smoke/support e
 Completed foundation phases, implementation notes and review/audit snapshots moved out of this queue live in [done](done/README.md). Older completed/cancelled archives retain their historical location under `specs/archive/ops-done` and `specs/archive/ops-postponed`. Archived evidence does not close active acceptance gaps.
 
 **AS02-C source evidence (2026-10-04):** [Pinned configuration/usage/history ledger](02-codex-adapter/implementation-notes-phase-c.md). Experimental full legacy history, optional session configuration, sparse per-profile limits/recovery and composite host/child epoch guards are implemented with production persistence fixtures. Paginated items are unavailable in the pinned executable; native management panels and authenticated/installed acceptance remain open. This does not close AS03-A/B or AS02-D.
+
+**AS02-D source evidence (2026-10-04):** [Hardening/setup/recovery and selected release matrix](02-codex-adapter/implementation-notes-phase-d.md). Native fault/secret/capacity tests and actual bundled-host death with two active production-client streams pass. Source developer scope remains experimental and default-off; immediate descendant race, account-A/B and installed 03-A/B gates stay open. AS08-A receives a blocked subset recommendation, not a release acceptance; 06-C remains later Planned work.

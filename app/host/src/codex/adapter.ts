@@ -1,3 +1,4 @@
+import { redactForSerialization, redactSecretStringValue } from '../../../src/lib/session/redact';
 import { mergeUsage, usageBlocked, failureRecovery } from './limits';
 import { adapterErrors } from '../../../src/lib/session/adapter/errors';
 import { NativeTurn } from './turn';
@@ -67,7 +68,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     return connection;
   }
   private publish(c: ProfileConnection): void {
-    this.onAuthUpdate({ runtimeId: 'codex', connectionProfileId: c.profile.id, generation: c.snapshot.generation, profile: { ...c.snapshot } });
+    this.onAuthUpdate({ runtimeId: 'codex', connectionProfileId: c.profile.id, generation: c.snapshot.generation, profile: redactForSerialization({ ...c.snapshot }, Infinity) as ConnectionProfileSnapshot });
   }
   async connect(id: unknown): Promise<ProfileConnection> {
     const c = this.connection(id);
@@ -110,7 +111,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     if (raw.account === null) { delete c.snapshot.account; delete c.snapshot.usage; c.snapshot.recovery = 'auth-required'; c.snapshot.state = c.loginId ? 'login-pending' : 'auth-required'; }
     else if (object(raw.account) && raw.account.type === 'apiKey') { c.snapshot.account = { type: 'apiKey' }; c.snapshot.state = 'authenticated'; }
     else if (object(raw.account) && raw.account.type === 'chatgpt' && (raw.account.email === null || typeof raw.account.email === 'string') && typeof raw.account.planType === 'string') {
-      c.snapshot.account = { type: 'chatgpt', ...(typeof raw.account.email === 'string' ? { email: raw.account.email } : {}), planType: raw.account.planType };
+      c.snapshot.account = { type: 'chatgpt', ...(typeof raw.account.email === 'string' ? { email: redactSecretStringValue(raw.account.email, 320) } : {}), planType: redactSecretStringValue(raw.account.planType, 80) };
       c.snapshot.state = 'authenticated';
     } else throw new Error('Incompatible account identity');
     const nextIdentity = c.snapshot.account?.type === 'chatgpt' ? c.snapshot.account.email : c.snapshot.account?.type;
@@ -167,7 +168,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     } else { c.transport.unknownNotifications = Math.min(100, c.transport.unknownNotifications + 1); }
   }
   async authenticate(request: AgentAuthRequest): Promise<AgentAuthResult> {
-    try { return await this.authenticateProfile(request); }
+    try { return redactForSerialization(await this.authenticateProfile(request), Infinity) as AgentAuthResult; }
     catch (error) {
       const c = typeof request.connectionProfileId === 'string' ? this.connections.get(request.connectionProfileId) : undefined;
       const message = error instanceof Error ? error.message : 'Authentication failed';
@@ -180,7 +181,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
         }
         this.publish(c);
       }
-      throw error;
+      throw new Error(redactSecretStringValue(message));
     }
   }
   private async authenticateProfile(request: AgentAuthRequest): Promise<AgentAuthResult> {
@@ -208,6 +209,8 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       }
       if (action === 'logout') {
         await c.transport!.request('account/logout');
+        this.store.secure(c.profile.id);
+        for (const name of ['api-key', 'auth.json']) { const path = join(this.store.home(c.profile.id), name); if (existsSync(path)) unlinkSync(path); }
         for (const key of this.sessions.keys()) if (JSON.parse(key)[1] === c.profile.id) this.sessions.delete(key);
         for (const turn of this.turns.values()) if (turn.request.native.connectionProfileId === c.profile.id) turn.finish('turn.failed', 'Profile signed out. Authenticate and explicitly resume.');
         delete c.snapshot.account; delete c.snapshot.usage; c.snapshot.recovery = 'auth-required'; await this.readAccount(c); c.transport!.close(); c.snapshot.state = 'auth-required'; c.snapshot.recovery = 'auth-required'; this.publish(c);
@@ -269,14 +272,14 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       if (models.length > 1000) throw new Error('Model catalog limit exceeded');
     } while (cursor);
     this.models.set(c.profile.id, models);
-    return models.filter(m => !m.hidden).map(m => ({ id: m.id, name: m.displayName, reasoningEfforts: m.supportedReasoningEfforts.map(e => e.reasoningEffort), defaultReasoningEffort: m.defaultReasoningEffort }));
+    return models.filter(m => !m.hidden).map(m => ({ id: m.id, name: redactSecretStringValue(m.displayName), reasoningEfforts: m.supportedReasoningEfforts.map(e => e.reasoningEffort), defaultReasoningEffort: m.defaultReasoningEffort }));
   }
   async listModes(input?: { modelId?: string; connectionProfileId?: string }) {
     const c = await this.connect(input?.connectionProfileId);
     if (!this.experimental(c.profile.id)) return [{ id: 'default', name: 'Default' }];
     const raw = await c.transport!.request('collaborationMode/list', {});
     if (!object(raw) || !Array.isArray(raw.data)) throw new Error('Incompatible collaboration catalog');
-    return raw.data.filter(m => object(m) && ['default', 'plan'].includes(String(m.mode))).map(m => ({ id: String((m as Record<string, unknown>).mode), name: String((m as Record<string, unknown>).name) }));
+    return raw.data.filter(m => object(m) && ['default', 'plan'].includes(String(m.mode))).map(m => ({ id: String((m as Record<string, unknown>).mode), name: redactSecretStringValue(String((m as Record<string, unknown>).name)) }));
   }
   async describeSessionConfiguration(input?: { connectionProfileId?: string }) {
     const c = await this.connect(input?.connectionProfileId);
@@ -363,7 +366,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       const mapped = new NativeTurn({ native, turnId: asSpecOpsTurnId(turnId), workspaceRootPath: String(thread.cwd), prompt: '' }, transport, () => ++seq);
       mapped.bind(turnId);
       for (const item of items.values()) {
-        if (item.type === 'userMessage') history.push({ id: item.clientId ?? item.id, nativeTurnId: turnId, nativeItemId: item.id, role: 'user', content: item.content.filter(v => v.type === 'text').map(v => v.type === 'text' ? v.text : '').join(''), createdAt: at });
+        if (item.type === 'userMessage') history.push({ id: item.clientId ?? item.id, nativeTurnId: turnId, nativeItemId: item.id, role: 'user', content: item.content.filter(v => v.type === 'text').map(v => v.type === 'text' ? redactSecretStringValue(v.text, Infinity) : '').join(''), createdAt: at });
         else mapped.item(item, true);
       }
       mapped.finish(turn.status === 'completed' ? 'turn.finished' : 'turn.failed', 'Native history turn was interrupted or failed; continue with a new message explicitly.');

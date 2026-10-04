@@ -92,3 +92,42 @@ it('native expiry marks only the bound profile auth-required; explicit retry and
   expect(events.at(-1)?.type).toBe('turn.failed'); expect(conn.snapshot.state).toBe('auth-required'); expect(conn.snapshot.recovery).toBe('auth-required'); expect(otherConnection.snapshot.state).toBe('authenticated');
   await expect(collectContractEvents(adapter.send(request(native, workspace)))).rejects.toMatchObject({ code: 'authentication-required' });
 });
+
+describe('native disclosure boundaries', () => {
+  it.each(['sk-abcdefghijklmnopqrstuv', 'Bearer OPAQUE-TOKEN-CANARY', 'api_key = OPAQUE-KEY-CANARY', '"access_token":"OPAQUE-TOKEN-CANARY"', 'https://auth.openai.com/authorize?code=AUTH-URL-CANARY'])('masks every split position in streamed %s and authoritative snapshots', async secret => {
+    for (let split = 1; split < secret.length; split++) {
+      const transport = new CodexTransport('unused', '/unused'); transport.generation = 1;
+      const native = { runtimeId: 'codex' as const, connectionProfileId: 'profile', nativeSessionId: asNativeSessionId('thread') }; let seq = 0;
+      const turn = new NativeTurn(request(native, '/work'), transport, () => ++seq); turn.bind('turn');
+      const notify = (delta: string) => turn.notification('item/agentMessage/delta', { threadId: 'thread', turnId: 'turn', itemId: 'text', delta }, 1);
+      notify(secret.slice(0, split)); turn.item({ type: 'mcpToolCall', id: 'unrelated-tool', status: 'completed', result: { text: 'safe' } } as never, true); notify(secret.slice(split)); turn.finish('turn.finished');
+      const events = await collectContractEvents(turn.events()); const text = events.filter(e => e.type === 'text.delta').map(e => e.type === 'text.delta' ? e.delta : '').join('');
+      expect(text).not.toContain(secret); expect(JSON.stringify(events)).not.toContain('OPAQUE-'); expect(JSON.stringify(events)).not.toContain('AUTH-URL-CANARY');
+    }
+  });
+  it('preserves benign long snapshots while redacting nested tool values and caps accumulated state with a draining consumer', async () => {
+    const transport = new CodexTransport('unused', '/unused'); transport.generation = 1;
+    const native = { runtimeId: 'codex' as const, connectionProfileId: 'profile', nativeSessionId: asNativeSessionId('thread') }; let seq = 0;
+    const turn = new NativeTurn(request(native, '/work'), transport, () => ++seq); turn.bind('turn');
+    turn.item({ type: 'agentMessage', id: 'text', text: 'x'.repeat(9000) } as never, true); turn.item({ type: 'mcpToolCall', id: 'tool', arguments: { access_token: 'OPAQUE-TOKEN-CANARY' }, result: { authUrl: 'https://auth.openai.com/?secret=CANARY', text: 'y'.repeat(9000) }, status: 'completed' } as never, true); turn.finish('turn.finished');
+    const events = await collectContractEvents(turn.events()); expect(events.find(e => e.type === 'text.finished')).toMatchObject({ text: 'x'.repeat(9000) }); expect(JSON.stringify(events)).not.toContain('OPAQUE-TOKEN-CANARY'); expect(JSON.stringify(events)).toContain('y'.repeat(9000));
+    const flood = new NativeTurn(request(native, '/work'), transport, () => ++seq); flood.bind('turn'); const consuming = collectContractEvents(flood.events());
+    for (let i = 0; i < 300 && !flood.ended; i++) { flood.notification('item/agentMessage/delta', { threadId: 'thread', turnId: 'turn', itemId: 'text', delta: 'word '.repeat(4096) }, 1); await Promise.resolve(); }
+    expect((await consuming).at(-1)).toMatchObject({ type: 'turn.failed', message: expect.stringContaining('capacity') });
+  });
+});
+
+it('ignored native cancel settles within the timeout, retires only its profile and retains the original binding', async () => {
+  const { adapter, native, workspace } = await setup();
+  const original = { ...native }; const iterator = adapter.send(request(native, workspace, 'ignored-cancel'))[Symbol.asyncIterator](); await iterator.next();
+  await new Promise(resolve => setTimeout(resolve, 30)); const start = Date.now(); await adapter.cancel({ native, turnId: asSpecOpsTurnId('specops-turn') });
+  const rest: SessionEvent[] = []; for (;;) { const next = await iterator.next(); if (next.done) break; rest.push(next.value); }
+  expect(Date.now() - start).toBeLessThan(2000); expect(rest.at(-1)?.type).toBe('turn.cancelled'); expect(native).toEqual(original);
+  expect(readFileSync(join(adapter.store.home(native.connectionProfileId!), 'fixture-requests.jsonl'), 'utf8').match(/thread\/start/g)).toHaveLength(1);
+});
+
+it.each(['agentMessage', 'reasoning', 'fileChange'])('malformed required %s item fails once and retains its native binding', async kind => {
+  const { adapter, native, workspace } = await setup(); const original = { ...native };
+  const events = await collectContractEvents(adapter.send(request(native, workspace, 'malformed-' + kind)));
+  expect(events.filter(event => event.type === 'turn.failed')).toHaveLength(1); expect(events.some(event => event.type === 'turn.finished')).toBe(false); expect(native).toEqual(original);
+});

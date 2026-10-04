@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** In progress — A/B/C implemented from source; experimental developer/live account acceptance pending
+**Status:** In progress — A–D source implemented; experimental developer/live account and installed acceptance pending
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -23,7 +23,7 @@ Codex is the first production runtime and the second active milestone. A–D del
 | AS02-A | [Isolated profile and authentication](execution-plan-phase-a-protocol-auth.md) | Implemented; manual account gate pending |
 | AS02-B | [Native coding slice and minimum resume](execution-plan-phase-b-thread-events.md) | Experimental source/fixtures verified; authenticated developer smoke pending |
 | AS02-C | [Native config, limits and reconciliation](execution-plan-phase-c-capabilities-history.md) | Experimental legacy source/fixtures verified; unsupported native surfaces and live acceptance explicit |
-| AS02-D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | Planned |
+| AS02-D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | Source hardening verified; installed/account gates blocked |
 
 **Phase A evidence:** [Implementation and support ledger](implementation-notes-phase-a.md). Automated profile/protocol/bootstrap checks pass; no live account-B login is claimed.
 
@@ -35,11 +35,13 @@ Codex is the first production runtime and the second active milestone. A–D del
 
 - [ ] A–D task/contract/security and desktop-A/SpecOps-B smoke accepted.
 - [ ] Installed activity/packaging gates 03-A/B accepted outside checkout/developer PATH.
-- [ ] Native feature/auth/config/history/recovery ledger and selected-scope 08-A evidence recorded.
-- [ ] Setup/support limitations, accepted evidence and changelog updated when implementation lands.
+- [x] Native feature/auth/config/history/recovery ledger and selected-scope 08-A evidence recorded (source evidence and blocked release recommendation).
+- [x] Setup/support limitations, source evidence and changelog updated; installed acceptance remains open.
 
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
 
 **Phase B evidence:** [Native coding implementation and pin/support ledger](implementation-notes-phase-b.md). Official 0.160.0 distribution requires explicit persisted profile experimental opt-in and legacy history for coding/resume; default coding creation fails before work. Native/shared/production/UI fixtures pass; real authenticated coding, whole-host recovery and installed acceptance remain open.
 
 **Phase C evidence:** [Configuration, usage/recovery and reconciliation ledger](implementation-notes-phase-c.md). Optional neutral session controls, profile-scoped sparse limits/auth recovery, host/child epoch guards, authoritative materialized-legacy hydration and divergent/corrupt/missing-cache recovery are fixture-verified. The pinned unavailable paginated-items API and native management panels remain explicit deferrals; default coding stays gated and authenticated/installed acceptance stays open.
+
+**Phase D evidence:** [Fault/security closure, setup/recovery and AS08-A selected-scope submission](implementation-notes-phase-d.md). Actual bundled-host death settles two native streams including pending approval; native split-secret masking, bounded accumulated state and observed descendant retirement are source-verified. Immediate orphan race, installed AS03-A/B and human account-A/B smoke remain open; baseline preview and milestone A–D are not Done.

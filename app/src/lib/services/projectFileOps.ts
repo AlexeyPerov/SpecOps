@@ -1,3 +1,4 @@
+import { relocateProjectFavorites } from "./projectFavorites";
 import { join } from "@tauri-apps/api/path";
 import { exists, mkdir, readFile, remove, rename } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
@@ -313,6 +314,7 @@ export async function renameProjectEntry(
   }
   try {
     await rename(entryPath, targetPath);
+    await relocateProjectFavorites(workspaceRoot, entryPath, targetPath).catch(() => {});
     await syncDocumentsAfterPathRelocation(workspaceRoot, entryPath, targetPath, windowId);
     return { ok: true, path: targetPath };
   } catch (error: unknown) {
@@ -335,6 +337,7 @@ export async function deleteProjectEntry(
   }
   try {
     await remove(entryPath, { recursive: true });
+    await relocateProjectFavorites(workspaceRoot, entryPath, null).catch(() => {});
     markDocumentsMissingUnderPath(workspaceRoot, entryPath);
     closeTabsForDeletedDocumentsUnderPath(workspaceRoot, entryPath);
     return { ok: true, path: entryPath };
@@ -360,6 +363,7 @@ export async function moveProjectEntry(
   }
   try {
     await rename(sourcePath, targetPath);
+    await relocateProjectFavorites(workspaceRoot, sourcePath, targetPath).catch(() => {});
     await syncDocumentsAfterPathRelocation(workspaceRoot, sourcePath, targetPath, windowId);
     return { ok: true, path: targetPath };
   } catch (error: unknown) {

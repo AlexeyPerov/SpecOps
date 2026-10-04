@@ -777,6 +777,7 @@
       workspaceFileCatalogRegistry.refresh();
       return projectTreeHandlers.refreshProjectTree();
     },
+    onCollapseAll: () => projectTreeController.collapseAll(),
     onToggleHidden: projectTreeHandlers.toggleProjectTreeHidden,
     onToggleCollapsed: (next: boolean) => {
       layoutHandlers.toggleProjectPanelCollapsed(next);

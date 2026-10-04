@@ -233,6 +233,7 @@ export function createProjectTreeController(
   deps: ProjectTreeControllerDeps = {},
 ): {
   getState: () => ProjectTreeControllerState;
+  collapseAll: () => void;
   setShowHidden: (next: boolean) => void;
   loadProjectTreeRoot: (options: LoadProjectTreeRootOptions) => Promise<void>;
   loadProjectTreeChildren: (workspaceRoot: string | null, directoryPath: string) => Promise<void>;
@@ -1110,6 +1111,10 @@ export function createProjectTreeController(
         ...state,
         showHidden: next,
       };
+      publish();
+    },
+    collapseAll: () => {
+      state = { ...state, expandedPaths: new Set() };
       publish();
     },
     loadProjectTreeRoot,

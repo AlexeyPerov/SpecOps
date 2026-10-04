@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-10-04 12:22 MSK — Project tree navigation, Git colors and favorites
+
+- Added a tree actions menu with Expand one level and Collapse all. Expansion
+  opens the first closed level in each visible branch; collapse clears the
+  persisted expansion set while retaining cached directory listings.
+- Highlighted pending files and their ancestor folders in cyan, including
+  changes inside closed branches. Kept change badges and added a distinct
+  conflict color and `!` badge for unmerged Git entries.
+- Added a collapsible Favorites section above the tree, sorted alphabetically
+  with relative paths and yellow stars. Files open directly; folders reveal
+  their location in the tree. Context menus add or remove favorites.
+- Persisted favorites per project in shared application storage, with a
+  dedicated cross-window write lock and change notifications. Favorites follow
+  app-initiated renames and moves and are removed after deletion. Missing
+  entries are hidden when favorites reload, including tree refreshes.
+- Validation: full suite passed (3515 tests); Svelte check reported zero errors
+  and warnings; production build passed. Added coverage for favorites storage,
+  concurrent updates and notifications, relocation/deletion, tree actions,
+  ancestor highlighting and all unmerged Git status codes.
+
 ## 2026-10-03 23:12 MSK — Complete theme appearance and expanded palettes
 
 - Expanded the catalog from 18 to 43 themes, with 10 light options. Added

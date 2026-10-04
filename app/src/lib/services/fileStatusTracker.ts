@@ -395,6 +395,8 @@ export function fileStatusBadgeLabel(status: OpencodeFileChangeStatus): string {
       return "D";
     case "modified":
       return "M";
+    case "conflicted":
+      return "!";
   }
 }
 
@@ -411,7 +413,7 @@ export function summarizeFileStatuses(
   const counts: FileStatusCounts = { modified: 0, added: 0, deleted: 0, total: 0 };
   for (const status of statusByPath.values()) {
     counts.total += 1;
-    if (status === "modified") {
+    if (status === "modified" || status === "conflicted") {
       counts.modified += 1;
     } else if (status === "added") {
       counts.added += 1;

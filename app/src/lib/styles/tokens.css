@@ -87,6 +87,8 @@
 }
 
 :root[data-theme="light"] {
+  --project-pane-color-pending: #087e8b;
+  --project-pane-color-favorite: #947000;
   --project-file-icon-blue: #247bb0;
   --project-file-icon-yellow: #93800a;
   --project-file-icon-orange: #be6537;
@@ -152,6 +154,8 @@
 }
 
 :root[data-theme="dark"] {
+  --project-pane-color-pending: #65d9e6;
+  --project-pane-color-favorite: #f4d35e;
   --project-file-icon-blue: #61aed5;
   --project-file-icon-yellow: #c6cf49;
   --project-file-icon-orange: #dd9469;

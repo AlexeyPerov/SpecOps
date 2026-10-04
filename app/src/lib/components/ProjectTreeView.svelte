@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { normalizePathSync } from "../services/diskFingerprint";
+  import { projectTreeChangeTones } from "../services/projectTreeDecorations";
   import { onDestroy } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
   import type { ContextId } from "../domain/contracts";
@@ -28,6 +30,8 @@
    */
 
   interface Props {
+    revealPath?: string | null;
+    favoritePaths?: ReadonlySet<string>;
     nodes?: ProjectTreeNode[];
     workspaceRoot?: string;
     coloredFileIcons?: boolean;
@@ -58,6 +62,8 @@
   }
 
   let {
+    revealPath = null,
+    favoritePaths = emptySet<string>(),
     nodes = [],
     workspaceRoot = "",
     coloredFileIcons = true,
@@ -81,6 +87,8 @@
     onFileDropPaneChange = () => {},
     onOpenFileInContext,
   }: Props = $props();
+
+  const changeTones = $derived(projectTreeChangeTones(statusByPath));
 
   let ignoreNextActivation = false;
 
@@ -355,6 +363,7 @@
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(measure);
       resizeObserver.observe(parent);
+      if (el.parentElement) resizeObserver.observe(el.parentElement);
     }
     return () => {
       parent.removeEventListener("scroll", onScroll);
@@ -442,7 +451,7 @@
   // an auto-expand that adds the row later can still retry (F71).
   let lastRevealedPath: string | null = null;
   $effect(() => {
-    const path = activeFilePath;
+    const path = revealPath ?? activeFilePath;
     if (path === lastRevealedPath) {
       return;
     }
@@ -527,6 +536,7 @@
         </li>
       {:else}
         {@const labelTone = classifyProjectTreeLabelTone(row.node.name, row.node.kind)}
+        {@const changeTone = changeTones.get(normalizePathSync(row.node.path))}
         {@const fileChangeStatus = statusByPath?.get(row.node.path) ?? null}
         <li
           role="treeitem"
@@ -554,7 +564,10 @@
             {:else}
               <ProjectFileIcon name={row.node.name} colored={coloredFileIcons} />
             {/if}
-            <span class="project-tree-label project-tree-label-{labelTone}">{row.node.name}</span>
+            <span class={`project-tree-label project-tree-label-${labelTone} ${changeTone ? `project-tree-label-${changeTone}` : ""}`}>{row.node.name}</span>
+            {#if favoritePaths.has(normalizePathSync(row.node.path))}
+              <span class="project-tree-star" title="Favorite" aria-label="Favorite">★</span>
+            {/if}
             {#if fileChangeStatus}
               <span
                 class={`project-tree-status-badge project-tree-status-${fileChangeStatus}`}
@@ -708,4 +721,7 @@
     color: var(--color-diff-removed);
     background: color-mix(in srgb, var(--color-diff-removed) 16%, transparent);
   }
+  .project-tree-label-pending { color: var(--project-pane-color-pending); }
+  .project-tree-label-conflicted, .project-tree-status-conflicted { color: var(--color-danger); }
+  .project-tree-star { color: var(--project-pane-color-favorite); flex-shrink: 0; }
 </style>

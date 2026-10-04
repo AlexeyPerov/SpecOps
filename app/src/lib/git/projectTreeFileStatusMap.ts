@@ -1,7 +1,7 @@
 import { normalizeGitOutputPath, type WorkingTreeStatus } from "./types";
 
 /** Project-tree badge status aligned with M/A/D labels. */
-export type ProjectTreeFileChangeStatus = "added" | "deleted" | "modified";
+export type ProjectTreeFileChangeStatus = "added" | "deleted" | "modified" | "conflicted";
 
 /** Maps a porcelain status code to a project-tree badge status. */
 export function mapPorcelainStatusCodeToBadge(
@@ -16,15 +16,13 @@ export function mapPorcelainStatusCodeToBadge(
     return "added";
   }
 
+  if (code.includes("U") || code === "AA" || code === "DD") return "conflicted";
+
   if (code.includes("D")) {
     return "deleted";
   }
 
   if (code.includes("R") || code.includes("C")) {
-    return "modified";
-  }
-
-  if (code.includes("U")) {
     return "modified";
   }
 
@@ -87,6 +85,10 @@ export function mapWorkingTreeStatusToAbsoluteBadges(
 function mergePorcelainStatusCodes(stagedCode: string, unstagedCode: string): string {
   if (stagedCode === unstagedCode) {
     return stagedCode;
+  }
+
+  if ([stagedCode, unstagedCode].some((code) => code.includes("U") || code === "AA" || code === "DD")) {
+    return "UU";
   }
 
   if (stagedCode.includes("D") || unstagedCode.includes("D")) {

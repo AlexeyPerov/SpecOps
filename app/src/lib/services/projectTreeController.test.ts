@@ -749,3 +749,18 @@ describe("revalidateProjectTree", () => {
     expect(clearedChildren).toEqual([]);
   });
 });
+
+it("collapses every level, preserves listings and reports the empty persisted expansion", async () => {
+  const reported = vi.fn();
+  const controller = createProjectTreeController(() => {}, {
+    loadDirectoryChildrenFn: async (_root, dir) => dir === "/repo" ? [makeNode("docs", "/repo/docs", "directory")] : [makeNode("sub", "/repo/docs/sub", "directory")],
+    onExpandedPathsChange: reported,
+  });
+  await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
+  await controller.handleToggleProjectTreeDirectory("/repo", "/repo/docs");
+  await controller.handleToggleProjectTreeDirectory("/repo", "/repo/docs/sub");
+  controller.collapseAll();
+  expect(controller.getState().expandedPaths.size).toBe(0);
+  expect(controller.getState().childrenByPath.has("/repo/docs")).toBe(true);
+  expect(reported).toHaveBeenLastCalledWith("/repo", []);
+});

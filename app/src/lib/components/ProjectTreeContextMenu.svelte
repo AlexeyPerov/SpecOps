@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { normalizePathSync } from "../services/diskFingerprint";
   import { onDestroy } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
   import { revealInFileManagerLabel } from "../services/platform";
@@ -14,6 +15,8 @@
   }
 
   interface Props {
+    favoritePaths?: ReadonlySet<string>;
+    onToggleFavorite?: (node: ProjectTreeNode) => void;
     workspaceRoot?: string;
     /** Opens the git-log popup for `path` at the menu's position. */
     onShowGitLog?: (event: MouseEvent, path: string, isFile: boolean) => void;
@@ -27,6 +30,8 @@
   }
 
   let {
+    favoritePaths = new Set<string>(),
+    onToggleFavorite = () => {},
     workspaceRoot = "",
     onShowGitLog,
     gitEnabled = false,
@@ -196,6 +201,11 @@
       >
         New Folder…
     </button>
+    {#if menuTarget.node}
+      <button class="project-tree-context-item" type="button" role="menuitem" onclick={() => { if (menuTarget.node) onToggleFavorite(menuTarget.node); closeContextMenu(); }}>
+        {favoritePaths.has(normalizePathSync(menuTarget.node.path)) ? "Remove from Favorites" : "Add to Favorites"}
+      </button>
+    {/if}
     {#if hasNode && nodePath}
       <div class="ui-rule" role="separator"></div>
       <button

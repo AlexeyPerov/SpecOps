@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, untrack } from "svelte";
+  import { onDestroy, untrack, tick } from "svelte";
   import ProjectTreeView from "./ProjectTreeView.svelte";
   import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
   import GitLogPopover from "./GitLogPopover.svelte";
@@ -20,6 +20,10 @@
   import { emptyMap, emptySet } from "../collections/emptyCollections";
   import { startPointerDrag } from "./pointerDrag";
   import { normalizePathSync } from "../services/diskFingerprint";
+  import { loadProjectFavorites, setProjectFavorite, listenProjectFavorites } from "../services/projectFavorites";
+  import { projectTreeChangeTones } from "../services/projectTreeDecorations";
+  import { fileStatusBadgeLabel } from "../services/fileStatusTracker";
+  import { workspaceRelativePath } from "../services/workspacePaths";
   import RefreshIcon from "./icons/RefreshIcon.svelte";
 
   interface Props {
@@ -45,7 +49,8 @@
     onToggleHidden?: (next: boolean) => void;
     onToggleCollapsed?: (next: boolean) => void;
     onPanelWidthChange?: (width: number) => void;
-    onToggleDirectory?: (path: string) => void;
+    onCollapseAll?: () => void;
+    onToggleDirectory?: (path: string) => void | Promise<void>;
     onOpenFile?: (path: string) => void;
     /** Double click on a file row: keep its (preview) tab. */
     onKeepFile?: (path: string) => void;
@@ -83,6 +88,7 @@
     onToggleHidden = () => {},
     onToggleCollapsed = () => {},
     onPanelWidthChange = () => {},
+    onCollapseAll = () => {},
     onToggleDirectory = () => {},
     onOpenFile = () => {},
     onKeepFile = () => {},
@@ -98,6 +104,84 @@
     onOpenFileInContext,
     onMarkdownFilterEnable = () => {},
   }: Props = $props();
+
+  const changeTones = $derived(projectTreeChangeTones(statusByPath));
+  let favoriteRevealPath = $state<string | null>(null);
+  let treeActionsEl = $state<HTMLDetailsElement | null>(null);
+  $effect(() => {
+    void activeFilePath;
+    untrack(() => { favoriteRevealPath = null; });
+  });
+  let favorites = $state<ProjectTreeNode[]>([]);
+  let reloadFavorites = $state<(() => Promise<void>) | null>(null);
+  let favoritesCollapsed = $state(false);
+  const favoritePaths = $derived(new Set(favorites.map((node) => normalizePathSync(node.path))));
+  $effect(() => {
+    const root = workspaceRoot;
+    favorites = [];
+    reloadFavorites = null;
+    favoriteRevealPath = null;
+    let disposed = false;
+    let revision = 0;
+    let stop: (() => void) | undefined;
+    const reload = async () => {
+      const request = ++revision;
+      try {
+        const entries = await loadProjectFavorites(root);
+        if (!disposed && request === revision) favorites = entries;
+      } catch { if (!disposed) notify("Could not load project favorites."); }
+    };
+    void listenProjectFavorites(root, () => { void reload(); }).then((unlisten) => {
+      if (disposed) unlisten();
+      else { stop = unlisten; reloadFavorites = reload; }
+    }).catch(() => { void reload(); });
+    return () => { disposed = true; stop?.(); };
+  });
+  $effect(() => {
+    void rootNodes;
+    void childrenByPath;
+    const reload = reloadFavorites;
+    if (reload) untrack(() => { void reload(); });
+  });
+  async function toggleFavorite(node: ProjectTreeNode): Promise<void> {
+    const root = workspaceRoot;
+    try {
+      await setProjectFavorite(root, node, !favoritePaths.has(normalizePathSync(node.path)));
+      if (workspaceRoot === root) await reloadFavorites?.();
+    } catch { notify("Could not save project favorites."); }
+  }
+  function expandOneLevel(): void {
+    const targets: string[] = [];
+    function visit(nodes: readonly ProjectTreeNode[]): void {
+      for (const node of nodes) {
+        if (node.kind !== "directory") continue;
+        if (!expandedPaths.has(node.path)) targets.push(node.path);
+        else visit(visibleChildrenByPath.get(node.path) ?? []);
+      }
+    }
+    visit(visibleRootNodes);
+    for (const path of targets) onToggleDirectory(path);
+  }
+  async function openFavorite(node: ProjectTreeNode): Promise<void> {
+    if (node.kind === "file") { onOpenFile(node.path); return; }
+    const relative = workspaceRelativePath(node.path, workspaceRoot);
+    if (relative === null) return;
+    let path = workspaceRoot.replace(/\/+$/, "");
+    for (const segment of relative.split("/")) {
+      path += `/${segment}`;
+      if (!expandedPaths.has(path)) await onToggleDirectory(path);
+    }
+    favoriteRevealPath = null;
+    await tick();
+    favoriteRevealPath = node.path;
+    const target = node.path;
+    requestAnimationFrame(() => {
+      const row = [...(panelBodyEl?.querySelectorAll<HTMLElement>("[data-path]") ?? [])]
+        .find((element) => element.dataset.path === target);
+      row?.scrollIntoView({ block: "nearest" });
+      row?.focus();
+    });
+  }
 
   let panelBodyEl = $state<HTMLDivElement | null>(null);
   let contextMenuComponent = $state<ProjectTreeContextMenu | undefined>(undefined);
@@ -345,6 +429,11 @@
   }
 </script>
 
+<svelte:window
+  onkeydown={(event) => { if (event.key === "Escape") treeActionsEl?.removeAttribute("open"); }}
+  onpointerdown={(event) => { if (event.target instanceof Node && !treeActionsEl?.contains(event.target)) treeActionsEl?.removeAttribute("open"); }}
+/>
+
 <aside
   class={`project-panel ${collapsed ? "project-panel-collapsed" : ""} ${isResizing ? "project-panel-resizing" : ""}`}
   aria-label="Project panel"
@@ -369,6 +458,13 @@
         aria-label="Create file or folder"
         onclick={(event) => openContextMenu(event, { node: null, parentDirPath: workspaceRoot })}
       >+</button>
+      <details class="tree-actions" bind:this={treeActionsEl}>
+        <summary class="btn btn-sm btn-ghost" title="Tree actions" aria-label="Tree actions">⋯</summary>
+        <div class="tree-actions-menu">
+          <button type="button" onclick={(event) => { expandOneLevel(); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Expand one level</button>
+          <button type="button" disabled={expandedPaths.size === 0} onclick={(event) => { onCollapseAll(); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Collapse all</button>
+        </div>
+      </details>
       <button class="btn btn-sm btn-ghost" type="button" onclick={onRefresh} title="Refresh tree">
         <RefreshIcon size={14} />
       </button>
@@ -409,6 +505,28 @@
       onscroll={handleBodyScroll}
       oncontextmenu={handleContextMenuRoot}
     >
+      {#if favorites.length > 0}
+        <section class="project-favorites" aria-label="Favorites">
+          <button class="favorites-heading" type="button" aria-expanded={!favoritesCollapsed} onclick={() => favoritesCollapsed = !favoritesCollapsed}>
+            {favoritesCollapsed ? "▸" : "▾"} Favorites
+          </button>
+          {#if !favoritesCollapsed}
+            {#each favorites as node (node.path)}
+              {@const tone = changeTones.get(normalizePathSync(node.path))}
+              {@const status = statusByPath?.get(node.path)}
+              <div class="favorite-row">
+                <button class="favorite-link" type="button" title={node.path} onclick={() => { void openFavorite(node); }} oncontextmenu={(event) => handleContextMenuNode(event, node)}>
+                  <span class="favorite-star" aria-hidden="true">★</span>
+                  <span class:favorite-pending={tone === "pending"} class:favorite-conflicted={tone === "conflicted"}>{node.name}{node.kind === "directory" ? "/" : ""}</span>
+                  {#if status}<span class:favorite-pending={tone === "pending"} class:favorite-conflicted={tone === "conflicted"} title={`${status} (git)`}>{fileStatusBadgeLabel(status)}</span>{/if}
+                  <small>{workspaceRelativePath(node.path, workspaceRoot)}</small>
+                </button>
+                <button class="favorite-remove" type="button" title="Remove from Favorites" aria-label={`Remove ${node.name} from Favorites`} onclick={() => { void toggleFavorite(node); }}>×</button>
+              </div>
+            {/each}
+          {/if}
+        </section>
+      {/if}
       <ProjectTreeView
         coloredFileIcons={$appSettings.coloredProjectFileIcons}
         nodes={visibleRootNodes}
@@ -418,6 +536,8 @@
         {loadingPaths}
         {activeFilePath}
         {statusByPath}
+        {favoritePaths}
+        revealPath={favoriteRevealPath}
         {onToggleDirectory}
         {onOpenFile}
         {onKeepFile}
@@ -442,6 +562,8 @@
   bind:this={contextMenuComponent}
   {workspaceRoot}
   {gitEnabled}
+  {favoritePaths}
+  onToggleFavorite={(node) => { void toggleFavorite(node); }}
   onShowGitLog={showGitLog}
   onOpenFile={onOpenFile}
   onNewFile={(parent) => startDraft("file", parent)}
@@ -453,6 +575,26 @@
 <GitLogPopover bind:this={gitLogPopover} onOpenCommit={openCommitInVersionControl} />
 
 <style>
+  .tree-actions { position: relative; }
+  .tree-actions summary { list-style: none; cursor: pointer; }
+  .tree-actions summary::-webkit-details-marker { display: none; }
+  .tree-actions-menu { position: absolute; right: 0; top: 100%; z-index: 20; min-width: 165px; padding: 4px; background: var(--color-surface-1); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); box-shadow: var(--shadow-overlay); }
+  .tree-actions-menu button { display: block; width: 100%; padding: 6px; text-align: left; border: 0; background: transparent; color: var(--color-text-primary); font: inherit; cursor: pointer; }
+  .tree-actions-menu button:hover { background: var(--color-hover); }
+  .tree-actions-menu button:disabled { opacity: .45; cursor: default; }
+  .project-favorites { border-bottom: 1px solid var(--color-border-subtle); padding: var(--space-4); }
+  .favorites-heading, .favorite-link, .favorite-remove { border: 0; background: transparent; color: var(--color-text-primary); font: inherit; cursor: pointer; }
+  .favorites-heading { width: 100%; text-align: left; padding: 4px; color: var(--color-text-secondary); }
+  .favorite-row { display: flex; align-items: center; }
+  .favorite-row:hover { background: var(--color-hover); }
+  .favorite-link { display: flex; gap: 6px; flex: 1; min-width: 0; align-items: center; text-align: left; padding: 4px; }
+  .favorite-link span, .favorite-link small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .favorite-link small { color: var(--color-text-secondary); font-size: 10px; flex: 1; }
+  .favorite-star { color: var(--project-pane-color-favorite); flex-shrink: 0; }
+  .favorite-pending { color: var(--project-pane-color-pending); }
+  .favorite-conflicted { color: var(--color-danger); }
+  .favorite-remove { padding: 4px; }
+
   .project-panel {
     width: var(--project-panel-width);
     position: relative;

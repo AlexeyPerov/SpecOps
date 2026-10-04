@@ -112,6 +112,7 @@
     onToggleHidden: (next: boolean) => void | Promise<void>;
     onToggleCollapsed: (next: boolean) => void;
     onPanelWidthChange: (widthPx: number) => void;
+    onCollapseAll?: () => void;
     onToggleDirectory: (path: string) => void | Promise<void>;
     onOpenFile: (path: string) => void | Promise<void>;
     /** Double click in the tree: keep the previewed file's tab. */
@@ -839,6 +840,7 @@
         onToggleHidden={projectTree.onToggleHidden}
         onToggleCollapsed={projectTree.onToggleCollapsed}
         onPanelWidthChange={projectTree.onPanelWidthChange}
+        onCollapseAll={projectTree.onCollapseAll}
         onToggleDirectory={projectTree.onToggleDirectory}
         onOpenFile={projectTree.onOpenFile}
         onKeepFile={projectTree.onKeepFile}

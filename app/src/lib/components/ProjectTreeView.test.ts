@@ -65,3 +65,17 @@ describe("project tree file symbols", () => {
     expect(host.querySelectorAll(".project-file-icon.monochrome")).toHaveLength(2);
   });
 });
+
+it("decorates closed ancestors and keeps favorites visible alongside Git status", () => {
+  const { host } = mountComponent(ProjectTreeView, {
+    nodes: [{ name: "docs", path: "/repo/docs", kind: "directory" as const }, { name: "note.md", path: "/repo/note.md", kind: "file" as const }],
+    statusByPath: new Map([["/repo/docs/deep/a.md", "conflicted" as const], ["/repo/note.md", "modified" as const]]),
+    favoritePaths: new Set(["/repo/note.md"]),
+  });
+  flushSync();
+  expect(host.querySelector('[data-path="/repo/docs"] .project-tree-label-conflicted')).not.toBeNull();
+  const file = host.querySelector('[data-path="/repo/note.md"]')!;
+  expect(file.querySelector(".project-tree-label-pending")).not.toBeNull();
+  expect(file.querySelector(".project-tree-star")).not.toBeNull();
+  expect(file.querySelector(".project-tree-status-badge")?.textContent).toBe("M");
+});

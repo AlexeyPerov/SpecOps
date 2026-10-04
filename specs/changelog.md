@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-05 01:00 MSK — Record repeatable expanded source release gates
+
+- Implemented AS08-A dated four-runtime release/support record with exact pins, selected Darwin arm64/Node 24.15.0 distribution and asset hashes, per-runtime source/account/installed lifecycle rows and explicit pass/not-run/excluded dispositions. Added fixed required-gate/pin/platform validation and a bounded private-output sequential source runner that never accepts external gates or discovers account credentials.
+- Verified full frontend 2,933 tests, serial host 312 tests/7 explicit skips, Rust 79 tests, type checks/builds, isolated pinned native controls and copied account-free SDK assets. Updated the stale tooltip assertion to verify visible configuration help; recorded the initial assertion failure and concurrent packaging rerun failure transparently. Validator negative cases pass.
+- Published setup/auth/configuration/history/cache/Stop/handoff/diagnostics/recovery guide, reconciled milestone states and linked historical baselines to the current blocked decision. Actual accounts/native enforcement/handoff pairs, signed installed/platform/redistribution/manual descendant acceptance remain open; AS08-A final closure and roadmap are not Done. No migrations or compatibility shims.
+
 ## 2026-10-05 00:31 MSK — Harden local native recovery and extend reviewed handoff
 
 - Implemented AS07-D safe native auth/quota/offline classification, strict bounded history sequencing/timestamps/acknowledgements, terminal publication after worker cleanup/durable cursor settlement, and idempotent ownership release without stale cache overwrite. Exact current/pending/replaced credentials are scrubbed from profile/control responses and private persisted labels; no raw native logs/errors leave workers.

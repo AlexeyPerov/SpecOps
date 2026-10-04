@@ -17,3 +17,5 @@ Recommendation: **Do not release the expanded subset yet.** Source hardening doe
 | Distribution/process | Open. SDK Terms/redistribution/notice clearance, missing native-package standalone license acceptance, immediate unobserved descendant exit and all earlier baseline gates |
 
 Evidence: [AS07-D notes](../07-cursor-adapter/implementation-notes-phase-d.md) and [finite native ledger](../07-cursor-adapter/implementation-notes-phase-c.md). Final selected release rerun and whole-roadmap closure remain AS08-A responsibilities.
+
+**Current gate update (2026-10-05):** This is a historical phase snapshot. The [AS08-A expanded record](release-2026-10-05.md) reruns the four-runtime source scope, records repeatable checks and retains all external acceptance blockers. AS08-A source tooling/docs are verified; release and full roadmap closure remain open.

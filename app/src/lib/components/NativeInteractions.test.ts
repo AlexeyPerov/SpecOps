@@ -26,7 +26,7 @@ it('optional session controls render without vendor UI branches and absence hide
     { id: 'approvalPolicy', label: 'Approval', kind: 'select' as const, options: ['on-request', 'never'], default: 'on-request' },
   ] } } }); await tick(); expect(document.body.textContent).toContain('Effort'); expect(document.body.textContent).toContain('Sandbox'); expect(document.body.textContent).toContain('Approval');
   const selects = [...document.querySelectorAll('select')]; const effort = selects.find(s => [...s.options].some(o => o.value === 'high'))!;
-  effort.value = 'high'; effort.dispatchEvent(new Event('change', { bubbles: true })); await tick(); expect(changes).toEqual([{ effort: 'high' }]); expect(document.querySelector('[title*="profile-scoped"]')).toBeTruthy();
+  effort.value = 'high'; effort.dispatchEvent(new Event('change', { bubbles: true })); await tick(); expect(changes).toEqual([{ effort: 'high' }]); expect(document.querySelector('.session-catalog-settings-description')?.textContent).toContain('Experimental opt-in is profile-scoped.');
 });
 
 it('model-specific default effort is shown with no persisted setting', async () => {

@@ -14,3 +14,5 @@ Recommendation: **Do not release the expanded subset yet.** Prior [AS06-C baseli
 | Distribution/OS/cleanup | Open: SDK/Terms/native notice review, signed installation, Windows/Linux/native enforcement, immediate unobserved descendant race; inherited experimental legacy Codex history/account gates remain open |
 
 Evidence: [AS07-A notes and feasibility ledger](../07-cursor-adapter/implementation-notes-phase-a.md). Source progress is not full A acceptance or AS08-A closure.
+
+**Current gate update (2026-10-05):** This is a historical phase snapshot. The [AS08-A expanded record](release-2026-10-05.md) reruns the four-runtime source scope, records repeatable checks and retains all external acceptance blockers. AS08-A source tooling/docs are verified; release and full roadmap closure remain open.

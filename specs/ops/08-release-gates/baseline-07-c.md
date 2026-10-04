@@ -17,3 +17,5 @@ Recommendation: **Do not release the expanded subset yet.** Prior [AS07-B baseli
 | Distribution/platform/cleanup | Open: SDK Terms/public redistribution/native notice clearance, signed installed packaging, Linux/Windows durable/process behavior, immediate unobserved descendant exit and inherited earlier gates |
 
 Evidence: [C implementation notes and finite ledger](../07-cursor-adapter/implementation-notes-phase-c.md). Source support and native account-free option acceptance do not accept paid inference, filesystem enforcement or release readiness.
+
+**Current gate update (2026-10-05):** This is a historical phase snapshot. The [AS08-A expanded record](release-2026-10-05.md) reruns the four-runtime source scope, records repeatable checks and retains all external acceptance blockers. AS08-A source tooling/docs are verified; release and full roadmap closure remain open.

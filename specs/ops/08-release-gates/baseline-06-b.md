@@ -17,3 +17,5 @@ Recommendation: **Do not release the expanded subset yet.** Prior [AS06-A baseli
 | Signed installed startup/recovery/quit, platform/legal/process cleanup and prior runtime/handoff acceptance | Open, unchanged; immediate unobserved descendant exit race remains unaccepted |
 
 Evidence: [AS06-B notes](../06-handoff-native-extensions/implementation-notes-phase-b.md), [finite retained ledger](../04-opencode-adapter/cutover-reference-evidence.md). This record adds selected source evidence and preserves a blocked release recommendation; it does not close AS08-A or the roadmap.
+
+**Current gate update (2026-10-05):** This is a historical phase snapshot. The [AS08-A expanded record](release-2026-10-05.md) reruns the four-runtime source scope, records repeatable checks and retains all external acceptance blockers. AS08-A source tooling/docs are verified; release and full roadmap closure remain open.

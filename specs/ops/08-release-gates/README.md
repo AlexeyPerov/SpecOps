@@ -1,8 +1,8 @@
 # 08 — Repeatable release gates and final closure
 
-**Updated:** 2026-10-04
+**Updated:** 2026-10-05
 
-**Status:** Planned
+**Status:** Source record/runner verified; selected release blocked; external acceptance and final closure open
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -20,7 +20,7 @@ Run release acceptance for each concrete enabled runtime/platform subset, starti
 
 | Phase | Plan | State |
 | --- | --- | --- |
-| AS08-A | [Subset release matrix and final closure](execution-plan-phase-a-release-exit.md) | Planned |
+| AS08-A | [Subset release matrix and final closure](execution-plan-phase-a-release-exit.md) | Source verified; external gates open |
 
 ## Dependencies and delivery
 
@@ -37,3 +37,9 @@ First invocation: 02-D plus 03-A/B. Later invocations require each selected adap
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
 
 AS04-C extends early shared activity and host/Node/native asset/support source infrastructure; source and external acceptance are separated in [04-C evidence](../04-opencode-adapter/implementation-notes-phase-c.md) and [the blocked subset baseline](../08-release-gates/baseline-04-c.md). Installed/live evidence remains open; this does not mark the phase Done.
+
+## AS08-A recorded source outcome — 2026-10-05
+
+The [expanded source decision](release-2026-10-05.md), [machine record](release-2026-10-05.json) and [runtime support guide](runtime-guide.md) identify exact four-runtime pins, Darwin arm64/Node 24.15.0, distribution/assets, finite feature boundaries, full regression and explicit pass/not-run/excluded gates. Repeatable source runner and fixed required-gate validation fail closed. Earlier baselines remain historical; this record supersedes their current selected scope without changing their original evidence.
+
+AS08-A-01/-02/-03/-04 source record/shared/security/docs work is verified. Their actual installed/account/native-enforcement/process/distribution acceptance remains open; no full task Done is inferred. AS08-A-05 is **open**, because full active roadmap acceptance is incomplete. Expanded recommendation is **blocked**.

@@ -16,3 +16,5 @@ Recommendation: **Do not release the expanded subset yet.** Prior [AS06-B baseli
 | Signed installed, native browser/account A/B, supported platforms/legal/cleanup | Open, inherited; experimental legacy history default-off, immediate unobserved descendant race remains unaccepted |
 
 Evidence: [AS06-C notes](../06-handoff-native-extensions/implementation-notes-phase-c.md). This records selected source verification and keeps AS08-A/release acceptance open.
+
+**Current gate update (2026-10-05):** This is a historical phase snapshot. The [AS08-A expanded record](release-2026-10-05.md) reruns the four-runtime source scope, records repeatable checks and retains all external acceptance blockers. AS08-A source tooling/docs are verified; release and full roadmap closure remain open.

@@ -16,3 +16,5 @@
 | Other adapters/profiles/handoff/extensions | Separate implementation/acceptance gates; do not mark Done |
 
 AS08-A remains Planned. Source readiness enables the next requested adapter implementation; neither this subset record nor account-free native smoke closes upstream AS02-D/03-A/B or final roadmap acceptance.
+
+**Current gate update (2026-10-05):** This is a historical phase snapshot. The [AS08-A expanded record](release-2026-10-05.md) reruns the four-runtime source scope, records repeatable checks and retains all external acceptance blockers. AS08-A source tooling/docs are verified; release and full roadmap closure remain open.

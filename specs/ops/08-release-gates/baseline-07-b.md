@@ -16,3 +16,5 @@ Recommendation: **Do not release the expanded subset yet.** Prior [AS07-A baseli
 | Distribution/platform/cleanup | Open: license/Terms/native notice clearance, signed installed packaging, Linux/Windows durable/process behavior, immediate unobserved descendant exit; inherited experimental native history/account gates |
 
 Evidence: [B implementation notes](../07-cursor-adapter/implementation-notes-phase-b.md). Source progress and copied account-free assets are not release acceptance.
+
+**Current gate update (2026-10-05):** This is a historical phase snapshot. The [AS08-A expanded record](release-2026-10-05.md) reruns the four-runtime source scope, records repeatable checks and retains all external acceptance blockers. AS08-A source tooling/docs are verified; release and full roadmap closure remain open.

@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** Source record/runner verified; selected release blocked; external acceptance and final closure open
 
 **Prerequisites:** Early AS03-A/AS03-B plus acceptance of each adapter baseline/profile feature selected for this release. AS06-A only if handoff is advertised. First invocation follows AS02-D; later invocations add scope.
 
@@ -57,3 +57,9 @@ After all active tasks including later extensions/profiles and supported adapter
 ## Exit and next work
 
 Repeat this gate for each expanded release. Final 08-A/roadmap Done is a distinct terminal acceptance, never implied by the first Codex preview. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+
+## AS08-A recorded source outcome — 2026-10-05
+
+The [expanded source decision](release-2026-10-05.md), [machine record](release-2026-10-05.json) and [runtime support guide](runtime-guide.md) identify exact four-runtime pins, Darwin arm64/Node 24.15.0, distribution/assets, finite feature boundaries, full regression and explicit pass/not-run/excluded gates. Repeatable source runner and fixed required-gate validation fail closed. Earlier baselines remain historical; this record supersedes their current selected scope without changing their original evidence.
+
+AS08-A-01/-02/-03/-04 source record/shared/security/docs work is verified. Their actual installed/account/native-enforcement/process/distribution acceptance remains open; no full task Done is inferred. AS08-A-05 is **open**, because full active roadmap acceptance is incomplete. Expanded recommendation is **blocked**.

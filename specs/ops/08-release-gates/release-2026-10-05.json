@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-04T21:59:28.527359+00:00",
+  "sourceCommit": "1355d01028bff0a0b6668035dad301efbb5d4245",
+  "workingTree": "AS08-A record/runner/docs and visible-description regression assertion; parent commits after review",
+  "recommendation": "blocked",
+  "roadmapComplete": false,
+  "platform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "osVersion": "14.4",
+    "osBuild": "23E214",
+    "node": "24.15.0"
+  },
+  "distribution": "source checkout and copied adjacent no-account payload; signed installed app not accepted",
+  "runtimes": [
+    {
+      "id": "codex",
+      "version": "0.160.0",
+      "constraints": [
+        "Native app-server; full legacy history experimental/default-off with explicit per-profile opt-in",
+        "Named isolated profiles; API key/official browser/device where available; original-principal native binding"
+      ]
+    },
+    {
+      "id": "opencode",
+      "version": "1.17.4",
+      "constraints": [
+        "Private local profiles; external owner-managed loopback HTTP/HTTPS core-only",
+        "Nine native views/seven actions; no unowned inference/configuration/OAuth editors"
+      ]
+    },
+    {
+      "id": "claude",
+      "version": "0.3.289",
+      "constraints": [
+        "Native CLI 2.1.289; third-party dedicated API-key baseline only",
+        "Finite native permission/question callbacks and tool/mode/turn/budget settings; managed native policy may apply"
+      ]
+    },
+    {
+      "id": "cursor",
+      "version": "1.0.35",
+      "constraints": [
+        "Official local SDK; native JSONL agent/run store; API/service keys only",
+        "Browser lifecycle/Cloud/approval/questions/hooks/MCP/skills/subagents unavailable",
+        "Finite automatic file tools/sandbox/catalog enums; no read-only guarantee"
+      ]
+    }
+  ],
+  "assetSha256": {
+    "app/host/dist/claude/assets.json": "c03da5db4f40971581784fc880e1af08177a5d22565f2fa15b9e39f5f66a6343",
+    "app/host/dist/cursor/assets.json": "a8abe5076eac9e0c4d331e1c81fc1415769dabe0e231c6c6c9ac9ee4f71abf13",
+    "app/host/dist/index.js": "269b10d63d5d225669611c826aa700f7186131b991d96f810fc0194a2062d633",
+    "app/src-tauri/binaries/opencode-aarch64-apple-darwin": "13a01fc41fec09e84cebde3383c6293fa00f1a5c29795ed505512eaa42766c1c"
+  },
+  "gates": [
+    {
+      "id": "codex-source-lifecycle",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Pinned isolated profile/auth/catalog/create/send/tools/supported callbacks/cancel/restart/resume/logout/owner cleanup source fixtures; full host 312 pass/7 explicit skips; frontend 2933 pass. Unsupported capabilities remain explicit.",
+      "required": true
+    },
+    {
+      "id": "codex-live-lifecycle",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual authorized account/auth/inference/native tools/policy/supported interactions/cancel/restart/resume/logout acceptance not executed; catalog/account-free assets do not establish it.",
+      "required": true
+    },
+    {
+      "id": "codex-installed-lifecycle",
+      "scope": "installed",
+      "status": "not-run",
+      "evidence": "Signed installed app install/resolve/auth/create/send/tool/config/cancel/restart/resume/logout/quit and descendants not accepted; no checkout/PATH fallback permitted.",
+      "required": true
+    },
+    {
+      "id": "opencode-source-lifecycle",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Pinned isolated profile/auth/catalog/create/send/tools/supported callbacks/cancel/restart/resume/logout/owner cleanup source fixtures; full host 312 pass/7 explicit skips; frontend 2933 pass. Unsupported capabilities remain explicit.",
+      "required": true
+    },
+    {
+      "id": "opencode-live-lifecycle",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual authorized account/auth/inference/native tools/policy/supported interactions/cancel/restart/resume/logout acceptance not executed; catalog/account-free assets do not establish it.",
+      "required": true
+    },
+    {
+      "id": "opencode-installed-lifecycle",
+      "scope": "installed",
+      "status": "not-run",
+      "evidence": "Signed installed app install/resolve/auth/create/send/tool/config/cancel/restart/resume/logout/quit and descendants not accepted; no checkout/PATH fallback permitted.",
+      "required": true
+    },
+    {
+      "id": "claude-source-lifecycle",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Pinned isolated profile/auth/catalog/create/send/tools/supported callbacks/cancel/restart/resume/logout/owner cleanup source fixtures; full host 312 pass/7 explicit skips; frontend 2933 pass. Unsupported capabilities remain explicit.",
+      "required": true
+    },
+    {
+      "id": "claude-live-lifecycle",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual authorized account/auth/inference/native tools/policy/supported interactions/cancel/restart/resume/logout acceptance not executed; catalog/account-free assets do not establish it.",
+      "required": true
+    },
+    {
+      "id": "claude-installed-lifecycle",
+      "scope": "installed",
+      "status": "not-run",
+      "evidence": "Signed installed app install/resolve/auth/create/send/tool/config/cancel/restart/resume/logout/quit and descendants not accepted; no checkout/PATH fallback permitted.",
+      "required": true
+    },
+    {
+      "id": "cursor-source-lifecycle",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Pinned isolated profile/auth/catalog/create/send/tools/supported callbacks/cancel/restart/resume/logout/owner cleanup source fixtures; full host 312 pass/7 explicit skips; frontend 2933 pass. Unsupported capabilities remain explicit.",
+      "required": true
+    },
+    {
+      "id": "cursor-live-lifecycle",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual authorized account/auth/inference/native tools/policy/supported interactions/cancel/restart/resume/logout acceptance not executed; catalog/account-free assets do not establish it.",
+      "required": true
+    },
+    {
+      "id": "cursor-installed-lifecycle",
+      "scope": "installed",
+      "status": "not-run",
+      "evidence": "Signed installed app install/resolve/auth/create/send/tool/config/cancel/restart/resume/logout/quit and descendants not accepted; no checkout/PATH fallback permitted.",
+      "required": true
+    },
+    {
+      "id": "full-regression",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Frontend2933/283 files; host serial312/7skip/24 files; Rust79; host/frontend checks/builds pass",
+      "required": true
+    },
+    {
+      "id": "shared-workspace",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Full frontend activity/writer warning Continue/suppression, external refresh and workspace switch fixtures pass; actual simultaneous native writing remains account gate",
+      "required": true
+    },
+    {
+      "id": "runtime-failure-isolation",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Production child faults and actual host SIGKILL four-runtime streams + two equal-ID Codex profiles; bindings retained/no replay",
+      "required": true
+    },
+    {
+      "id": "handoff-16-pairs",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "All16 ordered four-runtime production adapter/dispatcher/client/pipeline/store/disk fixtures; immutable reviewed prompt/settings, durable lineage, no duplicate create/send",
+      "required": true
+    },
+    {
+      "id": "secret-bounded-protocol",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Full host/frontend/Rust canaries cover control/auth/split events/history/cache/handoff/export, inherited environment, private no-follow paths, malformed/oversized frames, queue/deadlines and stale approvals",
+      "required": true
+    },
+    {
+      "id": "copied-assets",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Claude copied SDK/native2.1.289/5models and Cursor copied SDK/Node24.15.0 JSONL durable create/resume/search/helper pass without credentials/inference; OpenCode actual isolated native48test/3files pass",
+      "required": true
+    },
+    {
+      "id": "actual-two-codex-accounts",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Default-skipped explicit paid account harness not run; synthetic equal native IDs and distinct fixture keys are not real account-A/B proof.",
+      "required": true
+    },
+    {
+      "id": "actual-handoff-16-pairs",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "All advertised ordered account/provider pairs require real authorized runtime/account acceptance; source fixtures do not accept policy or actual inference.",
+      "required": true
+    },
+    {
+      "id": "native-policy-and-extensions",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual permission allow/deny/question/tool/budget/sandbox enforcement; OpenCode file restoration/tool management/share/revoke; Claude managed policy; Cursor native tool/parameter/sandbox enforcement unverified.",
+      "required": true
+    },
+    {
+      "id": "distribution-clearance",
+      "scope": "distribution",
+      "status": "not-run",
+      "evidence": "Signed/notarized package and current vendor redistribution/SDK Terms/licenses/notices clearance unresolved; Cursor native package lacks standalone license. No permission inferred from package download.",
+      "required": true
+    },
+    {
+      "id": "other-platforms",
+      "scope": "platform",
+      "status": "not-run",
+      "evidence": "Linux/Windows/other architectures not accepted; Windows durable handoff confirmation fails closed. They are not advertised supported.",
+      "required": false
+    },
+    {
+      "id": "manual-descendant-cleanup",
+      "scope": "process",
+      "status": "not-run",
+      "evidence": "Source observed-descendant cleanup passes; installed quit/crash manual child/grandchild inspection and immediate unobserved spawn/exit race remain open.",
+      "required": true
+    },
+    {
+      "id": "unsupported-extensions",
+      "scope": "source",
+      "status": "excluded",
+      "evidence": "Cursor Cloud/browser lifecycle/programmatic callbacks/hooks/MCP/skills/subagents; OpenCode external extensions/unowned inference/config OAuth editors; Claude subscription embedding. Explicit native capability boundaries, not deferred implemented claims.",
+      "required": false
+    },
+    {
+      "id": "selected-platform",
+      "scope": "platform",
+      "status": "not-run",
+      "required": true,
+      "evidence": "Selected Darwin arm64 installed native sandbox/file enforcement/durability and lifecycle acceptance remains open; copied source controls are insufficient."
+    }
+  ],
+  "sourceRunner": {
+    "schemaVersion": 1,
+    "recordedAt": "2026-10-04T21:58:34.070Z",
+    "sourceCommit": "1355d01028bff0a0b6668035dad301efbb5d4245",
+    "node": "v24.15.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "recommendation": "blocked",
+    "note": "Source-only run; installed/account/distribution/platform/process acceptance must be recorded separately.",
+    "results": [
+      {
+        "id": "host-check",
+        "status": "pass",
+        "exitCode": 0
+      },
+      {
+        "id": "host-build",
+        "status": "pass",
+        "exitCode": 0
+      },
+      {
+        "id": "host-tests",
+        "status": "pass",
+        "exitCode": 0
+      },
+      {
+        "id": "frontend-check",
+        "status": "pass",
+        "exitCode": 0
+      },
+      {
+        "id": "frontend-build",
+        "status": "pass",
+        "exitCode": 0
+      },
+      {
+        "id": "frontend-tests",
+        "status": "pass",
+        "exitCode": 0
+      },
+      {
+        "id": "rust-tests",
+        "status": "pass",
+        "exitCode": 0
+      },
+      {
+        "id": "claude-copied-assets",
+        "status": "pass",
+        "exitCode": 0
+      },
+      {
+        "id": "cursor-copied-assets",
+        "status": "pass",
+        "exitCode": 0
+      },
+      {
+        "id": "record-validator-tests",
+        "status": "pass",
+        "exitCode": 0
+      }
+    ],
+    "localPrivateOutput": "/tmp/specops-release-2026-10-05-as08",
+    "workingTreeDirty": true
+  },
+  "workingTreeDirty": true,
+  "assetIdentityNote": "Hashes recorded after the sequential source run; generated payloads are not a signed installed candidate and later rebuilds require a fresh record."
+}

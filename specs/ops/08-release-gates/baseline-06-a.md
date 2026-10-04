@@ -16,3 +16,5 @@ Recommendation: **Do not release the expanded subset yet.** [Prior baseline](bas
 | Prior auth/platform/legal/descendant-race gates | Open, unchanged from prior selected baseline |
 
 Evidence: [AS06-A implementation notes](../06-handoff-native-extensions/implementation-notes-phase-a.md). Rerun selected 08-A after live/installed evidence or each newly advertised feature; no roadmap completion or release acceptance is inferred from fixture success.
+
+**Current gate update (2026-10-05):** This is a historical phase snapshot. The [AS08-A expanded record](release-2026-10-05.md) reruns the four-runtime source scope, records repeatable checks and retains all external acceptance blockers. AS08-A source tooling/docs are verified; release and full roadmap closure remain open.

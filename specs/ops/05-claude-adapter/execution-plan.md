@@ -2,9 +2,9 @@
 
 **Updated:** 2026-10-04
 
-**Status:** A source bootstrap implemented; installed/live gates and B–D remain open.
+**Status:** A/B source bootstrap and developer lifecycle implemented; installed/live gates and C–D remain open.
 
-**Evidence:** [Phase A notes](implementation-notes-phase-a.md)
+**Evidence:** [Phase A notes](implementation-notes-phase-a.md) · [Phase B notes](implementation-notes-phase-b.md)
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 

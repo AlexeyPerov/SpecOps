@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 21:34 MSK — Add profile-bound third-runtime native session lifecycle
+
+- Implemented AS05-B developer source native session initialization/send/resume/history/cancel, immutable profile/workspace/model/settings and credential binding, stable native/client message identities and atomic cursors. Native readers remain profile-isolated; accepted missing history preserves metadata without new sessions or prompt replay. Control-only UUID reservations are distinguished from accepted native conversation history.
+- Added bounded native text/thinking/tools/results/usage/cost/error mapping, fragmented credential redaction, single-terminal drain, pending/late cancellation, concurrent-send guards and observed process-tree retirement. Native turns default off; empty tools/manual deny policy remains until C interaction acceptance. Rich native history hydrates through production dispatcher/client/pipeline/disk and fresh app/host fixtures.
+- Pinned SDK 0.3.289/native 2.1.289 contracts, host/frontend checks/builds and deterministic regression/integration evidence are recorded in phase notes. Real Darwin arm64 control-only creation/history probe passed without account credentials or inference. Live accepted-turn/account, signed installed/platform cleanup and release gates remain open. No persisted-data migration or compatibility shim.
+
 ## 2026-10-04 21:09 MSK — Bootstrap third native runtime SDK and isolated API key profiles
 
 - Implemented AS05-A host-only official native SDK 0.3.289 / executable 2.1.289 bootstrap, same-host packaged module/native/license assets and manifest identity checks. Added isolated private profile credential import, non-inference API authentication verification, logout/reconnect and stale-generation guards, dynamic native model catalogs and common profile selection. Unsupported subscription/cloud login, turns and native session settings remain explainably unavailable.

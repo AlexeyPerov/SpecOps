@@ -1,71 +1,49 @@
-# 05 — Cursor adapter
+# 05 — Cursor native adapter after feasibility
 
-**Status:** Planned  
-**Date:** 2026-08-11  
-**Main doc (SSOT):** [`../roadmap.md`](../roadmap.md)  
-**Execution plan:** [`execution-plan.md`](execution-plan.md)  
-**Phase plans:** [A](execution-plan-phase-a-sdk-auth.md), [B](execution-plan-phase-b-agent-events.md), [C](execution-plan-phase-c-capabilities-cloud.md), [D](execution-plan-phase-d-hardening-exit.md)
+**Date:** 2026-10-04
 
-This milestone adds the fourth runtime through its official local SDK mode,
-after the common contract has already survived three adapters.
+**Status:** Planned
 
-## Locked decisions (2026-08-11)
+**Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
-| # | Topic | Choice |
-| - | ----- | ------ |
-| 1 | SDK | Pin a tested public-beta TypeScript SDK in Agent Host |
-| 2 | Authentication | Supported user or service-account API keys |
-| 3 | Execution | Local agent uses the real workspace `rootPath` as `cwd` |
-| 4 | Unsupported behavior | Capability-gate it; do not emulate with prompts |
-| 5 | Cloud | Deferred runtime extension, never a separate product context |
+**Evidence:** [Implementation audit](../audit-2026-10-04.md)
 
-## Goal
+Cursor follows initial native integrations. Phase A first validates current SDK/auth/storage/assets; exact capabilities follow evidence, not a predetermined parity promise.
 
-Cursor local runs can create, stream, follow up, cancel, report usage, and
-restore as far as the pinned SDK supports, alongside the other runtimes.
+## Decisions
 
-## Scope
+- Pin tested official native local SDK/version and actual release maturity after feasibility spike.
+- Support current official profile auth, API key baseline and browser flow only with verified native storage/scope.
+- Verify Node/native binaries/history-store/single-file packaging on supported target before promising installed behavior.
+- Keep cloud execution deferred as a runtime extension; no standalone Cloud product.
 
-| ID | Item | Current state |
-| --- | ---- | ------------- |
-| AS05-A | SDK bootstrap, auth, health, model/mode catalogs | Missing |
-| AS05-B | Durable agents/runs, streaming, follow-up and recovery | Missing |
-| AS05-C | Capability gaps and cloud deferral contract | Missing |
-| AS05-D | Contract tests, real-key smoke, packaging exit | Missing |
+## Scope and current state
 
-## Outcome
+| Phase | Work | State |
+| --- | --- | --- |
+| AS05-A | [feasibility, auth and installed SDK bootstrap](execution-plan-phase-a-sdk-auth.md) | Missing |
+| AS05-B | [durable native agents, runs and recovery](execution-plan-phase-b-agent-events.md) | Missing |
+| AS05-C | [native capability ledger and cloud boundary](execution-plan-phase-c-capabilities-cloud.md) | Missing |
+| AS05-D | [installed native acceptance and release extension](execution-plan-phase-d-hardening-exit.md) | Missing |
 
-- All four runtimes own independent sessions in one workspace.
-- Runtime-specific beta/health state never degrades healthy adapters.
-- No standalone Chat or Cloud lane returns.
+## Dependencies and delivery
 
-## Dependencies
+Default slot 7. Technical prerequisites: accepted Codex baseline and profile/contract/early 06-B/C infrastructure; use lessons from enabled OpenCode/Claude adapters. A → B → C → D. Handoff is not a prerequisite; extend enabled pairs when advertised.
 
-- **Phases 01–04** — Done, including broad common-contract evidence.
+## Expected outcomes
 
-**Blocks:** final handoff and release phase 06.
+- Independent native sessions use real workspace cwd, fixed profile and native history.
+- Native tools/config/policy and UI capabilities match pinned evidence.
+- Installed offline/auth/crash/restart/cancel behavior is safe and does not disable healthy runtime.
 
 ## Out of scope
 
-- Prompt-based emulation of read-only, permission, fork, or lifecycle features.
-- Generic HTTP-provider credentials.
-- Cloud execution implementation in this milestone.
-
-## Risks
-
-- **Public-beta SDK drift** — pin the version and expose independent runtime
-  health/version state.
-- **Capability ambiguity** — verify each descriptor against observed SDK
-  behavior and default unsupported features to absent.
+- Cloud execution, generic HTTP wrapper, prompt-based permission/lifecycle emulation.
+- Credential/native history transfer, persisted-data migration or mandatory future-runtime coupling.
 
 ## Definition of done
 
-- All phase plans A–D and the shared adapter contract pass.
-- Manually gated real-key smoke and packaging checks pass.
-- Status is changed to Done here and in [`../roadmap.md`](../roadmap.md).
-
-### Definition of done — docs
-
-- [ ] Authentication, supported capabilities, beta limits, and recovery documented.
-- [ ] Changelog entry appended in [`../../changelog.md`](../../changelog.md).
-- [ ] Exit criteria manually reviewed before phase 06 starts.
+- [ ] A–D task acceptance and actual native feature/config/auth ledger pass.
+- [ ] Profile-scoped contract/security/native restart tests pass for advertised capabilities.
+- [ ] Installed assets, current auth smoke/support scope and early shared activity/recovery checks recorded.
+- [ ] Selected-scope 06-D matrix, setup/recovery docs and changelog updated.

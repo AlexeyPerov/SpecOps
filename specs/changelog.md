@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-04 14:38 MSK — Adopt Codex-first operations composition and delivery order
+
+- Rewrote the active roadmap and all milestone scope/index/phase plans around foundation stabilization, isolated Codex accounts, usable installed Codex delivery, OpenCode core, Claude, later handoff/native extensions and Cursor.
+- Added phase AS01-S for reopened production persistence, bounded supervision/transport, failed-stream settlement, redaction and strengthened acceptance evidence; preserved A–F implementation history with explicit historical status.
+- Added profile identity, isolated native auth/config homes, profile-scoped routing and control-plane events throughout runtime plans. Codex A–D now accept the separate-desktop-account scenario without a Claude prerequisite; later E covers simultaneous accounts inside SpecOps.
+- Moved shared activity and host/Node packaging/diagnostics/recovery to independent early AS06-B/C gates; defined repeatable selected-runtime/platform release acceptance without requiring all adapters or handoff.
+- Changed OpenCode order to A → B → D core cutover, with C native extensions later; updated Claude/Cursor auth-policy, native capability/configuration and installed-asset verification tasks.
+- Marked the audit proposal adopted and linked historical evidence to active gates. No runtime implementation or credentials changed.
+- Validation: 22 active phase plans, 98 unique tasks with acceptance, 234 local operations-document links and an acyclic default dependency graph verified; whitespace checks passed. Repository-wide Markdown check retains the same two pre-existing issues outside these changes. Runtime tests were not repeated for this documentation-only revision.
+
 ## 2026-10-04 14:15 MSK — Audit agent-runtime tasks and propose Codex-first delivery
 
 - Added an implementation audit of operations milestones 01–06, separating the fake-runtime foundation, acceptance gaps, legacy integration code and missing production adapters.

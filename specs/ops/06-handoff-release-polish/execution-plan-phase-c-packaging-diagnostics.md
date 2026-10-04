@@ -1,60 +1,59 @@
-# 06 — Phase C: packaging, health, diagnostics and recovery
+# 06 — Phase C: early installed build, diagnostics and recovery
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisites:** Phases A and B Done  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Package a compatible host/runtime set and make failures actionable without exposing secrets.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own supported-target packaging, runtime resolution/version diagnostics, support
-bundle, updater compatibility, and recovery UI. Final release matrix belongs to Phase D.
+**Prerequisites:** AS01-S for packaging design/build work; AS03-B for native Codex runtime smoke. No dependency on handoff A, observability B or later adapters.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Ship the first usable Codex preview from an installed app outside the development checkout.
+
+## Implementation boundary
+
+Own reproducible host/Node assets, native runtime distribution/discovery, support diagnostics and installed recovery/version checks. Later adapter native assets extend this gate when each is enabled.
 
 ## Tasks
 
-### AS06-C-01 — Package Agent Host per target
+### AS06-C-01 — Package host and compatible Node
 
-Produce deterministic host artifacts, include required Node/runtime assets, and
-verify executable resolution/signing/permissions in development and release bundles.
+Build deterministic host metadata/artifacts from pinned source/version inputs. Wire host build/resources into Tauri release pipeline; bundle tested Node, signing/permissions and target assets. Keep an explicit development override independent of normal installed resolution.
 
-**Acceptance:** Every supported target launches the exact host version expected by Tauri.
+**Acceptance:** Installed macOS app launches correct host/Node outside checkout and without developer PATH. Same inputs produce reproducible host identity; wall-clock build metadata does not undermine the claim.
 
-### AS06-C-02 — Define runtime distribution and overrides
+### AS06-C-02 — Define native runtime distribution and setup
 
-Bundle/install vendor runtimes only where redistribution permits; otherwise
-provide discovery/setup and explicit PATH override with version validation.
+Choose bundled/installed Codex only where permitted or explicit user-managed executable with supported-version validation and setup UX. Validate custom executable override; add native SDK assets for future adapters when they are enabled.
 
-**Acceptance:** Missing/incompatible runtimes fail with actionable setup guidance and do not affect healthy adapters.
+**Acceptance:** Missing/incompatible native runtime gives actionable setup while editor/other healthy runtime work remains available. Node is bundled; vendor runtime management mode is documented, not silently inferred from PATH.
 
-### AS06-C-03 — Build health and support diagnostics
+### AS06-C-03 — Expose useful safe diagnostics
 
-Expose host/adapter/runtime versions, auth category, health, recent typed errors,
-and process generation; generate a copyable redacted support bundle.
+Report host/native versions, profile ID/nonsecret auth category, generation, health and recent typed errors. Provide bounded allowlisted support export, excluding auth files, tokens, device codes/auth URL query and raw tool output by default.
 
-**Acceptance:** Secret canaries and raw tool output are absent; bundle is useful without internal debug mode.
+**Acceptance:** Canaries never enter copy/export/log payloads. A user can diagnose missing runtime, mismatch, auth-required, offline and crash state without exporting native home or internal debug data.
 
-### AS06-C-04 — Recovery UX and crash-loop behavior
+### AS06-C-04 — Implement installed recovery UX
 
-Handle offline, missing binary, expired auth, quota/rate limit, crash loop,
-protocol mismatch, updater mismatch, retry, re-auth, and reset actions.
+Offer scoped retry/re-auth/restart for missing binary, expired auth, quota, child crash, whole-host crash loop and mismatch. Explain interrupted turn/history. Never retry sent prompt or replace thread automatically; preserve binding and workspace files.
 
-**Acceptance:** Recovery is scoped to the failing runtime and never deletes workspace files or unrelated sessions.
+**Acceptance:** Child recovery targets selected profile, whole-host recovery settles its affected sessions; neither deletes files/another profile or silently rotates accounts. Quota/unknown limits are distinguished.
 
-### AS06-C-05 — Updater compatibility checks
+### AS06-C-05 — Verify component compatibility and installed lifecycle
 
-Define compatible Tauri/host/runtime version ranges and verify upgrade,
-downgrade, interrupted update, and stale PATH override behavior.
+Test Tauri/host/native version compatibility, stale overrides, interrupted component update and supported binary replacement. Do not implement persisted-data upgrade/downgrade migration. Record install/start/auth/tool/cancel/restart/quit evidence on first target and extend per later target.
 
-**Acceptance:** Incompatible pairs fail before session work begins and provide a supported recovery path.
+**Acceptance:** Incompatible binaries fail before session work with a supported recovery path. Installed macOS smoke leaves no descendants and has no checkout/Node-on-PATH dependency.
 
 ## Verification
 
-- Build/package on every supported target or CI image.
-- Run support-bundle canary/redaction and recovery-state tests.
-- Exercise compatible/incompatible update fixtures.
+- Run reproducibility, resource inclusion/resolver, support-canary and recovery-state fixtures.
+- Build/install first macOS preview; launch from a normal environment outside checkout and inspect process tree.
+- Record component support/distribution matrix; future native assets/platforms are checked before advertisement.
 
-## Handoff
+## Exit and next work
 
-Phase D starts when release artifacts can diagnose and recover every defined runtime failure class.
+C plus independent B and Codex C unlocks 03-D. Selected-scope 06-D decides each release; handoff and remaining vendor adapters never block this early gate. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

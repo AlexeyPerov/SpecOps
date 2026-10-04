@@ -1,53 +1,54 @@
-# 05 — Phase D: recovery, security and milestone exit
+# 05 — Phase D: installed native acceptance and release extension
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisites:** Phases A–C Done  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Prove the beta adapter is isolated, secret-safe, recoverable, and ready for handoff work.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own fault/security closure, shared contract execution, gated real-key smoke,
-packaging, docs, and milestone status. Do not implement cloud execution.
+**Prerequisites:** AS05-A/B/C accepted; early 06-B/C extended for this SDK/native assets.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Accept independently usable Cursor with truthful native limitations.
+
+## Implementation boundary
+
+Own native SDK/asset fault/security/coexistence and installed support evidence; cloud execution remains out of scope.
 
 ## Tasks
 
-### AS05-D-01 — Fault and recovery matrix
+### AS05-D-01 — Run SDK/profile fault recovery matrix
 
-Cover missing/incompatible SDK, offline service, invalid/expired auth, quota,
-stream disconnect, host crash, cancel race, missing history, and restart.
+Cover missing SDK/asset/incompatible version, offline/expired auth/quota, native store loss, stream disconnect, child/host crash, cancellation race and restart.
 
-**Acceptance:** Errors are actionable and isolated to this runtime/session.
+**Acceptance:** Typed recovery preserves profile/binding/files; no fabricated history or silent cross-account retry. Healthy enabled runtime remains available after this runtime failure.
 
 ### AS05-D-02 — Security and redaction audit
 
 Run secret canaries through auth, errors, raw SDK events, transcript cache,
-logs, snapshots, and diagnostic export.
+logs, snapshots, and diagnostic export. Include profile identity, inherited auth environment, native credential storage and control-plane notifications.
 
-**Acceptance:** No canary crosses a prohibited boundary.
+**Acceptance:** No canary crosses a prohibited boundary. Unrelated profiles remain intact.
 
-### AS05-D-03 — Contract, real-key and packaging smoke
+### AS05-D-03 — Verify shared contract and installed native smoke
 
-Run shared adapter suite and gated create/send/tool/follow-up/cancel/reconnect
-smoke from a packaged host on supported platforms.
+Run supported-subset shared contract and actual credential create/tool/follow-up/cancel/reconnect/config smoke in installed build. Include native assets/sandbox/search/storage packaging and current auth method scope.
 
-**Acceptance:** Results and any beta limitations are recorded in the capability ledger.
+**Acceptance:** Matrix records native capabilities and limits accurately on advertised platforms; no developer PATH/storage dependency passes as installed readiness.
 
-### AS05-D-04 — Docs and milestone closure
+### AS05-D-04 — Close adapter and rerun selected release matrix
 
-Document setup, beta/version support, capabilities, recovery, and cloud
-non-scope; update changelog, README, index, and roadmap statuses.
+Document setup/auth/native feature/config/history/asset/version support, limitations/recovery and cloud non-scope. Update changelog/statuses and extend 06-A pairwise tests only if handoff is advertised.
 
-**Acceptance:** Phase 06 receives a stable four-runtime descriptor set.
+**Acceptance:** Cursor baseline acceptance extends selected 06-D release record; final roadmap closure remains separate and includes all open active scope.
 
 ## Verification
 
-- Run all milestone-05 automated suites, build and type checks.
-- Complete gated real-key and packaging smoke records.
-- Review README definition-of-done and capability ledger.
+- Run adapter/profile/schema/mapper and capability fixtures appropriate to this phase, using no live credential by default.
+- Check error/log/transcript/export boundaries with canaries and late profile/generation events.
+- Record pinned native contracts and optional real-runtime/installed smoke for the advertised support scope.
 
-## Handoff
+## Exit and next work
 
-Mark milestone 05 Done and hand the stable runtime set to phase 06.
+Record Cursor acceptance, then run expanded 06-D release gate. Do not delay previous subset releases or automatically close roadmap. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

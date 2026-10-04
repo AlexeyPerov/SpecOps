@@ -1,60 +1,33 @@
-# 04 — Execution plan index
+# 04 — Execution plan index: core cutover before extensions
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Milestone scope:** [`README.md`](README.md)  
-**Roadmap:** [`../roadmap.md`](../roadmap.md)
+**Date:** 2026-10-04
 
-**Requirements evidence:** Read [`README.md`](README.md), completed historical
-plans in [`../../archive/ops-done/phase-3`](../../archive/ops-done/phase-3) and
-[`../../archive/ops-done/phase-3.5`](../../archive/ops-done/phase-3.5), plus the
-final adapter/extension contracts from phases 01–03.
+**Status:** Planned
 
-## 1. Milestone overview
+**Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
-```text
-04 — OpenCode adapter migration
-  Phase A  Agent Host ownership and runtime lifecycle
-  Phase B  Core session/event/interaction parity
-  Phase C  Optional extensions, stores and settings UI
-  Phase D  Legacy cutover, fixture comparison and exit
-```
+## Execution order
 
-| Phase | Plan doc | Effort | Ship independently? |
-| ----- | -------- | ------ | ------------------- |
-| **A** | [`execution-plan-phase-a-host-lifecycle.md`](execution-plan-phase-a-host-lifecycle.md) | L | No |
-| **B** | [`execution-plan-phase-b-core-parity.md`](execution-plan-phase-b-core-parity.md) | L | No |
-| **C** | [`execution-plan-phase-c-extensions-ui.md`](execution-plan-phase-c-extensions-ui.md) | L | Partial |
-| **D** | [`execution-plan-phase-d-cutover-exit.md`](execution-plan-phase-d-cutover-exit.md) | L | Yes, broad beta gate |
+03-D → A → B → D; **D does not require C**. C follows accepted D at default slot 6. Early 06-B/C runtime-specific extensions are accepted by D; no prerequisite implementation of Claude.
 
-**Dependency graph:** `A → B → C → D`. The legacy path stays available until D
-but may not own the same child process concurrently with Agent Host.
+| Phase | Plan | Effort | Delivery gate |
+| --- | --- | --- | --- |
+| A | [Ownership and finite parity ledger](execution-plan-phase-a-host-lifecycle.md) | L | Second-runtime baseline |
+| B | [Core session/event parity](execution-plan-phase-b-core-parity.md) | L | Second-runtime baseline |
+| D | [Core cutover and acceptance](execution-plan-phase-d-cutover-exit.md) | L | Second-runtime baseline |
+| C | [Later optional native extensions](execution-plan-phase-c-extensions-ui.md) | L | Later native depth |
 
-**Delivery policy:** Preserve behavior through evidence; do not migrate old
-session persistence or expand scope with unrelated features.
+## Delivery policy
 
-## 2. Task ID convention
+Freeze finite core/parity ledger in A. Keep legacy only as temporary reference, never double-own child processes; remove direct path in D even if rich features are explicitly deferred. Baseline Done and full milestone Done are different statuses.
 
-Use `AS04-A-*` through `AS04-D-*`. Mark task headings `[DONE]` when complete.
+## Exit verification
 
-## 3. Implementation slicing
+- Codex/OpenCode core and profile-bound restart parity.
+- Exactly one native runtime owner; no frontend SDK after D.
+- Required/retained/deferred ledger is complete before cutover.
+- Installed/native/security and subset-release evidence, later extension gate separate.
 
-Each phase is one agent handoff. Phase C must maintain a written parity/deferred
-table so Phase D has a finite cutover gate.
+## Task tracking
 
-## 4. Exit verification
-
-| Check | Required result |
-| ----- | --------------- |
-| Ownership | Tauri owns Agent Host; Agent Host owns all runtime children |
-| Core parity | Sessions, events, permissions/questions and cancellation match fixtures |
-| Extensions | Existing supported feature set retained or explicitly deferred |
-| Frontend | No direct SDK import or client remains |
-| Packaging | Supported-platform smoke green |
-
-## 5. Phase plans
-
-- [Phase A](execution-plan-phase-a-host-lifecycle.md)
-- [Phase B](execution-plan-phase-b-core-parity.md)
-- [Phase C](execution-plan-phase-c-extensions-ui.md)
-- [Phase D](execution-plan-phase-d-cutover-exit.md)
+Use `AS04-<phase>-<NN>` for task IDs. Folder prefixes are stable milestone identities, not delivery order. Planned dependencies are conditions to satisfy, not claims that upstream work is Done. Keep scope bounded by task acceptance; record fixtures, version/support scope and residual gaps. Mark only implemented and verified tasks `[DONE]` and log changes in `specs/changelog.md`.

@@ -1,54 +1,52 @@
-# 04 — Phase B: core session, stream and interaction parity
+# 04 — Phase B: core sessions, events and interaction parity
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisite:** Phase A Done  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Port the mandatory Sessions lifecycle and interaction behavior to the host adapter.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own session CRUD/resume, messages, streaming, tools, permissions/questions,
-cancellation, terminal state, models/providers needed for creation, and core fixtures.
+**Prerequisites:** AS04-A accepted.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Make OpenCode a second native runtime through common profile-bound Sessions.
+
+## Implementation boundary
+
+Own required core create/resume/send/cancel/history/tools/interactions/catalog and normalized fixtures. Optional rich UI features remain ledger entries for C.
 
 ## Tasks
 
-### AS04-B-01 — Port session and message lifecycle
+### AS04-B-01 — Port core native lifecycle and persisted binding
 
-Map create/list/get/resume/archive as needed, native ids, message hydration,
-send, cancellation, and terminal status into the common contract.
+Map session creation/read/resume and native message history to immutable runtime/profile/native binding and production persistence. Archive/list controls are capability-gated as needed. Use real workspace rootPath as cwd and no legacy-state migration.
 
-**Acceptance:** Existing sessions behavior is reproducible through Agent Host with the new clean SpecOps store.
+**Acceptance:** Independent Codex/OpenCode sessions restart/resume their own native histories; missing native history/profile preserves metadata and offers an explicit state.
 
-### AS04-B-02 — Port normalized event streaming
+### AS04-B-02 — Normalize native event stream
 
-Translate text/reasoning, tool, step/subtask, diff, usage/cost, error, compaction,
-unknown, and reconnect events with stable ordering/correlation.
+Map text/reasoning/tools/steps/subtasks/file changes/usage/errors/compaction/reconnect and bounded unknown events. Use stable native IDs with host-assigned cursor and profile/generation correlation. Compare legacy normalized fixtures and document corrections.
 
-**Acceptance:** Legacy and host fixture outputs match at the normalized-event boundary or document an intentional correction.
+**Acceptance:** Ordering/deduplication/terminal completion pass contract; late events cannot mutate Codex or another profile. Each core parity difference is resolved or justified with evidence.
 
-### AS04-B-03 — Port permissions and questions
+### AS04-B-03 — Port permissions, questions and cancel
 
-Map incoming requests and replies, cancellation/timeouts, abort, and stale-event
-handling through shared extensions.
+Use shared capability extensions for correlated native allow/deny/answer/cancel/timeout and stale reply handling. Settle interrupted host/runtime streams without re-sending prompt.
 
-**Acceptance:** Allow/deny/answer/cancel paths render and resolve exactly once through common UI.
+**Acceptance:** Native policy remains authoritative, interaction resolves once and Stop never rolls back files or leaves a hung iterator.
 
-### AS04-B-04 — Core parity test gate
+### AS04-B-04 — Accept core parity independent of rich extensions
 
-Run shared adapter contract plus side-by-side fixture comparison for lifecycle,
-stream, tool, interaction, failure, restart, and cancel cases.
+Run core history/catalog/settings/stream/tools/interaction/failure/restart fixtures plus shared contract and real-native opt-in smoke. Finalize required vs later ledger classifications without treating unimplemented rich features as preserved.
 
-**Acceptance:** No unresolved core-parity difference remains before optional features begin.
+**Acceptance:** Core is accepted for D; no unknown required category remains. Optional C features are explicitly unavailable until implemented, and Codex regression checks pass.
 
 ## Verification
 
-- Run shared adapter suite and legacy/new normalized fixture comparison.
-- Manually execute create/send/tool/question/permission/cancel/restart through the new path.
-- Verify Claude and Codex sessions remain unaffected.
+- Run shared adapter suite, mapper/profile/persistence and legacy/new core comparisons.
+- Opt-in create/tool/approval/question/cancel/restart smoke; keep Codex usable during OpenCode child failure.
 
-## Handoff
+## Exit and next work
 
-Phase C begins when common Sessions behavior reaches parity and all remaining
-gaps are explicitly optional extensions.
+D performs core cutover next. C is not a prerequisite and moves to later native-extension slot. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

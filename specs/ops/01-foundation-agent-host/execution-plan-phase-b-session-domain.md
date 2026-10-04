@@ -1,7 +1,9 @@
 # 01 — Phase B: runtime-neutral session domain and persistence
 
+> Historical implementation record. The 2026-10-04 [active index](execution-plan.md) supersedes delivery/handoff instructions here. Landed tasks remain recorded; acceptance gaps are reopened in [S](execution-plan-phase-s-stabilization.md), 03-A and 06-C as allocated by the [scope](README.md). This is not an active instruction to implement another adapter or mark the foundation fully accepted.
+
 **Date:** 2026-08-12  
-**Status:** Done  
+**Status:** Historical implementation complete; active acceptance tracked in S / 03-A / 06-C.
 **Prerequisite:** Phase A Done  
 **Scope:** [`README.md`](README.md)  
 **Index:** [`execution-plan.md`](execution-plan.md)  
@@ -51,7 +53,6 @@ and restart round-trips with fixed fixtures.
 - Search common state for provider-prefixed fields/types.
 - Review serialized fixtures for credentials and raw native payloads.
 
-## Handoff
+## Historical handoff superseded
 
-Phase C may start when the schema is stable enough to define adapter contracts
-without provider-specific exceptions.
+Follow the active execution index: stabilize S, then Codex 03-A. Earlier handoff and Done instructions no longer determine delivery order.

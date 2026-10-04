@@ -1,53 +1,54 @@
-# 02 — Phase D: recovery, security and milestone exit
+# 02 — Phase D: installed recovery, security and baseline acceptance
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisites:** Phases A–C Done  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Prove the adapter is recoverable, secret-safe, and ready to become a contract baseline.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own hardening, test closure, documentation, and milestone status. Do not add new
-capabilities unless they close a demonstrated exit gap.
+**Prerequisites:** AS02-A/B/C accepted; early 06-B/C extended for Claude.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Accept Claude without delaying existing Codex/OpenCode releases.
+
+## Implementation boundary
+
+Own fault/security/installed coexistence checks, current auth scope and docs; do not reopen predecessor gates for unrelated features.
 
 ## Tasks
 
-### AS02-D-01 — Recovery and fault matrix
+### AS02-D-01 — Run profile/runtime recovery matrix
 
-Cover offline startup, invalid/expired auth, quota/rate failure, SDK exception,
-host crash mid-turn, missing history, and restart with two sessions.
+Cover missing SDK/binary, offline/invalid/expired auth, quota/rate errors, exception/stream disconnect, child/host crash, cancel race, missing history and fresh-process restart.
 
-**Acceptance:** Each state is actionable and isolated to this runtime/session.
+**Acceptance:** Failure is actionable and scoped correctly; no prompt replay/native replacement/account rotation; whole-host failure settles affected streams.
 
 ### AS02-D-02 — Security and redaction audit
 
 Run secret canaries through auth, errors, raw events, transcript caching, logs,
-snapshots, handoff-ready summaries, and diagnostic export.
+snapshots, handoff-ready summaries, and diagnostic export. Include profile identity, inherited auth environment, native credential storage and control-plane notifications.
 
-**Acceptance:** No canary crosses a prohibited boundary.
+**Acceptance:** No canary crosses a prohibited boundary. Unrelated profiles remain intact.
 
-### AS02-D-03 — Shared contract and real-key smoke
+### AS02-D-03 — Verify native contract and installed credential smoke
 
-Run the complete shared adapter suite and manually gated create/send/tool/
-permission/cancel/resume smoke using real credentials.
+Run strengthened contract and optional actual-credential create/tool/allow/deny/input/cancel/resume/logout smoke from installed build; document supported auth families and actual native feature ledger.
 
-**Acceptance:** Automated suite and recorded smoke checklist pass on supported development platforms.
+**Acceptance:** Recorded installed-platform evidence passes without exposing secrets; Codex/OpenCode independence is checked when enabled.
 
-### AS02-D-04 — Docs and milestone closure
+### AS02-D-04 — Close Claude baseline and update subset release
 
-Document setup, supported capabilities, recovery, limits, and shared-workspace
-warning behavior; update changelog, README, index, and roadmap statuses.
+Document current setup/auth/policy evidence, config/native feature scope, limits/recovery and writer visibility. Update task/phase/milestone states and changelog and rerun selected-scope 06-D.
 
-**Acceptance:** Phase 03 can consume written contract lessons without inspecting implementation history.
+**Acceptance:** Accepted Claude extends release scope; already shipped runtimes remain usable and no task claims Codex depends on this adapter.
 
 ## Verification
 
-- Run all milestone-02 automated suites and type/build checks.
-- Complete and record manually gated credential smoke.
-- Review all milestone README definition-of-done items.
+- Run adapter/profile/schema/mapper and capability fixtures appropriate to this phase, using no live credential by default.
+- Check error/log/transcript/export boundaries with canaries and late profile/generation events.
+- Record pinned native contracts and optional real-runtime/installed smoke for the advertised support scope.
 
-## Handoff
+## Exit and next work
 
-Mark milestone 02 Done and record any common-contract amendments before assigning phase 03.
+Mark Claude baseline accepted only with evidence; proceed to scheduled handoff/native extensions. Codex remains an earlier baseline. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

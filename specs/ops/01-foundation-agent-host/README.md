@@ -1,86 +1,44 @@
 # 01 — Sessions foundation and Agent Host
 
-**Status:** Done (2026-08-15)  
-**Date:** 2026-08-11  
-**Main doc (SSOT):** [`../roadmap.md`](../roadmap.md)  
-**Execution plan:** [`execution-plan.md`](execution-plan.md)  
-**Phase plans:** [A](execution-plan-phase-a-chat-removal.md), [B](execution-plan-phase-b-session-domain.md), [C](execution-plan-phase-c-adapter-contract.md), [D](execution-plan-phase-d-agent-host.md), [E](execution-plan-phase-e-supervision.md), [F](execution-plan-phase-f-sessions-ux-exit.md)
+**Updated:** 2026-10-04
 
-**Acceptance review (2026-10-04):** Implemented; acceptance gaps remain open.
-The historical Done marker above records implementation closure, not verified
-production readiness. The [current audit](../audit-2026-10-04.md) confirms open
-binding-persistence, stream-failure, supervision, catalog/creation UX and
-packaging gaps from [review round 1](review-issues-1.md), and proposes a bounded
-stabilization slice before real Codex credentials and usable preview delivery.
+**Status:** Historical A–F implemented (2026-08-15); acceptance reopened. Phase S Planned.
 
-This milestone removes the obsolete standalone AI surfaces and establishes the
-runtime-neutral domain, host protocol, process supervision, and Sessions UX on
-which every real runtime adapter depends.
+**Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
-## Locked decisions (2026-08-11)
+## Scope and current state
 
-| # | Topic | Choice |
-| - | ----- | ------ |
-| 1 | Product surface | Workspace Sessions is the only AI surface; remove Chat and the planned Cloud context |
-| 2 | Persistence | Start with the new runtime-neutral schema; no migration or compatibility codecs |
-| 3 | SDK boundary | Vendor SDKs and processes stay outside the WebView in one bundled Agent Host |
-| 4 | Host transport | Versioned JSON-RPC over stdio, supervised by Tauri |
-| 5 | Runtime binding | Runtime is immutable after session creation |
+| Phase | Implementation record | Acceptance state |
+| --- | --- | --- |
+| A | [Chat/Cloud removal](execution-plan-phase-a-chat-removal.md) | Implemented; regression baseline |
+| B | [Neutral domain/persistence](execution-plan-phase-b-session-domain.md) | Implemented; production binding persistence gap → S-01 |
+| C | [Adapter contract/fake](execution-plan-phase-c-adapter-contract.md) | Implemented; contract evidence gaps → S-04 |
+| D | [Agent Host](execution-plan-phase-d-agent-host.md) | Implemented; failure/redaction/framing gaps → S-03/04 |
+| E | [Tauri supervision](execution-plan-phase-e-supervision.md) | Implemented; I/O/shutdown/generation cleanup gaps → S-02 |
+| F | [Sessions UX](execution-plan-phase-f-sessions-ux-exit.md) | Implemented slice; stream recovery → S-03, runtime/profile/catalog/gate → 03-A |
+| S | [Stabilization](execution-plan-phase-s-stabilization.md) | Planned; first active delivery gate |
 
-## Goal
+The August Done markers describe landed code, not accepted production readiness. [Review round 1](review-issues-1.md) and [current audit](../audit-2026-10-04.md) provide evidence. Preserve historical task IDs/notes; do not rerun removal or add persistence migration.
 
-A deterministic fake runtime can exercise the complete Sessions lifecycle
-without any provider-specific type or process leaking into common frontend code.
+## Decisions
 
-## Scope
+- Workspace Sessions is the only AI surface; native SDK/process remains outside WebView.
+- Tauri supervises one Agent Host; host owns runtime descendants, bounded I/O and shutdown.
+- New storage may reset cleanly. No persisted-data migration or compatibility shim.
+- Common session core stays small; native optional features use honest capabilities/extensions.
+- S is foundation stabilization, not a new generic agent-platform product.
 
-| ID | Item | Current state |
-| --- | ---- | ------------- |
-| AS01-A | Remove Chat and dormant Cloud product/state | Done (Phase A) |
-| AS01-B | Runtime-neutral domain and persistence | Done (Phase B) |
-| AS01-C | Adapter core, extensions, capabilities, fake runtime | Done (Phase C) |
-| AS01-D | Bundled Agent Host and versioned protocol | Done (Phase D) |
-| AS01-E | Tauri host/process supervision | Done (Phase E) |
-| AS01-F | Unified Sessions UX and foundation exit | Done (Phase F) |
+## Dependencies and allocation
 
-## Outcome
-
-- Chat/Cloud are absent from product UI, state, persistence, settings, and docs.
-- A fake adapter creates, streams, cancels, persists, restores, and renders a
-  session end to end.
-- The common codebase and WebView contain no vendor SDK types.
-- Agent Host and its descendants terminate cleanly on exit and recovery paths.
-
-## Dependencies
-
-- None. This is the root implementation milestone.
-
-**Blocks:** every runtime adapter in phases 02–05 and release work in phase 06.
-
-## Out of scope
-
-- Real vendor adapters — phases 02–05.
-- Legacy AI-state migration or compatibility shims.
-- Worktrees, writer locks, automatic git operations, or rollback.
-
-## Risks
-
-- **Over-generalizing before real adapters** — keep the mandatory core minimal
-  and use capabilities/extensions for optional behavior.
-- **Orphan processes** — require process-tree cleanup tests before phase exit.
-- **Accidental reusable UI deletion** — characterize transcript/tool rendering
-  before removing Chat-specific state and routing.
+S has no vendor-adapter dependency and precedes 03-A. Runtime/profile creation, native auth and neutral Sessions settings are active 03-A work; packaging/reproducibility/Node assets are active 06-C work before usable Codex preview. Those downstream gaps are explicit and do not falsely mark F accepted.
 
 ## Definition of done
 
-- Every phase plan A–F is marked Done and its acceptance checks pass.
-- Foundation exit criteria in [`execution-plan.md`](execution-plan.md) pass.
-- Changelog records the breaking Chat/state reset and the shipped foundation.
-- Status is changed to Done in this README and [`../roadmap.md`](../roadmap.md).
+- [ ] S-01–05 acceptance and the remaining-review disposition ledger pass.
+- [ ] Production persistence resumes a known native binding through fresh store/host state.
+- [ ] Bounded crash/restart/shutdown and error/stream fixtures pass on declared supported targets.
+- [ ] Historical F creation/catalog gaps are implemented and accepted in 03-A.
+- [ ] Historical packaging gaps are implemented and accepted in 06-C.
+- [ ] Non-AI regression checks, supported-platform evidence and changelog are recorded.
 
-### Definition of done — docs
-
-- [x] Active architecture and user docs describe workspace Sessions only.
-- [x] Removed Chat/Cloud docs are archived or deleted as appropriate.
-- [x] Changelog entry appended in [`../../changelog.md`](../../changelog.md).
-- [x] Exit criteria manually reviewed before phase 02 starts.
+Passing S permits Codex work. Full foundation acceptance additionally requires the explicitly allocated 03-A/06-C gates; no circular dependency requires them to finish before S.

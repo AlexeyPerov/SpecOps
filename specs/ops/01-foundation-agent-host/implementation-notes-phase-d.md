@@ -1,5 +1,7 @@
 # 01 — Phase D implementation notes
 
+> Historical implementation evidence. Active acceptance and delivery order are defined in the [current execution index](execution-plan.md); these notes do not close the reopened stabilization gaps.
+
 **Date:** 2026-08-12
 **Scope:** [`execution-plan-phase-d-agent-host.md`](execution-plan-phase-d-agent-host.md)
 

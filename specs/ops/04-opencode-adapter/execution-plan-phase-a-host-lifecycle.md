@@ -1,54 +1,53 @@
-# 04 — Phase A: Agent Host ownership and runtime lifecycle
+# 04 — Phase A: legacy inventory and new host ownership
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisites:** Milestones 01–03 Done  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Move SDK/client and runtime ownership out of the WebView without double supervision.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own adapter packaging, runtime resolution, process ownership, health, auth/config
-bootstrap, and a minimal connection probe. Core session parity belongs to Phase B.
+**Prerequisites:** AS03-D accepted baseline and AS01-S. No Claude prerequisite.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Establish a single-owner host adapter path and finite parity scope for the second runtime.
+
+## Implementation boundary
+
+Own inventory/ledger, host client/profile/auth and runtime bootstrap. Keep legacy code only as a temporary parity reference until core cutover D; do not demand optional extensions before cutover.
 
 ## Tasks
 
-### AS04-A-01 — Freeze legacy ownership and behavior
+### AS04-A-01 — Inventory ownership and establish parity/deferred ledger
 
-Map current frontend client, Rust supervisor, child runtime, startup/config/auth,
-health, and shutdown flows; capture process and connection fixtures.
+Map frontend SDK/client, Rust sidecar, process/config/auth/start/shutdown and existing behavior. Classify every legacy UI category as core required for D, retained later C or deferred with rationale/owner. Include fork/revert/share/summarize, commands/search, todos/diffs/file status/language services, provider models/auth/config, MCP/skills/agents.
 
-**Acceptance:** The cutover map identifies one future owner for every lifecycle responsibility.
+**Acceptance:** Every legacy category is owned and scoped; D has a finite core gate. A retained code file is not proof that the feature works in new Sessions.
 
-### AS04-A-02 — Move client code into Agent Host
+### AS04-A-02 — Add host-side SDK and profile configuration
 
-Relocate SDK/server client dependencies behind an adapter module and remove
-them from the WebView build graph without changing user-visible behavior.
+Pin SDK/runtime and place client imports inside Agent Host. Bootstrap supported provider/config auth through host-owned profile scope; adapt common profile/catalog/health control plane. Legacy frontend dependency may temporarily remain as reference and is removed in D.
 
-**Acceptance:** Agent Host can connect/probe the runtime; frontend has no direct client import in the migrated slice.
+**Acceptance:** New host connection/probe uses no SDK in common UI and contains no frontend secret state. Same profile/runtime settings survive restart; external endpoint/local ownership is explicit.
 
-### AS04-A-03 — Transfer runtime lifecycle ownership
+### AS04-A-03 — Transfer native lifecycle ownership
 
-Make Agent Host launch/connect, monitor, restart, and stop the child runtime.
-Ensure Tauri supervises only Agent Host for the new path.
+Host launches/connects, monitors, restarts and stops native runtime; Tauri owns only Agent Host on the new path. Exclusive old/new gate chooses one runtime owner, with clear temporary parity-only legacy usage.
 
-**Acceptance:** Exactly one supervisor owns the runtime in every feature-gate state; shutdown leaves no child process.
+**Acceptance:** No double launch or simultaneous supervisor ownership in any intermediate gate state; new-path shutdown/crash leaves no descendants.
 
-### AS04-A-04 — Bootstrap and process tests
+### AS04-A-04 — Verify bootstrap and pin cutover baseline
 
-Cover missing binary, PATH override, auth/config failure, port/connection failure,
-crash, restart, shutdown, and old/new feature-gate selection.
+Cover binary/version/PATH override, auth/config/connection failure, port ownership, profile collisions, stale generations, crash/restart/shutdown and gate selection. Record core fixture corpus and C deferments.
 
-**Acceptance:** Process tests are deterministic and prove no double launch or orphan.
+**Acceptance:** Process/auth/profile tests are deterministic; Codex remains healthy when this runtime is offline. Core/deferred ledger is ready for B and D.
 
 ## Verification
 
-- Inspect WebView bundle/import graph for migrated client dependencies.
-- Run host adapter bootstrap and Tauri/host process-tree tests.
-- Toggle legacy/new path and verify only one runtime instance exists.
+- Run host bootstrap/auth/redaction and runtime-owner/process-tree fixtures.
+- Compare discovery/catalog/config/profile state with native behavior and legacy fixture corpus.
+- Verify gate switches leave only one native owner.
 
-## Handoff
+## Exit and next work
 
-Phase B starts when Agent Host owns a stable authenticated runtime connection
-and the legacy path remains available only as a parity reference.
+B follows A; D follows B without waiting for optional C. The finite ledger is maintained throughout cutover. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

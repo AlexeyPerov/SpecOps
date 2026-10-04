@@ -1,71 +1,48 @@
-# 02 — Claude adapter
+# 02 — Claude native adapter
 
-**Status:** Planned  
-**Date:** 2026-08-11  
-**Main doc (SSOT):** [`../roadmap.md`](../roadmap.md)  
-**Execution plan:** [`execution-plan.md`](execution-plan.md)  
-**Phase plans:** [A](execution-plan-phase-a-sdk-auth.md), [B](execution-plan-phase-b-session-events.md), [C](execution-plan-phase-c-capabilities.md), [D](execution-plan-phase-d-hardening-exit.md)
+**Date:** 2026-10-04
 
-This milestone proves the common contract with the first production runtime and
-delivers resumable Claude sessions through the shared Sessions UI.
+**Status:** Planned
 
-## Locked decisions (2026-08-11)
+**Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
-| # | Topic | Choice |
-| - | ----- | ------ |
-| 1 | SDK location | Official TypeScript agent SDK runs inside Agent Host |
-| 2 | Authentication | API key and supported cloud-provider credentials; no consumer OAuth |
-| 3 | Workspace | Use the real workspace `rootPath` as `cwd` |
-| 4 | Optional behavior | Advertise only capabilities actually supported by the pinned SDK |
+**Evidence:** [Implementation audit](../audit-2026-10-04.md)
 
-## Goal
+Claude is the scheduled third native runtime, after the usable Codex preview and OpenCode core cutover. It is not a prerequisite for Codex.
 
-Users can create, run, cancel, restart, and resume independent Claude sessions
-without credentials or provider payloads entering frontend persistence.
+## Decisions
 
-## Scope
+- Use the official native Agent SDK inside Agent Host; retain its agent loop/tools/history.
+- Verify current third-party auth policy and pinned native flow; API key/cloud is baseline, supported additional auth is evidence-dependent.
+- Profile-bound credentials/config/native history and native permissions; no prompt emulation.
 
-| ID | Item | Current state |
-| --- | ---- | ------------- |
-| AS02-A | SDK bootstrap, auth, descriptor, catalogs | Missing |
-| AS02-B | Session lifecycle and normalized event stream | Missing |
-| AS02-C | Permissions, questions, tools, limits, MCP and optional features | Missing |
-| AS02-D | Recovery, security tests, real-key smoke, milestone exit | Missing |
+## Scope and current state
 
-## Outcome
+| Phase | Work | State |
+| --- | --- | --- |
+| AS02-A | [native SDK, current auth policy and connection profiles](execution-plan-phase-a-sdk-auth.md) | Missing |
+| AS02-B | [profile-bound native sessions and events](execution-plan-phase-b-session-events.md) | Missing |
+| AS02-C | [permissions, native settings and ecosystem capabilities](execution-plan-phase-c-capabilities.md) | Missing |
+| AS02-D | [installed recovery, security and baseline acceptance](execution-plan-phase-d-hardening-exit.md) | Missing |
 
-- Two Claude sessions coexist and resume by distinct native ids after restart.
-- Text, reasoning, tools, permissions/questions, usage, errors, and cancellation
-  render through the common UI.
-- A second write-capable session warns but is still allowed.
+## Dependencies and delivery
 
-## Dependencies
+Default slot 5: 03-D and 04-D → A → B → C → D. A recorded 04/02 scheduling swap may use 03-D directly. Early 06-B/C extend for installed Claude; 06-D decides the expanded subset release. No downstream Codex dependency.
 
-- **Phase 01** foundation and Agent Host — Done.
+## Expected outcomes
 
-**Blocks:** phase 03, which validates the contract with a second runtime.
+- Independent native sessions use real workspace cwd, fixed profile and native history.
+- Native tools/config/policy and UI capabilities match pinned evidence.
+- Installed offline/auth/crash/restart/cancel behavior is safe and does not disable healthy runtime.
 
 ## Out of scope
 
-- Consumer-account OAuth.
-- Emulation of unsupported lifecycle or permission behavior.
-- Cross-runtime handoff — phase 06.
-
-## Risks
-
-- **Native history may be missing or interrupted** — expose a clear
-  non-destructive state and retain SpecOps metadata.
-- **Secret leakage through raw events** — use canary-based redaction tests at
-  both adapter and diagnostic-export boundaries.
+- Subscription login without verified supported integration policy/flow.
+- Handoff implementation, migrations or widening core for optional native features.
 
 ## Definition of done
 
-- All phase plans A–D are Done and the shared adapter contract passes.
-- Manually gated real-key smoke passes without persisting the key.
-- Status is changed to Done here and in [`../roadmap.md`](../roadmap.md).
-
-### Definition of done — docs
-
-- [ ] Authentication, capabilities, recovery, and installation documented.
-- [ ] Changelog entry appended in [`../../changelog.md`](../../changelog.md).
-- [ ] Exit criteria manually reviewed before phase 03 starts.
+- [ ] A–D task acceptance and actual native feature/config/auth ledger pass.
+- [ ] Profile-scoped contract/security/native restart tests pass for advertised capabilities.
+- [ ] Installed assets, current auth smoke/support scope and early shared activity/recovery checks recorded.
+- [ ] Selected-scope 06-D matrix, setup/recovery docs and changelog updated.

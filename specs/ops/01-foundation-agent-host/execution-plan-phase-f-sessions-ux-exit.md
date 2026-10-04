@@ -1,7 +1,9 @@
 # 01 — Phase F: Sessions UX integration and foundation exit
 
+> Historical implementation record. The 2026-10-04 [active index](execution-plan.md) supersedes delivery/handoff instructions here. Landed tasks remain recorded; acceptance gaps are reopened in [S](execution-plan-phase-s-stabilization.md), 03-A and 06-C as allocated by the [scope](README.md). This is not an active instruction to implement another adapter or mark the foundation fully accepted.
+
 **Date:** 2026-08-11  
-**Status:** Done (2026-08-15)  
+**Status:** Historical implementation complete; active acceptance tracked in S / 03-A / 06-C.
 **Prerequisites:** Phases A–E Done  
 **Scope:** [`README.md`](README.md)  
 **Index:** [`execution-plan.md`](execution-plan.md)  
@@ -91,7 +93,6 @@ real adapter without changing the product model.
 - Run editor, workspace, version-control and non-AI regression suites.
 - Manually exercise create, restart/resume, cancel, question/permission and crash recovery.
 
-## Handoff
+## Historical handoff superseded
 
-Mark milestone 01 Done, update [`../roadmap.md`](../roadmap.md), then hand the
-stable host/adapter contract to phase 02.
+Follow the active execution index: stabilize S, then Codex 03-A. Earlier handoff and Done instructions no longer determine delivery order.

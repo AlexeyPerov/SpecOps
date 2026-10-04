@@ -1,5 +1,7 @@
 # 01 — Phase A implementation notes
 
+> Historical implementation evidence. Active acceptance and delivery order are defined in the [current execution index](execution-plan.md); these notes do not close the reopened stabilization gaps.
+
 **Date:** 2026-08-11
 **Scope:** [`execution-plan-phase-a-chat-removal.md`](execution-plan-phase-a-chat-removal.md)
 

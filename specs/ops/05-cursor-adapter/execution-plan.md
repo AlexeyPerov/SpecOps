@@ -1,58 +1,33 @@
-# 05 — Execution plan index
+# 05 — Execution plan index: Cursor feasibility and native integration
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Milestone scope:** [`README.md`](README.md)  
-**Roadmap:** [`../roadmap.md`](../roadmap.md)
+**Date:** 2026-10-04
 
-**Requirements evidence:** Read [`README.md`](README.md), final common contracts,
-and the pinned public-beta SDK documentation/types. Treat observed SDK behavior
-as authoritative for capabilities.
+**Status:** Planned
 
-## 1. Milestone overview
+**Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
-```text
-05 — Cursor adapter
-  Phase A  SDK bootstrap, auth, health and catalogs
-  Phase B  Durable agents/runs and normalized events
-  Phase C  Capability gaps and cloud deferral boundary
-  Phase D  Recovery, security, contract tests and exit
-```
+## Execution order
 
-| Phase | Plan doc | Effort | Ship independently? |
-| ----- | -------- | ------ | ------------------- |
-| **A** | [`execution-plan-phase-a-sdk-auth.md`](execution-plan-phase-a-sdk-auth.md) | M | No |
-| **B** | [`execution-plan-phase-b-agent-events.md`](execution-plan-phase-b-agent-events.md) | L | Developer preview |
-| **C** | [`execution-plan-phase-c-capabilities-cloud.md`](execution-plan-phase-c-capabilities-cloud.md) | M | Developer preview |
-| **D** | [`execution-plan-phase-d-hardening-exit.md`](execution-plan-phase-d-hardening-exit.md) | M | Yes |
+Default slot 7. Technical prerequisites: accepted Codex baseline and profile/contract/early 06-B/C infrastructure; use lessons from enabled OpenCode/Claude adapters. A → B → C → D. Handoff is not a prerequisite; extend enabled pairs when advertised.
 
-**Dependency graph:** `A → B → C → D`.
+| Phase | Plan | Effort | Delivery gate |
+| --- | --- | --- | --- |
+| A | [feasibility, auth and installed SDK bootstrap](execution-plan-phase-a-sdk-auth.md) | M/L | Native feasibility |
+| B | [durable native agents, runs and recovery](execution-plan-phase-b-agent-events.md) | M/L | Adapter prerequisite |
+| C | [native capability ledger and cloud boundary](execution-plan-phase-c-capabilities-cloud.md) | M/L | Adapter prerequisite |
+| D | [installed native acceptance and release extension](execution-plan-phase-d-hardening-exit.md) | M/L | Expanded release baseline |
 
-**Delivery policy:** Pin the beta SDK and isolate its health/version state. Real
-credentials are used only in manually gated smoke tests.
+## Delivery policy
 
-## 2. Task ID convention
+Use supported pinned native harness and current official auth/config documentation. All persistence/routing/catalog/auth/status paths include profile scope. Optional native features use capabilities/extensions; fake fixtures alone do not prove native history/policy. Real credential smokes are opt-in; no persisted-data migration.
 
-Use `AS05-A-*` through `AS05-D-*`. Mark task headings `[DONE]` when complete.
+## Exit verification
 
-## 3. Implementation slicing
+- Independent profile/native history and host failure settlement.
+- Native capability honesty and permission semantics, no prompt substitutes.
+- SDK/native assets in installed app and exact support/version evidence.
+- Healthy prior runtimes remain usable; subset release is independent of complete roadmap.
 
-Each phase is one agent handoff. Unsupported behaviors stay absent from the
-capability manifest; prompt emulation is outside the implementation slice.
+## Task tracking
 
-## 4. Exit verification
-
-| Check | Required result |
-| ----- | --------------- |
-| Lifecycle | Local runs create, stream, follow up, cancel and recover as supported |
-| Catalogs | Models/modes come from the SDK, not generic provider settings |
-| Isolation | Beta/offline state affects only this runtime |
-| Product | No standalone Chat or Cloud context appears |
-| Contract/smoke | Shared suite and gated real-key smoke green |
-
-## 5. Phase plans
-
-- [Phase A](execution-plan-phase-a-sdk-auth.md)
-- [Phase B](execution-plan-phase-b-agent-events.md)
-- [Phase C](execution-plan-phase-c-capabilities-cloud.md)
-- [Phase D](execution-plan-phase-d-hardening-exit.md)
+Use `AS05-<phase>-<NN>` for task IDs. Folder prefixes are stable milestone identities, not delivery order. Planned dependencies are conditions to satisfy, not claims that upstream work is Done. Keep scope bounded by task acceptance; record fixtures, version/support scope and residual gaps. Mark only implemented and verified tasks `[DONE]` and log changes in `specs/changelog.md`.

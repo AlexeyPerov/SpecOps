@@ -1,40 +1,40 @@
-# 02 — Phase A: SDK bootstrap, authentication and runtime descriptor
+# 02 — Phase A: native SDK, current auth policy and connection profiles
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisite:** Milestone 01 Done  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Load the pinned SDK in Agent Host and expose honest auth/health/catalog state.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own SDK packaging, adapter bootstrap, credentials, descriptor, health, and
-catalogs. Do not implement live session streaming beyond a connection probe.
+**Prerequisites:** AS03-D and scheduled AS04-D baseline accepted; AS01-S and early 06-B/C available. An explicitly recorded slots-4/5 swap may place Claude after Codex directly.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Bootstrap the third scheduled native harness with current supported auth and independent profile state.
+
+## Implementation boundary
+
+Own pinned SDK/native binary, profile/credential auth, descriptor/catalog/settings scope. Native turns belong to B.
 
 ## Tasks
 
-### AS02-A-01 — Pin and package the SDK
+### AS02-A-01 — Pin the native SDK and verify installed assets
 
-Add the official TypeScript SDK to Agent Host, pin its version, record runtime
-compatibility, and keep all SDK imports inside the adapter module.
+Use the official native Agent SDK, not a model client SDK. Record version, native binary/Node/OS assets, licensing and shared host bundling compatibility. Extend 06-C resolver/native-asset checks without adding frontend SDK imports.
 
-**Acceptance:** Packaged host discovers the adapter and reports exact SDK/runtime versions.
+**Acceptance:** Installed host discovers exact supported SDK/native versions; missing/incompatible dependencies are runtime-local and actionable.
 
-### AS02-A-02 — Implement credential flow
+### AS02-A-02 — Recheck auth policy and implement profile connection
 
-Support API key and officially supported cloud-provider credentials through the
-host credential boundary; implement authenticate, status, refresh/probe, and logout semantics.
+Record current official supported third-party embedding/auth documentation before coding. Baseline is API key or supported cloud credentials through host-owned profile; add subscription login only with documented allowed/supported flow and actual pinned-version evidence. Scope environment/native settings to selected profile; no inherited account fallback.
 
-**Acceptance:** No credential enters frontend stores, snapshots, transcripts,
-logs, errors, or diagnostics.
+**Acceptance:** Auth lifecycle, refresh/status/logout and stale completion rules are profile-local. Secrets stay outside frontend/logs/snapshots/errors/export; unsupported login is explained, not simulated.
 
-### AS02-A-03 — Map descriptor, health and catalogs
+### AS02-A-03 — Map profile descriptor and honest catalogs
 
-Report runtime availability, auth requirements, supported setting sources,
-models/modes when discoverable, beta/version state, and capability prerequisites.
+Report version/health/auth and native configuration sources. Normalize discoverable models and distinct native policy/tool/budget settings; no hard-coded claims of subscription/model entitlement.
 
-**Acceptance:** Offline, missing credential, invalid credential, and healthy states are distinct.
+**Acceptance:** Missing/offline/auth-invalid/healthy states differ; another profile/runtime remains usable and unknown capabilities are unadvertised.
 
 ### AS02-A-04 — Adapter bootstrap tests
 
@@ -45,11 +45,10 @@ catalog normalization with fakes/fixtures.
 
 ## Verification
 
-- Run host build, adapter bootstrap, auth/redaction and descriptor tests.
-- Inspect frontend state and diagnostic fixtures with secret canaries.
-- Perform optional manually gated authentication probe.
+- Run adapter/profile/schema/mapper and capability fixtures appropriate to this phase, using no live credential by default.
+- Check error/log/transcript/export boundaries with canaries and late profile/generation events.
+- Record pinned native contracts and optional real-runtime/installed smoke for the advertised support scope.
 
-## Handoff
+## Exit and next work
 
-Phase B starts when a healthy authenticated adapter can be selected by the host
-and reports stable model/mode metadata.
+B follows authenticated A; Claude has no role as a Codex prerequisite. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

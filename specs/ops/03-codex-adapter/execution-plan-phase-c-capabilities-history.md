@@ -1,53 +1,59 @@
-# 03 — Phase C: modes, account state and native-history reconciliation
+# 03 — Phase C: native configuration, limits and history reconciliation
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisite:** Phase B Done  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Expose supported runtime depth while keeping native history authoritative.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own model/mode descriptors, sandbox/autonomy controls, account/usage/rate-limit
-state, history reconciliation, and capability UI. Do not invent missing protocol behavior.
+**Prerequisites:** AS03-B accepted.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Make Codex state, capabilities and resumed history reliable enough for everyday use.
+
+## Implementation boundary
+
+Own profile-scoped account/limits, advanced configuration ledger, full native/cache reconciliation and capability UX. Basic resume/settings are already required by B; later simultaneous profiles are E.
 
 ## Tasks
 
-### AS03-C-01 — Models, modes and sandbox capabilities
+### AS03-C-01 — Finalize native configuration and feature ledger
 
-Map model discovery/configuration and read-only/workspace-write/sandbox controls
-into validated common descriptors and runtime-specific detail.
+Enumerate workspace instructions, profile config, skills, MCP/plugins, hooks/subagents, native plans and supported native actions against pinned runtime. Record separate native execution, UI display and UI configuration status, tests and explicit deferrals.
 
-**Acceptance:** Session creation offers only valid combinations; unsupported controls are absent.
+**Acceptance:** Every advertised feature has evidence; unsupported/experimental capabilities are absent by default. New profile config scope is visible and workspace instructions are consumed by native harness.
 
-### AS03-C-02 — Account, usage and rate limits
+### AS03-C-02 — Integrate settings and capability extensions
 
-Map account updates, usage reads, rate-limit snapshots/updates, quota state, and
-logout effects without leaking auth material.
+Extend B settings/catalog using supported effort, collaboration, sandbox, approval policy and native extension panels. Include scope and experimental opt-in where required. Do not add vendor types to common UI or mandatory methods for optional features.
 
-**Acceptance:** Sparse updates merge predictably and affect only this runtime’s availability/actions.
+**Acceptance:** Supported combinations round-trip and reach native config; profile/global/workspace settings do not silently override one another. Common UI works with optional extensions absent.
 
-### AS03-C-03 — Reconcile native history and transcript cache
+### AS03-C-03 — Map profile account usage and rate limits
 
-Hydrate/resume from native thread data, merge with cached normalized turns by
-stable ids/cursors, and handle missing/divergent cache explicitly.
+Read account/usage/rate-limit state and merge sparse updates by profile/limit identity. Expose quota/auth-expiry/offline states with explicit retry/re-auth. Logout invalidates only that profile and marks its sessions auth-required.
 
-**Acceptance:** Cache never overwrites native truth or duplicates completed items after restart.
+**Acceptance:** Temporary missing limit data does not disable healthy work. Profile B auth/limits do not affect A or another profile; no automatic account rotation or hidden retry follows quota failure.
 
-### AS03-C-04 — Capability and reconciliation tests
+### AS03-C-04 — Reconcile native history and cache
 
-Cover mode combinations, account transitions, sparse rate-limit updates, stale
-cache, missing native thread, duplicate notifications, and restart hydration.
+Hydrate/read/resume by stable native item/turn IDs and normalized cursors. Handle sparse snapshots, partial turns, missing/divergent cache, duplicates, event reordering and interrupted restart. Native history wins, local metadata/lineage remains intact.
 
-**Acceptance:** Common UI remains usable if account/rate-limit data is temporarily unavailable.
+**Acceptance:** Restart during/after a turn yields no duplicate completed item; cache cannot overwrite native truth or replay prompt. Missing native history is explicit and preserves SpecOps record.
+
+### AS03-C-05 — Verify capabilities, cache and recovery states
+
+Add configuration/scope/conditional capability fixtures, sparse limits, logout/expiry, replay/reordering, stale generations, corrupt cache and missing-thread cases. Hand version/setup details to 06-C and activity semantics to 06-B.
+
+**Acceptance:** Feature ledger has no advertised unknown behavior. Profile failure is recoverable, unrelated editor/workspace/session state remains usable, and C evidence is ready for D.
 
 ## Verification
 
-- Run capability, account-state, cache reconciliation and UI tests.
-- Restart during and after a turn; verify no duplicate transcript items.
-- Compare advertised modes against generated protocol schemas for the pinned runtime.
+- Run capability/settings, profile-account/limits, reconciliation and recovery UI tests.
+- Compare each advertised control with pinned executable/schema/native behavior.
+- Record restart during/after a turn and missing-native-history behavior.
 
-## Handoff
+## Exit and next work
 
-Phase D begins when descriptors and cached/native history behavior are stable and fully fixture-covered.
+D begins after C and early 06-B/C gates pass; full profile-to-profile concurrency may ship later in E. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

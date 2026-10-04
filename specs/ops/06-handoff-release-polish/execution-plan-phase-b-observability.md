@@ -1,60 +1,58 @@
-# 06 — Phase B: shared-workspace activity and conflict observability
+# 06 — Phase B: early shared-workspace activity
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisites:** Stable runtime capability/activity descriptors  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Make concurrent shared-`cwd` work visible without taking control from the user.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own activity aggregation, write-capable warnings, file/diff refresh, overlap
-signals, explanatory UX, and preferences. Do not add locking or git automation.
+**Prerequisites:** AS03-B accepted activity/write-capability descriptors; AS01-S stream settlement. No handoff/Claude/OpenCode/Cursor dependency.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Make concurrent native work understandable before the first usable Codex preview.
+
+## Implementation boundary
+
+Own early activity/writer warnings, workspace refresh and Stop/recovery explanations. Work remains in shared cwd without execution locks.
 
 ## Tasks
 
-### AS06-B-01 — Aggregate running/write-capable activity
+### AS06-B-01 — Aggregate activity by session and profile
 
-Derive workspace activity from common session/turn status and capability data;
-show runtime, model/mode, current action, and Stop affordance.
+Use common turn/session status and actual settings/capabilities to show runtime, connection profile, model/settings, current action and Stop. Handle child/host crash, stale generation and pending interaction state.
 
-**Acceptance:** Crashed/stale turns clear predictably and one adapter’s health never hides another’s activity.
+**Acceptance:** Multiple Codex threads are visible before a second vendor exists; stale activity settles and one profile failure does not hide another.
 
-### AS06-B-02 — Warn on a second writer
+### AS06-B-02 — Warn before another writer starts
 
-Before starting another write-capable turn, show an allow-and-warn dialog with
-active writers and optional “do not show again” preference.
+Show active writers and allow Continue, with optional suppression/reset preference. Derive write capability from actual sandbox/policy settings, representing unknown capability honestly.
 
-**Acceptance:** Continue always remains available; warning never pauses, serializes, redirects, or cancels work.
+**Acceptance:** Continue always remains available. Warning never silently cancels, pauses, serializes, locks or changes cwd/profile; concurrent sessions remain allowed.
 
-### AS06-B-03 — Refresh workspace evidence
+### AS06-B-03 — Refresh external workspace evidence
 
-Combine adapter file-change hints with filesystem watcher notifications to
-refresh project tree, editor state, version-control status, and session diffs.
+Combine native changed-file hints and filesystem watcher updates to refresh tree, editor external-change state and version-control/diff views without overwriting dirty buffers.
 
-**Acceptance:** External/other-session writes become visible without requiring a full workspace reload.
+**Acceptance:** A session edit or external editor edit becomes visible without workspace reload or losing local unsaved text.
 
-### AS06-B-04 — Add best-effort overlap signals
+### AS06-B-04 — Show best-effort overlaps and stop semantics
 
-Compare reported changed paths for simultaneous turns and display a non-blocking
-warning with session links and recovery guidance.
+Report changed-path overlap only as non-blocking evidence; explain missing path data and that Stop does not roll back files. Preserve user-owned git/manual recovery; no branches/stashes/merges/worktrees.
 
-**Acceptance:** False negatives/positives cannot alter execution; missing path data is represented honestly.
+**Acceptance:** Overlap hints do not alter execution. Users can identify running writers and understand file effects after cancel/crash without an implication of rollback or isolation.
 
-### AS06-B-05 — Explain stop and recovery semantics
+### AS06-B-05 — Accept the early concurrency gate
 
-State that Stop does not roll back files and recovery uses user-controlled git
-or manual edits; add preference/reset and accessibility coverage.
+Cover multiple same-runtime threads, external edits, writer preference/accessibility, crash settlement and workspace switching. Later repeat with multiple profiles/vendors when enabled.
 
-**Acceptance:** No UI copy implies isolation, rollback, serialization, or conflict prevention.
+**Acceptance:** First Codex preview has actual concurrent-writer and refresh evidence; no waiting for handoff schema or all adapters.
 
 ## Verification
 
-- Run activity, warning preference, watcher/diff refresh, overlap and accessibility tests.
-- Manually run two writers plus an external editor change.
-- Verify continue/stop behavior and version-control refresh.
+- Run activity/write-setting, warning/preference, watcher/dirty-buffer, overlap and UI tests.
+- Opt-in two Codex threads writing and an external file change; confirm Continue/Stop behavior.
 
-## Handoff
+## Exit and next work
 
-Phase C starts when concurrency is understandable and observable without any hidden control policy.
+B is an independent early gate for 03-D and every applicable 06-D release. Extend its existing tests as profiles/adapters ship; handoff A is not a prerequisite. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

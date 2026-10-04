@@ -1,59 +1,33 @@
-# 02 — Execution plan index
+# 02 — Execution plan index: Claude third native runtime
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Milestone scope:** [`README.md`](README.md)  
-**Roadmap:** [`../roadmap.md`](../roadmap.md)
+**Date:** 2026-10-04
 
-**Requirements evidence:** Read [`README.md`](README.md), the final phase-01
-adapter/protocol contracts, and the pinned SDK documentation/types before
-implementation. SDK behavior wins over assumptions in this plan; capability
-descriptors must remain honest.
+**Status:** Planned
 
-## 1. Milestone overview
+**Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
-```text
-02 — Claude adapter
-  Phase A  SDK bootstrap, authentication and runtime descriptor
-  Phase B  Native sessions, resume and normalized event stream
-  Phase C  Permissions, questions and optional capabilities
-  Phase D  Recovery, security, contract tests and exit
-```
+## Execution order
 
-| Phase | Plan doc | Effort | Ship independently? |
-| ----- | -------- | ------ | ------------------- |
-| **A** | [`execution-plan-phase-a-sdk-auth.md`](execution-plan-phase-a-sdk-auth.md) | M | No |
-| **B** | [`execution-plan-phase-b-session-events.md`](execution-plan-phase-b-session-events.md) | L | Developer preview |
-| **C** | [`execution-plan-phase-c-capabilities.md`](execution-plan-phase-c-capabilities.md) | M/L | Developer preview |
-| **D** | [`execution-plan-phase-d-hardening-exit.md`](execution-plan-phase-d-hardening-exit.md) | M | Yes |
+Default slot 5: 03-D and 04-D → A → B → C → D. A recorded 04/02 scheduling swap may use 03-D directly. Early 06-B/C extend for installed Claude; 06-D decides the expanded subset release. No downstream Codex dependency.
 
-**Dependency graph:** `A → B → C → D`.
+| Phase | Plan | Effort | Delivery gate |
+| --- | --- | --- | --- |
+| A | [native SDK, current auth policy and connection profiles](execution-plan-phase-a-sdk-auth.md) | M/L | Adapter prerequisite |
+| B | [profile-bound native sessions and events](execution-plan-phase-b-session-events.md) | M/L | Adapter prerequisite |
+| C | [permissions, native settings and ecosystem capabilities](execution-plan-phase-c-capabilities.md) | M/L | Adapter prerequisite |
+| D | [installed recovery, security and baseline acceptance](execution-plan-phase-d-hardening-exit.md) | M/L | Expanded release baseline |
 
-**Delivery policy:** No legacy-state migration. Real credentials are used only
-in manually gated smoke tests.
+## Delivery policy
 
-## 2. Task ID convention
+Use supported pinned native harness and current official auth/config documentation. All persistence/routing/catalog/auth/status paths include profile scope. Optional native features use capabilities/extensions; fake fixtures alone do not prove native history/policy. Real credential smokes are opt-in; no persisted-data migration.
 
-Use `AS02-A-*` through `AS02-D-*`. Mark task headings `[DONE]` when complete.
+## Exit verification
 
-## 3. Implementation slicing
+- Independent profile/native history and host failure settlement.
+- Native capability honesty and permission semantics, no prompt substitutes.
+- SDK/native assets in installed app and exact support/version evidence.
+- Healthy prior runtimes remain usable; subset release is independent of complete roadmap.
 
-Each phase plan is one agent-sized handoff. Phase B is the vertical lifecycle
-slice; Phase C may not broaden the mandatory adapter core for optional features.
+## Task tracking
 
-## 4. Exit verification
-
-| Check | Required result |
-| ----- | --------------- |
-| Lifecycle | Two sessions create, stream, cancel, restart and resume independently |
-| Interaction | Tools, permissions/questions and errors render through common UI |
-| Security | Secret canaries absent from state, logs, transcripts and exports |
-| Contract | Shared adapter suite green |
-| Smoke | Manually gated real-key smoke green |
-
-## 5. Phase plans
-
-- [Phase A](execution-plan-phase-a-sdk-auth.md)
-- [Phase B](execution-plan-phase-b-session-events.md)
-- [Phase C](execution-plan-phase-c-capabilities.md)
-- [Phase D](execution-plan-phase-d-hardening-exit.md)
+Use `AS02-<phase>-<NN>` for task IDs. Folder prefixes are stable milestone identities, not delivery order. Planned dependencies are conditions to satisfy, not claims that upstream work is Done. Keep scope bounded by task acceptance; record fixtures, version/support scope and residual gaps. Mark only implemented and verified tasks `[DONE]` and log changes in `specs/changelog.md`.

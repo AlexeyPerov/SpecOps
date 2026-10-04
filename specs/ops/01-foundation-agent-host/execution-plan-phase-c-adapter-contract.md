@@ -1,7 +1,9 @@
 # 01 — Phase C: adapter core, capabilities and fake runtime
 
+> Historical implementation record. The 2026-10-04 [active index](execution-plan.md) supersedes delivery/handoff instructions here. Landed tasks remain recorded; acceptance gaps are reopened in [S](execution-plan-phase-s-stabilization.md), 03-A and 06-C as allocated by the [scope](README.md). This is not an active instruction to implement another adapter or mark the foundation fully accepted.
+
 **Date:** 2026-08-11  
-**Status:** Done  
+**Status:** Historical implementation complete; active acceptance tracked in S / 03-A / 06-C.
 **Prerequisite:** Phase B Done  
 **Scope:** [`README.md`](README.md)  
 **Index:** [`execution-plan.md`](execution-plan.md)  
@@ -53,7 +55,6 @@ terminal exclusivity, restart, capability honesty, and secret-shaped values.
 - Review mandatory interface methods against at least the four planned runtimes.
 - Confirm frontend-facing packages import only common contracts.
 
-## Handoff
+## Historical handoff superseded
 
-Phase D consumes these contracts as the host protocol payload model; changes
-after that point require protocol version consideration.
+Follow the active execution index: stabilize S, then Codex 03-A. Earlier handoff and Done instructions no longer determine delivery order.

@@ -1,69 +1,39 @@
-# 01 — Execution plan index
+# 01 — Execution plan index: foundation and stabilization
 
-**Date:** 2026-08-11  
-**Status:** Done (2026-08-15)  
-**Milestone scope:** [`README.md`](README.md)  
-**Roadmap:** [`../roadmap.md`](../roadmap.md)
+**Date:** 2026-10-04
 
-**Requirements evidence:** Read the locked decisions in [`README.md`](README.md),
-the architecture and persistence sections in [`../roadmap.md`](../roadmap.md),
-and characterize the current Chat/workspace-agent behavior before deleting or
-replacing code.
+**Status:** Planned
 
-## 1. Milestone overview
+**Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
-```text
-01 — Sessions foundation and Agent Host
-  Phase A  Remove Chat and dormant Cloud surfaces
-  Phase B  Runtime-neutral session domain and persistence
-  Phase C  Adapter core, capabilities and deterministic fake runtime
-  Phase D  Bundled Agent Host and JSON-RPC protocol
-  Phase E  Tauri supervision and process-tree cleanup
-  Phase F  Sessions UX integration and foundation exit
-```
+## Execution order
 
-| Phase | Plan doc | Effort | Ship independently? |
-| ----- | -------- | ------ | ------------------- |
-| **A** | [`execution-plan-phase-a-chat-removal.md`](execution-plan-phase-a-chat-removal.md) | L | Yes |
-| **B** | [`execution-plan-phase-b-session-domain.md`](execution-plan-phase-b-session-domain.md) | L | No |
-| **C** | [`execution-plan-phase-c-adapter-contract.md`](execution-plan-phase-c-adapter-contract.md) | M/L | No |
-| **D** | [`execution-plan-phase-d-agent-host.md`](execution-plan-phase-d-agent-host.md) | L | No |
-| **E** | [`execution-plan-phase-e-supervision.md`](execution-plan-phase-e-supervision.md) | M/L | No |
-| **F** | [`execution-plan-phase-f-sessions-ux-exit.md`](execution-plan-phase-f-sessions-ux-exit.md) | L | Yes, foundation preview |
+Historical A → B → C → D → E → F records remain below; **only S is the next foundation execution slice**. Execute S-01 → S-02 → S-03 → S-04 → S-05, closing P0 before credentials. Tasks can overlap only when persistence/transport/lifecycle boundaries are agreed.
 
-**Dependency graph:** `A → B → C → D → E → F`. Phase A may begin in parallel
-with detailed design for B/C, but implementation handoff follows this order.
+| Phase | Plan | Effort | Delivery gate |
+| --- | --- | --- | --- |
+| S | [Stabilization](execution-plan-phase-s-stabilization.md) | M/L | Prerequisite for live account work |
 
-**Delivery policy:** Pre-launch; change schemas directly. Do not add migrations,
-compatibility shims, branches, or PR-only workflow.
+## Delivery policy
 
-## 2. Task ID convention
+Do not use historical Done as acceptance evidence. Active creation/profile/catalog work is 03-A; installed build is 06-C. No branches/PR workflow or persisted-data migrations.
 
-`AS01-<phase>-<NN>` identifies one focused implementation task. Mark task
-headings `[DONE]` without rewriting their descriptions.
+## Exit verification
 
-## 3. Implementation slicing
+- Full production binding survives fresh-process restart.
+- No hung request/turn/quit or unsafe error path; no orphans on supported targets.
+- Negative protocol/contract fixtures verify terminal completion, backpressure and redaction.
+- Review ledger has no unowned critical finding.
 
-Each phase document is intended for one agent handoff. If a phase cannot fit one
-working session, the agent must stop at a documented task boundary and update
-its status rather than silently expanding scope.
+## Task tracking
 
-## 4. Exit verification
+Use `AS01-<phase>-<NN>` for task IDs. Folder prefixes are stable milestone identities, not delivery order. Planned dependencies are conditions to satisfy, not claims that upstream work is Done. Keep scope bounded by task acceptance; record fixtures, version/support scope and residual gaps. Mark only implemented and verified tasks `[DONE]` and log changes in `specs/changelog.md`.
 
-| Check | Required result |
-| ----- | --------------- |
-| Product surfaces | Chat/Cloud absent; workspace Sessions remains |
-| Domain | New codecs round-trip; no legacy compatibility branches |
-| Protocol | Framing, limits, cancellation, timeouts and version negotiation pass |
-| Supervision | Crash/restart/shutdown leaves no child processes |
-| UI | Fake runtime lifecycle works end to end |
-| Regression | Editor, workspace, version-control and non-AI suites green |
+## Historical phase records
 
-## 5. Phase plans
-
-- [Phase A](execution-plan-phase-a-chat-removal.md)
-- [Phase B](execution-plan-phase-b-session-domain.md)
-- [Phase C](execution-plan-phase-c-adapter-contract.md)
-- [Phase D](execution-plan-phase-d-agent-host.md)
-- [Phase E](execution-plan-phase-e-supervision.md)
-- [Phase F](execution-plan-phase-f-sessions-ux-exit.md)
+- [execution-plan-phase-a-chat-removal.md](execution-plan-phase-a-chat-removal.md)
+- [execution-plan-phase-b-session-domain.md](execution-plan-phase-b-session-domain.md)
+- [execution-plan-phase-c-adapter-contract.md](execution-plan-phase-c-adapter-contract.md)
+- [execution-plan-phase-d-agent-host.md](execution-plan-phase-d-agent-host.md)
+- [execution-plan-phase-e-supervision.md](execution-plan-phase-e-supervision.md)
+- [execution-plan-phase-f-sessions-ux-exit.md](execution-plan-phase-f-sessions-ux-exit.md)

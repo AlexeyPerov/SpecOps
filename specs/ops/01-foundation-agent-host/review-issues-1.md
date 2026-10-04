@@ -1,5 +1,7 @@
 # 01 — Review issues (round 1)
 
+> Historical review snapshot. Its earlier phase-02 delivery recommendation is superseded by the 2026-10-04 [roadmap](../roadmap.md). [Phase S](execution-plan-phase-s-stabilization.md) owns stabilization and the disposition of these findings; the original observations remain evidence, not a claim that they are all still untriaged or already fixed.
+
 **Date:** 2026-08-15
 **Scope:** milestone 01 phases A–F implementation review (session domain, adapter
 contract + fake runtime, Agent Host package, Tauri supervision, frontend Sessions

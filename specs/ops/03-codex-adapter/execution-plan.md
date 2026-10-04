@@ -1,58 +1,34 @@
-# 03 — Execution plan index
+# 03 — Execution plan index: Codex-first delivery
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Milestone scope:** [`README.md`](README.md)  
-**Roadmap:** [`../roadmap.md`](../roadmap.md)
+**Date:** 2026-10-04
 
-**Requirements evidence:** Read [`README.md`](README.md), phase-01 protocol
-contracts, lessons recorded during phase 02, and schemas generated from the
-pinned app-server version.
+**Status:** Planned
 
-## 1. Milestone overview
+**Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
-```text
-03 — Codex adapter
-  Phase A  Process/protocol bootstrap and authentication
-  Phase B  Thread/turn lifecycle and streamed events
-  Phase C  Modes, account state and native-history reconciliation
-  Phase D  Drift handling, security, contract tests and exit
-```
+## Execution order
 
-| Phase | Plan doc | Effort | Ship independently? |
-| ----- | -------- | ------ | ------------------- |
-| **A** | [`execution-plan-phase-a-protocol-auth.md`](execution-plan-phase-a-protocol-auth.md) | L | No |
-| **B** | [`execution-plan-phase-b-thread-events.md`](execution-plan-phase-b-thread-events.md) | L | Developer preview |
-| **C** | [`execution-plan-phase-c-capabilities-history.md`](execution-plan-phase-c-capabilities-history.md) | M/L | Developer preview |
-| **D** | [`execution-plan-phase-d-hardening-exit.md`](execution-plan-phase-d-hardening-exit.md) | M | Yes |
+01-S → A → B → C → D. D additionally requires early 06-B/C; neither early phase depends on D or handoff. E follows accepted D at delivery slot 6 and is excluded from first-preview gate.
 
-**Dependency graph:** `A → B → C → D`.
+| Phase | Plan | Effort | Delivery gate |
+| --- | --- | --- | --- |
+| A | [Isolated profile and authentication](execution-plan-phase-a-protocol-auth.md) | M/L | Baseline prerequisite |
+| B | [Native coding slice and minimum resume](execution-plan-phase-b-thread-events.md) | L | Developer slice |
+| C | [Native config, limits and reconciliation](execution-plan-phase-c-capabilities-history.md) | M/L | Baseline prerequisite |
+| D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | M/L | Installed preview gate |
+| E | [Multiple simultaneous SpecOps profiles](execution-plan-phase-e-multi-profile.md) | L | Later optional extension |
 
-**Delivery policy:** Fail closed on unsupported protocol versions. Real auth
-flows remain manually gated.
+## Delivery policy
 
-## 2. Task ID convention
+Read official pinned protocol/auth/config and the audit. Add profile identity consistently to domain, host, client, persistence and control-plane events. Keep existing AS03-A–D task IDs; audit proposal labels AS03-P/M/R map to A/B/C–D. No native protocol negotiation assumption or live secrets in default tests.
 
-Use `AS03-A-*` through `AS03-D-*`. Mark task headings `[DONE]` when complete.
+## Exit verification
 
-## 3. Implementation slicing
+- Desktop-A/SpecOps-B isolation, profile identity, production persistence and same-thread restart.
+- Tools/approvals/questions where supported, bounded cancel/failure and truthful catalogs/config.
+- Native/cache reconciliation, profile limits and safe diagnostics.
+- Installed macOS build works outside checkout; first preview does not wait for E or any other vendor.
 
-Each phase plan is one agent handoff. Changes to common contracts require
-evidence that phase 02 cannot express the needed behavior via capabilities.
+## Task tracking
 
-## 4. Exit verification
-
-| Check | Required result |
-| ----- | --------------- |
-| Coexistence | Claude and Codex sessions remain independently usable |
-| Auth | API-key and official ChatGPT login complete without secret persistence |
-| Lifecycle | Threads/turns stream, cancel and resume correctly |
-| Drift | Mismatched protocol version fails before partial parsing |
-| Contract/smoke | Shared suite and gated credential smokes green |
-
-## 5. Phase plans
-
-- [Phase A](execution-plan-phase-a-protocol-auth.md)
-- [Phase B](execution-plan-phase-b-thread-events.md)
-- [Phase C](execution-plan-phase-c-capabilities-history.md)
-- [Phase D](execution-plan-phase-d-hardening-exit.md)
+Use `AS03-<phase>-<NN>` for task IDs. Folder prefixes are stable milestone identities, not delivery order. Planned dependencies are conditions to satisfy, not claims that upstream work is Done. Keep scope bounded by task acceptance; record fixtures, version/support scope and residual gaps. Mark only implemented and verified tasks `[DONE]` and log changes in `specs/changelog.md`.

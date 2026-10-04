@@ -1,60 +1,52 @@
-# 04 — Phase C: optional extensions, stores and settings UI
+# 04 — Phase C: later native extensions and settings
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisite:** Phase B Done  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Preserve rich existing capabilities without reshaping the common adapter core.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own optional feature extensions, runtime-specific stores/panels, capability
-descriptors, and a parity/deferred ledger. Do not migrate legacy persisted sessions.
+**Prerequisites:** AS04-D accepted core cutover. Default delivery slot 6 after Claude baseline; not a prerequisite for OpenCode core release.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Restore valuable native feature depth through optional host extensions without expanding the mandatory core.
+
+## Implementation boundary
+
+Own retained parity-ledger features, provider-specific host logic, common extension UI and independent settings refresh. No revival of old SDK/supervisor path.
 
 ## Tasks
 
-### AS04-C-01 — Establish parity/deferred ledger
+### AS04-C-01 — Prioritize retained-feature ledger
 
-Enumerate lifecycle actions, commands, search, configuration, provider auth,
-MCP, skills, agents, todos, diffs, file status, and language-service behavior.
+Review A/D ledger for lifecycle actions, commands/search, todos/diffs/file status/language services, configuration, providers/models/auth, MCP/skills/agents. Select bounded retained work; explicitly revise scope for excluded features.
 
-**Acceptance:** Every existing user-visible feature has an owner, target extension, test, or explicit deferment rationale.
+**Acceptance:** Every retained category has target extension/test and every excluded category has explicit disposition; no unowned blanket promise of parity.
 
-### AS04-C-02 — Port lifecycle and workspace extensions
+### AS04-C-02 — Implement native lifecycle and workspace extensions
 
-Implement supported fork/revert/share/summarize, commands, file search, todos,
-diffs, file status, and language-service extensions.
+Add supported fork/revert/share/summarize, commands/file search, todos/diffs/file status and language-service functionality as selected in ledger. Native actions preserve profile scope; Stop remains separate from any explicit native revert action.
 
-**Acceptance:** Each action is capability-gated and unavailable actions cannot produce no-op requests.
+**Acceptance:** Each retained action has real native behavior and capability gate; unsupported actions send no request. Common UI does not import vendor types.
 
-### AS04-C-03 — Port configuration and ecosystem extensions
+### AS04-C-03 — Implement native configuration and ecosystem extensions
 
-Implement provider/model management, provider auth, configuration, MCP, skills,
-and agent discovery/control as runtime-specific extensions.
+Expose selected provider/model/auth/config, MCP/skills/agents through runtime-specific host extensions and bounded UI state. Clearly show workspace/profile configuration ownership.
 
-**Acceptance:** Credentials remain host-side; common UI imports no provider types.
+**Acceptance:** Credentials remain host-side; refresh/failure/logout affects the owning profile only and cannot erase another runtime session.
 
-### AS04-C-04 — Replace stores and preserve settings panels
+### AS04-C-04 — Replace extension stores and accept retained parity
 
-Move provider-specific frontend stores behind generic/extension state and adapt
-rich settings panels to host requests/events.
+Update settings/panels to host requests/control-plane events. Compare retained fixtures and verify extension absence/presence, redaction and enabled handoff integration without reintroducing direct client dependencies.
 
-**Acceptance:** One runtime can refresh/fail independently without clearing another runtime’s session state.
-
-### AS04-C-05 — Extension parity tests
-
-Add fixture/component tests for each retained extension and finalize the deferred ledger.
-
-**Acceptance:** Phase D has a finite, reviewed cutover checklist with no unknown feature category.
+**Acceptance:** Retained rows have automated or recorded native evidence, deferred rows stay unavailable, and new core path remains the only runtime owner.
 
 ## Verification
 
-- Run extension schema/store/component tests and credential redaction checks.
-- Walk every parity-ledger row in new-path UI.
-- Search common packages for provider-specific extension types.
+- Run selected extension/capability/settings/store UI fixtures and canaries.
+- Walk retained ledger rows in installed app; inspect frontend import graph.
 
-## Handoff
+## Exit and next work
 
-Phase D starts only after the parity/deferred ledger is reviewed and all retained
-features have automated or recorded manual evidence.
+Record C completion separately from D baseline and rerun selected-scope 06-D for advertised new features. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

@@ -1,39 +1,40 @@
-# 05 — Phase A: SDK bootstrap, auth, health and catalogs
+# 05 — Phase A: feasibility, auth and installed SDK bootstrap
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Prerequisites:** Milestones 01–04 Done  
-**Scope:** [`README.md`](README.md)  
-**Index:** [`execution-plan.md`](execution-plan.md)  
-**Goal:** Load the pinned local SDK in Agent Host and expose honest runtime/auth/catalog state.
+**Date:** 2026-10-04
 
-## Agent handoff boundary
+**Status:** Planned
 
-Own SDK packaging, version/health, user/service-account API-key flow, model/mode
-catalogs, and bootstrap tests. Agent/run lifecycle belongs to Phase B.
+**Prerequisites:** AS03-D plus accepted shared contract/profile/06-B/C infrastructure. Default slot 7 after initial integrations; handoff is not a technical prerequisite.
+
+**Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+## Goal
+
+Verify the current official local SDK before promising a Cursor adapter.
+
+## Implementation boundary
+
+Own native SDK/auth/capability/asset feasibility spike then pinned bootstrap/profile state. Cloud execution is excluded.
 
 ## Tasks
 
-### AS05-A-01 — Pin and package the beta SDK
+### AS05-A-01 — Verify and pin native SDK feasibility
 
-Add a tested SDK version inside Agent Host, record compatibility/licensing and
-runtime requirements, and isolate all imports to the adapter.
+Probe current official SDK local mode: runtime loop, native durable history store, stream/cancel, native policy/hook enforcement and unsupported interaction behavior. Record exact Node/OS/native asset/version and bundling requirements. Choose supported SDK entry/storage for the actual host packaging; do not assume a single JS file contains native binaries.
 
-**Acceptance:** Packaged host discovers the adapter and reports exact SDK/beta version independently.
+**Acceptance:** Written feasibility ledger and installed native-asset probe identify viable local path and unknowns. Pin tested version before implementation; unsupported semantics are not promised.
 
-### AS05-A-02 — Implement supported API-key auth
+### AS05-A-02 — Implement current supported profile authentication
 
-Route user/service-account keys through the credential boundary with status,
-probe, invalid/expired handling, logout/clear, and redaction.
+Use supported user/service API keys through host credential boundary. Evaluate official browser-assisted login and its minted credential storage/current third-party embedding support before exposing it. Keep selected profile/environment, login progress and logout independent from other runtime accounts.
 
-**Acceptance:** Keys never enter frontend state, logs, snapshots, transcripts, or diagnostic export.
+**Acceptance:** Profile-local auth/status/probe/logout works; no keys/tokens/native auth files enter frontend state/logs/errors/export; unsupported flow has explicit capability state.
 
-### AS05-A-03 — Map health, models and modes
+### AS05-A-03 — Expose actual catalog and runtime support state
 
-Read actual catalogs/availability from the SDK, normalize stable ids/labels,
-and expose loading/offline/unsupported/beta states.
+Read supported models/settings using selected profile; separate model/options/native sandbox/tool control rather than assuming generic mode. Document actual release maturity/version instead of permanently labeling every version beta.
 
-**Acceptance:** No generic HTTP-provider key or catalog fallback is used.
+**Acceptance:** Loading/offline/auth/missing-native-asset/unsupported states are distinct; no HTTP model wrapper or generic provider fallback replaces native harness.
 
 ### AS05-A-04 — Bootstrap tests
 
@@ -44,10 +45,10 @@ catalog refresh, and adapter-local offline state.
 
 ## Verification
 
-- Run host build, adapter bootstrap, auth/redaction, descriptor and catalog tests.
-- Inspect diagnostic fixtures using secret canaries.
-- Perform an optional gated auth/catalog probe.
+- Run adapter/profile/schema/mapper and capability fixtures appropriate to this phase, using no live credential by default.
+- Check error/log/transcript/export boundaries with canaries and late profile/generation events.
+- Record pinned native contracts and optional real-runtime/installed smoke for the advertised support scope.
 
-## Handoff
+## Exit and next work
 
-Phase B starts when the adapter is healthy, authenticated, and reports stable catalogs.
+B follows proven local SDK/installed-assets feasibility and stable authenticated profile/catalog; record blocked native assumptions instead of implementing prompt emulation. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.

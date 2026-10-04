@@ -1,73 +1,52 @@
-# 06 — Handoff, shared-workspace observability, and release polish
+# 06 — Shared activity, packaging, handoff and release gates
 
-**Status:** Planned  
-**Date:** 2026-08-11  
-**Main doc (SSOT):** [`../roadmap.md`](../roadmap.md)  
-**Execution plan:** [`execution-plan.md`](execution-plan.md)  
-**Phase plans:** [A](execution-plan-phase-a-handoff.md), [B](execution-plan-phase-b-observability.md), [C](execution-plan-phase-c-packaging-diagnostics.md), [D](execution-plan-phase-d-release-exit.md)
+**Date:** 2026-10-04
 
-This milestone completes the cross-runtime workflow and makes permissive
-shared-workspace execution understandable, diagnosable, and releasable.
+**Status:** Planned
 
-## Locked decisions (2026-08-11)
+**Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
-| # | Topic | Choice |
-| - | ----- | ------ |
-| 1 | Handoff | New target-native session seeded by a user-reviewed context packet |
-| 2 | Concurrency | Warn and observe; never lock, isolate, or serialize writers |
-| 3 | Recovery | Stop does not roll back files; git recovery remains user-owned |
-| 4 | Distribution | Bundle/install runtimes only where licensing permits; support PATH overrides |
-| 5 | Diagnostics | Support bundles are redacted and runtime health is independent |
+**Evidence:** [Implementation audit](../audit-2026-10-04.md)
 
-## Goal
+Shared work is split by actual dependencies: B/C before usable Codex; A after two accepted native runtimes; D runs for every selected-scope release and only closes finally when roadmap scope is complete.
 
-Users can hand work between enabled runtimes and safely understand concurrent
-activity, while release builds supervise every process and provide actionable,
-secret-safe recovery information.
+## Decisions
 
-## Scope
+- B/C are independent of handoff and later vendor adapters.
+- Shared cwd execution warns/observes; no locks, isolation, serialization or automatic git recovery.
+- Bundle host and compatible Node; vendor executable may be explicitly user-managed if distribution requires.
+- Handoff requires reviewed content, new target-native session and selected target profile.
+- Support exports are bounded/allowlisted and omit auth/native homes/raw tool output by default.
 
-| ID | Item | Current state |
-| --- | ---- | ------------- |
-| AS06-A | Reviewable cross-runtime handoff and lineage | Missing |
-| AS06-B | Running/writer visibility, warnings and overlap signals | Missing |
-| AS06-C | Packaging, health, diagnostics and recovery UX | Partial |
-| AS06-D | Platform matrix, security, docs and release exit | Missing |
+## Scope and current state
 
-## Outcome
+| Phase | Work | State |
+| --- | --- | --- |
+| AS06-B | [Early workspace activity](execution-plan-phase-b-observability.md) | Missing |
+| AS06-C | [Early installed build/diagnostics](execution-plan-phase-c-packaging-diagnostics.md) | Partial infrastructure; acceptance missing |
+| AS06-A | [Later reviewable handoff](execution-plan-phase-a-handoff.md) | Missing |
+| AS06-D | [Subset release matrix and final closure](execution-plan-phase-d-release-exit.md) | Missing |
 
-- Every enabled runtime pair can create a traceable handoff session.
-- Concurrent writers remain allowed and visibly risky.
-- Release builds leave no orphan processes and produce secret-safe diagnostics.
+## Dependencies and delivery
 
-## Dependencies
+S enables packaging preparation; 03-B enables B and C runtime acceptance. B/C + 03-C → 03-D; first selected-scope D follows Codex D. A requires at least two accepted baselines and defaults to slot 6. D later covers only features selected for each release; final closure requires full active roadmap.
 
-- **Phases 01–05** — Done for every runtime included in release.
+## Expected outcomes
 
-**Blocks:** production release of the multi-runtime Sessions product.
+- First installed Codex preview has writer visibility, useful safe diagnostics and recovery.
+- Every advertised handoff pair/profile is tested when shipped.
+- Supported platform scope is evidence-backed and native children are reaped.
 
 ## Out of scope
 
-- Native history transfer or native-id reuse across vendors.
-- Automatic worktrees, locks, branches, commits, stashes, rollback, or merging.
-- A general-purpose third-party agent platform.
-
-## Risks
-
-- **Sensitive handoff content** — default-exclude raw tool output and require
-  review before the first target prompt.
-- **Platform-specific process behavior** — require launch-to-shutdown smoke on
-  every supported target.
+- Data migrations, credential/thread portability, automatic account rotation.
+- Automatic worktrees, locks, branches, commits, stash, rollback or merge.
+- A mandatory all-runtime release or standalone Cloud product surface.
 
 ## Definition of done
 
-- All phase plans A–D and the supported-platform matrix pass.
-- User-facing auth, capability, risk, handoff, diagnostics, and recovery docs ship.
-- Status is changed to Done here and in [`../roadmap.md`](../roadmap.md).
-
-### Definition of done — docs
-
-- [ ] Runtime support/capability table finalized.
-- [ ] Shared-workspace risk and recovery guide finalized.
-- [ ] Changelog entry appended in [`../../changelog.md`](../../changelog.md).
-- [ ] Release exit manually reviewed.
+- [ ] B/C accepted for first usable Codex preview and extended for enabled adapters/platforms.
+- [ ] A pairwise/review/security gate accepted when handoff ships.
+- [ ] Each subset release has D evidence; missing later tasks remain Planned.
+- [ ] Full roadmap scope verified before final D/roadmap closure.
+- [ ] Setup/auth/profile/limits/native capability/risk/recovery docs and changelog current.

@@ -1,59 +1,34 @@
-# 06 — Execution plan index
+# 06 — Execution plan index: early delivery and later handoff
 
-**Date:** 2026-08-11  
-**Status:** Planned  
-**Milestone scope:** [`README.md`](README.md)  
-**Roadmap:** [`../roadmap.md`](../roadmap.md)
+**Date:** 2026-10-04
 
-**Requirements evidence:** Read [`README.md`](README.md), the shared-`cwd` and
-handoff sections in [`../roadmap.md`](../roadmap.md), and the shipped capability
-descriptors for every enabled runtime.
+**Status:** Planned
 
-## 1. Milestone overview
+**Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
-```text
-06 — Handoff and release polish
-  Phase A  Reviewable cross-runtime handoff and lineage
-  Phase B  Shared-workspace activity and conflict observability
-  Phase C  Packaging, health, diagnostics and recovery
-  Phase D  Platform/security matrix, docs and release exit
-```
+## Execution order
 
-| Phase | Plan doc | Effort | Ship independently? |
-| ----- | -------- | ------ | ------------------- |
-| **A** | [`execution-plan-phase-a-handoff.md`](execution-plan-phase-a-handoff.md) | L | Yes |
-| **B** | [`execution-plan-phase-b-observability.md`](execution-plan-phase-b-observability.md) | M/L | Yes |
-| **C** | [`execution-plan-phase-c-packaging-diagnostics.md`](execution-plan-phase-c-packaging-diagnostics.md) | L | No |
-| **D** | [`execution-plan-phase-d-release-exit.md`](execution-plan-phase-d-release-exit.md) | M/L | Yes, release gate |
+B and C are independent early gates: 03-B → B/C → 03-D. C design/build can start after S. A follows at least two accepted adapters (default slot 6). D runs after the selected baseline gates and depends on A only if handoff is selected. There is no A → B → C chain.
 
-**Dependency graph:** `A → B`; `A + B → C → D`. A and B may be implemented in
-parallel only after their shared session-lineage/activity schema is agreed.
+| Phase | Plan | Effort | Delivery gate |
+| --- | --- | --- | --- |
+| B | [Early workspace activity](execution-plan-phase-b-observability.md) | M/L | Early Codex gate |
+| C | [Early installed build/diagnostics](execution-plan-phase-c-packaging-diagnostics.md) | M/L | Early Codex gate |
+| A | [Later reviewable handoff](execution-plan-phase-a-handoff.md) | M/L | After two accepted runtimes |
+| D | [Subset release matrix and final closure](execution-plan-phase-d-release-exit.md) | M | Each release; final closure separately |
 
-**Delivery policy:** Handoff requires user review. Concurrency controls warn and
-observe but never lock, isolate, serialize, commit, or roll back.
+## Delivery policy
 
-## 2. Task ID convention
+Test supported subsets, not imaginary four-runtime completion. First usable preview is macOS/Codex. Keep historical AS06-A/B/C/D IDs even though B/C execute first. B/C changes are extended and reverified as SDK/native assets or targets are added.
 
-Use `AS06-A-*` through `AS06-D-*`. Mark task headings `[DONE]` when complete.
+## Exit verification
 
-## 3. Implementation slicing
+- Installed host/Node/native setup works outside checkout.
+- Shared-writer/external-edit visibility and bounded Stop/recovery.
+- Allowlisted secret-safe diagnostics and profile-scoped state.
+- Reviewable handoff only after its enabled-pair acceptance; no native history transfer.
+- Subset release evidence cannot close unimplemented roadmap scope.
 
-Each phase is one agent handoff. Platform-specific fixes discovered in D stay in
-D unless they require a contract correction, which must be recorded explicitly.
+## Task tracking
 
-## 4. Exit verification
-
-| Check | Required result |
-| ----- | --------------- |
-| Handoff | Every enabled pair creates a new traceable session from reviewed content |
-| Concurrency | Second writer warns but remains allowed; overlap signals are best effort |
-| Security | Handoff/support bundles exclude secret canaries and raw tool output by default |
-| Processes | Launch, crash, restart and shutdown leave no orphans on supported platforms |
-| Docs | Auth, capabilities, risks, handoff, diagnostics and recovery are complete |
-
-## 5. Phase plans
-
-- [Phase A](execution-plan-phase-a-handoff.md)
-- [Phase B](execution-plan-phase-b-observability.md)
-- [Phase C](execution-plan-phase-c-packaging-diagnostics.md)
-- [Phase D](execution-plan-phase-d-release-exit.md)
+Use `AS06-<phase>-<NN>` for task IDs. Folder prefixes are stable milestone identities, not delivery order. Planned dependencies are conditions to satisfy, not claims that upstream work is Done. Keep scope bounded by task acceptance; record fixtures, version/support scope and residual gaps. Mark only implemented and verified tasks `[DONE]` and log changes in `specs/changelog.md`.

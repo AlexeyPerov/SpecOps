@@ -1,7 +1,9 @@
 # 01 — Phase A: remove Chat and dormant Cloud surfaces
 
+> Historical implementation record. The 2026-10-04 [active index](execution-plan.md) supersedes delivery/handoff instructions here. Landed tasks remain recorded; acceptance gaps are reopened in [S](execution-plan-phase-s-stabilization.md), 03-A and 06-C as allocated by the [scope](README.md). This is not an active instruction to implement another adapter or mark the foundation fully accepted.
+
 **Date:** 2026-08-11  
-**Status:** Done  
+**Status:** Historical implementation complete; active acceptance tracked in S / 03-A / 06-C.
 **Scope:** [`README.md`](README.md)  
 **Index:** [`execution-plan.md`](execution-plan.md)  
 **Goal:** Remove obsolete product lanes while preserving reusable Sessions rendering.
@@ -53,7 +55,6 @@ frontend/domain suites pass.
 - Exercise cold start, workspace restore, Notepad, editor, and version control.
 - Run affected frontend and persistence tests plus type checking.
 
-## Handoff
+## Historical handoff superseded
 
-Mark Phase A Done only when the removed lanes cannot be restored from active
-state. Phase B then introduces the clean session schema.
+Follow the active execution index: stabilize S, then Codex 03-A. Earlier handoff and Done instructions no longer determine delivery order.

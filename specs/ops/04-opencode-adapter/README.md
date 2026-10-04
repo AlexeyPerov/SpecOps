@@ -1,73 +1,51 @@
-# 04 — OpenCode adapter migration
+# 04 — OpenCode core cutover, then native extensions
 
-**Status:** Planned  
-**Date:** 2026-08-11  
-**Main doc (SSOT):** [`../roadmap.md`](../roadmap.md)  
-**Execution plan:** [`execution-plan.md`](execution-plan.md)  
-**Phase plans:** [A](execution-plan-phase-a-host-lifecycle.md), [B](execution-plan-phase-b-core-parity.md), [C](execution-plan-phase-c-extensions-ui.md), [D](execution-plan-phase-d-cutover-exit.md)
+**Date:** 2026-10-04
 
-This milestone moves the completed OpenCode integration behind Agent Host while
-preserving its useful depth through optional extensions rather than expanding
-the mandatory common adapter contract.
+**Status:** Planned
 
-## Locked decisions (2026-08-11)
+**Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
-| # | Topic | Choice |
-| - | ----- | ------ |
-| 1 | Ownership | Agent Host owns the SDK/client and all runtime children |
-| 2 | Common core | Do not reshape it around OpenCode-specific capabilities |
-| 3 | Rich features | Preserve them through explicit optional extensions |
-| 4 | Persistence | Start clean; do not migrate legacy session state |
-| 5 | Cutover | Remove direct frontend client and old supervisor only after parity evidence |
+**Evidence:** [Implementation audit](../audit-2026-10-04.md)
 
-## Goal
+OpenCode is the scheduled second production runtime. Existing code/fixtures are input to a new host adapter; they are not proof of current Sessions parity.
 
-Claude, Codex, and OpenCode sessions coexist under the same host and UI, with
-the existing integration’s user-visible behavior preserved or explicitly deferred.
+## Decisions
 
-## Scope
+- Use one native owner in every intermediate state; host becomes sole owner at D.
+- Maintain required/retained/deferred ledger from A, before core implementation.
+- Execute A → B → D; optional C follows later and cannot block Codex/OpenCode baseline.
+- No frontend vendor SDK after core cutover; provider details remain native host extensions.
 
-| ID | Item | Current state |
-| --- | ---- | ------------- |
-| AS04-A | Move client/runtime lifecycle into Agent Host | Legacy direct path |
-| AS04-B | Core session, stream and interaction parity | Legacy implementation |
-| AS04-C | Optional feature extensions, stores and settings UI | Provider-shaped |
-| AS04-D | Legacy-path removal, fixture comparison, packaging exit | Missing |
+## Scope and current state
 
-## Outcome
+| Phase | Work | State |
+| --- | --- | --- |
+| AS04-A | [Ownership and finite parity ledger](execution-plan-phase-a-host-lifecycle.md) | Legacy implementation; host adapter missing |
+| AS04-B | [Core session/event parity](execution-plan-phase-b-core-parity.md) | Legacy implementation; host core missing |
+| AS04-D | [Core cutover and acceptance](execution-plan-phase-d-cutover-exit.md) | Missing |
+| AS04-C | [Later optional native extensions](execution-plan-phase-c-extensions-ui.md) | Later; missing |
 
-- The frontend bundle contains no runtime SDK import.
-- Tauri supervises only Agent Host; Agent Host owns the runtime process tree.
-- Existing capabilities retain parity or have an explicit deferred record.
+## Dependencies and delivery
 
-## Dependencies
+Codex 03-D → A → B → D. D extends early 06-B/C for this runtime and unblocks default Claude slot. C follows D in slot 6. Handoff is eligible once this second baseline is accepted; no Claude prerequisite for core.
 
-- **Phases 01–03** — Done; common contract proven by two independent adapters.
+## Expected outcomes
 
-**Blocks:** phase 05 and the first broad Sessions beta.
+- Codex/OpenCode native histories and profiles coexist independently.
+- Core cutover removes legacy frontend SDK and supervisor path.
+- Rich features ship later only with explicit ledger evidence.
 
 ## Out of scope
 
-- Migration of old persisted AI sessions.
-- Adding provider-specific methods to the mandatory adapter core.
-- New features not required for existing behavior parity.
-
-## Risks
-
-- **Large parity surface** — cut over in slices and compare recorded normalized
-  events before deleting the legacy path.
-- **Double process ownership** — establish Agent Host ownership first and keep a
-  single supervisor active in every intermediate state.
+- Persisted-state migration or complete rich-feature parity as a core release gate.
+- Mandatory core methods for vendor-specific capabilities.
+- New unscoped feature expansion.
 
 ## Definition of done
 
-- All phase plans A–D and legacy/new fixture comparisons pass.
-- Cross-platform packaging smoke passes before broad beta.
-- Status is changed to Done here and in [`../roadmap.md`](../roadmap.md).
-
-### Definition of done — docs
-
-- [ ] Capability parity/deferment table finalized.
-- [ ] Runtime settings and recovery docs updated.
-- [ ] Changelog entry appended in [`../../changelog.md`](../../changelog.md).
-- [ ] Exit criteria manually reviewed before phase 05 starts.
+- [ ] A/B/D core baseline, profile isolation and installed coexistence accepted.
+- [ ] Legacy execution and frontend SDK path removed at D.
+- [ ] Every legacy category has core/retained/deferred disposition and docs.
+- [ ] Retained C features accepted separately before full milestone Done, or explicit scope revision.
+- [ ] Applicable 06-D evidence, runtime setup/recovery docs and changelog recorded.

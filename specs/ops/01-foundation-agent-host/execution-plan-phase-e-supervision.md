@@ -1,7 +1,9 @@
 # 01 — Phase E: Tauri supervision and process-tree cleanup
 
+> Historical implementation record. The 2026-10-04 [active index](execution-plan.md) supersedes delivery/handoff instructions here. Landed tasks remain recorded; acceptance gaps are reopened in [S](execution-plan-phase-s-stabilization.md), 03-A and 06-C as allocated by the [scope](README.md). This is not an active instruction to implement another adapter or mark the foundation fully accepted.
+
 **Date:** 2026-08-11  
-**Status:** Done  
+**Status:** Historical implementation complete; active acceptance tracked in S / 03-A / 06-C.
 **Prerequisite:** Phase D Done  
 **Scope:** [`README.md`](README.md)  
 **Index:** [`execution-plan.md`](execution-plan.md)  
@@ -51,7 +53,6 @@ shutdown, noisy stderr, child spawning, and stale-generation events.
 - Manually kill/hang host during an active fake turn and verify recovery state.
 - Quit the app during a child-spawning fixture and inspect the process tree.
 
-## Handoff
+## Historical handoff superseded
 
-Phase F starts when fake-runtime traffic reliably crosses UI → Tauri → host and
-all supervised failure paths are deterministic.
+Follow the active execution index: stabilize S, then Codex 03-A. Earlier handoff and Done instructions no longer determine delivery order.

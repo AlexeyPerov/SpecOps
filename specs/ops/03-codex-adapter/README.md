@@ -1,79 +1,53 @@
-# 03 — Codex adapter
+# 03 — Codex native harness and isolated accounts
 
-**Status:** Planned  
-**Date:** 2026-08-11  
-**Main doc (SSOT):** [`../roadmap.md`](../roadmap.md)  
-**Execution plan:** [`execution-plan.md`](execution-plan.md)  
-**Phase plans:** [A](execution-plan-phase-a-protocol-auth.md), [B](execution-plan-phase-b-thread-events.md), [C](execution-plan-phase-c-capabilities-history.md), [D](execution-plan-phase-d-hardening-exit.md)
+**Date:** 2026-10-04
 
-**Planning review (2026-10-04):** Codex is now the first user priority. The
-[current audit and alternative plan](../audit-2026-10-04.md) propose removing
-the Claude prerequisite, introducing isolated connection profiles, and shipping
-a usable Codex slice before adding other runtimes. Account isolation, profile
-binding, native-config scope and installed-build acceptance are missing from
-the original phase plans below and must be incorporated in their next revision.
+**Status:** Planned
 
-This milestone adds the second production runtime through its official
-app-server protocol and tests that the common contract does not encode assumptions
-from the first adapter.
+**Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
-## Locked decisions (2026-08-11)
+**Evidence:** [Implementation audit](../audit-2026-10-04.md)
 
-| # | Topic | Choice |
-| - | ----- | ------ |
-| 1 | Integration | Launch and supervise a pinned app-server through Agent Host |
-| 2 | Authentication | Support API-key and official ChatGPT browser/device login |
-| 3 | Protocol drift | Fail closed with an unsupported-version error |
-| 4 | History | Native thread history is authoritative; SpecOps transcript is a cache |
+Codex is the first production adapter. Baseline A–D delivers a usable macOS preview with account B in SpecOps while desktop stays on A. E is later simultaneous profiles inside SpecOps.
 
-## Goal
+## Decisions
 
-Claude and Codex sessions coexist, authenticate independently, resume their own
-native histories, and use one capability-driven Sessions UI.
+- Use pinned official app-server in Agent Host; no frontend protocol/SDK or model-only agent loop.
+- Profile home/auth/config and child process are SpecOps-owned; account state and routing are profile-scoped.
+- Persist immutable runtime/profile/native-thread binding; native history is authoritative.
+- API key and official browser/device login only where supported by selected version/account.
+- Model, effort, collaboration, sandbox and approval policy are distinct settings.
 
-## Scope
+## Scope and current state
 
-| ID | Item | Current state |
-| --- | ---- | ------------- |
-| AS03-A | App-server process, schema pinning, init and auth | Missing |
-| AS03-B | Thread/turn lifecycle and streamed event normalization | Missing |
-| AS03-C | Modes, approvals, account/rate limits and history reconciliation | Missing |
-| AS03-D | Drift/recovery tests, credential smoke and milestone exit | Missing |
+| Phase | Work | State |
+| --- | --- | --- |
+| AS03-A | [Isolated profile and authentication](execution-plan-phase-a-protocol-auth.md) | Missing |
+| AS03-B | [Native coding slice and minimum resume](execution-plan-phase-b-thread-events.md) | Missing |
+| AS03-C | [Native config, limits and reconciliation](execution-plan-phase-c-capabilities-history.md) | Missing |
+| AS03-D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | Missing |
+| AS03-E | [Multiple simultaneous SpecOps profiles](execution-plan-phase-e-multi-profile.md) | Later; missing |
 
-## Outcome
+## Dependencies and delivery
 
-- Both official login paths work without frontend secret persistence.
-- Threads, turns, tools, approvals, questions, cancellation, sandbox state, and
-  rate limits are represented through common capabilities.
-- Either runtime may be offline without disabling the other.
+01-S → A → B → C; B also feeds independent early 06-B/C. C + 06-B/C → D → selected-scope 06-D release. No Claude prerequisite. Accepted D unblocks 04 core; E follows D at slot 6.
 
-## Dependencies
+## Expected outcomes
 
-- **Phase 01** foundation — Done.
-- **Phase 02** first real adapter — Done and contract lessons incorporated.
-
-**Blocks:** phase 04 adapter migration.
+- Real coding tasks use native tools, permissions and history.
+- Fresh installed-app restart resumes same B profile/thread; logout B preserves desktop A.
+- Missing runtime/auth/history/quota states are actionable without implicit replay.
 
 ## Out of scope
 
-- Reimplementing the app-server protocol in the frontend.
-- Treating cached transcript data as native source of truth.
-- Cross-runtime handoff — phase 06.
-
-## Risks
-
-- **Schema drift** — pin schemas and versions; reject mismatches before a turn.
-- **Interactive auth interruption** — persist no secret and expose resumable,
-  explicit login state.
+- Account rotation to bypass quota or thread transfer between accounts.
+- Full desktop feature duplication, voice/browser/cloud parity or prompt-based policy emulation.
+- Persisted-data migration or a prerequisite implementation of another vendor adapter.
 
 ## Definition of done
 
-- All phase plans A–D and the shared adapter contract pass.
-- API-key and ChatGPT-login smokes pass behind manual credential gates.
-- Status is changed to Done here and in [`../roadmap.md`](../roadmap.md).
-
-### Definition of done — docs
-
-- [ ] Authentication, modes, account state, version support, and recovery documented.
-- [ ] Changelog entry appended in [`../../changelog.md`](../../changelog.md).
-- [ ] Exit criteria manually reviewed before phase 04 starts.
+- [ ] Baseline A–D tasks, strengthened shared contract and profile/credential canaries pass.
+- [ ] 06-B/C installed macOS/activity/diagnostic gates pass and selected-scope 06-D release record exists.
+- [ ] Actual desktop-A/SpecOps-B smoke passes; unsupported login variants recorded honestly.
+- [ ] Native feature ledger and setup/config/history/recovery docs are current; changelog updated.
+- [ ] For full milestone completion, later E accepted or explicitly removed from active scope; baseline acceptance alone does not mark E Done.

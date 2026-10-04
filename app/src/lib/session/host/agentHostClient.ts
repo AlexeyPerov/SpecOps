@@ -1,3 +1,4 @@
+import type { NativeExtensions } from "../adapter/nativeExtensions";
 import type { SessionConfigurationSchema } from "../adapter/extensions";
 /**
  * Frontend Agent Host client (phase F, task AS01-F-03).
@@ -169,6 +170,8 @@ export interface AgentHostClient {
   discover(): Promise<DiscoverResult>;
   subscribeProfiles(listener: (update: ProfileAuthUpdate) => void): Promise<() => void>;
   authenticate(request: AgentAuthRequest): Promise<AgentAuthResult>;
+  inspectNative: NativeExtensions["inspectNative"];
+  actNative: NativeExtensions["actNative"];
   catalogModels(runtimeId: AgentRuntimeId, workspaceRootPath?: string, connectionProfileId?: string): Promise<CatalogModelsResult>;
   catalogModes(runtimeId: AgentRuntimeId, modelId?: string, connectionProfileId?: string): Promise<CatalogModesResult>;
   createSession(request: CreateSessionRequest): Promise<NativeSessionRef>;
@@ -309,6 +312,8 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
       if (hostEpoch !== epoch) throw new Error("Agent Host was replaced during account verification. Retry this profile explicitly.");
       return { ...result, ...(result.profile ? { profile: { ...result.profile, hostGeneration: epoch } } : {}), ...(result.profiles ? { profiles: result.profiles.map(profile => ({ ...profile, hostGeneration: epoch })) } : {}) };
     },
+    inspectNative(input) { return request("native.inspect", input); },
+    actNative(input) { return request("native.action", input); },
     async catalogModels(runtimeId, workspaceRootPath, connectionProfileId) {
       return request<CatalogModelsResult>("catalog.models", {
         runtimeId,

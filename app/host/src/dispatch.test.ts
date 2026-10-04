@@ -432,3 +432,24 @@ it("turns oversized adapter events into one bounded failure and limits response 
   expect(eventsFor(stdout).at(-1)?.params.event.type).toBe("turn.failed");
   expect(stdout.lines.every((line) => Buffer.byteLength(line) <= 1024 * 1024 + 1)).toBe(true);
 });
+
+it("gates finite native extension requests against advertised capability and methods before invoking any operation", async () => {
+  let calls = 0;
+  const adapter = createFakeRuntimeAdapter();
+  adapter.describeCapabilities = async () => ({ schemaVersion: 1, supported: [], details: {} });
+  Object.assign(adapter, { inspectNative: async () => { calls++; return {}; }, actNative: async () => { calls++; return {}; } });
+  const { dispatcher, stdout } = makeDispatcher(adapter);
+  await initialize(dispatcher);
+  const native = await adapter.createSession({ runtimeId: adapter.runtimeId, workspaceRootPath: "/workspace" });
+  await call(dispatcher, "absent", "native.inspect", { native, workspaceRootPath: "/workspace", view: "todos" });
+  expect(errorFor(stdout, "absent").message).toContain("Capability not supported");
+  expect(calls).toBe(0);
+  adapter.describeCapabilities = async () => ({ schemaVersion: 1, supported: ["nativeExtensions"], details: {} });
+  await call(dispatcher, "unknown", "native.action", { native, workspaceRootPath: "/workspace", action: "shell" });
+  expect(errorFor(stdout, "unknown").code).toBe(ProtocolErrorCode.INVALID_PARAMS);
+  expect(calls).toBe(0);
+  delete (adapter as unknown as Record<string,unknown>).inspectNative;
+  await call(dispatcher, "missing", "native.inspect", { native, workspaceRootPath: "/workspace", view: "todos" });
+  expect(errorFor(stdout, "missing").message).toContain("Capability not supported");
+  expect(calls).toBe(0);
+});

@@ -23,7 +23,7 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 | [03 — Preview delivery](03-codex-preview-delivery/README.md) | Partial shared infrastructure; acceptance missing | Independent A activity and B packaging/recovery before 02-D |
 | [04 — OpenCode](04-opencode-adapter/README.md) | A/B/C host/core/cutover source verified; installed/account acceptance open | A → B → C core cutover |
 | [05 — Claude](05-claude-adapter/README.md) | A–D source native SDK/API key/sessions/interactions/policy/recovery/security implemented; installed/live baseline open | Installed/live acceptance |
-| [06 — Handoff/native extensions](06-handoff-native-extensions/README.md) | Missing | A handoff, B OpenCode depth, C simultaneous Codex profiles |
+| [06 — Handoff/native extensions](06-handoff-native-extensions/README.md) | A/B source verified; live/installed gates open | C simultaneous Codex profiles, live/installed acceptance |
 | [07 — Cursor](07-cursor-adapter/README.md) | Missing production adapter | A feasibility → B → C → D |
 | [08 — Release gates](08-release-gates/README.md) | Missing acceptance records | A per selected release; final closure after full scope |
 

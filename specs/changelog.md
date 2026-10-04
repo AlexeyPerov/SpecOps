@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 22:58 MSK — Add bounded native session lifecycle and workspace catalogs
+
+- Implemented AS06-B finite host capability requests, explicit fork/revert/restore/publish/revoke and configured tool-server connect/disconnect, with profile reservations and immutable generation/binding checks. Common Sessions attaches fresh fork lineage and reconciles native checkpoint history without replay; workspace watchers refresh.
+- Added selectable native checkpoints, bounded tasks/diffs/file/language/command/provider/config/tool/skill/agent projections and independent vendor-neutral UI. Private credential values and transport secrets are scrubbed before truncation; control bytes are capped before SDK parsing. External endpoints, unowned inference actions and arbitrary configuration/OAuth/editor flows remain unavailable with a finite scope ledger.
+- Verified source fixtures, neutral UI/client/pipeline/persistence checks and real isolated pinned account-free catalog/fork control smoke. Paid native restoration/sharing, signed installed/account/platform/cleanup acceptance remains open; expanded release baseline stays blocked. No migrations or compatibility shims.
+
 ## 2026-10-04 22:36 MSK — Add reviewed native session handoff and durable lineage
 
 - Implemented AS06-A common Handoff review with separately editable/removable bounded context sections, safe workspace excerpts/patches, target runtime/profile/model/policy selection and frozen exact first-prompt preview. Source native history stays independent; cancellation creates no target. Private paths/raw tool output/common secret values are excluded by default.

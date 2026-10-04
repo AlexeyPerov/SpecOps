@@ -115,14 +115,19 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({ model: "fixture/model", default_agent: "build" }));
     return;
   }
-  if (req.url === "/config/providers") {
+  if (path === "/config/providers") {
     res.end(JSON.stringify({ providers: [{ id: "fixture", name: "Fixture provider", models: { model: { id: "model", name: "Fixture model" } } }], default: { fixture: "model" } }));
     return;
   }
-  if (req.url === "/agent") {
+  if (path === "/agent") {
     res.end(JSON.stringify([{ name: "build", mode: "primary", hidden: false }]));
     return;
   }
+  if (path === "/session" && req.method === "GET") { res.end(JSON.stringify(Object.values(sessions).map(s => s.info))); return; }
+  if (["/skill", "/file/status", "/lsp", "/formatter"].includes(path)) { res.end("[]"); return; }
+  if (path === "/command") { res.end(JSON.stringify([{ name: "review", description: "Review change", hints: ["path"], agent: "build" }])); return; }
+  if (path === "/mcp") { res.end(JSON.stringify({ local: { status: "connected" } })); return; }
+  if (path === "/mcp/local/connect" || path === "/mcp/local/disconnect") { res.end("true"); return; }
   if (path === "/session" && req.method === "POST") {
     let body = "";
     for await (const chunk of req) body += chunk;
@@ -166,6 +171,13 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify(s.info));
       return;
     }
+    if (action === "todo") { res.end(JSON.stringify([{ id: "task", content: "Review changes", status: "pending", priority: "high" }])); return; }
+    if (action === "diff") { res.end(JSON.stringify([{ file: "src/main.ts", additions: 1, deletions: 0, before: "", after: "new code" }])); return; }
+    if (action === "share") { if (req.method === "POST") s.info.share = { url: "https://example.com/s/fixture" }; else delete s.info.share; save(); res.end(JSON.stringify(s.info)); return; }
+    if (action === "fork") { const child = "ses-" + (Object.keys(sessions).length + 1); sessions[child] = structuredClone(s); sessions[child].info.id = child; sessions[child].info.parentID = id; sessions[child].messages = sessions[child].messages.map(row => ({ info: { ...row.info, sessionID: child }, parts: row.parts.map(p => ({ ...p, sessionID: child })) })); save(); res.end(JSON.stringify(sessions[child].info)); return; }
+    if (action === "revert") { let body = ""; for await (const chunk of req) body += chunk; s.info.revert = { messageID: JSON.parse(body).messageID }; save(); res.end(JSON.stringify(s.info)); return; }
+    if (action === "unrevert") { delete s.info.revert; save(); res.end(JSON.stringify(s.info)); return; }
+    if (action?.startsWith("message/")) { const row = s.messages.find(row => row.info.id === action.slice(8)); if (!row) { res.statusCode = 404; res.end("{}"); } else res.end(JSON.stringify(row)); return; }
     if (action === "message") {
       res.end(JSON.stringify(s.messages));
       return;

@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** A source verified with external gates open; B/C planned
+**Status:** A/B source verified with external gates open; C planned
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -29,4 +29,8 @@ Task prefix is `AS06-<phase>-<NN>`. Numeric folders reflect the default delivery
 
 ## AS06-A source result
 
-[Implementation evidence](implementation-notes-phase-a.md): exact reviewed prompt, fresh native target, immutable profile/policy, neutral lineage and strict before-action intent CAS are implemented. All nine ordered source-adapter fixture pairs pass; real account/provider/installed acceptance is pending. No automatic repeat of an unknown creation or possibly accepted prompt is permitted. B/C remain independent later plans.
+[Implementation evidence](implementation-notes-phase-a.md): exact reviewed prompt, fresh native target, immutable profile/policy, neutral lineage and strict before-action intent CAS are implemented. All nine ordered source-adapter fixture pairs pass; real account/provider/installed acceptance is pending. No automatic repeat of an unknown creation or possibly accepted prompt is permitted. B is now selected-source verified; C remains an independent later plan.
+
+## AS06-B source result
+
+[Native extension source evidence](implementation-notes-phase-b.md) records native lifecycle, finite status/catalog projections, common UI and strict capability/profile/generation/security boundaries. [Retained ledger](../04-opencode-adapter/cutover-reference-evidence.md) explicitly excludes unowned inference/configuration/editor flows. Live and installed acceptance remains open.

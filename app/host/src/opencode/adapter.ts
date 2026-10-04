@@ -1,3 +1,6 @@
+import type { NativeExtensions, NativeExtensionRequest, NativeExtensionSnapshot, NativeExtensionResult, NativeView, NativeAction } from "../../../src/lib/session/adapter/nativeExtensions";
+import { NATIVE_ACTIONS, NATIVE_VIEWS } from "../../../src/lib/session/adapter/nativeExtensions";
+import { extensionScrubber, projectRows } from "./extensions";
 import { realpathSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isAbsolute } from "node:path";
@@ -47,10 +50,12 @@ export interface OpenCodeAdapterOptions {
   ) => RuntimeConnection;
 }
 export class OpenCodeRuntimeAdapter
-  implements AgentRuntimeAdapter, CatalogExtension
+  implements AgentRuntimeAdapter, CatalogExtension, NativeExtensions
 {
   readonly runtimeId = "opencode" as const;
   readonly store: RuntimeProfileStore;
+  private readonly creationReservations = new Set<string>();
+  private readonly extensionReservations = new Set<string>();
   private readonly connections = new Map<string, RuntimeConnection>();
   private readonly snapshots = new Map<string, ConnectionProfileSnapshot>();
   private readonly bindings = new Map<
@@ -85,11 +90,13 @@ export class OpenCodeRuntimeAdapter
     return {
       schemaVersion: 1 as const,
       supported: [
+        "nativeExtensions" as const,
         "catalogs" as const,
         "permissions" as const,
         "questions" as const,
       ],
       details: {
+        nativeExtensions: { supported: true, notes: "Bounded native views and explicit idle-session actions; configuration inspection only." },
         catalogs: { supported: true },
         permissions: { supported: true },
         questions: { supported: true },
@@ -236,6 +243,10 @@ export class OpenCodeRuntimeAdapter
         profiles: this.store.list().map((p) => this.safe(this.snapshot(p))),
       };
     const profile = this.store.require(request.connectionProfileId);
+    if (action !== "read" && (this.extensionReservations.has(profile.id) || this.creationReservations.has(profile.id) || [...this.turns.values()].some(t => t.request.native.connectionProfileId === profile.id))) throw new Error("Native profile is busy");
+    const reserved = action !== "read";
+    if (reserved) this.extensionReservations.add(profile.id);
+    try {
     if (action === "restart") this.connections.get(profile.id)?.close();
     const connection = await this.connect(profile.id);
     const generation = connection.generation;
@@ -273,6 +284,7 @@ export class OpenCodeRuntimeAdapter
         snapshot.state === "authenticated" ? "authenticated" : "challenge",
       profile: snapshot,
     };
+    } finally { if (reserved) this.extensionReservations.delete(profile.id); }
   }
   async listModels(input?: {
     connectionProfileId?: string;
@@ -408,10 +420,17 @@ export class OpenCodeRuntimeAdapter
   ): Promise<NativeSessionRef> {
     if (request.runtimeId !== this.runtimeId)
       throw new Error("Runtime mismatch");
+    const profileId = this.store.require(request.connectionProfileId).id;
+    if (this.creationReservations.has(profileId) || this.extensionReservations.has(profileId)) throw new Error("Native profile action is active");
+    this.creationReservations.add(profileId);
+    try {
     const directory = this.directory(request.workspaceRootPath);
+    if (this.extensionReservations.has(request.connectionProfileId!)) throw new Error("Native profile action is active");
     const c = await this.connect(request.connectionProfileId);
+    if (this.extensionReservations.has(c.profile.id)) throw new Error("Native profile action is active");
     const generation = c.generation;
     const configured = await c.client!.config.get({ directory });
+    if (this.extensionReservations.has(c.profile.id) || c.generation !== generation) throw new Error("Native profile action is active or expired");
     const modelId = request.modelId ?? configured.data?.model;
     const modeId = request.modeId ?? configured.data?.default_agent ?? "build";
     const model = this.model(modelId);
@@ -444,6 +463,7 @@ export class OpenCodeRuntimeAdapter
     this.clientMessageIds.set(this.key(native), {});
     this.bindings.set(this.key(native), { native, directory });
     return native;
+    } finally { this.creationReservations.delete(profileId); }
   }
   async resumeSession(
     request: ResumeAgentSessionRequest,
@@ -515,6 +535,7 @@ export class OpenCodeRuntimeAdapter
         sessionID: request.native.nativeSessionId,
         directory,
       });
+    if (request.native.runtimeMetadata?.parentNativeSessionId !== found.data.metadata?.specopsParentSessionId) throw new Error("Native parent binding mismatch");
     const clientIds = record(found.data.metadata?.specopsClientMessages)
       ? found.data.metadata.specopsClientMessages
       : {};
@@ -564,6 +585,11 @@ export class OpenCodeRuntimeAdapter
     )
       throw new Error("Malformed native history; cached history was preserved");
     rows.sort((a, b) => a.info.time.created - b.info.time.created);
+    if (found.data.revert?.messageID) {
+      const cutoff = rows.findIndex(row => row.info.id === found.data!.revert!.messageID);
+      if (cutoff >= 0) rows.splice(cutoff);
+      else throw new Error("Native revert checkpoint is absent from history");
+    }
     const ids = new Set<string>();
     const history: NonNullable<NativeSessionRef["history"]>[number][] = [];
     for (const row of rows) {
@@ -646,7 +672,9 @@ export class OpenCodeRuntimeAdapter
       throw new Error(
         "Select an explicit native model when creating the session before sending",
       );
+    if (this.extensionReservations.has(request.native.connectionProfileId!)) throw new Error("Native profile action is active");
     const c = await this.connect(request.native.connectionProfileId);
+    if (this.extensionReservations.has(request.native.connectionProfileId!)) throw new Error("Native profile action is active");
     if (this.turns.has(key)) throw new Error("A native turn is already active");
     // Native message identifiers are monotonic sortable ids; caller message ids remain host-owned.
     const messageId = `msg_${Date.now().toString(16).padStart(12, "0")}${randomUUID().replaceAll("-", "").slice(0, 20)}`;
@@ -777,6 +805,116 @@ export class OpenCodeRuntimeAdapter
     const turn = this.turns.get(this.key(request.native));
     if (turn && (!request.turnId || request.turnId === turn.request.turnId))
       await turn.stop();
+  }
+  private async extensionContext(input: NativeExtensionRequest) {
+    const directory = this.directory(input.workspaceRootPath);
+    this.validate(input.native, directory);
+    if (input.native.runtimeMetadata?.workspaceRootPath !== directory) throw new Error("Immutable workspace binding mismatch");
+    if (this.store.require(input.native.connectionProfileId).ownership !== "local") throw new Error("Native extensions require an isolated local profile");
+    const c = await this.connect(input.native.connectionProfileId);
+    const client = c.client!;
+    const generation = c.generation;
+    const found = await client.session.get({ sessionID: input.native.nativeSessionId, directory });
+    const binding = found.data?.metadata?.specopsBinding;
+    if (!record(binding) || found.data?.directory !== directory || binding.connectionProfileId !== input.native.connectionProfileId || binding.modelId !== (input.native.modelId ?? null) || binding.modeId !== (input.native.modeId ?? null) || binding.workspaceRootPath !== directory || input.native.runtimeMetadata?.parentNativeSessionId !== found.data?.metadata?.specopsParentSessionId) throw new Error("Native extension binding mismatch");
+    const fresh = () => { if (c.generation !== generation || c.client !== client) throw new Error("Native extension generation expired"); };
+    fresh();
+    const scrub = extensionScrubber(this.store, c.profile.id, c.credentialValues());
+    if (scrub(input.native.nativeSessionId) !== input.native.nativeSessionId) throw new Error("Unsafe native identity");
+    return { c, client, generation, directory, found: found.data!, fresh, scrub };
+  }
+  async inspectNative(input: NativeExtensionRequest & { view: NativeView }): Promise<NativeExtensionSnapshot> {
+    if (!NATIVE_VIEWS.includes(input.view)) throw new Error("Unsupported native view");
+    try {
+      const { client, generation, directory, fresh, scrub } = await this.extensionContext(input);
+      const read = async <T>(operation: Promise<T>): Promise<T> => { const result = await operation; fresh(); return result; };
+      const scope = { directory }; const session = { ...scope, sessionID: input.native.nativeSessionId };
+      let data: unknown; let fields: string[] = [];
+      switch (input.view) {
+        case "checkpoints": {
+          const messages = (await read(client.session.messages({ ...session, limit: 100 }))).data;
+          if (!messages || messages.length > 100) throw new Error("Native checkpoints unavailable");
+          return { generation, scope: "Recent native user checkpoints; selecting revert can restore files", actions: [...NATIVE_ACTIONS], rows: messages.filter(row => row.info.role === "user").map(row => ({ id: scrub(row.info.id), label: scrub(row.parts.filter(part => part.type === "text").map(part => part.type === "text" ? part.text : "").join("")).slice(0, 240), targetKind: "checkpoint" as const })) };
+        }
+        case "sessions": data = (await read(client.session.list({ ...scope, limit: 100 }))).data?.filter(v => record(v.metadata?.specopsBinding) && v.metadata.specopsBinding.connectionProfileId === input.native.connectionProfileId && v.directory === directory); fields = ["parentID"]; break;
+        case "todos": data = (await read(client.session.todo(session))).data; fields = ["status", "priority"]; break;
+        case "diffs": data = (await read(client.session.diff(session))).data; fields = ["file", "additions", "deletions", "before", "after"]; break;
+        case "files": data = (await read(client.file.status(scope))).data; fields = ["path", "status", "added", "removed"]; break;
+        case "languageServices": {
+          const lsp = (await read(client.lsp.status(scope))).data;
+          const formatter = (await read(client.formatter.status(scope))).data;
+          if (!lsp || !formatter) throw new Error("Native language status unavailable");
+          data = [...lsp, ...formatter]; fields = ["status", "root", "extensions", "enabled"]; break;
+        }
+        case "commands": data = (await read(client.command.list(scope))).data; fields = ["description", "hints", "agent", "subtask"]; break;
+        case "ecosystem": {
+          const mcp = (await read(client.mcp.status(scope))).data;
+          const skills = (await read(client.app.skills(scope))).data;
+          const agents = (await read(client.app.agents(scope))).data;
+          if (!mcp || !skills || !agents) throw new Error("Native ecosystem unavailable");
+          const toolRows = projectRows(mcp, ["status"], scrub).map(row => ({ ...row, targetKind: "toolServer" as const }));
+          const catalogRows = projectRows([...skills.map(v => ({ name: v.name, status: "skill" })), ...agents.map(v => ({ name: v.name, status: v.mode }))], ["status"], scrub);
+          if (toolRows.length + catalogRows.length > 256 || Buffer.byteLength(JSON.stringify([...toolRows, ...catalogRows])) > 512 * 1024) throw new Error("Native ecosystem exceeds capacity");
+          return { generation, scope: "Configured tool servers and native skill/agent catalogs in selected profile/workspace", actions: [...NATIVE_ACTIONS], rows: [...toolRows, ...catalogRows] };
+
+        }
+        case "configuration": {
+          const config = (await read(client.config.get(scope))).data;
+          const providers = (await read(client.config.providers(scope))).data;
+          if (!config || !providers) throw new Error("Native configuration unavailable");
+          data = [{ name: "Effective workspace configuration", model: config.model, agent: config.default_agent }, ...providers.providers.map(v => ({ name: v.id, models: Object.keys(v.models) }))]; fields = ["model", "agent", "models"]; break;
+        }
+      }
+      fresh(); if (data === undefined) throw new Error("Native view unavailable");
+      return { generation, scope: "Selected profile / canonical workspace; effective native catalogs (read only)", actions: [...NATIVE_ACTIONS], rows: projectRows(data, fields, scrub) };
+    } catch { throw new Error("Selected native view is unavailable, expired or exceeds capacity."); }
+  }
+  async actNative(input: NativeExtensionRequest & { action: NativeAction; target?: string }): Promise<NativeExtensionResult> {
+    if (!NATIVE_ACTIONS.includes(input.action)) throw new Error("Unsupported native action");
+    const profile = this.store.require(input.native.connectionProfileId);
+    if (this.extensionReservations.has(profile.id) || this.creationReservations.has(profile.id) || [...this.turns.values()].some(t => t.request.native.connectionProfileId === profile.id)) throw new Error("Stop active profile turns before a native action");
+    this.extensionReservations.add(profile.id);
+    try {
+      const { client, generation, directory, found, fresh, scrub } = await this.extensionContext(input);
+      const p = { directory, sessionID: input.native.nativeSessionId };
+      const statuses = await client.session.status({ directory }); fresh();
+      if (!statuses.data || Object.values(statuses.data).some(v => v.type !== "idle")) throw new Error("Native workspace is busy");
+      if (input.target !== undefined && (!input.target.length || input.target.length > 256 || /[\x00-\x1f]/.test(input.target))) throw new Error("Invalid native action target");
+      if ((input.action === "revert" || input.action === "fork") && input.target) {
+        const checkpoint = await client.session.message({ ...p, messageID: input.target }); fresh();
+        if (checkpoint.data?.info.sessionID !== p.sessionID || checkpoint.data.info.role !== "user") throw new Error("Select an owned native user checkpoint");
+      }
+      let result;
+      if (input.action === "fork") {
+        result = await client.session.fork({ ...p, messageID: input.target }); fresh();
+        if (!result.data || result.data.id === p.sessionID) throw new Error("Native fork unavailable");
+        const child = result.data;
+        if (!/^[a-zA-Z0-9_-]{1,256}$/.test(child.id) || scrub(child.id) !== child.id) throw new Error("Unsafe native fork identity");
+        const updated = await client.session.update({ directory, sessionID: child.id, metadata: { specopsBinding: found.metadata!.specopsBinding, specopsClientMessages: found.metadata?.specopsClientMessages ?? {}, specopsParentSessionId: p.sessionID } }); fresh();
+        if (!updated.data) throw new Error("Native fork binding unavailable");
+        const native = { ...input.native, nativeSessionId: asNativeSessionId(child.id), history: undefined, runtimeMetadata: { ...input.native.runtimeMetadata, parentNativeSessionId: p.sessionID } };
+        this.bindings.set(this.key(native), { native, directory });
+        return { generation, native };
+      }
+      if (input.action === "share") {
+        result = await client.session.share(p); fresh();
+        const url = new URL(result.data?.share?.url ?? "");
+        if (url.href.length > 2048 || scrub(url.href) !== url.href || url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("Unsafe native share URL");
+        return { generation, url: url.href };
+      }
+      if (input.action === "revokeShare") { result = await client.session.unshare(p); fresh(); if (!result.data || result.data.share) throw new Error("Native revoke unavailable"); }
+      if (input.action === "revert") { if (!input.target) throw new Error("Select a native message checkpoint"); result = await client.session.revert({ ...p, messageID: input.target }); }
+      if (input.action === "restore") result = await client.session.unrevert(p);
+      if (input.action === "connectToolServer" || input.action === "disconnectToolServer") {
+        if (profile.ownership !== "local" || !input.target) throw new Error("Native tool management requires a local selected profile");
+        const statuses = await client.mcp.status({ directory }); fresh();
+        if (!statuses.data || !Object.hasOwn(statuses.data, input.target)) throw new Error("Select a configured native tool server");
+        result = await client.mcp[input.action === "connectToolServer" ? "connect" : "disconnect"]({ directory, name: input.target });
+      }
+      fresh(); if (!result || result.error || result.data === undefined) throw new Error("Native action failed");
+      return { generation, reconcile: input.action === "revert" || input.action === "restore" };
+    } catch { throw new Error("Native action failed or expired. Inspect native state before retrying."); }
+    finally { this.extensionReservations.delete(profile.id); }
   }
   close(): void {
     for (const turn of this.turns.values())

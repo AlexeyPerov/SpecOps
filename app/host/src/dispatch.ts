@@ -1,3 +1,5 @@
+import { adapterErrors } from "../../src/lib/session/adapter/errors";
+import { isNativeExtensions, NATIVE_VIEWS, NATIVE_ACTIONS } from "../../src/lib/session/adapter/nativeExtensions";
 /**
  * Request dispatch, streaming, cancellation, backpressure, and graceful
  * shutdown (phase D, task AS01-D-03).
@@ -196,6 +198,25 @@ export class HostDispatcher {
         return this.handlePermissionReply(id, params);
       case RequestMethod.QuestionReply:
         return this.handleQuestionReply(id, params);
+      case RequestMethod.NativeInspect:
+      case RequestMethod.NativeAction: {
+        const decoded = decodeSessionResume(params);
+        if (!decoded.ok) return this.invalidParams(id, decoded.reason);
+        const adapter = this.deps.registry.require(decoded.value.native.runtimeId);
+        const capabilities = await adapter.describeCapabilities();
+        if (!capabilities.supported.includes("nativeExtensions") || !isNativeExtensions(adapter)) throw adapterErrors.capabilityNotSupported("nativeExtensions");
+        const extra = params as Record<string, unknown>;
+        const value = { ...decoded.value };
+        if (method === RequestMethod.NativeInspect) {
+          if (!NATIVE_VIEWS.includes(extra.view as any)) return this.invalidParams(id, "Unsupported native view");
+          await this.respond(makeResponse(id, await adapter.inspectNative({ ...value, view: extra.view as any })));
+        } else {
+          if (!NATIVE_ACTIONS.includes(extra.action as any) || (extra.target !== undefined && (typeof extra.target !== "string" || extra.target.length > 256))) return this.invalidParams(id, "Unsupported native action");
+          if (this.activeTurns.has(this.turnKey(value.native))) throw new Error("Stop the turn before a native action");
+          await this.respond(makeResponse(id, await adapter.actNative({ ...value, action: extra.action as any, target: extra.target as string | undefined })));
+        }
+        return;
+      }
       case RequestMethod.Health:
         return this.handleHealth(id, params);
       default:

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NativeExtensionsPanel from "./NativeExtensionsPanel.svelte";
   import SessionHandoffDialog from "./SessionHandoffDialog.svelte";
   let handoffSource = $state<{ sessionId: string; root: string } | null>(null);
   import { persistSessionConnectionSelection } from "../ai/composerSendActions";
@@ -311,6 +312,9 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
       <p>Handoff from SpecOps session {metadata.handoff.sourceSessionId}; target {metadata.handoff.targetSessionId}, profile {metadata.handoff.targetProfileId ?? 'none'}.
         <button onclick={() => chatStore.setActiveSessionId(metadata!.handoff!.sourceSessionId)}>Open source</button>
       </p>
+    {/if}
+    {#if activeSessionId && sessionIndexEntry?.nativeSessionId}
+      <NativeExtensionsPanel root={workspaceRootPath} sessionId={activeSessionId} disabled={isGenerating || isBlocked} />
     {/if}
     <ChatBlockedState isAccessBlocked={isBlocked} {accessBlockedCopy} />
 

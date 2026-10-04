@@ -1,3 +1,4 @@
+import { isNativeExtensions } from "./nativeExtensions";
 /**
  * Optional capability extensions (phase C, task AS01-C-02).
  *
@@ -282,6 +283,7 @@ export function isDiagnosticsExtension(adapter: AdapterLike): adapter is Diagnos
  * Open capability ids (runtime-specific) are exempt.
  */
 export const CAPABILITY_EXTENSION_MAP: Readonly<Record<string, (a: AdapterLike) => boolean>> = {
+  nativeExtensions: isNativeExtensions,
   catalogs: isCatalogExtension,
   nativeTodos: isTodosExtension,
   permissions: isPermissionExtension,

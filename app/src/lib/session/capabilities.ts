@@ -9,6 +9,7 @@
  */
 
 export type AgentCapability =
+  | "nativeExtensions"
   | "catalogs"
   | "permissions"
   | "questions"
@@ -34,6 +35,7 @@ export type AgentCapability =
 export type AgentCapabilityValue = AgentCapability | (string & {});
 
 const KNOWN_CAPABILITY_SET: ReadonlySet<string> = new Set<AgentCapability>([
+  "nativeExtensions",
   "catalogs",
   "permissions",
   "questions",

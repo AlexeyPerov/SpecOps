@@ -145,6 +145,8 @@ export const RequestMethod = {
   PermissionReply: "permission.reply",
   QuestionReply: "question.reply",
   Health: "health",
+  NativeInspect: "native.inspect",
+  NativeAction: "native.action",
 } as const;
 
 export type RequestMethodValue = (typeof RequestMethod)[keyof typeof RequestMethod];

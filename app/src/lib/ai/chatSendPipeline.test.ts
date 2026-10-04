@@ -76,6 +76,8 @@ function createFakeHostHarness(): FakeHostHarness {
     cancelTurn,
     nextTurnEvents: [],
     client: {
+      inspectNative: vi.fn(),
+      actNative: vi.fn(),
       status: null,
       subscribeProfiles: vi.fn(async () => () => {}),
       start,

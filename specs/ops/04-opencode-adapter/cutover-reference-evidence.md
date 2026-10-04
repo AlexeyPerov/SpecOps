@@ -1,23 +1,24 @@
 # Retained native extension comparison evidence
 
-**Updated:** 2026-10-04 20:52 MSK
+**Updated:** 2026-10-04 22:58 MSK
 
-This finite ledger replaces deleted frontend rich-feature code/tests as comparison evidence. All rows below are unavailable in current common Sessions. Native vendor functionality is separate from a supported host extension. No code from the removed frontend runtime is an active execution or credential path.
+This finite ledger replaces removed frontend feature code as comparison evidence. AS06-B implements the selected source scope through the host-only SDK; no deleted runtime or supervisor is active. Installed/live evidence remains pending. “Excluded” below revises the current promised scope, rather than silently promising eventual parity.
 
-| Removed frontend surface | Required later behavior/evidence | Owner/target |
+| Former surface | Selected source behavior and evidence | Explicit excluded disposition / owner |
 | --- | --- | --- |
-| Fork/revert/unrevert | Explicit native checkpoint/fork controls; preserve parent identity and reconcile changed native history | AS06-B-02 |
-| Share/unshare | Explicit opt-in native sharing, safe URL and native revoke; no auto-share | AS06-B-02 |
-| Manual summarize, native session browsing | Capability-gated lifecycle actions, interrupted-state reconciliation; core compaction events stay supported | AS06-B-02 |
-| Commands/arguments | Native catalog schema and argument dispatch, unavailable state where unsupported | AS06-B-02 |
-| Todos | Authoritative native projection/reconciliation, real terminal/status updates | AS06-B-02/04 |
-| Session diff/file status panels | Native fetch/reconciliation with bounded cache and UI errors; core patch events stay supported | AS06-B-02/04 |
-| Language services/formatting diagnostics | Native status/actions and bounded capability UI | AS06-B-03 |
-| MCP catalog/connect/disconnect/auth | Native management with host-only credentials and explicit profile/workspace scope | AS06-B-03 |
-| Skills/custom/subagents management | Native config/catalog with scope and capability gating; basic primary-mode selection stays core | AS06-B-03 |
-| Provider/config/permission/instruction editor | Supported native schema and isolated config scope; no WebView secret editor | AS06-B-03/04 |
-| File/text/symbol search | App-owned workspace integration; not a turn or cutover prerequisite | Future workspace integration owner |
-| Transcript export | Product-owned local artifact export; not a native cutover requirement | Future export owner |
-| Native web/TUI/terminal management | No common Sessions surface or core gate | Future native management owner |
+| Fork/revert/unrevert | `native.action` fork/revert/restore; owned selectable user checkpoints; fresh binding/parent/index persistence; authoritative history replacement and workspace watcher refresh. Native HTTP fixtures plus real account-free native fork/resume | Live native file restoration/installed acceptance owned by selected 08-A; no implicit Stop/revert coupling |
+| Share/unshare | Explicit publish and revoke; bounded HTTPS credential-safe link; native fixture confirms revoke | Real remote publication/revoke acceptance owned by selected 08-A; no automatic publish or browser opening |
+| Manual summarize/native browsing | `sessions` view lists bounded owned profile/workspace native metadata; core compaction events stay supported | Manual summarize dispatch excluded from AS06-B until a dedicated owned inference/permission/cancel stream exists. Arbitrary native session adoption/browser/TUI launch excluded, owned by future product-native-session integration |
+| Commands/arguments | `commands` view retains native description, argument hints, agent/subtask metadata; SDK 1.17.4 exposes hints, not a required/optional argument schema | Command invocation excluded from AS06-B until an owned command turn stream is implemented; no fabricated required/optional flags or synthetic prompt expansion |
+| Todos | `todos` authoritative snapshot with native content/status/priority; native fixture and real no-account empty view | No editable todo store. IDs absent in native records are snapshot display positions, not persistent identities; automatic live reconciliation is core-event work, not a promised extension |
+| Session diff/file status | `diffs` native filenames/counts/bounded before/after; `files` native git status. Native fixture and real metadata views | Whole-file editor integration and unlimited patch export excluded; future workspace integration owns these product surfaces |
+| Language services/formatting | `languageServices` read-only native LSP/formatter status and enabled/extensions metadata; native empty-status canary | Formatting execution and diagnostics-body editor navigation excluded; future editor integration owns these actions |
+| MCP catalog/connect/disconnect/auth | `ecosystem` configured status with selectable tool server; explicit local-profile connect/disconnect; credentials remain host-side. Native route fixtures | Server definitions/arbitrary launch arguments, OAuth start/callback/browser and auth removal excluded from AS06-B; a separately scoped native credential-flow implementation must own these before advertising |
+| Skills/custom/subagents | `ecosystem` native skill/agent catalog and mode; existing core primary selection/native subtask events remain | Skill contents, custom/subagent editing and management excluded; future scoped native-config editing owns these flows |
+| Provider/model/auth/config/permission/instruction editor | Read-only safe effective default model/agent and provider/model IDs; existing core model selection and selected-profile opaque private-file credential import/logout remain. No arbitrary native config exports | Arbitrary config, permission/instruction/provider editing excluded from AS06-B; future schema-specific native-config implementation owns validation and environment/transport safety. Provenance beyond effective profile/workspace scope is not invented |
+| File/text/symbol search | Current app-owned workspace behavior only; no native extension action | Excluded from this runtime-adapter scope; future workspace search integration owns requirements |
+| Transcript export | No new native action | Excluded from this runtime-adapter scope; future product export owns local artifact behavior |
+| Native web/TUI/terminal management | No common native extension action | Excluded from this scope; future explicit native management owns setup/security/process behavior |
+| External native endpoints | Existing pinned core sessions remain supported under owner-managed limits | New extensions require local isolated profiles; external unknown credentials/account isolation are not accepted. A separate external endpoint security scope owns any expansion |
 
-Generic fixture expectations retained for later extension tests: checkpoint actions return native identity and require fresh history; native revoke invalidates a previously shared link; command catalog entries carry required/optional arguments; todos expose stable IDs/status; file differences carry paths/counts/patches; ecosystem/config panels expose bounded structured status and actionable unavailable errors. These are comparison requirements, not claims of implemented contracts. AS06-B-01 must prioritize this ledger; AS06-B-04 owns new host-side fixtures/stores and acceptance.
+Tests: `app/host/src/opencode/extensions.test.ts`, `dispatch.test.ts`, existing core/bootstrap contracts; `NativeExtensionsPanel.test.ts`, `nativeExtensions.test.ts`, client/pipeline/persistence regressions. Selection/generation/reservation/no-replay/credentials/body capacity fixtures and real isolated nine-view native fork/resume metadata canary are source evidence. [AS06-B implementation notes](../06-handoff-native-extensions/implementation-notes-phase-b.md) and [selected release baseline](../08-release-gates/baseline-06-b.md) retain paid/provider/account/installed/platform gates. No reference-project code path or naming is shipped.

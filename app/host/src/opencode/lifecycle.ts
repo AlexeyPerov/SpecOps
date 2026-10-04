@@ -1,3 +1,4 @@
+import { boundedResponse } from "./boundedResponse";
 import {
   createOpencodeClient,
   type OpencodeClient,
@@ -59,6 +60,11 @@ export class RuntimeConnection {
   private lifecycle = 0;
   private streamEndpoint?: string;
   private streamAuthorization?: string;
+  credentialValues(): string[] {
+    if (!this.streamAuthorization) return [];
+    const decoded = Buffer.from(this.streamAuthorization.slice(6), "base64").toString("utf8");
+    return [this.streamAuthorization, decoded, decoded.slice(decoded.indexOf(":") + 1)];
+  }
   private streams = new Set<AbortController>();
   private starting: Promise<void> | null = null;
   private descendants = new Map<number, string>();
@@ -143,11 +149,10 @@ export class RuntimeConnection {
       baseUrl,
       throwOnError: true,
       ...(authorization ? { headers: { Authorization: authorization } } : {}),
-      fetch: (input, init) => {
+      fetch: async (input, init) => {
         const request = new Request(input, init);
-        return this.fetcher(request, {
-          signal: AbortSignal.any([request.signal, AbortSignal.timeout(3000)]),
-        });
+        const signal = AbortSignal.any([request.signal, AbortSignal.timeout(3000)]);
+        return boundedResponse(await this.fetcher(request, { signal }), signal);
       },
     });
     const deadline = Date.now() + 10000;

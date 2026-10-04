@@ -51,13 +51,8 @@ export function packageCursorAssets(destination) {
       ),
     ),
   );
-  cpSync(
-    resolve(
-      dirname(fileURLToPath(import.meta.url)),
-      "../src/cursor/worker.mjs",
-    ),
-    join(output, "worker.mjs"),
-  );
+  for (const name of ["worker.mjs", "session-worker.mjs"])
+    cpSync(resolve(dirname(fileURLToPath(import.meta.url)), "../src/cursor", name), join(output, name));
   const files = {};
   function walk(path) {
     for (const name of readdirSync(path)) {

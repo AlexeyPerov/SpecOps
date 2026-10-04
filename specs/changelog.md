@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-05 00:01 MSK — Add durable local native agents and run recovery
+
+- Implemented AS07-B isolated local SDK session workers, per-agent native JSONL stores, canonical profile/workspace/model/settings/original-credential binding and native agent/run identities. Native stream/text/reasoning/tool/usage/status mapping, cancellation/disposal, static failures and authoritative restart history are bounded and secret-safe.
+- Added durable single-use client dispatch guards, uncertain acknowledgement recovery, no implicit prompt replay/new session, profile mutation reservations and independent worker cleanup. Minimal explicit-model agent turns use empty native tools/settings/MCP; policy editors/interactions/Cloud and tested enforcement remain unavailable pending later scope.
+- Verified shared lifecycle/source/native-store wire/late-create/canary fixtures, production dispatcher/client/pipeline/store/disk recovery from divergent/corrupt caches, checks/builds and copied account-free native session-worker create/resume outside checkout. Actual authenticated/native enforcement, signed installed/platform/cleanup/distribution gates remain open; selected expanded release baseline remains blocked. No migrations or compatibility shims.
+
 ## 2026-10-04 23:33 MSK — Bootstrap isolated local native SDK profiles
 
 - Implemented AS07-A exact official local SDK 1.0.35 host pin and full SDK/dependency/lazy-chunk/platform parser/search/sandbox payload with safe adjacent manifest resolution. Private profile workers own explicit API/service key account/catalog probes, bounded secret-safe results, generation cancellation and process cleanup; common profile UI exposes actual source support.

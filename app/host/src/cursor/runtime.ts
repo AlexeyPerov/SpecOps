@@ -51,6 +51,7 @@ export function verifyCursorAssetDirectory(root: string): CursorAssets {
     if (
       !m.files[sdk] ||
       !m.files["worker.mjs"] ||
+      !m.files["session-worker.mjs"] ||
       !Object.keys(m.files).some((p) => p.startsWith(native + "bin/rg")) ||
       !Object.keys(m.files).some((p) =>
         p.startsWith(native + "bin/cursorsandbox"),

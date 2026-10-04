@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** Source implementation verified; authenticated/installed acceptance remains open.
 
 **Prerequisites:** AS07-A accepted.
 
@@ -52,3 +52,7 @@ cancellation, and missing-history cases.
 ## Exit and next work
 
 C follows local native lifecycle evidence; actual supported restart scope is recorded before release. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+
+## Recorded source evidence
+
+AS07-B-01 through B-04 are implemented and source verified for the minimal no-tool local scope. See [implementation notes](implementation-notes-phase-b.md) for pinned SDK contracts, native store/wire fixtures, production cache recovery, cancellation and uncertainty boundaries. Actual authenticated native history/stream/tool/cancel and installed gates remain open in the [selected release baseline](../08-release-gates/baseline-07-b.md). C follows this source lifecycle; B is not full release acceptance.

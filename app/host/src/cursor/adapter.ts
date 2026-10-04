@@ -1,3 +1,9 @@
+import { realpathSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { asNativeSessionId } from "../../../src/lib/session/ids";
+import { CursorBindings, type CursorBinding } from "./binding";
+import { nativeCursorDriver, type CursorSessionDriver, type CursorOperation } from "./session";
+import { CursorMapper, cursorSafe } from "./mapping";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -35,6 +41,8 @@ export interface CursorAdapterOptions {
   ambient?: NodeJS.ProcessEnv;
   assets?: () => CursorAssets;
   control?: typeof cursorControl;
+  driver?: (assets: CursorAssets, env: NodeJS.ProcessEnv) => CursorSessionDriver;
+  turnTimeoutMs?: number;
 }
 export class CursorRuntimeAdapter
   implements
@@ -45,6 +53,10 @@ export class CursorRuntimeAdapter
   readonly runtimeId = "cursor" as const;
   readonly store: CursorProfileStore;
   readonly snapshots = new Map<string, ConnectionProfileSnapshot>();
+  private bindings: CursorBindings;
+  private closed = false;
+  private mutating = new Set<string>();
+  private operations = new Map<string, { profileId: string; abort: AbortController; done: Promise<void>; turnId?: string; stop?: () => Promise<void> }>();
   private catalogs = new Map<string, readonly { id: string; name: string }[]>();
   private pending = new Map<string, AbortController>();
   private controls = new Set<Promise<CursorControlResult>>();
@@ -71,6 +83,7 @@ export class CursorRuntimeAdapter
           "cursor",
         ),
     );
+    this.bindings = new CursorBindings(this.store);
   }
   async describe() {
     return { id: this.runtimeId, label: "Cursor" };
@@ -86,9 +99,9 @@ export class CursorRuntimeAdapter
             "Official native SDK model catalog for the selected user/service API key. Model parameters await session configuration integration.",
         },
         nativeTurns: {
-          supported: false,
-          notes:
-            "Durable local SDK bootstrap verified; turn mapping and native tool policy await the next phases.",
+          supported: true,
+          limits: { localOnly: true, builtinTools: 0, attachments: false },
+          notes: "Durable local native agents/runs with explicit model and no tools/settings sources. Interactive approval and native policy editing are unavailable.",
         },
         browserLogin: {
           supported: false,
@@ -152,9 +165,12 @@ export class CursorRuntimeAdapter
   async refresh(
     id: string,
     candidate?: string,
+    fromOperation = false,
   ): Promise<ConnectionProfileSnapshot> {
     const p = this.store.require(id),
       s = this.snapshot(p);
+    if (this.closed) throw adapterErrors.runtimeUnavailable();
+    if (!fromOperation && [...this.operations.values()].some((op) => op.profileId === id)) return this.safe(s);
     this.pending.get(id)?.abort();
     const abort = new AbortController();
     this.pending.set(id, abort);
@@ -276,7 +292,15 @@ export class CursorRuntimeAdapter
         profiles: profiles(),
       };
     }
+    if (!["read", "restart", "login-api-key", "logout"].includes(String(action))) throw adapterErrors.capabilityNotSupported("authentication-flow");
     const p = this.store.require(request.connectionProfileId);
+    const mutation = action !== "read", ownsMutation = !this.mutating.has(p.id);
+    if (mutation) {
+      if (!ownsMutation && action !== "logout") throw new Error("Profile authentication is already changing");
+      this.mutating.add(p.id);
+      await this.stopProfile(p.id);
+    }
+    try {
     if (action === "logout") {
       this.pending.get(p.id)?.abort();
       this.pending.delete(p.id);
@@ -307,6 +331,7 @@ export class CursorRuntimeAdapter
       status: profile.state === "authenticated" ? "authenticated" : "challenge",
       profile,
     };
+    } finally { if (mutation && ownsMutation) this.mutating.delete(p.id); }
   }
   async listModels(input?: { connectionProfileId?: string }) {
     const p = this.store.require(input?.connectionProfileId);
@@ -316,7 +341,7 @@ export class CursorRuntimeAdapter
       : [];
   }
   async listModes() {
-    return [];
+    return [{ id: "agent", name: "Agent", primary: true }];
   }
   async describeSessionConfiguration() {
     return {
@@ -365,23 +390,207 @@ export class CursorRuntimeAdapter
       checkedAt: new Date().toISOString(),
     };
   }
-  async createSession(
-    _request: CreateAgentSessionRequest,
-  ): Promise<NativeSessionRef> {
-    throw adapterErrors.capabilityNotSupported("nativeTurns");
+  private digest(id: string) {
+    const key = this.store.readKey(id);
+    if (!key) throw adapterErrors.authenticationRequired();
+    return createHash("sha256").update(key).digest("hex");
   }
-  async resumeSession(
-    _request: ResumeAgentSessionRequest,
-  ): Promise<NativeSessionRef> {
-    throw adapterErrors.capabilityNotSupported("nativeTurns");
+  private reserve(profileId: string, route: string, turnId?: string) {
+    this.store.require(profileId);
+    if (this.closed || this.mutating.has(profileId)) throw adapterErrors.runtimeUnavailable("Selected profile is changing or disconnected");
+    if (this.operations.has(route)) throw new Error("Native session operation is already active");
+    const abort = new AbortController();
+    let resolve!: () => void;
+    const done = new Promise<void>((r) => { resolve = r; });
+    this.operations.set(route, { profileId, abort, done, turnId });
+    return { abort, finish: () => { this.operations.delete(route); resolve(); } };
   }
-  async *send(_request: AgentTurnRequest): AsyncIterable<SessionEvent> {
-    throw adapterErrors.capabilityNotSupported("nativeTurns");
+  private async stopProfile(id: string) {
+    const ops = [...this.operations.values()].filter((op) => op.profileId === id);
+    for (const op of ops) op.abort.abort();
+    this.pending.get(id)?.abort();
+    await Promise.allSettled(ops.map((op) => op.stop?.()));
   }
-  async cancel(_request: CancelAgentTurnRequest) {}
+  private async authenticated(id: string, signal: AbortSignal) {
+    const p = this.store.require(id);
+    if (this.snapshot(p).state !== "authenticated") {
+      if (this.pending.has(id)) throw adapterErrors.authenticationRequired("Selected profile is still connecting; retry after it settles");
+      const abort = () => this.pending.get(id)?.abort();
+      signal.addEventListener("abort", abort, { once: true });
+      try { await this.refresh(id, undefined, true); } finally { signal.removeEventListener("abort", abort); }
+    }
+    if (signal.aborted) throw adapterErrors.cancelled();
+    if (this.snapshot(p).state !== "authenticated") throw adapterErrors.authenticationRequired();
+    this.digest(id);
+    return p;
+  }
+  private driver(id: string) {
+    const assets = (this.options.assets ?? resolveCursorAssets)();
+    const env = this.store.environment(id, undefined, this.options.ambient);
+    return this.options.driver?.(assets, env) ?? nativeCursorDriver(assets, env, this.options.turnTimeoutMs);
+  }
+  private nativeBinding(b: CursorBinding) {
+    return { runtimeId: "cursor", connectionProfileId: b.native.connectionProfileId, workspaceRootPath: b.native.runtimeMetadata!.workspaceRootPath, modelId: b.native.modelId, modeId: "agent", credentialDigest: b.credentialDigest, tools: [], settingSources: [] };
+  }
+  private operation(b: CursorBinding, action: CursorOperation["action"]): CursorOperation {
+    return { action, agentId: b.native.nativeSessionId, store: this.bindings.store(b.native.connectionProfileId!, b.storeId), cwd: String(b.native.runtimeMetadata!.workspaceRootPath), key: this.store.readKey(b.native.connectionProfileId!)!, modelId: b.native.modelId, binding: this.nativeBinding(b) };
+  }
+  private valid(b: CursorBinding, generation: number, signal: AbortSignal) {
+    const p = this.store.require(b.native.connectionProfileId);
+    if (signal.aborted || this.closed || this.snapshot(p).generation !== generation || this.digest(p.id) !== b.credentialDigest) throw adapterErrors.cancelled("Native operation expired");
+  }
+  private validate(native: NativeSessionRef, cwd: string, profile?: string) {
+    if (native.runtimeId !== "cursor" || (profile !== undefined && profile !== native.connectionProfileId)) throw new Error("Native profile mismatch");
+    if (!native.connectionProfileId) throw adapterErrors.sessionNotFound("Selected native agent");
+    const b = this.bindings.read(native);
+    if (!b) throw adapterErrors.sessionNotFound("Selected native agent");
+    if (b.native.modelId !== native.modelId || b.native.modeId !== native.modeId || JSON.stringify(b.native.runtimeMetadata) !== JSON.stringify(native.runtimeMetadata) || b.native.runtimeMetadata!.workspaceRootPath !== realpathSync(cwd)) throw new Error("Native workspace/model/settings binding mismatch");
+    if (this.digest(native.connectionProfileId!) !== b.credentialDigest) throw adapterErrors.authenticationRequired("Restore the original profile credential or create a new session");
+    return b;
+  }
+  async createSession(request: CreateAgentSessionRequest): Promise<NativeSessionRef> {
+    const p = this.store.require(request.connectionProfileId);
+    const reserved = this.reserve(p.id, p.id + ":create");
+    try {
+      await this.authenticated(p.id, reserved.abort.signal);
+      if (request.runtimeId !== "cursor" || (request.modeId !== undefined && request.modeId !== "agent") || Object.keys(request.runtimeMetadata ?? {}).length) throw adapterErrors.capabilityNotSupported("native-session-settings");
+      if (!request.modelId || !(this.catalogs.get(p.id) ?? []).some((m) => m.id === request.modelId)) throw new Error("Select an explicit native catalog model");
+      const b: CursorBinding = { native: { runtimeId: "cursor", nativeSessionId: asNativeSessionId("agent-pending"), connectionProfileId: p.id, modelId: request.modelId, modeId: "agent", runtimeMetadata: { workspaceRootPath: realpathSync(request.workspaceRootPath), tools: [], settingSources: [] } }, storeId: randomUUID(), credentialDigest: this.digest(p.id), cursor: 0, users: Object.create(null) };
+      const generation = this.snapshot(p).generation;
+      let created = false;
+      const driver = this.driver(p.id);
+      this.operations.get(p.id + ":create")!.stop = () => driver.stop?.() ?? Promise.resolve();
+      for await (const frame of driver.operation(this.operation(b, "create"), reserved.abort.signal)) {
+        this.valid(b, generation, reserved.abort.signal);
+        if (frame.type !== "created" || created || typeof frame.agentId !== "string" || !/^agent-[A-Za-z0-9_-]{1,150}$/.test(frame.agentId) || frame.agentId.includes(this.store.readKey(p.id)!)) throw new Error("Native agent creation failed; inspect retained private store before trying again");
+        b.native = { ...b.native, nativeSessionId: asNativeSessionId(frame.agentId) };
+        this.bindings.save(b); created = true;
+      }
+      this.valid(b, generation, reserved.abort.signal);
+      if (!created) throw new Error("Native agent creation acknowledgement missing; inspect retained private store");
+      return b.native;
+    } finally { reserved.finish(); }
+  }
+  async resumeSession(request: ResumeAgentSessionRequest): Promise<NativeSessionRef> {
+    const b = this.validate(request.native, request.workspaceRootPath, request.connectionProfileId);
+    const id = b.native.connectionProfileId!, reserved = this.reserve(id, id + ":" + b.native.nativeSessionId);
+    try {
+      await this.authenticated(id, reserved.abort.signal);
+      const generation = this.snapshot(this.store.require(id)).generation, key = this.store.readKey(id)!;
+      const history: NonNullable<NativeSessionRef["history"]>[number][] = [];
+      const runs = new Map<string, { run: any; mapper: CursorMapper; events: SessionEvent[]; user: string; at: string; count: number }>();
+      let done = false, bytes = 0;
+      const driver = this.driver(id);
+      this.operations.get(id + ":" + b.native.nativeSessionId)!.stop = () => driver.stop?.() ?? Promise.resolve();
+      for await (const frame of driver.operation(this.operation(b, "history"), reserved.abort.signal)) {
+        this.valid(b, generation, reserved.abort.signal);
+        bytes += Buffer.byteLength(JSON.stringify(frame));
+        if (bytes > 16777216) throw new Error("Native history exceeds capacity");
+        if (frame.type === "failure") {
+          if (frame.reason === "missing") throw adapterErrors.sessionNotFound("Selected native agent");
+          throw new Error("Native history is unavailable; retained session metadata was preserved");
+        }
+        if (frame.type === "historyRun") {
+          const run = frame.run;
+          if (!run || run.agentId !== b.native.nativeSessionId || typeof run.runId !== "string" || !/^run-[A-Za-z0-9_-]{1,150}$/.test(run.runId) || run.runId.includes(key) || runs.has(run.runId) || runs.size >= 4096 || !["queued", "running", "finished", "error", "cancelled", "expired"].includes(run.status) || !Number.isFinite(run.createdAt)) throw new Error("Malformed native history run");
+          runs.set(run.runId, { run, mapper: new CursorMapper(b.native.nativeSessionId, run.runId, run.runId, key), events: [], user: "", at: new Date(run.createdAt).toISOString(), count: 0 });
+        } else if (frame.type === "historyEvent") {
+          const entry = runs.get(frame.runId);
+          if (!entry || !Number.isSafeInteger(frame.seq) || frame.seq < 1 || ++entry.count > 4096 || !Number.isFinite(frame.createdAt)) throw new Error("Malformed native history event");
+          const message = frame.message;
+          if (message?.type === "user") {
+            if (message.agent_id !== b.native.nativeSessionId || message.run_id !== frame.runId || !Array.isArray(message.message?.content) || message.message.content.some((x: any) => x.type !== "text" || typeof x.text !== "string")) throw new Error("Malformed native user history");
+            entry.user += message.message.content.map((x: any) => x.text).join("");
+          }
+          for (const payload of entry.mapper.event(message)) entry.events.push({ ...payload, nativeSessionId: b.native.nativeSessionId, connectionProfileId: id, nativeTurnId: frame.runId, nativeGeneration: generation, nativeItemId: frame.runId + ":event:" + frame.seq, seq: ++b.cursor, at: new Date(frame.createdAt).toISOString() } as SessionEvent);
+        } else if (frame.type === "historyDone") done = true;
+        else throw new Error("Malformed native history response");
+      }
+      if (!done) throw new Error("Native history acknowledgement missing");
+      for (const [runId, entry] of runs) {
+        if (entry.count === 0 && entry.run.status === "queued" && entry.run.startedAt == null) continue;
+        const mapped = Object.values(b.users).find((u) => u.runId === runId);
+        if (mapped && ["finished", "error", "cancelled", "expired"].includes(entry.run.status)) mapped.settled = true;
+        const events = [...entry.events, ...entry.mapper.finish().map((payload) => ({ ...payload, nativeSessionId: b.native.nativeSessionId, connectionProfileId: id, nativeTurnId: runId, nativeGeneration: generation, seq: ++b.cursor, at: entry.at } as SessionEvent))];
+        if (entry.user) history.push({ id: mapped?.id ?? runId + ":user", role: "user", content: entry.user, createdAt: entry.at, nativeTurnId: runId });
+        history.push({ id: runId + ":assistant", role: "assistant", content: entry.mapper.text, createdAt: entry.at, nativeTurnId: runId, completionState: entry.run.status === "finished" ? "completed" : entry.run.status === "error" ? "failed" : "interrupted", events });
+      }
+      this.bindings.save(b);
+      return cursorSafe({ ...b.native, history }, key);
+    } finally { reserved.finish(); }
+  }
+  async *send(request: AgentTurnRequest): AsyncIterable<SessionEvent> {
+    const b = this.validate(request.native, request.workspaceRootPath, request.connectionProfileId);
+    const id = b.native.connectionProfileId!, reserved = this.reserve(id, id + ":" + b.native.nativeSessionId, request.turnId);
+    let mapper: CursorMapper | undefined, terminal = false, dispatched = false, announced = false;
+    let clientId: string | undefined;
+    let generation = 0, key = "", failureMessage = "Native turn failed or its acknowledgement was lost; resume explicitly. The prompt will not be resent.";
+    const emit = (payload: any): SessionEvent => cursorSafe({ ...payload, nativeSessionId: b.native.nativeSessionId, connectionProfileId: id, nativeGeneration: generation, ...(mapper ? { nativeTurnId: mapper.runId } : {}), seq: ++b.cursor, at: new Date().toISOString() }, key);
+    try {
+      await this.authenticated(id, reserved.abort.signal);
+      generation = this.snapshot(this.store.require(id)).generation;
+      key = this.store.readKey(id)!;
+      if (request.attachments?.length) throw adapterErrors.capabilityNotSupported("attachments");
+      clientId = typeof request.context?.clientUserMessageId === "string" ? request.context.clientUserMessageId : request.turnId;
+      if (!clientId || ["__proto__", "constructor", "prototype"].includes(clientId) || clientId.includes(key) || clientId.length > 500 || Buffer.byteLength(request.prompt) > 262144) throw new Error("Native turn input exceeds capacity");
+      if (Object.hasOwn(b.users, clientId) || Object.values(b.users).some((u) => !u.settled)) throw new Error("Previous native dispatch is uncertain or already accepted; resume explicitly and inspect history before continuing");
+      b.users[clientId] = { id: clientId, createdAt: new Date().toISOString(), settled: false };
+      this.bindings.save(b);
+      announced = true;
+      yield emit({ type: "turn.started", turnId: request.turnId });
+      if (reserved.abort.signal.aborted) throw adapterErrors.cancelled();
+      const operation = { ...this.operation(b, "send"), prompt: request.prompt };
+      const driver = this.driver(id);
+      this.operations.get(id + ":" + b.native.nativeSessionId)!.stop = () => driver.stop?.() ?? Promise.resolve();
+      dispatched = true;
+      for await (const frame of driver.operation(operation, reserved.abort.signal)) {
+        if (reserved.abort.signal.aborted) {
+          if (frame.type === "terminal" && mapper && frame.runId === mapper.runId && frame.status === "cancelled") { b.users[clientId].settled = true; terminal = true; yield emit({ type: "turn.cancelled", turnId: request.turnId }); }
+          continue;
+        }
+        this.valid(b, generation, reserved.abort.signal);
+        if (terminal) throw new Error("Native event after terminal");
+        if (frame.type === "started") {
+          if (mapper || frame.agentId !== b.native.nativeSessionId || typeof frame.runId !== "string" || !/^run-[A-Za-z0-9_-]{1,150}$/.test(frame.runId) || frame.runId.includes(key)) throw new Error("Malformed native run acknowledgement");
+          mapper = new CursorMapper(b.native.nativeSessionId, frame.runId, request.turnId, key);
+          b.users[clientId].runId = frame.runId; this.bindings.save(b);
+        } else if (frame.type === "event" && mapper) {
+          for (const payload of mapper.event(frame.message)) yield emit(payload);
+        } else if (frame.type === "terminal" && mapper && frame.runId === mapper.runId && ["finished", "error", "cancelled"].includes(frame.status)) {
+          for (const payload of mapper.finish()) yield emit(payload);
+          b.users[clientId].settled = true; terminal = true;
+          yield emit(frame.status === "finished" ? { type: "turn.finished", turnId: request.turnId } : frame.status === "cancelled" ? { type: "turn.cancelled", turnId: request.turnId } : { type: "turn.failed", turnId: request.turnId, message: "Native run failed; resume explicitly to inspect retained history." });
+        } else if (frame.type === "failure") {
+          failureMessage = frame.reason === "auth-required" ? "Native authentication was rejected. Reconnect this profile; the prompt will not be resent." : frame.reason === "quota" ? "Native quota or rate limit reached. Wait or review the selected account; the prompt will not be resent." : "Native runtime failed or disconnected. Resume explicitly to inspect retained history; the prompt will not be resent.";
+          throw new Error("Native turn failed");
+        }
+        else throw new Error("Malformed native turn response");
+      }
+      if (!terminal) throw new Error("Native terminal acknowledgement missing");
+    } catch {
+      if (!terminal) {
+        if (!announced) { announced = true; yield emit({ type: "turn.started", turnId: request.turnId }); }
+        if (!dispatched && clientId && reserved.abort.signal.aborted) delete b.users[clientId];
+        if (!reserved.abort.signal.aborted) yield emit({ type: "diagnostic", level: "warn", reason: "malformed", message: "Native operation could not be completed safely; no raw payload retained." });
+        if (mapper) for (const payload of mapper.finish()) yield emit(payload);
+        terminal = true;
+        yield emit(reserved.abort.signal.aborted ? { type: "turn.cancelled", turnId: request.turnId } : { type: "turn.failed", turnId: request.turnId, message: failureMessage });
+      }
+    } finally {
+      reserved.abort.abort();
+      try { this.bindings.save(b); } finally { reserved.finish(); }
+    }
+  }
+  async cancel(request: CancelAgentTurnRequest) {
+    const route = request.native.connectionProfileId + ":" + request.native.nativeSessionId;
+    const op = this.operations.get(route);
+    if (op && (!request.turnId || request.turnId === op.turnId)) { op.abort.abort(); await op.stop?.(); }
+  }
   async close() {
+    this.closed = true;
     for (const abort of this.pending.values()) abort.abort();
     this.pending.clear();
-    await Promise.allSettled([...this.controls]);
+    for (const op of this.operations.values()) op.abort.abort();
+    await Promise.allSettled([...this.controls, ...[...this.operations.values()].map((op) => op.stop?.())]);
   }
 }

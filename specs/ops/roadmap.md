@@ -24,7 +24,7 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 | [04 — OpenCode](04-opencode-adapter/README.md) | A/B/C host/core/cutover source verified; installed/account acceptance open | A → B → C core cutover |
 | [05 — Claude](05-claude-adapter/README.md) | A–D source native SDK/API key/sessions/interactions/policy/recovery/security implemented; installed/live baseline open | Installed/live acceptance |
 | [06 — Handoff/native extensions](06-handoff-native-extensions/README.md) | A/B source verified; live/installed gates open | C simultaneous Codex profiles, live/installed acceptance |
-| [07 — Cursor](07-cursor-adapter/README.md) | A official local SDK/profile/catalog source and copied native assets verified; authenticated/installed gates open | B local agents/runs → C policy → D acceptance |
+| [07 — Cursor](07-cursor-adapter/README.md) | A/B official local SDK/profile/catalog/durable lifecycle source and copied assets verified; authenticated/installed gates open | C policy → D acceptance |
 | [08 — Release gates](08-release-gates/README.md) | Missing acceptance records | A per selected release; final closure after full scope |
 
 A completed implementation marker is not a release acceptance record. All new phases below are Planned until their checks actually pass.

@@ -1,8 +1,8 @@
 # 07 — Execution plan index: Cursor native adapter after feasibility
 
-**Updated:** 2026-10-04
+**Updated:** 2026-10-05
 
-**Status:** A source SDK/profile bootstrap verified; authenticated/installed and B–D acceptance open.
+**Status:** A/B source SDK/profile/local lifecycle verified; authenticated/installed and C–D acceptance open.
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -30,3 +30,5 @@ Task prefix is `AS07-<phase>-<NN>`. Numeric folders reflect the default delivery
 ## Current evidence
 
 [AS07-A native feasibility ledger](implementation-notes-phase-a.md): exact official local SDK 1.0.35, isolated API-key/native catalog source and copied account-free durable JSONL/Node/native assets verified on Darwin arm64. Native turns, interactive/browser integration and Cloud execution are not advertised by this bootstrap. [Expanded release baseline](../08-release-gates/baseline-07-a.md) remains blocked; B/C/D and authenticated/signed installed/platform/distribution acceptance remain open.
+
+[AS07-B source lifecycle evidence](implementation-notes-phase-b.md): durable per-agent native JSONL store, immutable profile/workspace/model/credential binding, bounded stream/cancel/history and production cache recovery verified. Only minimal no-tool local turns are advertised; native policy and live/installed acceptance remain C/D work. [B release baseline](../08-release-gates/baseline-07-b.md) remains blocked.

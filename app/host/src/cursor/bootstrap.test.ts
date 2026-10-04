@@ -148,7 +148,7 @@ describe("Cursor bootstrap", () => {
     ])
       expect(env[name]).toBeUndefined();
   });
-  it("redacts credential canaries in catalog and never exposes unsupported native/cloud/auth actions", async () => {
+  it("redacts catalog credentials and advertises only implemented local native scope", async () => {
     const { a, p } = setup({
       ok: true,
       models: [
@@ -162,7 +162,7 @@ describe("Cursor bootstrap", () => {
       JSON.stringify(await a.listModels({ connectionProfileId: p.id })),
     ).not.toContain("canary");
     expect((await a.describeCapabilities()).details.nativeTurns.supported).toBe(
-      false,
+      true,
     );
     await expect(auth(a, p.id, "login-browser")).rejects.toThrow();
     await expect(

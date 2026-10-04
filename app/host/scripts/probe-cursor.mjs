@@ -3,7 +3,7 @@ import { cpSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 const host = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = mkdtempSync(join(tmpdir(), "specops-cursor-installed-probe-"));
 try {
@@ -37,6 +37,22 @@ try {
     !JSON.parse(worker.stdout).probe?.durableAgent
   )
     throw new Error("Copied native SDK control probe failed");
+  const store = join(home, "native", "session-store");
+  mkdirSync(store, {mode:0o700});
+  const sessionProbe = (request) => new Promise((resolveProbe, rejectProbe) => {
+    const child = spawn(node, [join(payload,"session-worker.mjs")], {cwd:root,env,stdio:["pipe","pipe","pipe"]});
+    let stdout="", stderr="";
+    const timer=setTimeout(()=>{child.kill("SIGKILL");rejectProbe(new Error("Copied native session worker timed out"));},10000);
+    child.stdout.on("data",chunk=>{stdout+=chunk;if(stdout.length>1048576)child.kill("SIGKILL");});
+    child.stderr.on("data",chunk=>{stderr+=chunk;});
+    child.once("error",rejectProbe);
+    child.once("close",code=>{clearTimeout(timer);child.stdin.destroy();try{if(code!==0||stderr)throw new Error();resolveProbe(stdout.trim().split("\n").map(line=>JSON.parse(line)));}catch{rejectProbe(new Error("Copied native session worker failed"));}});
+    child.stdin.write(JSON.stringify({...request,sdk,store,cwd:root,key:"specops-no-account-probe",binding:{scope:"copied-native-session-probe"}})+"\n");
+  });
+  const created=await sessionProbe({action:"create"});
+  if(created.length!==1||created[0].type!=="created"||!created[0].agentId.startsWith("agent-"))throw new Error("Copied native session creation failed");
+  const history=await sessionProbe({action:"history",agentId:created[0].agentId});
+  if(history.at(-1)?.type!=="historyDone"||history.some(frame=>frame.type==="failure"))throw new Error("Copied native session resume failed");
   const native = join(
     payload,
     `node_modules/@cursor/sdk-${process.platform}-${process.arch}`,
@@ -65,6 +81,7 @@ try {
       arch: process.arch,
       nodeVersion: process.version,
       durableLocalAgent: true,
+      durableLocalSessionWorker: true,
       store: "jsonl",
       nativeSearch: true,
       nativeSandboxExecutable: true,

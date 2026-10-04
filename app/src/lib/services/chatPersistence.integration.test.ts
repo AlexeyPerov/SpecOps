@@ -55,7 +55,7 @@ import { createAgentHostClient } from '../session/host/agentHostClient';
 import { bindAgentHostClientForTests } from './agentHostRuntime';
 import { executeProviderTurn } from '../ai/chatSendPipeline';
 import { registerPermissionPromptRunner } from './permissionPrompt';
-const nativeRuntimes: (CodexRuntimeAdapter | OpenCodeRuntimeAdapter | ClaudeRuntimeAdapter)[] = [];
+const nativeRuntimes: (CodexRuntimeAdapter | OpenCodeRuntimeAdapter | ClaudeRuntimeAdapter | CursorRuntimeAdapter)[] = [];
 afterEach(() => { nativeRuntimes.splice(0).forEach(adapter => adapter.close()); bindAgentHostClientForTests(null); registerPermissionPromptRunner(null); });
 async function nativeClient(adapter: import('../session/adapter').AgentRuntimeAdapter, generation: number) {
   const registry = new AdapterRegistry(); registry.register(adapter);
@@ -232,8 +232,40 @@ it.each(["divergent", "corrupt"] as const)(
 );
 
 import { ClaudeRuntimeAdapter } from '../../../host/src/claude/adapter';
+import { CursorRuntimeAdapter } from '../../../host/src/cursor/adapter';
+import { CursorFixtureDriver } from '../../../host/src/cursor/fixtures';
+import { CURSOR_SDK_VERSION } from '../../../host/src/cursor/runtime';
 import { ClaudeFixtureDriver, fixturePath } from '../../../host/src/claude/fixtures';
 import { CLAUDE_NATIVE_VERSION, CLAUDE_SDK_VERSION } from '../../../host/src/claude/runtime';
+it.each(['divergent', 'corrupt'] as const)('Cursor native %s cache reconciles production dispatcher/client/pipeline/store/disk without replay', async cache => {
+ const root=join(dataDir,'workspace');await mkdir(root);
+ const profileRoot=join(dataDir,'profiles');await mkdir(profileRoot);
+ const driver=new CursorFixtureDriver(join(profileRoot,'native-fixture.json'));
+ const options={profileRoot,assets:()=>({sdk:'fixture',worker:'fixture',root:'fixture',sdkVersion:CURSOR_SDK_VERSION}),control:async(_assets:unknown,_env:unknown,action:string)=>action==='probe'?{ok:true,probe:{durableAgent:true,nativeId:true,store:'jsonl',node:process.version}}:{ok:true,models:[{id:'native-model',displayName:'Native model'}]},driver:()=>driver};
+ const first=new CursorRuntimeAdapter(options);nativeRuntimes.push(first);const profile=first.store.create('Native profile');first.store.saveKey(profile.id,'fixture-private-key-canary');
+ const client=await nativeClient(first,1);bindAgentHostClientForTests(()=>client);
+ chatStore.setActiveWorkspaceRoot(root);const sessionId=chatStore.createDraftSession()!;
+ chatStore.updateThreadMetadata({runtimeId:'cursor',connectionProfileId:profile.id,selectedModelId:'native-model',selectedModeId:'agent'});
+ chatStore.appendMessage({id:'user-first',role:'user',content:'secret',createdAt:'t'},{sessionId});chatStore.beginTurn('first',sessionId);
+ expect(await executeProviderTurn({root,activeSessionId:sessionId,turnId:'first'})).toMatchObject({ok:true});
+ const binding=chatStore.getSessionLink(sessionId,root)!;expect(binding).toMatchObject({runtimeId:'cursor',connectionProfileId:profile.id,modelId:'native-model',modeId:'agent',runtimeMetadata:{workspaceRootPath:realpathSync(root),tools:[],settingSources:[]}});
+ const saved=chatStore.getActiveThreadSnapshot(sessionId)!,runId=saved.messages.find(m=>m.role==='assistant')!.nativeTurnId;
+ expect(runId).toMatch(/^run-/);expect(JSON.stringify(saved)).not.toContain('fixture-private-key-canary');
+ if(cache==='divergent')saved.messages=saved.messages.map(m=>({...m,content:'stale cache'}));
+ await persistSessionThreadSnapshot(root,sessionId,saved);await flushSessionIndexPersistence(root);
+ const {getSessionThreadFilePath}=await import('./chatPersistencePaths');const cachedFile=await getSessionThreadFilePath(root,sessionId);expect(await readFile(cachedFile,'utf8')).not.toContain('fixture-private-key-canary');
+ if(cache==='corrupt')await writeFile(cachedFile,'{broken');
+ await first.close();chatStore.reset();chatStore.setActiveWorkspaceRoot(root);await chatStore.loadWorkspaceSessions(root);expect(chatStore.getSessionLink(sessionId,root)).toEqual(binding);
+ const fresh=new CursorRuntimeAdapter(options);nativeRuntimes.push(fresh);const freshClient=await nativeClient(fresh,2);bindAgentHostClientForTests(()=>freshClient);chatStore.setActiveSessionId(sessionId);
+ chatStore.appendMessage({id:'user-next',role:'user',content:'follow up',createdAt:'t2'},{sessionId});chatStore.beginTurn('next',sessionId);
+ expect(await executeProviderTurn({root,activeSessionId:sessionId,turnId:'next'})).toMatchObject({ok:true});
+ const messages=chatStore.getMessages(sessionId);expect(messages.filter(m=>m.id==='user-first')).toHaveLength(1);expect(messages.filter(m=>m.role==='assistant')).toHaveLength(2);expect(messages.some(m=>m.content==='stale cache')).toBe(false);
+ const previous=messages.find(m=>m.role==='assistant'&&m.nativeTurnId===runId)!;expect(previous.content).toBe('Native [REDACTED] answer ');expect(previous.toolCalls).toHaveLength(1);expect(previous.completionState).toBe('completed');expect(previous.parts?.some(p=>p.type==='reasoning')).toBe(true);
+ expect(chatStore.getSessionLink(sessionId,root)).toEqual(binding);expect(driver.calls.filter(c=>c.action==='create')).toHaveLength(1);expect(driver.calls.filter(c=>c.action==='send')).toHaveLength(2);expect(JSON.stringify(messages)).not.toContain('fixture-private-key-canary');
+ const db=JSON.parse(await readFile(driver.path,'utf8'));delete db[binding.nativeSessionId];await writeFile(driver.path,JSON.stringify(db));
+ chatStore.appendMessage({id:'missing',role:'user',content:'continue',createdAt:'t3'},{sessionId});chatStore.beginTurn('missing',sessionId);
+ expect((await executeProviderTurn({root,activeSessionId:sessionId,turnId:'missing'})).ok).toBe(false);expect(chatStore.getSessionLink(sessionId,root)).toEqual(binding);expect(driver.calls.filter(c=>c.action==='create')).toHaveLength(1);expect(driver.calls.filter(c=>c.action==='send')).toHaveLength(2);
+});
 it.each(['divergent','corrupt'] as const)('Claude native %s cache uses production dispatcher/client/pipeline/disk and profile-bound authoritative history',async cache=>{
  const firstPrompt = cache === 'corrupt' ? 'secret' : 'hello';
  const firstAnswer = cache === 'corrupt' ? '[redacted] private' : 'Native fixture answer';

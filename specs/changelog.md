@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-04 12:35 MSK — Release helper commands
+
+- Added `node scripts/release.mjs bump [patch|minor|major|X.Y.Z]` to
+  synchronize application versions across npm, Tauri, Cargo and lockfiles,
+  record the version change here and commit it on `master`.
+- Added `build` to push `master` and its annotated version tag atomically,
+  triggering the existing GitHub installer workflow, and `build --local`
+  to run the desktop build with optional Tauri arguments.
+- Release commands require a clean checkout, validate synchronized versions
+  and refuse duplicate published tags, conflicting local tags and a checkout
+  that does not include remote `master`. Documented usage and failure recovery.
+- Validation: six isolated Git integration tests cover version changes,
+  commits, dirty/staged changes, version mismatch, tag publication and remote
+  divergence; added these tests to the cross-platform CI workflow. Local
+  build argument forwarding passed. Markdown link checking still reports two
+  existing broken links outside the changed documentation.
+
 ## 2026-10-04 12:22 MSK — Project tree navigation, Git colors and favorites
 
 - Added a tree actions menu with Expand one level and Collapse all. Expansion

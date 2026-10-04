@@ -19,10 +19,12 @@ const SECRET_KEY_PATTERNS = [
   /^password$/i,
   /token$/i,
   /^bearer$/i,
+  /^(authUrl|verificationUrl|userCode|deviceCode|deviceAuthCode)$/i,
   /cookie$/i,
 ];
 
 const SECRET_VALUE_PATTERNS = [
+  /https?:\/\/[^\s?#]+\?[^\s]+/g,
   /Bearer\s+\S+/gi,
   /sk-[A-Za-z0-9_-]{16,}/g,
   /AIza[0-9A-Za-z_-]{20,}/g,

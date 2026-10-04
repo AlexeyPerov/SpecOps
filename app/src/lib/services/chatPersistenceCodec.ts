@@ -86,6 +86,7 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
   if (value.selectedModeId !== undefined && typeof value.selectedModeId !== "string") {
     return null;
   }
+  if (value.connectionProfileId !== undefined && (typeof value.connectionProfileId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(value.connectionProfileId))) return null;
   if (value.runtimeId !== undefined && typeof value.runtimeId !== "string") {
     return null;
   }
@@ -101,6 +102,7 @@ function parseThreadMetadata(value: unknown): ChatThreadMetadata | null {
     selectedModelId: value.selectedModelId,
     selectedModeId: value.selectedModeId,
     runtimeId: value.runtimeId,
+    connectionProfileId: value.connectionProfileId,
   };
 }
 
@@ -369,6 +371,7 @@ function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
   if (value.isDraft !== undefined && typeof value.isDraft !== "boolean") {
     return null;
   }
+  if (value.connectionProfileId !== undefined && (typeof value.connectionProfileId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/.test(value.connectionProfileId))) return null;
   if (value.runtimeId !== undefined && typeof value.runtimeId !== "string") {
     return null;
   }
@@ -392,6 +395,7 @@ function parseSessionIndexEntry(value: unknown): SessionIndexEntry | null {
     lastUsedAt: value.lastUsedAt,
     isDraft: value.isDraft,
     runtimeId: value.runtimeId,
+    connectionProfileId: value.connectionProfileId,
     nativeSessionId: value.nativeSessionId,
     modelId: value.modelId,
     modeId: value.modeId,

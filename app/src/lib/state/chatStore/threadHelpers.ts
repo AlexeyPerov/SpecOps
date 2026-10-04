@@ -35,7 +35,7 @@ export function applyMetadataPatch(
   patch: Partial<
     Pick<
       ChatThreadMetadata,
-      "summary" | "selectedModelId" | "selectedModeId" | "runtimeId"
+      "summary" | "selectedModelId" | "selectedModeId" | "runtimeId" | "connectionProfileId"
     >
   >,
   updatedAt: string,

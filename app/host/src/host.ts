@@ -7,6 +7,7 @@
  * registered; phase 02–05 add real runtimes here.
  */
 
+import { CodexRuntimeAdapter } from "./codex/adapter";
 import { AdapterRegistry } from "./registry";
 import { HostDispatcher, type HostWritable } from "./dispatch";
 import { readMessages } from "./framing";
@@ -48,6 +49,7 @@ export function createDefaultRegistry(extra: readonly AgentRuntimeAdapter[] = []
       },
     }),
   );
+  registry.register(new CodexRuntimeAdapter());
   for (const adapter of extra) {
     registry.register(adapter);
   }

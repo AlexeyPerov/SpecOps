@@ -53,7 +53,7 @@ function validateOptionalFields(value: unknown, depth = 0): string | null {
     return null;
   }
   if (!isObject(value)) return null;
-  const strings = ["description", "prompt", "reason", "filename", "snapshot", "finishedAt", "modelId", "modeId", "parentSessionId", "lastTurnAt", "name"];
+  const strings = ["description", "prompt", "reason", "filename", "snapshot", "finishedAt", "connectionProfileId", "modelId", "modeId", "parentSessionId", "lastTurnAt", "name"];
   // Tool input/output are intentionally arbitrary JSON; validate only typed structures.
   if ("agent" in value) {
     for (const key of ["output", "error"]) if (value[key] !== undefined && typeof value[key] !== "string") return `${key} must be a string`;
@@ -486,6 +486,7 @@ function decodeSessionRef(value: unknown): DecodeResult<AgentSessionRef> {
       native: {
         runtimeId: nativeRuntimeId as AgentSessionRef["runtimeId"],
         nativeSessionId,
+        connectionProfileId: readOptionalString(value.native.connectionProfileId),
         modelId: readOptionalString(value.native.modelId),
         modeId: readOptionalString(value.native.modeId),
         parentSessionId: readOptionalString(value.native.parentSessionId),
@@ -589,6 +590,7 @@ function decodeIndexEntry(value: unknown): SessionStoreIndexEntry | null {
     id: asSpecOpsSessionId(id),
     runtimeId,
     nativeSessionId: asNativeSessionId(nativeSessionId) as NativeSessionId,
+    ...(typeof value.connectionProfileId === "string" ? { connectionProfileId: value.connectionProfileId } : {}),
     title,
     lastTurnAt,
     status,

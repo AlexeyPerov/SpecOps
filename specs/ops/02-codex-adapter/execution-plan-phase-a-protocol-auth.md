@@ -2,11 +2,13 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** Implemented from source; automated/bootstrap checks passed; manual account-B acceptance pending
 
 **Prerequisites:** AS01-S accepted. Claude is not a prerequisite.
 
 **Scope:** [README](README.md) · [Execution index](execution-plan.md) · [Roadmap](../roadmap.md)
+
+**Evidence:** [Phase A implementation and acceptance ledger](implementation-notes-phase-a.md)
 
 ## Goal
 
@@ -67,3 +69,16 @@ Add no-account fixtures for missing/unsupported executable, malformed init, prof
 ## Exit and next work
 
 B starts with a stable isolated authenticated connection. 03-B may prepare packaging after S and use B for installed runtime smoke. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+
+## Landed task evidence (2026-10-04 16:28 MSK)
+
+| Task | Implementation evidence | Acceptance state |
+| --- | --- | --- |
+| AS02-A-01 | Pinned 0.160.0 native stdio child, required control/read/catalog probe, isolated restart/generation/descendant fixtures | Automated/source accepted; installed executable discovery downstream |
+| AS02-A-02 | Reproducible native contracts, consumed request types/required validators, composite profile routing and dedicated auth notifications | Automated accepted |
+| AS02-A-03 | App-data home, file credential boundary, permissions/symlink/env/redaction fixtures, no default-home copy | Automated accepted; real authenticated A/B preservation pending |
+| AS02-A-04 | Official account read/login/cancel/completion/logout/reconnect; profile UI; browser/device/API-key fixtures | Implemented; live account-B sign-in manually gated |
+| AS02-A-05 | Neutral Sessions setting, ensure-start discovery/catalog recovery, persisted draft/profile/native binding, immutable selection | Automated/source accepted |
+| AS02-A-06 | No-account subprocess/security/auth/codec/routing tests and real bounded binary probe | Automated portion accepted; manual account-B smoke pending |
+
+See the evidence ledger for exact commands, support bounds and the remaining account/installed gates. Native coding and resume remain B work.

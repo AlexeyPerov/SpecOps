@@ -12,4 +12,5 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # Build output of the host bundle (no sources tracked here)
-/host/
+/host/dist/
+/host/node_modules/

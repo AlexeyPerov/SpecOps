@@ -44,6 +44,7 @@ import type { AttachmentSnapshot, SessionEvent } from "../events";
 export interface NativeSessionRef {
   readonly runtimeId: AgentRuntimeId;
   readonly nativeSessionId: NativeSessionId;
+  readonly connectionProfileId?: string;
   readonly modelId?: string;
   readonly modeId?: string;
   readonly runtimeMetadata?: Readonly<Record<string, unknown>>;
@@ -78,6 +79,7 @@ export interface AgentAuthChallenge {
 export interface AgentAuthRequest {
   readonly runtimeId: AgentRuntimeId;
   readonly workspaceRootPath: string;
+  readonly connectionProfileId?: string;
   readonly credential?: AgentCredentialHandle;
   readonly options?: Readonly<Record<string, unknown>>;
 }
@@ -87,6 +89,8 @@ export type AgentAuthStatus = "authenticated" | "not-required" | "challenge";
 export interface AgentAuthResult {
   readonly status: AgentAuthStatus;
   readonly challenge?: AgentAuthChallenge;
+  readonly profile?: import("../profiles").ConnectionProfileSnapshot;
+  readonly profiles?: readonly import("../profiles").ConnectionProfileSnapshot[];
   readonly expiresAt?: string;
   readonly message?: string;
 }
@@ -98,6 +102,7 @@ export interface AgentAuthResult {
 export interface CreateAgentSessionRequest {
   readonly runtimeId: AgentRuntimeId;
   readonly workspaceRootPath: string;
+  readonly connectionProfileId?: string;
   readonly modelId?: string;
   readonly modeId?: string;
   readonly capabilities?: readonly AgentCapabilityValue[];
@@ -107,6 +112,7 @@ export interface CreateAgentSessionRequest {
 export interface ResumeAgentSessionRequest {
   readonly native: NativeSessionRef;
   readonly workspaceRootPath: string;
+  readonly connectionProfileId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +124,7 @@ export interface AgentTurnRequest {
   readonly turnId: SpecOpsTurnId;
   readonly native: NativeSessionRef;
   readonly workspaceRootPath: string;
+  readonly connectionProfileId?: string;
   readonly prompt: string;
   readonly attachments?: readonly AttachmentSnapshot[];
   /**
@@ -146,6 +153,8 @@ export interface AdapterHealth {
   readonly status: AdapterHealthStatus;
   readonly runtimeId: AgentRuntimeId;
   readonly runtimeVersion?: string;
+  readonly connectionProfileId?: string;
+  readonly generation?: number;
   readonly message?: string;
   readonly checkedAt: string;
 }
@@ -214,7 +223,7 @@ export interface AgentRuntimeAdapter {
   cancel(request: CancelAgentTurnRequest): Promise<void>;
 
   /** Report runtime health (availability, version). */
-  health(): Promise<AdapterHealth>;
+  health(connectionProfileId?: string): Promise<AdapterHealth>;
 }
 
 /** Terminal turn event kinds — exactly one of these ends every turn stream. */

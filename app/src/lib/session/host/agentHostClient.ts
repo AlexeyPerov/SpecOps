@@ -14,6 +14,7 @@
  * domain types (`NativeSessionRef`, `SessionEvent`, …).
  */
 
+import { nativeRoutingKey, type ProfileAuthUpdate } from "../profiles";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
@@ -71,6 +72,8 @@ interface HostNotification {
 
 /** `session.event` notification params. */
 interface SessionEventParams {
+  runtimeId?: string;
+  connectionProfileId?: string;
   nativeSessionId: string;
   event: SessionEvent;
 }
@@ -86,14 +89,19 @@ export interface DiscoverResult {
 }
 
 export interface CatalogModelsResult {
+  runtimeId?: AgentRuntimeId;
+  connectionProfileId?: string;
   models: readonly AgentModelDescriptor[];
 }
 export interface CatalogModesResult {
+  runtimeId?: AgentRuntimeId;
+  connectionProfileId?: string;
   modes: readonly AgentModeDescriptor[];
 }
 
 export interface CreateSessionRequest {
   runtimeId: AgentRuntimeId;
+  connectionProfileId?: string;
   workspaceRootPath: string;
   modelId?: string;
   modeId?: string;
@@ -156,12 +164,13 @@ export interface AgentHostClient {
   restart(): Promise<AgentHostStatus>;
   getStatus(): Promise<AgentHostStatus>;
   discover(): Promise<DiscoverResult>;
+  subscribeProfiles(listener: (update: ProfileAuthUpdate) => void): Promise<() => void>;
   authenticate(request: AgentAuthRequest): Promise<AgentAuthResult>;
-  catalogModels(runtimeId: AgentRuntimeId, workspaceRootPath?: string): Promise<CatalogModelsResult>;
-  catalogModes(runtimeId: AgentRuntimeId, modelId?: string): Promise<CatalogModesResult>;
+  catalogModels(runtimeId: AgentRuntimeId, workspaceRootPath?: string, connectionProfileId?: string): Promise<CatalogModelsResult>;
+  catalogModes(runtimeId: AgentRuntimeId, modelId?: string, connectionProfileId?: string): Promise<CatalogModesResult>;
   createSession(request: CreateSessionRequest): Promise<NativeSessionRef>;
   resumeSession(request: ResumeSessionRequest): Promise<NativeSessionRef>;
-  health(runtimeId?: AgentRuntimeId): Promise<AdapterHealth>;
+  health(runtimeId?: AgentRuntimeId, connectionProfileId?: string): Promise<AdapterHealth>;
   replyPermission(request: PermissionReplyRequest): Promise<void>;
   replyQuestion(request: QuestionReplyRequest): Promise<void>;
   /** Send a turn and yield its event stream until a terminal event. */
@@ -171,13 +180,14 @@ export interface AgentHostClient {
 
 export function createAgentHostClient(bindings: AgentHostBindings = defaultBindings): AgentHostClient {
   // Fan-out state for session.event notifications. Lazily wired on first use.
+  const profileSubscribers = new Set<(update: ProfileAuthUpdate) => void>();
   const subscribers = new Map<string, Set<SessionSubscriber>>();
   let listenerPromise: Promise<UnlistenFn> | null = null;
   const failures = new Map<string, (error: Error) => void>();
   const failStreams = (message: string): void => { for (const fail of failures.values()) fail(new Error(message)); };
 
-  function nativeKey(nativeSessionId: string): string {
-    return nativeSessionId;
+  function nativeKey(nativeSessionId: string, runtimeId = "fake", connectionProfileId?: string): string {
+    return nativeRoutingKey(runtimeId, connectionProfileId, nativeSessionId);
   }
 
   async function ensureListener(): Promise<void> {
@@ -190,12 +200,16 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
       if (!notification || typeof notification.method !== "string") {
         return;
       }
+      if (notification.method === "profile.authUpdated") {
+        const update = notification.params as ProfileAuthUpdate;
+        if (update && typeof update.connectionProfileId === "string" && typeof update.generation === "number" && update.profile) for (const listener of profileSubscribers) listener(update);
+      }
       if (notification.method === "session.event") {
         const params = notification.params as SessionEventParams | undefined;
         if (!params || typeof params.nativeSessionId !== "string" || !params.event) {
           return;
         }
-        const set = subscribers.get(nativeKey(params.nativeSessionId));
+        const set = subscribers.get(nativeKey(params.nativeSessionId, params.runtimeId, params.connectionProfileId));
         if (set) {
           for (const subscriber of set) {
             subscriber(params.event);
@@ -211,8 +225,8 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
     });
   }
 
-  function subscribe(nativeSessionId: string, subscriber: SessionSubscriber): () => void {
-    const key = nativeKey(nativeSessionId);
+  function subscribe(nativeSessionId: string, subscriber: SessionSubscriber, runtimeId?: string, connectionProfileId?: string): () => void {
+    const key = nativeKey(nativeSessionId, runtimeId, connectionProfileId);
     let set = subscribers.get(key);
     if (!set) {
       set = new Set();
@@ -225,7 +239,7 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
         current.delete(subscriber);
         if (current.size === 0) {
           subscribers.delete(key);
-          if (subscribers.size === 0 && listenerPromise) {
+          if (subscribers.size === 0 && profileSubscribers.size === 0 && listenerPromise) {
             const closing = listenerPromise;
             listenerPromise = null;
             void closing.then((unlisten) => unlisten()).catch(() => {});
@@ -270,21 +284,31 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
       return rememberStatus((await bindings.invoke("agent_host_status")) as AgentHostStatus);
     },
 
+    async subscribeProfiles(listener) {
+      await ensureListener();
+      profileSubscribers.add(listener);
+      return () => {
+        profileSubscribers.delete(listener);
+        if (!profileSubscribers.size && !subscribers.size && listenerPromise) { const closing = listenerPromise; listenerPromise = null; void closing.then(unlisten => unlisten()).catch(() => {}); }
+      };
+    },
     async discover() {
       return request<DiscoverResult>("discover");
     },
     async authenticate(req) {
       return request<AgentAuthResult>("auth", req);
     },
-    async catalogModels(runtimeId, workspaceRootPath) {
+    async catalogModels(runtimeId, workspaceRootPath, connectionProfileId) {
       return request<CatalogModelsResult>("catalog.models", {
         runtimeId,
+        connectionProfileId,
         ...(workspaceRootPath !== undefined ? { workspaceRootPath } : {}),
       });
     },
-    async catalogModes(runtimeId, modelId) {
+    async catalogModes(runtimeId, modelId, connectionProfileId) {
       return request<CatalogModesResult>("catalog.modes", {
         runtimeId,
+        connectionProfileId,
         ...(modelId !== undefined ? { modelId } : {}),
       });
     },
@@ -294,8 +318,8 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
     async resumeSession(req) {
       return request<NativeSessionRef>("session.resume", req);
     },
-    async health(runtimeId) {
-      return request<AdapterHealth>("health", runtimeId !== undefined ? { runtimeId } : {});
+    async health(runtimeId, connectionProfileId) {
+      return request<AdapterHealth>("health", runtimeId !== undefined ? { runtimeId, connectionProfileId } : {});
     },
     async replyPermission(req) {
       await request("permission.reply", req);
@@ -358,7 +382,7 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
           terminal = true;
         }
         resolveNext?.();
-      });
+      }, req.native.runtimeId, req.native.connectionProfileId);
 
       try {
         // Ack first (the host contract writes the ack before any event).

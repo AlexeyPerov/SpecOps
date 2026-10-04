@@ -24,10 +24,10 @@ import type {
 } from "../session/binding";
 
 /**
- * Runtime used for new sessions until runtime selection ships with real
- * adapters (phases 02+). The fake runtime is the only registered adapter.
+ * Production default for fresh sessions. Discovery also exposes the fake
+ * runtime for account-free development; an isolated profile is required for Codex.
  */
-export const DEFAULT_SESSION_RUNTIME_ID: AgentRuntimeId = "fake";
+export const DEFAULT_SESSION_RUNTIME_ID: AgentRuntimeId = "codex";
 
 let sharedClient: AgentHostClient | null = null;
 let clientFactory: () => AgentHostClient = () => createAgentHostClient();
@@ -45,13 +45,19 @@ export function getAgentHostClient(): AgentHostClient {
  * the cache so the next call retries.
  */
 export async function ensureAgentHostStarted(): Promise<AgentHostStatus> {
-  if (ensureStartPromise === null) {
-    const client = getAgentHostClient();
-    ensureStartPromise = client.start().catch((error: unknown) => {
-      ensureStartPromise = null;
-      throw error;
-    });
+  const client = getAgentHostClient();
+  if (ensureStartPromise !== null) {
+    const previous = await ensureStartPromise;
+    try {
+      const current = await client.getStatus();
+      if (current.running && current.generation === previous.generation) return current;
+    } catch { /* A fresh start can recover a retired bridge. */ }
+    ensureStartPromise = null;
   }
+  ensureStartPromise ??= client.start().then(status => {
+    if (!status.running) throw new Error("Agent Host did not start");
+    return status;
+  }).catch(error => { ensureStartPromise = null; throw error; });
   return ensureStartPromise;
 }
 
@@ -97,12 +103,14 @@ export const EMPTY_SESSION_CATALOG: SessionCatalogSnapshot = {
  */
 export async function loadSessionCatalogs(
   runtimeId: AgentRuntimeId,
+  connectionProfileId?: string,
 ): Promise<SessionCatalogSnapshot> {
   const client = getAgentHostClient();
   try {
+    await ensureAgentHostStarted();
     const [modelsResult, modesResult] = await Promise.all([
-      client.catalogModels(runtimeId),
-      client.catalogModes(runtimeId),
+      client.catalogModels(runtimeId, undefined, connectionProfileId),
+      client.catalogModes(runtimeId, undefined, connectionProfileId),
     ]);
     const models = [...modelsResult.models];
     const modes = [...modesResult.modes];

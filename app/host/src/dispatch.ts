@@ -58,6 +58,7 @@ import type { ProtocolError } from "./errors";
 import { ProtocolError as HostProtocolError, toProtocolError, isProtocolError } from "./errors";
 import type { AdapterRegistry } from "./registry";
 import type { BuildInfo } from "./version";
+import { nativeRoutingKey } from "../../src/lib/session/profiles";
 import { HOST_VERSION } from "./version";
 import type {
   AgentRuntimeAdapter,
@@ -65,8 +66,8 @@ import type {
 } from "../../src/lib/session/adapter";
 import { isCatalogExtension, isPermissionExtension, isQuestionExtension } from "../../src/lib/session/adapter";
 import type { SessionEvent } from "../../src/lib/session/events";
-import type { SpecOpsTurnId } from "../../src/lib/session/ids";
 import type { NativeSessionId } from "../../src/lib/session/ids";
+import type { SpecOpsTurnId } from "../../src/lib/session/ids";
 
 export interface HostWritable {
   write(chunk: string | Buffer, callback?: (error?: Error | null) => void): boolean;
@@ -108,6 +109,9 @@ export class HostDispatcher {
 
   constructor(private readonly deps: HostDispatcherDeps) {
     this.maxConcurrentTurns = deps.maxConcurrentTurns ?? MAX_CONCURRENT_TURNS;
+    for (const adapter of deps.registry.list()) {
+      if ("onAuthUpdate" in adapter) (adapter as unknown as { onAuthUpdate: (update: unknown) => void }).onAuthUpdate = update => { void this.enqueue(makeNotification("profile.authUpdated", redactForLogs(update))).catch(() => {}); };
+    }
   }
 
   get isInitialized(): boolean {
@@ -259,7 +263,7 @@ export class HostDispatcher {
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const adapter = this.deps.registry.require(decoded.value.runtimeId);
     const result = await adapter.authenticate(decoded.value);
-    await this.respond(makeResponse(id, result));
+    await this.respond(makeResponse(id, redactForLogs(result)));
   }
 
   private async handleCatalogModels(id: RequestId, params: unknown): Promise<void> {
@@ -267,9 +271,9 @@ export class HostDispatcher {
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const adapter = this.deps.registry.require(decoded.value.runtimeId);
     const models = isCatalogExtension(adapter)
-      ? await adapter.listModels({ ...(decoded.value.workspaceRootPath ? { workspaceRootPath: decoded.value.workspaceRootPath } : {}) })
+      ? await adapter.listModels({ connectionProfileId: decoded.value.connectionProfileId, ...(decoded.value.workspaceRootPath ? { workspaceRootPath: decoded.value.workspaceRootPath } : {}) })
       : [];
-    await this.respond(makeResponse(id, { models }));
+    await this.respond(makeResponse(id, { runtimeId: decoded.value.runtimeId, connectionProfileId: decoded.value.connectionProfileId, models }));
   }
 
   private async handleCatalogModes(id: RequestId, params: unknown): Promise<void> {
@@ -277,9 +281,9 @@ export class HostDispatcher {
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const adapter = this.deps.registry.require(decoded.value.runtimeId);
     const modes = isCatalogExtension(adapter)
-      ? await adapter.listModes({ ...(decoded.value.modelId ? { modelId: decoded.value.modelId } : {}) })
+      ? await adapter.listModes({ connectionProfileId: decoded.value.connectionProfileId, ...(decoded.value.modelId ? { modelId: decoded.value.modelId } : {}) })
       : [];
-    await this.respond(makeResponse(id, { modes }));
+    await this.respond(makeResponse(id, { runtimeId: decoded.value.runtimeId, connectionProfileId: decoded.value.connectionProfileId, modes }));
   }
 
   private async handleSessionCreate(id: RequestId, params: unknown): Promise<void> {
@@ -335,7 +339,7 @@ export class HostDispatcher {
       if (controller) await this.bounded(controller.done, this.deps.drainTimeoutMs ?? 1000);
     } catch {
       if (controller && !controller.terminal) {
-        await this.writeEvent(controller.native.nativeSessionId, {
+        await this.writeEvent(controller.native, {
           type: "turn.cancelled", nativeSessionId: controller.native.nativeSessionId,
           turnId: controller.turnId, seq: controller.lastSeq + 1, at: new Date().toISOString(),
         });
@@ -375,7 +379,7 @@ export class HostDispatcher {
     const decoded = decodeHealth(params);
     if (!decoded.ok) return this.invalidParams(id, decoded.reason);
     const result = decoded.value.runtimeId
-      ? await this.deps.registry.require(decoded.value.runtimeId).health()
+      ? await this.deps.registry.require(decoded.value.runtimeId).health(decoded.value.connectionProfileId)
       : await this.deps.registry.health();
     await this.respond(makeResponse(id, result));
   }
@@ -426,7 +430,7 @@ export class HostDispatcher {
         if (controller.terminal) throw new Error("Adapter emitted an event after terminal");
         controller.terminal = ["turn.finished", "turn.failed", "turn.cancelled"].includes(event.type);
         controller.lastSeq = event.seq;
-        await this.writeEvent(value.native.nativeSessionId, event);
+        await this.writeEvent(value.native, event);
       }
       if (!controller.terminal && !controller.stopped) throw new Error("Adapter stream ended without terminal");
     } catch (error) {
@@ -434,7 +438,7 @@ export class HostDispatcher {
       const reason = error instanceof Error ? error.message : String(error);
       if (controller.terminal || controller.stopped || this.shouldExitFlag) return;
       await this.writeEvent(
-        value.native.nativeSessionId,
+        value.native,
         this.synthesizeFailure(value.native.nativeSessionId, value.turnId, controller.lastSeq + 1, reason),
       );
     } finally {
@@ -463,6 +467,7 @@ export class HostDispatcher {
       return;
     }
     this.shuttingDown = true;
+    for (const adapter of this.deps.registry.list()) if ("close" in adapter && typeof adapter.close === "function") adapter.close();
     this.log(`graceful shutdown: ${reason}`);
 
     // Cancel every active turn; the adapter emits turn.cancelled, pumps drain.
@@ -483,7 +488,7 @@ export class HostDispatcher {
   // -- helpers ----------------------------------------------------------------
 
   private turnKey(native: NativeSessionRef): string {
-    return `${native.runtimeId}:${String(native.nativeSessionId)}`;
+    return nativeRoutingKey(native.runtimeId, native.connectionProfileId, String(native.nativeSessionId));
   }
 
   private async invalidParams(id: RequestId, reason: string): Promise<void> {
@@ -501,9 +506,9 @@ export class HostDispatcher {
     catch (error) { this.shouldExitFlag = true; this.deps.onTransportFailure?.(); this.log(`failed to write response: ${String(error)}`); }
   }
 
-  private async writeEvent(nativeSessionId: NativeSessionId, event: SessionEvent): Promise<void> {
+  private async writeEvent(native: NativeSessionRef, event: SessionEvent): Promise<void> {
     const safe = event.type === "diagnostic" || event.type === "turn.failed" ? redactForLogs(event) : event;
-    await this.enqueue(makeNotification(NotificationMethod.SessionEvent, { nativeSessionId, event: safe }));
+    await this.enqueue(makeNotification(NotificationMethod.SessionEvent, { runtimeId: native.runtimeId, connectionProfileId: native.connectionProfileId, nativeSessionId: native.nativeSessionId, event: { ...safe as SessionEvent, connectionProfileId: native.connectionProfileId } }));
   }
 
   private enqueue(message: unknown): Promise<void> {

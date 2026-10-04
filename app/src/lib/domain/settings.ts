@@ -212,6 +212,7 @@ export interface AppSettingsState {
    * (default), files open in whichever context is active.
    */
   restrictFilesToContext: boolean;
+  sessionsEnabled: boolean;
   opencode: OpencodeSettings;
   gitIntegration: GitIntegrationSettings;
   opencodeHealth: OpencodeHealthState;

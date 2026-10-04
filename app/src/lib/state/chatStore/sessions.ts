@@ -188,6 +188,7 @@ export function patchSessionIndexEntry(
 export interface SessionBinding {
   runtimeId: AgentRuntimeId;
   nativeSessionId: string;
+  connectionProfileId?: string;
   modelId?: string;
   modeId?: string;
   runtimeMetadata?: Readonly<Record<string, unknown>>;
@@ -202,6 +203,7 @@ function sessionBindingFromEntry(entry: SessionIndexEntry): SessionBinding | nul
   return {
     runtimeId: entry.runtimeId,
     nativeSessionId: entry.nativeSessionId,
+    connectionProfileId: entry.connectionProfileId,
     ...(entry.modelId ? { modelId: entry.modelId } : {}),
     ...(entry.modeId ? { modeId: entry.modeId } : {}),
     ...(entry.runtimeMetadata ? { runtimeMetadata: entry.runtimeMetadata } : {}),
@@ -215,13 +217,14 @@ function applySessionBinding(
   binding: SessionBinding | null,
 ): SessionIndexEntry {
   if (!binding || binding.nativeSessionId.trim().length === 0) {
-    const { runtimeId: _r, nativeSessionId: _n, modelId: _m, modeId: _mode, runtimeMetadata: _meta, shareUrl: _s, parentSessionId: _p, ...rest } = entry;
+    const { runtimeId: _r, nativeSessionId: _n, connectionProfileId: _profile, modelId: _m, modeId: _mode, runtimeMetadata: _meta, shareUrl: _s, parentSessionId: _p, ...rest } = entry;
     return rest;
   }
   return {
     ...entry,
     runtimeId: binding.runtimeId,
     nativeSessionId: binding.nativeSessionId,
+    connectionProfileId: binding.connectionProfileId,
     modelId: binding.modelId,
     modeId: binding.modeId,
     runtimeMetadata: binding.runtimeMetadata,
@@ -238,6 +241,7 @@ function didSessionBindingChange(
   return (
     next.runtimeId !== entry.runtimeId ||
     next.nativeSessionId !== entry.nativeSessionId ||
+    next.connectionProfileId !== entry.connectionProfileId ||
     next.modelId !== entry.modelId ||
     next.modeId !== entry.modeId ||
     JSON.stringify(next.runtimeMetadata) !== JSON.stringify(entry.runtimeMetadata) ||
@@ -429,7 +433,7 @@ export function createSessionsSlice(deps: {
             entry.runtimeId &&
             entry.nativeSessionId &&
             (binding.runtimeId !== entry.runtimeId ||
-              binding.nativeSessionId !== entry.nativeSessionId)
+              binding.nativeSessionId !== entry.nativeSessionId || binding.connectionProfileId !== entry.connectionProfileId)
           ) {
             // Runtime binding is immutable — reject the re-link entirely.
             return nextState;

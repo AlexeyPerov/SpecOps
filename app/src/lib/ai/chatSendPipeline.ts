@@ -118,6 +118,7 @@ function toNativeRef(binding: SessionBinding): NativeSessionRef {
   return {
     runtimeId: binding.runtimeId,
     nativeSessionId: asNativeSessionId(binding.nativeSessionId),
+    connectionProfileId: binding.connectionProfileId,
     ...(binding.modelId ? { modelId: binding.modelId } : {}),
     ...(binding.modeId ? { modeId: binding.modeId } : {}),
     ...(binding.runtimeMetadata ? { runtimeMetadata: binding.runtimeMetadata } : {}),
@@ -338,13 +339,14 @@ async function ensureNativeBinding(input: {
       native: toNativeRef(existing),
       workspaceRootPath: root,
     });
-    if (native.runtimeId !== existing.runtimeId || native.nativeSessionId !== existing.nativeSessionId) {
+    if (native.runtimeId !== existing.runtimeId || native.nativeSessionId !== existing.nativeSessionId || native.connectionProfileId !== existing.connectionProfileId) {
       throw new Error("Resume returned a different native session. Create a new session explicitly to continue.");
     }
     const binding: SessionBinding = {
       ...existing,
       runtimeId: native.runtimeId,
       nativeSessionId: native.nativeSessionId,
+    connectionProfileId: native.connectionProfileId,
       modelId: modelId || existing.modelId,
       ...(modeId ? { modeId } : existing.modeId ? { modeId: existing.modeId } : {}),
       ...(existing.shareUrl ? { shareUrl: existing.shareUrl } : {}),
@@ -360,6 +362,7 @@ async function ensureNativeBinding(input: {
     : DEFAULT_SESSION_RUNTIME_ID;
   const native = await client.createSession({
     runtimeId,
+    connectionProfileId: chatStore.getMetadata(activeSessionId)?.connectionProfileId,
     workspaceRootPath: root,
     ...(modelId ? { modelId } : {}),
     ...(modeId ? { modeId } : {}),
@@ -367,6 +370,7 @@ async function ensureNativeBinding(input: {
   const binding: SessionBinding = {
     runtimeId: native.runtimeId,
     nativeSessionId: native.nativeSessionId,
+    connectionProfileId: native.connectionProfileId,
     modelId: native.modelId ?? (modelId || undefined),
     ...(native.runtimeMetadata ? { runtimeMetadata: native.runtimeMetadata } : {}),
     ...(modeId ? { modeId } : native.modeId ? { modeId: native.modeId } : {}),

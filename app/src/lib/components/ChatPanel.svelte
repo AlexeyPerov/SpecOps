@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { persistSessionConnectionSelection } from "../ai/composerSendActions";
+  import ConnectionProfilePanel from "./ConnectionProfilePanel.svelte";
   import {
     getAccessBlockedCopy,
     OPENCODE_DISABLED_RECOVERY,
@@ -124,6 +126,8 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
     }
     return DEFAULT_SESSION_RUNTIME_ID;
   });
+  const connectionProfileId = $derived(sessionIndexEntry?.connectionProfileId ?? metadata?.connectionProfileId);
+  let catalogRevision = $state(0);
   const runtimeDescriptor = $derived(agentRuntimeDescriptor(runtimeId as AgentRuntimeId));
   const activeModel = $derived(metadata?.selectedModelId ?? sessionIndexEntry?.modelId ?? "");
   const activeMode = $derived(metadata?.selectedModeId ?? "");
@@ -131,14 +135,18 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
   let catalog = $state<SessionCatalogSnapshot>(EMPTY_SESSION_CATALOG);
   $effect(() => {
     const targetRuntime = runtimeId;
+    const targetProfile = connectionProfileId;
+    catalogRevision;
+    let disposed = false;
     catalog = { ...EMPTY_SESSION_CATALOG, status: "loading" };
-    void loadSessionCatalogs(targetRuntime as AgentRuntimeId).then((snapshot) => {
+    void loadSessionCatalogs(targetRuntime as AgentRuntimeId, targetProfile).then((snapshot) => {
       // Ignore stale loads after the runtime changed mid-flight.
-      if (targetRuntime !== runtimeId) {
+      if (disposed || targetRuntime !== runtimeId || targetProfile !== connectionProfileId) {
         return;
       }
       catalog = snapshot;
     });
+    return () => { disposed = true; };
   });
 
   // Default the selected model/mode to the first catalog entry once (creation
@@ -307,6 +315,17 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
       onEmptyAction={emptySetupAction?.onClick}
     />
 
+    <ConnectionProfilePanel
+      {runtimeId}
+      {connectionProfileId}
+      bound={Boolean(sessionIndexEntry?.nativeSessionId)}
+      onSelect={(runtime, profile) => {
+        if (sessionIndexEntry?.nativeSessionId) return;
+        chatStore.updateThreadMetadata({ runtimeId: runtime, connectionProfileId: profile, selectedModelId: "", selectedModeId: "" });
+        persistSessionConnectionSelection();
+      }}
+      onRefresh={() => { catalogRevision += 1; }}
+    />
     <ChatComposer
       {isBlocked}
       {isGenerating}

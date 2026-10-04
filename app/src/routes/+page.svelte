@@ -420,7 +420,7 @@
   );
 
   const opencodeBaseUrl = $derived($appSettings.opencode.baseUrl);
-  const opencodeEnabled = $derived($appSettings.opencode.enabled);
+  const opencodeEnabled = $derived($appSettings.sessionsEnabled);
   const opencodeSidecarPort = $derived($appSettings.opencode.sidecarPort);
   const showSessionsSidebar = $derived(
     Boolean(activeWorkspaceRoot) &&
@@ -1064,7 +1064,7 @@
   {fileDropTargetPaneId}
   {statusMessage}
   {openSessionIds}
-  opencodeEnabled={$appSettings.opencode.enabled}
+  opencodeEnabled={$appSettings.sessionsEnabled}
   canOpenLogsPanel={$appSettings.logSettings.canOpenLogsPanel}
   onFileDropPaneChange={handleFileDropPaneChange}
   {editorWorkbench}

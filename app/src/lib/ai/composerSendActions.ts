@@ -93,3 +93,12 @@ export function createComposerSendActions(deps: ComposerSendActionsDeps) {
     persistActiveThreadSnapshot,
   };
 }
+
+/** Persist an explicit connection selection, including a fresh empty session. */
+export function persistSessionConnectionSelection(): void {
+  const root = chatStore.getActiveChatScopeKey();
+  const sessionId = chatStore.getActiveSessionId();
+  const thread = sessionId ? chatStore.getActiveThreadSnapshot(sessionId) : null;
+  if (!root || !sessionId || !thread) return;
+  scheduleSessionThreadFilePersistence(root, sessionId, { version: 1, thread });
+}

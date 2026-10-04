@@ -284,6 +284,7 @@ export function syncSettingsPersistenceEffect(input: SyncSettingsPersistenceEffe
       autoSuggest: snapshot.settings.autoSuggest,
       defaultMarkdownViewMode: snapshot.settings.defaultMarkdownViewMode,
       restrictFilesToContext: snapshot.settings.restrictFilesToContext,
+      sessionsEnabled: snapshot.settings.sessionsEnabled ?? true,
       opencode: snapshot.settings.opencode,
       gitIntegration: snapshot.settings.gitIntegration,
       logSettings: snapshot.settings.logSettings,

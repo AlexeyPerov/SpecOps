@@ -415,6 +415,13 @@ fn build_host_command(app: &AppHandle) -> Result<Command, AgentHostError> {
     let script = resolve_host_script(app)?;
     let mut command = Command::new(node);
     command.arg(script);
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| AgentHostError::LaunchFailure {
+            message: "Cannot resolve profile storage".to_string(),
+        })?;
+    command.env("SPECOPS_PROFILE_ROOT", data_dir.join("connection-profiles"));
     Ok(command)
 }
 

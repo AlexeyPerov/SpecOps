@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Planned
+**Status:** In progress — A implemented from source; live account acceptance pending
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -20,10 +20,12 @@ Codex is the first production runtime and the second active milestone. A–D del
 
 | Phase | Plan | State |
 | --- | --- | --- |
-| AS02-A | [Isolated profile and authentication](execution-plan-phase-a-protocol-auth.md) | Planned |
+| AS02-A | [Isolated profile and authentication](execution-plan-phase-a-protocol-auth.md) | Implemented; manual account gate pending |
 | AS02-B | [Native coding slice and minimum resume](execution-plan-phase-b-thread-events.md) | Planned |
 | AS02-C | [Native config, limits and reconciliation](execution-plan-phase-c-capabilities-history.md) | Planned |
 | AS02-D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | Planned |
+
+**Phase A evidence:** [Implementation and support ledger](implementation-notes-phase-a.md). Automated profile/protocol/bootstrap checks pass; no live account-B login is claimed.
 
 ## Dependencies and delivery
 

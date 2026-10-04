@@ -46,7 +46,7 @@ interface FakeHostHarness {
 }
 
 function nativeRef(id = "fake-native-1"): NativeSessionRef {
-  return { runtimeId: DEFAULT_SESSION_RUNTIME_ID, nativeSessionId: id as never };
+  return { runtimeId: "fake", nativeSessionId: id as never };
 }
 
 function event(partial: Record<string, unknown> & { type: SessionEvent["type"] }): SessionEvent {
@@ -75,10 +75,11 @@ function createFakeHostHarness(): FakeHostHarness {
     nextTurnEvents: [],
     client: {
       status: null,
+      subscribeProfiles: vi.fn(async () => () => {}),
       start,
       stop: vi.fn(),
       restart: vi.fn(),
-      getStatus: vi.fn(),
+      getStatus: vi.fn(async () => ({ running: true, health: "healthy" }) as unknown as AgentHostStatus),
       discover: vi.fn(),
       authenticate: vi.fn(),
       catalogModels: vi.fn(async () => ({ models: [] })),

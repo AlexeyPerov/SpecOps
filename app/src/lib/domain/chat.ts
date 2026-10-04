@@ -120,6 +120,7 @@ export interface ChatThreadMetadata {
   selectedModeId?: string;
   /** Runtime this thread's session is bound to (immutable after first link). */
   runtimeId?: string;
+  connectionProfileId?: string;
 }
 
 /** One persisted workspace session conversation (messages + per-session settings). */
@@ -138,6 +139,7 @@ export interface SessionIndexEntry {
   runtimeId?: string;
   /** Native session id on the bound runtime for this workspace session tab. */
   nativeSessionId?: string;
+  connectionProfileId?: string;
   /** Last model used with the linked native session (restore hint). */
   modelId?: string;
   modeId?: string;

@@ -197,6 +197,7 @@ export interface DiscoverResult {
 }
 
 export interface AuthParams {
+  readonly connectionProfileId?: string;
   readonly runtimeId: AgentRuntimeId;
   readonly workspaceRootPath: string;
   readonly credential?: AgentCredentialHandle;
@@ -208,11 +209,13 @@ export type { AgentAuthResult, AgentAuthChallenge, AgentAuthStatus };
 export interface CatalogModelsParams {
   readonly runtimeId: AgentRuntimeId;
   readonly workspaceRootPath?: string;
+  readonly connectionProfileId?: string;
 }
 
 export interface CatalogModesParams {
   readonly runtimeId: AgentRuntimeId;
   readonly modelId?: string;
+  readonly connectionProfileId?: string;
 }
 
 
@@ -220,6 +223,7 @@ export interface SessionCreateParams {
   readonly runtimeId: AgentRuntimeId;
   readonly workspaceRootPath: string;
   readonly modelId?: string;
+  readonly connectionProfileId?: string;
   readonly modeId?: string;
   readonly capabilities?: readonly string[];
   readonly runtimeMetadata?: Readonly<Record<string, unknown>>;
@@ -266,6 +270,7 @@ export interface QuestionReplyParams {
 }
 
 export interface HealthParams {
+  readonly connectionProfileId?: string;
   readonly runtimeId?: AgentRuntimeId;
 }
 
@@ -352,6 +357,7 @@ export function decodeNativeSessionRef(value: unknown): DecodeResult<NativeSessi
   }
   return ok({
     runtimeId,
+    ...(typeof value.connectionProfileId === "string" ? { connectionProfileId: value.connectionProfileId } : {}),
     nativeSessionId: asNativeSessionId(nativeSessionId),
     ...(value.modelId !== undefined ? { modelId: readOptionalString(value.modelId) } : {}),
     ...(value.modeId !== undefined ? { modeId: readOptionalString(value.modeId) } : {}),
@@ -391,6 +397,7 @@ export function decodeAuth(value: unknown): DecodeResult<AuthParams> {
   if (workspaceRootPath === null) return fail("workspaceRootPath must be a string");
   return ok({
     runtimeId: runtimeId.value,
+    ...(typeof value.connectionProfileId === "string" ? { connectionProfileId: value.connectionProfileId } : {}),
     workspaceRootPath,
     ...(value.credential !== undefined && isObject(value.credential) ? { credential: value.credential as unknown as AgentCredentialHandle } : {}),
     ...(value.options !== undefined && isObject(value.options) ? { options: value.options as Readonly<Record<string, unknown>> } : {}),
@@ -403,6 +410,7 @@ export function decodeCatalogModels(value: unknown): DecodeResult<CatalogModelsP
   if (!runtimeId.ok) return fail(runtimeId.reason);
   return ok({
     runtimeId: runtimeId.value,
+    ...(typeof value.connectionProfileId === "string" ? { connectionProfileId: value.connectionProfileId } : {}),
     ...(value.workspaceRootPath !== undefined ? { workspaceRootPath: readOptionalString(value.workspaceRootPath) } : {}),
   });
 }
@@ -413,6 +421,7 @@ export function decodeCatalogModes(value: unknown): DecodeResult<CatalogModesPar
   if (!runtimeId.ok) return fail(runtimeId.reason);
   return ok({
     runtimeId: runtimeId.value,
+    ...(typeof value.connectionProfileId === "string" ? { connectionProfileId: value.connectionProfileId } : {}),
     ...(value.modelId !== undefined ? { modelId: readOptionalString(value.modelId) } : {}),
   });
 }
@@ -425,6 +434,7 @@ export function decodeSessionCreate(value: unknown): DecodeResult<SessionCreateP
   if (workspaceRootPath === null) return fail("workspaceRootPath must be a string");
   return ok({
     runtimeId: runtimeId.value,
+    ...(typeof value.connectionProfileId === "string" ? { connectionProfileId: value.connectionProfileId } : {}),
     workspaceRootPath,
     ...(value.modelId !== undefined ? { modelId: readOptionalString(value.modelId) } : {}),
     ...(value.modeId !== undefined ? { modeId: readOptionalString(value.modeId) } : {}),
@@ -512,5 +522,5 @@ export function decodeHealth(value: unknown): DecodeResult<HealthParams> {
   if (value.runtimeId === undefined) return ok({});
   const runtimeId = requireRuntimeId(value.runtimeId, "runtimeId");
   if (!runtimeId.ok) return fail(runtimeId.reason);
-  return ok({ runtimeId: runtimeId.value });
+  return ok({ runtimeId: runtimeId.value, ...(typeof value.connectionProfileId === "string" ? { connectionProfileId: value.connectionProfileId } : {}) });
 }

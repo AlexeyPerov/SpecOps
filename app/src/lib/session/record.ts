@@ -41,6 +41,7 @@ export interface SessionStoreIndexEntry {
   readonly id: SpecOpsSessionId;
   readonly runtimeId: AgentRuntimeId;
   readonly nativeSessionId: NativeSessionId;
+  readonly connectionProfileId?: string;
   readonly title: string;
   readonly lastTurnAt: string;
   readonly status: SessionLifecycleStatus;
@@ -63,6 +64,7 @@ export function toSessionStoreIndexEntry(
     id: session.id,
     runtimeId: session.runtimeId,
     nativeSessionId: native.nativeSessionId,
+    ...(native.connectionProfileId !== undefined ? { connectionProfileId: native.connectionProfileId } : {}),
     title,
     lastTurnAt: session.lastTurnAt ?? session.updatedAt,
     status: session.status,

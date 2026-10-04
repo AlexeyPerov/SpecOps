@@ -124,6 +124,7 @@ export type SessionEventKind =
 export interface BaseSessionEvent {
   /** Native session the event belongs to. */
   readonly nativeSessionId: NativeSessionId;
+  readonly connectionProfileId?: string;
   /** Monotonic sequence within the session (1-based). */
   readonly seq: number;
   readonly at: string;

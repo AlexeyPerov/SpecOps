@@ -44,6 +44,7 @@ export interface AgentModeDescriptor {
 export interface AgentNativeBinding {
   readonly runtimeId: AgentRuntimeId;
   readonly nativeSessionId: NativeSessionId;
+  readonly connectionProfileId?: string;
   readonly modelId?: string;
   readonly modeId?: string;
   readonly parentSessionId?: SpecOpsSessionId;
@@ -97,6 +98,7 @@ export interface AgentSessionRef {
   readonly runtimeId: AgentRuntimeId;
   readonly native: AgentNativeBinding;
   readonly workspaceRootPath: string;
+  readonly connectionProfileId?: string;
   readonly model?: AgentModelDescriptor;
   readonly mode?: AgentModeDescriptor;
   readonly capabilities: readonly AgentCapabilityValue[];
@@ -118,6 +120,7 @@ export interface CreateSessionRefInput {
   id?: SpecOpsSessionId;
   runtimeId: AgentRuntimeId;
   nativeSessionId: NativeSessionId | string;
+  connectionProfileId?: string;
   workspaceRootPath: string;
   modelId?: string;
   modeId?: string;
@@ -152,6 +155,7 @@ export function createSessionRef(input: CreateSessionRefInput): AgentSessionRef 
   const native: AgentNativeBinding = {
     runtimeId: input.runtimeId,
     nativeSessionId,
+    ...(input.connectionProfileId !== undefined ? { connectionProfileId: input.connectionProfileId } : {}),
     ...(input.modelId !== undefined ? { modelId: input.modelId } : {}),
     ...(input.modeId !== undefined ? { modeId: input.modeId } : {}),
     ...(input.parentSessionId !== undefined ? { parentSessionId: input.parentSessionId } : {}),
@@ -183,6 +187,7 @@ export function rebindRuntime(
   next: {
     runtimeId: AgentRuntimeId;
     nativeSessionId: NativeSessionId | string;
+  connectionProfileId?: string;
     modelId?: string;
     modeId?: string;
     runtimeMetadata?: Readonly<Record<string, unknown>>;
@@ -197,6 +202,7 @@ export function rebindRuntime(
   return createSessionRef({
     runtimeId: next.runtimeId,
     nativeSessionId,
+    connectionProfileId: next.connectionProfileId,
     workspaceRootPath: source.workspaceRootPath,
     modelId: next.modelId,
     modeId: next.modeId,
@@ -250,6 +256,7 @@ export function rehydrateSessionRef(raw: {
   native: {
     runtimeId: AgentRuntimeId;
     nativeSessionId: string;
+    connectionProfileId?: string;
     modelId?: string;
     modeId?: string;
     parentSessionId?: string;
@@ -273,6 +280,7 @@ export function rehydrateSessionRef(raw: {
     id: asSpecOpsSessionId(raw.id),
     runtimeId: raw.runtimeId,
     nativeSessionId: asNativeSessionId(raw.native.nativeSessionId),
+    connectionProfileId: raw.native.connectionProfileId,
     workspaceRootPath: raw.workspaceRootPath,
     modelId: raw.native.modelId,
     modeId: raw.native.modeId,

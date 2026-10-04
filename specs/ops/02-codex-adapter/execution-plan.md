@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Planned
+**Status:** In progress — A implemented from source; live account acceptance pending
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -16,6 +16,8 @@
 | B | [Native coding slice and minimum resume](execution-plan-phase-b-thread-events.md) | L |
 | C | [Native config, limits and reconciliation](execution-plan-phase-c-capabilities-history.md) | M/L |
 | D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | M/L |
+
+**Phase A evidence:** [Implementation and support ledger](implementation-notes-phase-a.md); automated/bootstrap accepted, manual account-B gate open.
 
 ## Acceptance
 

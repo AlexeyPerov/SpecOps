@@ -62,6 +62,7 @@ export interface PersistedSettings {
   autoSuggest: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
+  sessionsEnabled?: boolean;
   opencode: OpencodeSettings;
   gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
@@ -96,6 +97,7 @@ export const defaultPersistedSettings: PersistedSettings = {
   autoSuggest: false,
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
+  sessionsEnabled: true,
   opencode: defaultOpencodeSettings,
   gitIntegration: defaultGitIntegrationSettings,
   logSettings: defaultLogSettings,
@@ -203,6 +205,7 @@ export async function loadPersistedSettings(): Promise<PersistedSettings | null>
         restrictFilesToContext: isBoolean(parsed.restrictFilesToContext)
           ? parsed.restrictFilesToContext
           : defaultPersistedSettings.restrictFilesToContext,
+        sessionsEnabled: typeof parsed.sessionsEnabled === "boolean" ? parsed.sessionsEnabled : true,
         opencode: normalizeOpencodeSettings(parsed.opencode),
         gitIntegration: normalizeGitIntegrationSettings(parsed.gitIntegration),
         logSettings: normalizeLogSettings(parsed.logSettings),
@@ -274,6 +277,7 @@ export function toPersistedSettings(input: {
   autoSuggest: boolean;
   defaultMarkdownViewMode: MarkdownViewMode;
   restrictFilesToContext: boolean;
+  sessionsEnabled?: boolean;
   opencode: OpencodeSettings;
   gitIntegration: GitIntegrationSettings;
   logSettings: LogSettings;
@@ -310,6 +314,7 @@ export function toPersistedSettings(input: {
     restrictFilesToContext: isBoolean(input.restrictFilesToContext)
       ? input.restrictFilesToContext
       : defaultPersistedSettings.restrictFilesToContext,
+    sessionsEnabled: input.sessionsEnabled ?? true,
     opencode: normalizeOpencodeSettings(input.opencode),
     gitIntegration: normalizeGitIntegrationSettings(input.gitIntegration),
     logSettings: normalizeLogSettings(input.logSettings),

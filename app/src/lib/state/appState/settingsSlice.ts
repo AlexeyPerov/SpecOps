@@ -77,6 +77,7 @@ export const defaultSettings: AppSettingsState = {
   autoSuggest: false,
   defaultMarkdownViewMode: "preview",
   restrictFilesToContext: false,
+  sessionsEnabled: true,
   opencode: defaultOpencodeSettings,
   gitIntegration: defaultGitIntegrationSettings,
   opencodeHealth: {
@@ -96,6 +97,12 @@ export const defaultSettings: AppSettingsState = {
 
 function createGeneralSettingsSlice(update: SettingsUpdate) {
   return {
+    setSessionsEnabled(enabled: boolean) {
+      update(state => {
+        const next = { ...state, settings: { ...state.settings, sessionsEnabled: enabled } };
+        return enabled ? next : closeAllSessionTabsInState(next);
+      });
+    },
     setOpencodeEnabled(enabled: boolean) {
       // Toggling the master switch clears the sidecar circuit breaker so a
       // prior failure does not block re-enable.
@@ -259,6 +266,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
       autoSuggest?: boolean;
       defaultMarkdownViewMode?: MarkdownViewMode;
       restrictFilesToContext?: boolean;
+      sessionsEnabled?: boolean;
       opencode?: Partial<OpencodeSettings>;
       gitIntegration?: Partial<GitIntegrationSettings>;
       opencodeHealth?: Partial<OpencodeHealthState>;
@@ -367,6 +375,7 @@ function createGeneralSettingsSlice(update: SettingsUpdate) {
             },
           };
         }
+        if (typeof partial.sessionsEnabled === "boolean") next = { ...next, settings: { ...next.settings, sessionsEnabled: partial.sessionsEnabled } };
         if (partial.opencode) {
           next = {
             ...next,

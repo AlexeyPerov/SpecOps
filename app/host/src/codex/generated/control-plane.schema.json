@@ -1,0 +1,1103 @@
+{
+  "InitializeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ClientInfo": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "type": "object"
+      },
+      "InitializeCapabilities": {
+        "description": "Client-declared capabilities negotiated during initialize.",
+        "properties": {
+          "experimentalApi": {
+            "default": false,
+            "description": "Opt into receiving experimental API methods and fields.",
+            "type": "boolean"
+          },
+          "explicitGatewayOauth": {
+            "description": "Use explicit gateway OAuth login instead of automatic browser authorization. Applies to this app-server's gateway runtime; later connections cannot undo it.",
+            "type": "boolean"
+          },
+          "extensions": {
+            "additionalProperties": true,
+            "description": "MCP extension settings declared by the app-server client.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "mcpServerOpenaiFormElicitation": {
+            "description": "Legacy opt-in for the `openai/form` MCP extension.\n\nNew clients should declare `openai/form` in [`Self::extensions`].",
+            "type": "boolean"
+          },
+          "optOutNotificationMethods": {
+            "description": "Exact notification method names that should be suppressed for this connection (for example `thread/started`).",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "requestAttestation": {
+            "default": false,
+            "description": "Opt into `attestation/generate` requests for upstream `x-oai-attestation`.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "capabilities": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/InitializeCapabilities"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "clientInfo": {
+        "$ref": "#/definitions/ClientInfo"
+      }
+    },
+    "required": [
+      "clientInfo"
+    ],
+    "title": "InitializeParams",
+    "type": "object"
+  },
+  "InitializeResponse": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "AbsolutePathBuf": {
+        "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
+        "type": "string"
+      }
+    },
+    "properties": {
+      "codexHome": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/AbsolutePathBuf"
+          }
+        ],
+        "description": "Absolute path to the server's $CODEX_HOME directory."
+      },
+      "platformFamily": {
+        "description": "Platform family for the running app-server target, for example `\"unix\"` or `\"windows\"`.",
+        "type": "string"
+      },
+      "platformOs": {
+        "description": "Operating system for the running app-server target, for example `\"macos\"`, `\"linux\"`, or `\"windows\"`.",
+        "type": "string"
+      },
+      "userAgent": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "codexHome",
+      "platformFamily",
+      "platformOs",
+      "userAgent"
+    ],
+    "title": "InitializeResponse",
+    "type": "object"
+  },
+  "v2/LoginAccountParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "LoginAppBrand": {
+        "enum": [
+          "codex",
+          "chatgpt"
+        ],
+        "type": "string"
+      }
+    },
+    "oneOf": [
+      {
+        "properties": {
+          "apiKey": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "apiKey"
+            ],
+            "title": "ApiKeyv2::LoginAccountParamsType",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey",
+          "type"
+        ],
+        "title": "ApiKeyv2::LoginAccountParams",
+        "type": "object"
+      },
+      {
+        "properties": {
+          "appBrand": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/LoginAppBrand"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "codexStreamlinedLogin": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "chatgpt"
+            ],
+            "title": "Chatgptv2::LoginAccountParamsType",
+            "type": "string"
+          },
+          "useHostedLoginSuccessPage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Chatgptv2::LoginAccountParams",
+        "type": "object"
+      },
+      {
+        "properties": {
+          "type": {
+            "enum": [
+              "chatgptDeviceCode"
+            ],
+            "title": "ChatgptDeviceCodev2::LoginAccountParamsType",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "ChatgptDeviceCodev2::LoginAccountParams",
+        "type": "object"
+      },
+      {
+        "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.",
+        "properties": {
+          "accessToken": {
+            "description": "Access token (JWT) supplied by the client. This token is used for backend API requests and email extraction.",
+            "type": "string"
+          },
+          "chatgptAccountId": {
+            "description": "Workspace/account identifier supplied by the client.",
+            "type": "string"
+          },
+          "chatgptPlanType": {
+            "description": "Optional plan type supplied by the client.\n\nWhen `null`, Codex attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "enum": [
+              "chatgptAuthTokens"
+            ],
+            "title": "ChatgptAuthTokensv2::LoginAccountParamsType",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessToken",
+          "chatgptAccountId",
+          "type"
+        ],
+        "title": "ChatgptAuthTokensv2::LoginAccountParams",
+        "type": "object"
+      },
+      {
+        "description": "[UNSTABLE] Managed Amazon Bedrock login is experimental.",
+        "properties": {
+          "apiKey": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "amazonBedrock"
+            ],
+            "title": "AmazonBedrockv2::LoginAccountParamsType",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey",
+          "region",
+          "type"
+        ],
+        "title": "AmazonBedrockv2::LoginAccountParams",
+        "type": "object"
+      },
+      {
+        "description": "[UNSTABLE] Managed Amazon Bedrock AWS access key login is experimental.",
+        "properties": {
+          "accessKeyId": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "secretAccessKey": {
+            "type": "string"
+          },
+          "sessionToken": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "enum": [
+              "amazonBedrockAccessKeys"
+            ],
+            "title": "AmazonBedrockAccessKeysv2::LoginAccountParamsType",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accessKeyId",
+          "region",
+          "secretAccessKey",
+          "type"
+        ],
+        "title": "AmazonBedrockAccessKeysv2::LoginAccountParams",
+        "type": "object"
+      }
+    ],
+    "title": "LoginAccountParams"
+  },
+  "v2/LoginAccountResponse": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "oneOf": [
+      {
+        "properties": {
+          "type": {
+            "enum": [
+              "apiKey"
+            ],
+            "title": "ApiKeyv2::LoginAccountResponseType",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "ApiKeyv2::LoginAccountResponse",
+        "type": "object"
+      },
+      {
+        "properties": {
+          "authUrl": {
+            "description": "URL the client should open in a browser to initiate the OAuth flow.",
+            "type": "string"
+          },
+          "loginId": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "chatgpt"
+            ],
+            "title": "Chatgptv2::LoginAccountResponseType",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authUrl",
+          "loginId",
+          "type"
+        ],
+        "title": "Chatgptv2::LoginAccountResponse",
+        "type": "object"
+      },
+      {
+        "properties": {
+          "loginId": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "chatgptDeviceCode"
+            ],
+            "title": "ChatgptDeviceCodev2::LoginAccountResponseType",
+            "type": "string"
+          },
+          "userCode": {
+            "description": "One-time code the user must enter after signing in.",
+            "type": "string"
+          },
+          "verificationUrl": {
+            "description": "URL the client should open in a browser to complete device code authorization.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loginId",
+          "type",
+          "userCode",
+          "verificationUrl"
+        ],
+        "title": "ChatgptDeviceCodev2::LoginAccountResponse",
+        "type": "object"
+      },
+      {
+        "properties": {
+          "type": {
+            "enum": [
+              "chatgptAuthTokens"
+            ],
+            "title": "ChatgptAuthTokensv2::LoginAccountResponseType",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "ChatgptAuthTokensv2::LoginAccountResponse",
+        "type": "object"
+      },
+      {
+        "properties": {
+          "type": {
+            "enum": [
+              "amazonBedrock"
+            ],
+            "title": "AmazonBedrockv2::LoginAccountResponseType",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "AmazonBedrockv2::LoginAccountResponse",
+        "type": "object"
+      }
+    ],
+    "title": "LoginAccountResponse"
+  },
+  "v2/GetAccountParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "refreshToken": {
+        "description": "When `true`, requests a proactive token refresh before returning.\n\nIn managed auth mode this triggers the normal refresh-token flow. In external auth mode this flag is ignored. Clients should refresh tokens themselves and call `account/login/start` with `chatgptAuthTokens`.",
+        "type": "boolean"
+      }
+    },
+    "title": "GetAccountParams",
+    "type": "object"
+  },
+  "v2/GetAccountResponse": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "Account": {
+        "oneOf": [
+          {
+            "properties": {
+              "type": {
+                "enum": [
+                  "apiKey"
+                ],
+                "title": "ApiKeyAccountType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "ApiKeyAccount",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "planType": {
+                "$ref": "#/definitions/PlanType"
+              },
+              "type": {
+                "enum": [
+                  "chatgpt"
+                ],
+                "title": "ChatgptAccountType",
+                "type": "string"
+              }
+            },
+            "required": [
+              "email",
+              "planType",
+              "type"
+            ],
+            "title": "ChatgptAccount",
+            "type": "object"
+          },
+          {
+            "properties": {
+              "type": {
+                "enum": [
+                  "amazonBedrock"
+                ],
+                "title": "AmazonBedrockAccountType",
+                "type": "string"
+              },
+              "usesCodexManagedCredentials": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "title": "AmazonBedrockAccount",
+            "type": "object"
+          }
+        ]
+      },
+      "AccountRoutingOverride": {
+        "description": "Backend routing policy. Wire values match the accounts/check contract.",
+        "enum": [
+          "NO_CONSTRAINT",
+          "us",
+          "us_cr"
+        ],
+        "type": "string"
+      },
+      "PlanType": {
+        "enum": [
+          "free",
+          "go",
+          "plus",
+          "pro",
+          "prolite",
+          "promax",
+          "team",
+          "self_serve_business_prolite",
+          "self_serve_business_usage_based",
+          "business",
+          "ent26",
+          "enterprise_cbp_automation",
+          "enterprise_cbp_usage_based",
+          "enterprise",
+          "edu",
+          "edu_plus",
+          "edu_pro",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "WorkspaceRouting": {
+        "properties": {
+          "accountRoutingOverride": {
+            "$ref": "#/definitions/AccountRoutingOverride"
+          },
+          "backendOrigin": {
+            "type": "string"
+          },
+          "chatgptAccountId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountRoutingOverride",
+          "backendOrigin",
+          "chatgptAccountId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "account": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/Account"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "requiresOpenaiAuth": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "requiresOpenaiAuth"
+    ],
+    "title": "GetAccountResponse",
+    "type": "object"
+  },
+  "v2/CancelLoginAccountParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "loginId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "loginId"
+    ],
+    "title": "CancelLoginAccountParams",
+    "type": "object"
+  },
+  "v2/CancelLoginAccountResponse": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "CancelLoginAccountStatus": {
+        "enum": [
+          "canceled",
+          "notFound"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "status": {
+        "$ref": "#/definitions/CancelLoginAccountStatus"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "CancelLoginAccountResponse",
+    "type": "object"
+  },
+  "v2/LogoutAccountResponse": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "LogoutAccountResponse",
+    "type": "object"
+  },
+  "v2/AccountLoginCompletedNotification": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "DesktopOnboardingEntrypoint": {
+        "enum": [
+          "life_sciences"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "loginId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "onboardingEntrypoint": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/DesktopOnboardingEntrypoint"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "success": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "success"
+    ],
+    "title": "AccountLoginCompletedNotification",
+    "type": "object"
+  },
+  "v2/AccountUpdatedNotification": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "AuthMode": {
+        "description": "Authentication mode for OpenAI-backed providers.",
+        "oneOf": [
+          {
+            "description": "OpenAI API key provided by the caller and stored by Codex.",
+            "enum": [
+              "apikey"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "ChatGPT OAuth managed by Codex (tokens persisted and refreshed by Codex).",
+            "enum": [
+              "chatgpt"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE.\n\nChatGPT auth tokens are supplied by an external host app and are only stored in memory. Token refresh must be handled by the external host app.",
+            "enum": [
+              "chatgptAuthTokens"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Backend auth supplied as request headers.",
+            "enum": [
+              "headers"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Programmatic Codex auth backed by a registered Agent Identity.",
+            "enum": [
+              "agentIdentity"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Programmatic Codex auth backed by a personal access token.",
+            "enum": [
+              "personalAccessToken"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Amazon Bedrock bearer token managed by Codex.",
+            "enum": [
+              "bedrockApiKey"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Amazon Bedrock AWS access keys managed by Codex.",
+            "enum": [
+              "bedrockAccessKeys"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "PlanType": {
+        "enum": [
+          "free",
+          "go",
+          "plus",
+          "pro",
+          "prolite",
+          "promax",
+          "team",
+          "self_serve_business_prolite",
+          "self_serve_business_usage_based",
+          "business",
+          "ent26",
+          "enterprise_cbp_automation",
+          "enterprise_cbp_usage_based",
+          "enterprise",
+          "edu",
+          "edu_plus",
+          "edu_pro",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "authMode": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AuthMode"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "planType": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/PlanType"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "title": "AccountUpdatedNotification",
+    "type": "object"
+  },
+  "v2/ModelListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "cursor": {
+        "description": "Opaque pagination cursor returned by a previous call.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "includeHidden": {
+        "description": "When true, include models that are hidden from the default picker list.",
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "limit": {
+        "description": "Optional page size; defaults to a reasonable server-side value.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "title": "ModelListParams",
+    "type": "object"
+  },
+  "v2/ModelListResponse": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "CyberAccessProgram": {
+        "description": "Requested cyber treatment for a ChatGPT-authenticated Codex turn. Authorization and model-tier restrictions remain server-owned.",
+        "enum": [
+          "standard",
+          "daybreakBlue",
+          "daybreakRed"
+        ],
+        "type": "string"
+      },
+      "InputModality": {
+        "description": "Canonical user-input modality tags advertised by a model.",
+        "oneOf": [
+          {
+            "description": "Plain text turns and tool payloads.",
+            "enum": [
+              "text"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Image attachments included in user turns.",
+            "enum": [
+              "image"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Audio attachments included in user turns.",
+            "enum": [
+              "audio"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "Model": {
+        "properties": {
+          "additionalSpeedTiers": {
+            "default": [],
+            "description": "Deprecated: use `serviceTiers` instead.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "availabilityNux": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelAvailabilityNux"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "availableAccessPrograms": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelAccessPrograms"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Null when the catalog does not provide access-program metadata."
+          },
+          "defaultReasoningEffort": {
+            "$ref": "#/definitions/ReasoningEffort"
+          },
+          "defaultServiceTier": {
+            "default": null,
+            "description": "Catalog default service tier id for this model, when one is configured.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputModalities": {
+            "default": [
+              "text",
+              "image"
+            ],
+            "items": {
+              "$ref": "#/definitions/InputModality"
+            },
+            "type": "array"
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "modelSpecialty": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "multiAgentVersion": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MultiAgentVersion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Multi-agent runtime declared by this model, when available."
+          },
+          "serviceTiers": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/ModelServiceTier"
+            },
+            "type": "array"
+          },
+          "supportedReasoningEfforts": {
+            "items": {
+              "$ref": "#/definitions/ReasoningEffortOption"
+            },
+            "type": "array"
+          },
+          "supportsPersonality": {
+            "default": false,
+            "description": "@deprecated Always false; models no longer support personality selection.",
+            "type": "boolean"
+          },
+          "upgrade": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "upgradeInfo": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelUpgradeInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "defaultReasoningEffort",
+          "description",
+          "displayName",
+          "hidden",
+          "id",
+          "isDefault",
+          "model",
+          "supportedReasoningEfforts"
+        ],
+        "type": "object"
+      },
+      "ModelAccessPrograms": {
+        "description": "Caller-specific explicit access programs advertised by model discovery.",
+        "properties": {
+          "cyber": {
+            "description": "Accepted explicit selections.",
+            "items": {
+              "$ref": "#/definitions/CyberAccessProgram"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "cyber"
+        ],
+        "type": "object"
+      },
+      "ModelAvailabilityNux": {
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "type": "object"
+      },
+      "ModelServiceTier": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ModelUpgradeInfo": {
+        "properties": {
+          "migrationMarkdown": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "modelLink": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "retirementAt": {
+            "description": "Informational Unix timestamp for this upgrade's scheduled retirement, if known.",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "upgradeCopy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "type": "object"
+      },
+      "MultiAgentVersion": {
+        "description": "Multi-agent runtime supported by a model.",
+        "enum": [
+          "disabled",
+          "v1",
+          "v2"
+        ],
+        "type": "string"
+      },
+      "ReasoningEffort": {
+        "description": "A non-empty reasoning effort value advertised by the model.",
+        "minLength": 1,
+        "type": "string"
+      },
+      "ReasoningEffortOption": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "reasoningEffort": {
+            "$ref": "#/definitions/ReasoningEffort"
+          }
+        },
+        "required": [
+          "description",
+          "reasoningEffort"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "data": {
+        "items": {
+          "$ref": "#/definitions/Model"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "description": "Opaque cursor to pass to the next call to continue after the last item. If None, there are no more items to return.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "data"
+    ],
+    "title": "ModelListResponse",
+    "type": "object"
+  }
+}

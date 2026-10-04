@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-04 16:28 MSK — Add isolated Codex connection and authentication
+
+- Implemented AS02-A source control plane: pinned 0.160.0 app-server handshake/schemas, bounded profile child transport/restart/generations, official account read/browser/device/API-key login/cancel/logout, native creation shell and model discovery. Native turns/resume remain the next execution plan.
+- Added private app-data profile homes, explicit file credential storage, controlled inherited authentication/provider environment, permissions and symlink checks, secret-safe auth updates and host-only browser/device/API-key handling. Default desktop credentials are never copied.
+- Added neutral Sessions enablement and runtime/profile creation/selection, ensure-start catalog recovery, immutable profile-aware bindings and actual draft/index/session persistence; runtime/profile namespaces separate equal native IDs.
+- Verified the actual pinned binary without login in a temporary isolated home; required initialization/account/control/catalog methods passed and contract regeneration was byte-identical. Recorded setup/distribution/support evidence and kept real account-B sign-in plus installed acceptance explicitly pending.
+- Validation: 3,222 frontend tests, 73 host tests and 16 Agent Host Rust tests passed; frontend/host type checks and production builds passed. No data migration or compatibility shim. Existing unrelated Rust formatting differences/warning and canvas-stub notices remain.
+
 ## 2026-10-04 15:54 MSK — Stabilize foundation persistence, transport and supervision
 
 - Implemented AS01-S-01–05: full production binding/mode/runtime-settings persistence, per-session debounce and serialized index writes; native sends await binding storage. Resume rejects incompatible runtime/native IDs explicitly.

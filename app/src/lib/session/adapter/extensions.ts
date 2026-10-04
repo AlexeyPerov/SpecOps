@@ -29,8 +29,8 @@ import type {
 // ---------------------------------------------------------------------------
 
 export interface CatalogExtension {
-  listModels(input?: { readonly workspaceRootPath?: string }): Promise<readonly AgentModelDescriptor[]>;
-  listModes(input?: { readonly modelId?: string }): Promise<readonly AgentModeDescriptor[]>;
+  listModels(input?: { readonly workspaceRootPath?: string; readonly connectionProfileId?: string }): Promise<readonly AgentModelDescriptor[]>;
+  listModes(input?: { readonly modelId?: string; readonly connectionProfileId?: string }): Promise<readonly AgentModeDescriptor[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ export interface McpServerEntry {
 }
 
 export interface McpExtension {
-  listMcpServers(input?: { readonly workspaceRootPath?: string }): Promise<readonly McpServerEntry[]>;
+  listMcpServers(input?: { readonly workspaceRootPath?: string; readonly connectionProfileId?: string }): Promise<readonly McpServerEntry[]>;
 }
 
 export interface SkillEntry {
@@ -146,7 +146,7 @@ export interface SkillEntry {
 }
 
 export interface SkillsExtension {
-  listSkills(input?: { readonly workspaceRootPath?: string }): Promise<readonly SkillEntry[]>;
+  listSkills(input?: { readonly workspaceRootPath?: string; readonly connectionProfileId?: string }): Promise<readonly SkillEntry[]>;
 }
 
 export interface CommandEntry {
@@ -156,7 +156,7 @@ export interface CommandEntry {
 }
 
 export interface CommandsExtension {
-  listCommands(input?: { readonly workspaceRootPath?: string }): Promise<readonly CommandEntry[]>;
+  listCommands(input?: { readonly workspaceRootPath?: string; readonly connectionProfileId?: string }): Promise<readonly CommandEntry[]>;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-/** Fresh empty sets/maps for Svelte prop defaults (avoids Rollup `@__PURE__` warnings on inline `new`). */
+/** Fresh empty collections for Svelte prop defaults and effects (avoids Rollup `@__PURE__` warnings on inline `new`). */
 export function emptySet<T = never>(): Set<T> {
   return new Set<T>();
 }

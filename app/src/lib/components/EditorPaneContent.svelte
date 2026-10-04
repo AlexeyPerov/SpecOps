@@ -403,7 +403,7 @@
 
     // If a previously-deferred tab is now active (or closed), drop it from the
     // pending idle set so it doesn't hydrate late and overwrite a newer state.
-    const nextPending = new Set<string>();
+    const nextPending = emptySet<string>();
     for (const tabId of deferred) {
       if (pendingIdleTabIds.has(tabId)) {
         nextPending.add(tabId);

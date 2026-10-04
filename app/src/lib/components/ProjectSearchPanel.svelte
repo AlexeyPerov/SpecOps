@@ -7,6 +7,7 @@
   } from "../services/consoleTabPrefs";
   import type { ProjectSearchMatch, ProjectSearchResult } from "../services/projectSearch";
   import { startPointerDrag } from "./pointerDrag";
+  import { emptySet } from "../collections/emptyCollections";
 
   interface Props {
     heightPx?: number;
@@ -197,8 +198,8 @@
     // (e.g. a status update) does not wipe the user's manual expansions.
     const signature = results.map((r) => r.path).join("\0");
     void signature;
-    collapsedFiles = new Set();
-    expandedMatchFiles = new Set();
+    collapsedFiles = emptySet<string>();
+    expandedMatchFiles = emptySet<string>();
   });
 
   function handleKeydown(event: KeyboardEvent): void {

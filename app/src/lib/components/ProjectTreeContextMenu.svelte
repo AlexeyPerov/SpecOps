@@ -6,6 +6,7 @@
   import { revealInFileManager } from "../services/revealInFileManager";
   import { workspaceRelativePath } from "../services/workspacePaths";
   import { clampFixedOverlayPosition } from "./clampFixedOverlayPosition";
+  import { emptySet } from "../collections/emptyCollections";
 
   const revealLabel = revealInFileManagerLabel();
 
@@ -30,7 +31,7 @@
   }
 
   let {
-    favoritePaths = new Set<string>(),
+    favoritePaths = emptySet<string>(),
     onToggleFavorite = () => {},
     workspaceRoot = "",
     onShowGitLog,

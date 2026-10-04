@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-04 12:47 MSK — Fix collection annotations in component builds
+
+- Reused fresh empty-set helpers in editor pane and project search effects,
+  preventing orphaned pure annotations when Svelte removes effects from the
+  server build and eliminating the associated sourcemap warnings.
+- Applied the same fix to the project tree context menu's default favorites
+  set, removing its client-build annotation warning; clarified the collection
+  helper's use for effects as well as prop defaults.
+- Validation: production build passed without annotation or sourcemap warnings;
+  Svelte check passed with zero errors and warnings; all eight editor tab
+  keep-alive tests passed.
+
 ## 2026-10-04 12:38 MSK — Release 0.3.0
 
 - Bumped application version from 0.2.0 to 0.3.0.

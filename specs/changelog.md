@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 23:33 MSK — Bootstrap isolated local native SDK profiles
+
+- Implemented AS07-A exact official local SDK 1.0.35 host pin and full SDK/dependency/lazy-chunk/platform parser/search/sandbox payload with safe adjacent manifest resolution. Private profile workers own explicit API/service key account/catalog probes, bounded secret-safe results, generation cancellation and process cleanup; common profile UI exposes actual source support.
+- Added bounded private no-follow metadata/credential import/status/logout, finite inherited environments and actionable missing/incompatible/auth/offline states. Native browser minting was evaluated but its host lifecycle, native turns/interactions/policy and Cloud execution remain unavailable in this phase.
+- Verified bootstrap/credential/canary/generation/native-asset fixtures, shared profile/client checks and copied SDK plus Node outside checkout with account-free durable native JSONL create/resume and native search/helper launch. Actual accounts/inference/enforcement, signed installed/platform/cleanup/distribution gates remain open; expanded release baseline remains blocked. No migrations or compatibility shims.
+
 ## 2026-10-04 23:17 MSK — Add simultaneous named native account profiles
 
 - Implemented AS06-C Codex profile rename/remove, stable ID/native account display and explicit missing-profile state. Removal/logout retire only the selected native process and credentials while retaining application/native session history and workspace files. Bound sessions never move to another profile.

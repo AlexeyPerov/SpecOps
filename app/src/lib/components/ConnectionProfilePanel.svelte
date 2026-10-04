@@ -36,7 +36,7 @@
     const discovered = (await client.discover()).runtimes;
     if (epoch !== refreshEpoch || selectedRuntime !== runtimeId) return;
     runtimes = discovered;
-    if (selectedRuntime !== 'codex' && selectedRuntime !== 'opencode' && selectedRuntime !== 'claude') { profiles = []; return; }
+    if (selectedRuntime !== 'codex' && selectedRuntime !== 'opencode' && selectedRuntime !== 'claude' && selectedRuntime !== 'cursor') { profiles = []; return; }
     const result = await client.authenticate({ runtimeId: selectedRuntime, workspaceRootPath: '', options: { action: 'list-profiles' } });
     if (epoch !== refreshEpoch || selectedRuntime !== runtimeId) return;
     profiles = mergeProfiles(result.profiles ?? []);
@@ -93,7 +93,7 @@
       {#each runtimes as runtime}<option value={runtime.id}>{runtime.label}</option>{/each}
     </select>
   </label>
-  {#if runtimeId === 'codex' || runtimeId === 'opencode' || runtimeId === 'claude'}
+  {#if runtimeId === 'codex' || runtimeId === 'opencode' || runtimeId === 'claude' || runtimeId === 'cursor'}
     <label>Account profile
       <select value={connectionProfileId ?? ''} disabled={bound || busy} onchange={event => onSelect(runtimeId, event.currentTarget.value || undefined)}>
         <option value="">Select a profile</option>
@@ -130,10 +130,10 @@
         <button onclick={() => action('logout')} disabled={busy}>Sign out</button>
       {/if}
       <label title="Required for the pinned runtime's legacy history and developer coding slice. Restarts only this profile; pending turns end."><input type="checkbox" checked={selected.experimental ?? false} disabled={busy} onchange={e => action(e.currentTarget.checked ? 'experimental-on' : 'experimental-off')} />Enable experimental protocol (legacy history, plan and questions)</label>
-      {:else if runtimeId === 'claude'}
+      {:else if runtimeId === 'claude' || runtimeId === 'cursor'}
         <button onclick={() => action('login-api-key')} disabled={busy}>Import private API key</button>
         <button onclick={() => action('logout')} disabled={busy}>Remove credential</button>
-        <span class="note">Import reads a private 0600 api-key file in this profile’s app data home. Subscription login and cloud credential import are unavailable. Native sessions are awaiting implementation.</span>
+        <span class="note">Import reads a private 0600 api-key file in this profile’s app data home. {runtimeId === 'cursor' ? 'Browser login and native sessions are awaiting host integration. Cloud execution is unavailable.' : 'Subscription login and cloud credential import are unavailable.'}</span>
       {:else}
         <label>Provider<select bind:value={providerId} disabled={busy} aria-label="Native provider">
           <option value="">Select provider</option>

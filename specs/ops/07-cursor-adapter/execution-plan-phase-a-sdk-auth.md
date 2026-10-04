@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** Source bootstrap verified; full authenticated/installed feasibility acceptance open.
 
 **Prerequisites:** AS02-D plus accepted shared contract/profile/03-A/03-B infrastructure. Default stage 07 after initial integrations; handoff is not a technical prerequisite.
 
@@ -52,3 +52,7 @@ catalog refresh, and adapter-local offline state.
 ## Exit and next work
 
 B follows proven local SDK/installed-assets feasibility and stable authenticated profile/catalog; record blocked native assumptions instead of implementing prompt emulation. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+
+## Recorded source evidence
+
+[AS07-A implementation notes](implementation-notes-phase-a.md) record exact SDK 1.0.35, native account-free durable-store/copy probes and fixture scope. AS07-A-01/02/03/04 source slices are implemented and verified; no task is marked fully Done because authenticated local stream/policy/browser and signed installed/platform/distribution evidence remains open. API-key source auth is implemented; browser/device/native turns remain unavailable. B may implement the proven local SDK source path while these external acceptance gates remain explicit.

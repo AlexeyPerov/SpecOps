@@ -1,3 +1,4 @@
+import { packageCursorAssets } from "./cursor-assets.mjs";
 // Bundles the Agent Host into a single self-contained ESM file at dist/index.js.
 // Version metadata is injected at build time (HOST_VERSION from package.json,
 // git sha, build timestamp) so the packaged artifact reports deterministic
@@ -46,5 +47,6 @@ await build({
 });
 
 packageClaudeAssets(path.join(hostDir, "dist"));
+packageCursorAssets(path.join(hostDir, "dist"));
 
 console.log(`agent-host ${pkg.version} (git ${gitSha}) built at ${buildTime}`);

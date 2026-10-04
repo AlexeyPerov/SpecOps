@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Planned
+**Status:** A source SDK/profile bootstrap verified; authenticated/installed and B–D acceptance open.
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -26,3 +26,7 @@ Technical prerequisites: 02-D and shared profile/contract/03-A/B infrastructure,
 ## Task tracking
 
 Task prefix is `AS07-<phase>-<NN>`. Numeric folders reflect the default delivery sequence; cross-stage gates and later/recurring work are explicit above. Mark only implemented and verified tasks `[DONE]`, record pinned contracts and actual smoke/support scope, and update `specs/changelog.md`. Completed records live in [done](../done/README.md); open acceptance remains active.
+
+## Current evidence
+
+[AS07-A native feasibility ledger](implementation-notes-phase-a.md): exact official local SDK 1.0.35, isolated API-key/native catalog source and copied account-free durable JSONL/Node/native assets verified on Darwin arm64. Native turns, interactive/browser integration and Cloud execution are not advertised by this bootstrap. [Expanded release baseline](../08-release-gates/baseline-07-a.md) remains blocked; B/C/D and authenticated/signed installed/platform/distribution acceptance remain open.

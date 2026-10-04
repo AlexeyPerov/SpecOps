@@ -1,3 +1,4 @@
+import { packageCursorAssets } from "./cursor-assets.mjs";
 // Package the tested Node executable with an allowlisted identity manifest.
 import { packageClaudeAssets } from './claude-assets.mjs';
 import { copyFileSync, chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -15,6 +16,7 @@ if (identity.platform !== process.platform || identity.arch !== process.arch) th
 const resources = resolve(hostDir, '../src-tauri/resources/agent-host');
 mkdirSync(resources, { recursive: true });
 packageClaudeAssets(resources);
+packageCursorAssets(resources);
 const target = join(resources, process.platform === 'win32' ? 'node.exe' : 'node');
 if (process.platform === 'darwin') {
   const dependencies = execFileSync('/usr/bin/otool', ['-L', source], { encoding: 'utf8' }).split('\n').slice(1).map(line => line.trim().split(' ')[0]).filter(Boolean);

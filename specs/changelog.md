@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-04 12:38 MSK — Release 0.3.0
+
+- Bumped application version from 0.2.0 to 0.3.0.
+
 ## 2026-10-04 12:35 MSK — Release helper commands
 
 - Added `node scripts/release.mjs bump [patch|minor|major|X.Y.Z]` to

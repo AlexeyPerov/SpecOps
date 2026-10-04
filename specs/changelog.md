@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-05 00:31 MSK — Harden local native recovery and extend reviewed handoff
+
+- Implemented AS07-D safe native auth/quota/offline classification, strict bounded history sequencing/timestamps/acknowledgements, terminal publication after worker cleanup/durable cursor settlement, and idempotent ownership release without stale cache overwrite. Exact current/pending/replaced credentials are scrubbed from profile/control responses and private persisted labels; no raw native logs/errors leave workers.
+- Extended reviewed handoff to all 16 ordered four-runtime production adapter/dispatcher/client/pipeline/disk pairs, preserving frozen native tools/sandbox/catalog enum settings, source history, lineage and no first-prompt replay. Added actual worker faults, four-runtime host SIGKILL, private-key/export canaries and an explicit default-skipped authorized paid native smoke harness.
+- Verified source tests/type checks/builds and copied account-free native assets outside checkout. Recorded setup/auth/policy/history/Stop/recovery/support limits and blocked expanded release baseline. Actual accounts/native enforcement, signed installed/platform/process/redistribution acceptance remain open; no migrations or compatibility shims.
+
 ## 2026-10-05 00:15 MSK — Expose finite native local settings and capability boundaries
 
 - Implemented AS07-C immutable native file-tool presets, explicit sandbox option and bounded selected-profile catalog enum parameters through common session controls. Unsupported/no-op options fail before SDK requests; every native resume/send retains original settings and credential/workspace/model binding. Native automatic file execution and workspace sandbox policy qualifications are visible.

@@ -55,6 +55,12 @@ export class CursorRuntimeAdapter
   readonly store: CursorProfileStore;
   readonly snapshots = new Map<string, ConnectionProfileSnapshot>();
   private bindings: CursorBindings;
+  private redactionKeys = new Map<string, Set<string>>();
+  private rememberKey(id: string, key: string) {
+    const keys = this.redactionKeys.get(id) ?? new Set<string>();
+    if (!keys.has(key) && keys.size >= 32) throw new Error("Profile credential changes exceed this host capacity; restart the host");
+    keys.add(key); this.redactionKeys.set(id, keys);
+  }
   private parameters = new Map<string, CursorParameter[]>();
   private closed = false;
   private mutating = new Set<string>();
@@ -154,10 +160,10 @@ export class CursorRuntimeAdapter
     return s;
   }
   private safe(s: ConnectionProfileSnapshot) {
-    return redactForSerialization(
-      { ...s },
-      Infinity,
-    ) as ConnectionProfileSnapshot;
+    for (const name of ["credential", "api-key"]) { const key = this.store.readKey(s.id, name); if (key) this.rememberKey(s.id, key); }
+    let safe = { ...s };
+    for (const key of this.redactionKeys.get(s.id) ?? []) safe = cursorSafe(safe, key);
+    return cursorSafe(safe, "");
   }
   private publish(p: CursorProfile) {
     const s = this.safe(this.snapshot(p));
@@ -180,6 +186,8 @@ export class CursorRuntimeAdapter
     this.pending.get(id)?.abort();
     const abort = new AbortController();
     this.pending.set(id, abort);
+    const redactionKey = candidate ?? this.store.readKey(id);
+    if (redactionKey) this.rememberKey(id, redactionKey);
     const generation = ++s.generation;
     s.state = "connecting";
     delete s.account;
@@ -315,6 +323,8 @@ export class CursorRuntimeAdapter
       this.pending.delete(p.id);
       const s = this.snapshot(p);
       s.generation++;
+      const previousKey = this.store.readKey(p.id);
+      if (previousKey) this.rememberKey(p.id, previousKey);
       this.store.logout(p.id);
       this.catalogs.delete(p.id);
       for (const key of this.parameters.keys()) if (key.startsWith(p.id + ":")) this.parameters.delete(key);
@@ -424,7 +434,8 @@ export class CursorRuntimeAdapter
     let resolve!: () => void;
     const done = new Promise<void>((r) => { resolve = r; });
     this.operations.set(route, { profileId, abort, done, turnId });
-    return { abort, finish: () => { this.operations.delete(route); resolve(); } };
+    let finished = false;
+    return { abort, finish: () => { if (finished) return; finished = true; this.operations.delete(route); resolve(); } };
   }
   private async stopProfile(id: string) {
     const ops = [...this.operations.values()].filter((op) => op.profileId === id);
@@ -501,12 +512,13 @@ if (request.runtimeId !== "cursor" || (request.modeId !== undefined && request.m
       await this.authenticated(id, reserved.abort.signal);
       const generation = this.snapshot(this.store.require(id)).generation, key = this.store.readKey(id)!;
       const history: NonNullable<NativeSessionRef["history"]>[number][] = [];
-      const runs = new Map<string, { run: any; mapper: CursorMapper; events: SessionEvent[]; user: string; at: string; count: number }>();
+      const runs = new Map<string, { run: any; mapper: CursorMapper; events: SessionEvent[]; user: string; at: string; count: number; lastSeq: number }>();
       let done = false, bytes = 0;
       const driver = this.driver(id);
       this.operations.get(id + ":" + b.native.nativeSessionId)!.stop = () => driver.stop?.() ?? Promise.resolve();
       for await (const frame of driver.operation(this.operation(b, "history"), reserved.abort.signal)) {
         this.valid(b, generation, reserved.abort.signal);
+        if (done) throw new Error("Native history after acknowledgement");
         bytes += Buffer.byteLength(JSON.stringify(frame));
         if (bytes > 16777216) throw new Error("Native history exceeds capacity");
         if (frame.type === "failure") {
@@ -515,18 +527,19 @@ if (request.runtimeId !== "cursor" || (request.modeId !== undefined && request.m
         }
         if (frame.type === "historyRun") {
           const run = frame.run;
-          if (!run || run.agentId !== b.native.nativeSessionId || typeof run.runId !== "string" || !/^run-[A-Za-z0-9_-]{1,150}$/.test(run.runId) || run.runId.includes(key) || runs.has(run.runId) || runs.size >= 4096 || !["queued", "running", "finished", "error", "cancelled", "expired"].includes(run.status) || !Number.isFinite(run.createdAt)) throw new Error("Malformed native history run");
-          runs.set(run.runId, { run, mapper: new CursorMapper(b.native.nativeSessionId, run.runId, run.runId, key), events: [], user: "", at: new Date(run.createdAt).toISOString(), count: 0 });
+          if (!run || run.agentId !== b.native.nativeSessionId || typeof run.runId !== "string" || !/^run-[A-Za-z0-9_-]{1,150}$/.test(run.runId) || run.runId.includes(key) || runs.has(run.runId) || runs.size >= 4096 || !["queued", "running", "finished", "error", "cancelled", "expired"].includes(run.status) || !Number.isFinite(run.createdAt) || Math.abs(run.createdAt) > 8640000000000000) throw new Error("Malformed native history run");
+          runs.set(run.runId, { run, mapper: new CursorMapper(b.native.nativeSessionId, run.runId, run.runId, key), events: [], user: "", at: new Date(run.createdAt).toISOString(), count: 0, lastSeq: 0 });
         } else if (frame.type === "historyEvent") {
           const entry = runs.get(frame.runId);
-          if (!entry || !Number.isSafeInteger(frame.seq) || frame.seq < 1 || ++entry.count > 4096 || !Number.isFinite(frame.createdAt)) throw new Error("Malformed native history event");
+          if (!entry || !Number.isSafeInteger(frame.seq) || frame.seq <= entry.lastSeq || ++entry.count > 4096 || !Number.isFinite(frame.createdAt) || Math.abs(frame.createdAt) > 8640000000000000) throw new Error("Malformed native history event");
+          entry.lastSeq = frame.seq;
           const message = frame.message;
           if (message?.type === "user") {
             if (message.agent_id !== b.native.nativeSessionId || message.run_id !== frame.runId || !Array.isArray(message.message?.content) || message.message.content.some((x: any) => x.type !== "text" || typeof x.text !== "string")) throw new Error("Malformed native user history");
             entry.user += message.message.content.map((x: any) => x.text).join("");
           }
           for (const payload of entry.mapper.event(message)) entry.events.push({ ...payload, nativeSessionId: b.native.nativeSessionId, connectionProfileId: id, nativeTurnId: frame.runId, nativeGeneration: generation, nativeItemId: frame.runId + ":event:" + frame.seq, seq: ++b.cursor, at: new Date(frame.createdAt).toISOString() } as SessionEvent);
-        } else if (frame.type === "historyDone") done = true;
+        } else if (frame.type === "historyDone") { if (done) throw new Error("Duplicate native history acknowledgement"); done = true; }
         else throw new Error("Malformed native history response");
       }
       if (!done) throw new Error("Native history acknowledgement missing");
@@ -546,6 +559,7 @@ if (request.runtimeId !== "cursor" || (request.modeId !== undefined && request.m
     const b = this.validate(request.native, request.workspaceRootPath, request.connectionProfileId);
     const id = b.native.connectionProfileId!, reserved = this.reserve(id, id + ":" + b.native.nativeSessionId, request.turnId);
     let mapper: CursorMapper | undefined, terminal = false, dispatched = false, announced = false;
+    let terminalEvent: any, durableSettlement = false;
     let clientId: string | undefined;
     let generation = 0, key = "", failureMessage = "Native turn failed or its acknowledgement was lost; resume explicitly. The prompt will not be resent.";
     const emit = (payload: any): SessionEvent => cursorSafe({ ...payload, nativeSessionId: b.native.nativeSessionId, connectionProfileId: id, nativeGeneration: generation, ...(mapper ? { nativeTurnId: mapper.runId } : {}), seq: ++b.cursor, at: new Date().toISOString() }, key);
@@ -568,7 +582,7 @@ if (request.runtimeId !== "cursor" || (request.modeId !== undefined && request.m
       dispatched = true;
       for await (const frame of driver.operation(operation, reserved.abort.signal)) {
         if (reserved.abort.signal.aborted) {
-          if (frame.type === "terminal" && mapper && frame.runId === mapper.runId && frame.status === "cancelled") { b.users[clientId].settled = true; terminal = true; yield emit({ type: "turn.cancelled", turnId: request.turnId }); }
+          if (frame.type === "terminal" && mapper && frame.runId === mapper.runId && frame.status === "cancelled") { b.users[clientId].settled = true; terminal = true; terminalEvent = { type: "turn.cancelled", turnId: request.turnId }; }
           continue;
         }
         this.valid(b, generation, reserved.abort.signal);
@@ -582,26 +596,38 @@ if (request.runtimeId !== "cursor" || (request.modeId !== undefined && request.m
         } else if (frame.type === "terminal" && mapper && frame.runId === mapper.runId && ["finished", "error", "cancelled"].includes(frame.status)) {
           for (const payload of mapper.finish()) yield emit(payload);
           b.users[clientId].settled = true; terminal = true;
-          yield emit(frame.status === "finished" ? { type: "turn.finished", turnId: request.turnId } : frame.status === "cancelled" ? { type: "turn.cancelled", turnId: request.turnId } : { type: "turn.failed", turnId: request.turnId, message: "Native run failed; resume explicitly to inspect retained history." });
+          terminalEvent = frame.status === "finished" ? { type: "turn.finished", turnId: request.turnId } : frame.status === "cancelled" ? { type: "turn.cancelled", turnId: request.turnId } : { type: "turn.failed", turnId: request.turnId, message: "Native run failed; resume explicitly to inspect retained history." };
         } else if (frame.type === "failure") {
-          failureMessage = frame.reason === "auth-required" ? "Native authentication was rejected. Reconnect this profile; the prompt will not be resent." : frame.reason === "quota" ? "Native quota or rate limit reached. Wait or review the selected account; the prompt will not be resent." : "Native runtime failed or disconnected. Resume explicitly to inspect retained history; the prompt will not be resent.";
+          failureMessage = frame.reason === "auth-required" ? "Native authentication was rejected. Reconnect this profile; the prompt will not be resent." : frame.reason === "quota" ? "Native quota or rate limit reached. Wait or review the selected account; the prompt will not be resent." : frame.reason === "offline" ? "Native service is unreachable. Check connectivity and resume explicitly; the prompt will not be resent." : "Native runtime failed or disconnected. Resume explicitly to inspect retained history; the prompt will not be resent.";
           throw new Error("Native turn failed");
         }
         else throw new Error("Malformed native turn response");
       }
       if (!terminal) throw new Error("Native terminal acknowledgement missing");
+      // Publish terminal only after worker disposal and durable settlement.
+      const settled = emit(terminalEvent);
+      this.bindings.save(b);
+      durableSettlement = true;
+      terminalEvent = undefined;
+      reserved.finish();
+      yield settled;
     } catch {
+      if (terminalEvent) terminal = false;
       if (!terminal) {
         if (!announced) { announced = true; yield emit({ type: "turn.started", turnId: request.turnId }); }
         if (!dispatched && clientId && reserved.abort.signal.aborted) delete b.users[clientId];
         if (!reserved.abort.signal.aborted) yield emit({ type: "diagnostic", level: "warn", reason: "malformed", message: "Native operation could not be completed safely; no raw payload retained." });
         if (mapper) for (const payload of mapper.finish()) yield emit(payload);
         terminal = true;
-        yield emit(reserved.abort.signal.aborted ? { type: "turn.cancelled", turnId: request.turnId } : { type: "turn.failed", turnId: request.turnId, message: failureMessage });
+        const settled = emit(reserved.abort.signal.aborted ? { type: "turn.cancelled", turnId: request.turnId } : { type: "turn.failed", turnId: request.turnId, message: failureMessage });
+        this.bindings.save(b);
+        durableSettlement = true;
+        reserved.finish();
+        yield settled;
       }
     } finally {
       reserved.abort.abort();
-      try { this.bindings.save(b); } finally { reserved.finish(); }
+      try { if (!durableSettlement) this.bindings.save(b); } finally { reserved.finish(); }
     }
   }
   async cancel(request: CancelAgentTurnRequest) {

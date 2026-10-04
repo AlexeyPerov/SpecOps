@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-05
 
-**Status:** A–C source SDK/profile/local lifecycle/finite native settings verified; authenticated/installed and D acceptance open.
+**Status:** A–D selected source SDK/profile/lifecycle/settings/fault/security/handoff verified; authenticated native/signed installed/distribution acceptance open.
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -23,7 +23,7 @@ Cursor follows initial integrations. Verify current SDK/auth/native assets/histo
 | AS07-A | [Feasibility, SDK/assets and auth](execution-plan-phase-a-sdk-auth.md) | Source verified; authenticated/installed gates open |
 | AS07-B | [Durable native agents/runs](execution-plan-phase-b-agent-events.md) | Source verified; authenticated/installed gates open |
 | AS07-C | [Native capabilities/cloud boundary](execution-plan-phase-c-capabilities-cloud.md) | Source verified; native enforcement/installed gates open |
-| AS07-D | [Installed native acceptance](execution-plan-phase-d-hardening-exit.md) | Planned |
+| AS07-D | [Installed native acceptance](execution-plan-phase-d-hardening-exit.md) | Source hardening verified; actual native/installed gates open |
 
 ## Dependencies and delivery
 
@@ -45,3 +45,5 @@ No persisted-data migrations or compatibility shims. Planned prerequisites are g
 [AS07-B source lifecycle evidence](implementation-notes-phase-b.md): durable per-agent native JSONL store, immutable profile/workspace/model/credential binding, bounded stream/cancel/history and production cache recovery verified. Only minimal no-tool local turns are advertised; native policy and live/installed acceptance remain C/D work. [B release baseline](../08-release-gates/baseline-07-b.md) remains blocked.
 
 [AS07-C finite native capability ledger](implementation-notes-phase-c.md): immutable native file tool presets, boolean sandbox request and safe selected-profile catalog enum parameters are source verified. Interactive approvals/questions, hooks, fork/restore, MCP/skills/subagents and Cloud remain unavailable; no filesystem read-only guarantee is advertised. [C release baseline](../08-release-gates/baseline-07-c.md) remains blocked pending native enforcement/installed/distribution acceptance.
+
+[AS07-D hardening/support evidence](implementation-notes-phase-d.md): native discriminant faults, bounded strict history, durable terminal ownership, exact profile/control redaction, four-runtime host death and 16 production handoff pairs verified. Optional paid native smoke is explicit/default skipped. [D release baseline](../08-release-gates/baseline-07-d.md) remains blocked pending authenticated/native enforcement, signed installed/platform/process/distribution acceptance.

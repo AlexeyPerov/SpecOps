@@ -45,7 +45,7 @@ it('actual whole-host death settles two equal-ID profile-native streams includin
   const otherHistory = JSON.parse(readFileSync(join(root, 'profiles', otherProfile.id, 'home', 'fixture-history.json'), 'utf8')); expect(otherHistory[b.nativeSessionId].turns).toHaveLength(1);
 }, 15000);
 
-it.each([false, true])('actual whole-host death settles Codex/OpenCode and optional Claude=%s without replay', async (withClaude) => {
+it.each([false, true])('actual whole-host death settles Codex/OpenCode and optional Claude/Cursor=%s without replay', async (withClaude) => {
   const root = mkdtempSync(join(tmpdir(), 'specops-host-death-')); cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const executable = join(root, 'native.cjs'); writeFileSync(executable, threadFixture, { mode: 0o700 });
   const openExecutable = join(root, 'native.mjs'); copyFileSync(resolve('host/src/opencode/nativeFixture.mjs'), openExecutable); chmodSync(openExecutable, 0o700);
@@ -64,7 +64,13 @@ it.each([false, true])('actual whole-host death settles Codex/OpenCode and optio
       const profileRoot = ${JSON.stringify(join(root,'profiles','claude'))};
       const driver = new ClaudeFixtureDriver(fixturePath(profileRoot));
       const adapter = new ClaudeRuntimeAdapter({profileRoot,assets:()=>({sdk:'fixture',executable:'fixture',sdkVersion:CLAUDE_SDK_VERSION,nativeVersion:CLAUDE_NATIVE_VERSION}),verifyKey:async()=>{},probe:async()=>[{value:'native-model',displayName:'Native model'}],sessionDriver:()=>driver});
-      createHost({extraAdapters:[adapter]}).run().then(code=>process.exit(code));
+      import { CursorRuntimeAdapter } from ${JSON.stringify(join(hostDir,'src/cursor/adapter.ts'))};
+      import { CursorFixtureDriver } from ${JSON.stringify(join(hostDir,'src/cursor/fixtures.ts'))};
+      import { CURSOR_SDK_VERSION } from ${JSON.stringify(join(hostDir,'src/cursor/runtime.ts'))};
+      const cursorRoot = ${JSON.stringify(join(root,'profiles','cursor'))};
+      const cursorDriver = new CursorFixtureDriver(${JSON.stringify(join(root,'profiles','cursor-native.json'))});
+      const cursor = new CursorRuntimeAdapter({profileRoot:cursorRoot,assets:()=>({sdk:'fixture',worker:'fixture',root:'fixture',sdkVersion:CURSOR_SDK_VERSION}),control:async(_a,_e,action)=>action==='probe'?{ok:true,probe:{durableAgent:true,nativeId:true,store:'jsonl',node:process.version}}:{ok:true,models:[{id:'native-model',displayName:'Native model'}]},driver:()=>cursorDriver});
+      createHost({extraAdapters:[adapter,cursor]}).run().then(code=>process.exit(code));
     `);
     const bundled = spawnSync(join(hostDir,'../node_modules/.bin/esbuild'),[source,'--bundle','--platform=node','--format=esm',`--outfile=${harness}`,"--banner:js=import { createRequire as harnessCreateRequire } from 'node:module'; const require = harnessCreateRequire(import.meta.url);"],{encoding:'utf8'});
     expect(bundled.status, bundled.stderr).toBe(0);
@@ -116,6 +122,8 @@ it.each([false, true])('actual whole-host death settles Codex/OpenCode and optio
   const resumed = await client.resumeSession({ native: b, workspaceRootPath: root }); expect(resumed.nativeSessionId).toBe(b.nativeSessionId);
   second = client.sendTurn({ native: b, turnId: asSpecOpsTurnId('turn-b-recovered'), workspaceRootPath: root, prompt: 'cancel' })[Symbol.asyncIterator](); await second.next();
   await waitForNativePrompt(2);
+  let cursorStream: AsyncIterator<unknown> | undefined;
+  let cursorBinding: Awaited<ReturnType<typeof client.createSession>> | undefined;
   let claudeStream: AsyncIterator<unknown> | undefined;
   let claudeBinding: Awaited<ReturnType<typeof client.createSession>> | undefined;
   if (withClaude) {
@@ -126,10 +134,21 @@ it.each([false, true])('actual whole-host death settles Codex/OpenCode and optio
     const stream = client.sendTurn({native:claudeBinding,turnId:asSpecOpsTurnId('claude-pending'),workspaceRootPath:root,prompt:'approve'})[Symbol.asyncIterator]();
     let value = await stream.next(); while(value.value?.type !== 'permission.requested') value = await stream.next();
     claudeStream = stream;
+    const cursorProfile = (await client.authenticate({runtimeId:'cursor',workspaceRootPath:root,options:{action:'create-profile'}})).profile!;
+    writeFileSync(join(root,'profiles','cursor',cursorProfile.id,'api-key'),'cursor-host-death-private-canary',{mode:0o600});
+    await client.authenticate({runtimeId:'cursor',workspaceRootPath:root,connectionProfileId:cursorProfile.id,credential:{kind:'api-key',ref:'profile-api-key'},options:{action:'login-api-key'}});
+    cursorBinding = await client.createSession({runtimeId:'cursor',workspaceRootPath:root,connectionProfileId:cursorProfile.id,modelId:'native-model'});
+    const cursorTurn=client.sendTurn({native:cursorBinding,turnId:asSpecOpsTurnId('cursor-pending'),workspaceRootPath:root,prompt:'cancel',context:{clientUserMessageId:'cursor-pending'}})[Symbol.asyncIterator]();
+    await cursorTurn.next(); cursorStream=cursorTurn;
+    const until=Date.now()+3000;
+    while(Date.now()<until){try{const db=JSON.parse(readFileSync(join(root,'profiles','cursor-native.json'),'utf8'));if(db[cursorBinding.nativeSessionId]?.runs.length===1)break;}catch{}await new Promise(r=>setTimeout(r,10));}
+    expect(JSON.parse(readFileSync(join(root,'profiles','cursor-native.json'),'utf8'))[cursorBinding.nativeSessionId].runs).toHaveLength(1);
   }
   const failedA = expect(first.next()).rejects.toThrow(/Host.*(?:exited|stopped)/); const failedB = (async () => { try { for (;;) { const value = await second.next(); if (value.done) break; } throw new Error('unexpected completion'); } catch (error) { expect(String(error)).toMatch(/Host.*(?:exited|stopped)/); } })();
   const failedClaude = claudeStream ? expect(claudeStream.next()).rejects.toThrow(/Host.*(?:exited|stopped)/) : Promise.resolve();
-  host.kill('SIGKILL'); await failedA; await failedB; await failedClaude;
+  const failedCursor=cursorStream ? expect(cursorStream.next()).rejects.toThrow(/Host.*(?:exited|stopped)/) : Promise.resolve();
+  host.kill('SIGKILL'); await failedA; await failedB; await failedClaude; await failedCursor;
+  if(cursorBinding){const db=JSON.parse(readFileSync(join(root,'profiles','cursor-native.json'),'utf8'));expect(db[cursorBinding.nativeSessionId].runs).toHaveLength(1);expect(db[cursorBinding.nativeSessionId].runs[0].messages.filter((m:any)=>m.type==='user')).toHaveLength(1);const binding=readFileSync(join(root,'profiles','cursor',cursorBinding.connectionProfileId!,`session-${cursorBinding.nativeSessionId}.json`),'utf8');expect(binding).toContain(cursorBinding.nativeSessionId);expect(binding).not.toContain('cursor-host-death-private-canary');}
   if (claudeBinding) {
     expect(claudeBinding.runtimeId).toBe('claude');
     const history = JSON.parse(readFileSync(join(root,'profiles','claude','fixture-history.json'),'utf8'));

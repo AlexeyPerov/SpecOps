@@ -117,7 +117,11 @@ async function main(line) {
       } else throw new Error("unsupported");
     }
   } catch (error) {
-    const reason = stopped ? "cancelled" : error?.name === "AuthenticationError" ? "auth-required" : error?.name === "RateLimitError" ? "quota" : "native";
+    // Classify only bounded native discriminants; never serialize provider messages.
+    const auth = error?.name === "AuthenticationError" || error?.status === 401 || error?.status === 403 || error?.code === "unauthenticated" || error?.code === 16;
+    const quota = error?.name === "RateLimitError" || error?.status === 429 || error?.code === "resource_exhausted" || error?.code === 8;
+    const offline = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "UNAVAILABLE"].includes(error?.code) || error?.code === 14;
+    const reason = stopped ? "cancelled" : auth ? "auth-required" : quota ? "quota" : offline ? "offline" : "native";
     try { await emit({ type: "failure", reason }); } catch {}
   } finally {
     try { await cleanup(); } catch {}

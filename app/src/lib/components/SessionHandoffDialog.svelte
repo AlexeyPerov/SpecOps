@@ -84,7 +84,7 @@
   <label>Exact first prompt<textarea aria-label="Exact first prompt" readonly value={preview}></textarea></label>
   {#if previewError}<p role="alert">{previewError}</p>{/if}
   {#if error}<p role="alert">{error}</p>{/if}
-  <button onclick={() => void confirm()} disabled={busy || !preview || !target.connectionProfileId || !target.modelId || catalog.status !== 'ready' || target.runtimeId === 'cursor' || target.runtimeId === 'fake'}>Confirm and send reviewed prompt</button>
+  <button onclick={() => void confirm()} disabled={busy || !preview || !target.connectionProfileId || !target.modelId || catalog.status !== 'ready' || target.runtimeId === 'fake'}>Confirm and send reviewed prompt</button>
   <button onclick={onClose} disabled={busy}>Close / cancel review</button>
   {#if attempts.length}
     <h3>Saved attempts</h3>

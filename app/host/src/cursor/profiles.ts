@@ -54,7 +54,7 @@ export class CursorProfileStore {
           if (
             v.id !== id ||
             v.runtimeId !== "cursor" ||
-            typeof v.label !== "string" ||
+            typeof v.label !== "string" || v.label.length > 80 ||
             typeof v.createdAt !== "string" ||
             v.createdAt.length > 40 ||
             !Number.isFinite(Date.parse(v.createdAt)) ||
@@ -80,6 +80,7 @@ export class CursorProfileStore {
     return p;
   }
   create(label: string): CursorProfile {
+    if (label.trim().length > 80) throw new Error("Profile label exceeds 80 characters");
     const p: CursorProfile = {
       id: randomUUID(),
       runtimeId: "cursor",
@@ -143,6 +144,15 @@ export class CursorProfileStore {
     return key;
   }
   saveKey(id: string, key: string) {
+    const profile = this.require(id);
+    let label = profile.label;
+    for (const secret of [this.readKey(id), key]) if (secret) label = label.replaceAll(secret, "[REDACTED]");
+    if (label !== profile.label) {
+      const file = join(this.home(id), "profile.json");
+      const original = lstatSync(file);
+      const fd = openSync(file, constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+      try { const stat = fstatSync(fd); if (original.isSymbolicLink() || stat.ino !== original.ino || stat.dev !== original.dev || !stat.isFile() || stat.size > 8192 || (process.platform !== "win32" && stat.mode & 0o077)) throw new Error("Unsafe profile metadata"); ftruncateSync(fd, 0); writeFileSync(fd, JSON.stringify({ ...profile, label })); } finally { closeSync(fd); }
+    }
     const p = join(this.home(id), "credential");
     const existing = this.readKey(id);
     const original = existing ? lstatSync(p) : undefined;

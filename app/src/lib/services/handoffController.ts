@@ -5,7 +5,7 @@ import { ensureAgentHostStarted, getAgentHostClient, loadSessionCatalogs } from 
 import { flushSessionIndexPersistence, persistSessionThreadSnapshot } from './chatPersistence';
 import { beginTurn, createUserMessage, executeProviderTurn } from '../ai/chatSendPipeline';
 import { handoffJournalWriter, mintHandoffSendPermit, revokeHandoffSendPermit } from './handoffPersistence';
-import { buildHandoffDraft, executeHandoff, isHandoffPathAllowed, type HandoffAttempt, type HandoffTarget } from './sessionHandoff';
+import { buildHandoffDraft, executeHandoff, isHandoffPathAllowed, handoffSettingsMatch, type HandoffAttempt, type HandoffTarget } from './sessionHandoff';
 import { queryWorkingTreeStatus } from '../git/gitWorkingTree';
 import { runGit } from '../git/gitRun';
 import { reconcileNativeHistory } from '../session/history';
@@ -42,7 +42,7 @@ export async function collectHandoffDraft(root: string, sourceSessionId: string,
 
 export async function validateHandoffTarget(target: HandoffTarget, root: string): Promise<void> {
   if (!appState.getSnapshot().settings.sessionsEnabled) throw new Error('Enable Sessions before confirming a handoff.');
-  if (!isAgentRuntimeId(target.runtimeId) || target.runtimeId === 'cursor' || target.runtimeId === 'fake') throw new Error('This target runtime has no accepted handoff source adapter.');
+  if (!isAgentRuntimeId(target.runtimeId) || target.runtimeId === 'fake') throw new Error('This target runtime has no accepted handoff source adapter.');
   if (!target.connectionProfileId) throw new Error('Select an explicit target account profile.');
   await ensureAgentHostStarted();
   const client = getAgentHostClient();
@@ -66,7 +66,7 @@ async function bindKnownTarget(attempt: HandoffAttempt): Promise<void> {
   if (!attempt.native) throw new Error('Target creation outcome is unknown.');
   if (chatStore.getActiveChatScopeKey() !== attempt.workspaceRootPath) throw new Error('Return to the approved workspace to open the target.');
   const existing = chatStore.getSessionLink(attempt.targetSessionId, attempt.workspaceRootPath);
-  if (existing && (existing.runtimeId !== attempt.native.runtimeId || existing.nativeSessionId !== attempt.native.nativeSessionId || existing.connectionProfileId !== attempt.native.connectionProfileId || existing.modelId !== (attempt.native.modelId ?? attempt.target.modelId) || existing.modeId !== (attempt.native.modeId ?? attempt.target.modeId) || Object.entries(attempt.target.runtimeMetadata ?? {}).some(([key,value]) => JSON.stringify(existing.runtimeMetadata?.[key]) !== JSON.stringify(value)))) throw new Error('Known target binding differs from storage. Inspect before continuing.');
+  if (existing && (existing.runtimeId !== attempt.native.runtimeId || existing.nativeSessionId !== attempt.native.nativeSessionId || existing.connectionProfileId !== attempt.native.connectionProfileId || existing.modelId !== (attempt.native.modelId ?? attempt.target.modelId) || existing.modeId !== (attempt.native.modeId ?? attempt.target.modeId) || !handoffSettingsMatch(attempt.target.runtimeId, existing.runtimeMetadata, attempt.target.runtimeMetadata))) throw new Error('Known target binding differs from storage. Inspect before continuing.');
   if (!chatStore.getSessionIndex().some(e => e.id === attempt.targetSessionId)) {
     // A journal target can be recovered after a crash before its local tab save.
     chatStore.setWorkspaceThread(attempt.workspaceRootPath, { metadata: { sessionId: attempt.targetSessionId, threadId: `thread-${attempt.targetSessionId}`, createdAt: attempt.approvedAt, updatedAt: attempt.approvedAt }, messages: [] });

@@ -62,8 +62,18 @@ export interface HandoffExecutor {
   bind(attempt: HandoffAttempt): Promise<void>;
   send(attempt: HandoffAttempt): Promise<boolean>;
 }
+/** Compare reviewed input settings with the native adapter's immutable projection. */
+export function handoffSettingsMatch(runtimeId: AgentRuntimeId, metadata: Readonly<Record<string, unknown>> | undefined, reviewed: Readonly<Record<string, unknown>> | undefined): boolean {
+  return Object.entries(reviewed ?? {}).every(([key, value]) => {
+    if (runtimeId === 'cursor' && key.startsWith('modelParameter:')) {
+      if (value === '') return !Array.isArray(metadata?.modelParams) || !metadata.modelParams.some(p => p?.id === key.slice(15));
+      return Array.isArray(metadata?.modelParams) && metadata.modelParams.some(p => p?.id === key.slice(15) && p?.value === value);
+    }
+    return JSON.stringify(metadata?.[key]) === JSON.stringify(value);
+  });
+}
 export function assertHandoffNativeTarget(native: NativeSessionRef, target: HandoffTarget): void {
-  if (native.runtimeId !== target.runtimeId || native.connectionProfileId !== target.connectionProfileId || (native.modelId !== target.modelId) || (target.modeId !== undefined && native.modeId !== target.modeId) || Object.entries(target.runtimeMetadata ?? {}).some(([key, value]) => JSON.stringify(native.runtimeMetadata?.[key]) !== JSON.stringify(value))) throw new Error('Target binding differs from the approved runtime/profile/model/settings. Creation outcome requires inspection.');
+  if (native.runtimeId !== target.runtimeId || native.connectionProfileId !== target.connectionProfileId || (native.modelId !== target.modelId) || (target.modeId !== undefined && native.modeId !== target.modeId) || !handoffSettingsMatch(target.runtimeId, native.runtimeMetadata, target.runtimeMetadata)) throw new Error('Target binding differs from the approved runtime/profile/model/settings. Creation outcome requires inspection.');
 }
 /** Monotonic intent journal: interrupted native calls are never automatically retried. */
 export async function executeHandoff(approved: HandoffAttempt, deps: HandoffExecutor): Promise<HandoffAttempt> {

@@ -60,6 +60,9 @@ export class RuntimeConnection {
   generation = 0;
   onExit: (generation: number) => void = () => {};
   private lifecycle = 0;
+  private streamEndpoint?: string;
+  private streamAuthorization?: string;
+  private streams = new Set<AbortController>();
   private starting: Promise<void> | null = null;
   private descendants = new Map<number, string>();
   private monitor?: ReturnType<typeof setInterval>;
@@ -130,6 +133,7 @@ export class RuntimeConnection {
         this.cleanup(child.pid);
         this.child = null;
         this.client = null;
+        this.abortStreams();
         this.lifecycle++;
         this.starting = null;
         this.onExit(generation);
@@ -163,6 +167,8 @@ export class RuntimeConnection {
           result.data.version !== OPENCODE_VERSION
         )
           throw new Error("Incompatible runtime health");
+        this.streamEndpoint = baseUrl;
+        this.streamAuthorization = authorization;
         this.client = client;
         return;
       } catch {
@@ -176,6 +182,75 @@ export class RuntimeConnection {
       }
     }
     throw new Error("Runtime startup cancelled");
+  }
+  /** Open one SSE subscription before dispatch; never retry or replay a prompt. */
+  async events(
+    directory: string,
+    signal: AbortSignal,
+  ): Promise<AsyncIterable<unknown>> {
+    if (!this.client || !this.streamEndpoint)
+      throw new Error("Runtime offline");
+    const controller = new AbortController();
+    this.streams.add(controller);
+    const combined = AbortSignal.any([signal, controller.signal]);
+    const url = new URL("/event", this.streamEndpoint);
+    url.searchParams.set("directory", directory);
+    let response: Response;
+    try {
+      response = await this.fetcher(url, {
+        signal: combined,
+        headers: {
+          Accept: "text/event-stream",
+          ...(this.streamAuthorization
+            ? { Authorization: this.streamAuthorization }
+            : {}),
+        },
+      });
+      if (
+        !response.ok ||
+        !response.body ||
+        !response.headers.get("content-type")?.includes("text/event-stream")
+      )
+        throw new Error("Native event subscription unavailable");
+    } catch (error) {
+      this.streams.delete(controller);
+      throw error;
+    }
+    const streams = this.streams;
+    return (async function* () {
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let carry = "";
+      try {
+        while (!combined.aborted) {
+          const result = await reader.read();
+          if (result.done) break;
+          carry += decoder.decode(result.value, { stream: true });
+          if (Buffer.byteLength(carry) > 1024 * 1024)
+            throw new Error("Native event frame capacity exceeded");
+          let match: RegExpExecArray | null;
+          while ((match = /\r?\n\r?\n/.exec(carry))) {
+            const frame = carry.slice(0, match.index);
+            carry = carry.slice(match.index + match[0].length);
+            const data = frame
+              .split(/\r?\n/)
+              .filter((line) => line.startsWith("data:"))
+              .map((line) => line.slice(5).trimStart())
+              .join("\n");
+            if (data) yield JSON.parse(data);
+          }
+        }
+      } finally {
+        controller.abort();
+        streams.delete(controller);
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
+    })();
+  }
+  private abortStreams(): void {
+    for (const controller of this.streams) controller.abort();
+    this.streams.clear();
   }
   private rows() {
     return execFileSync("/bin/ps", ["-axo", "pid=,ppid=,lstart="], {
@@ -247,6 +322,9 @@ export class RuntimeConnection {
     this.descendants.clear();
   }
   close(): void {
+    this.abortStreams();
+    this.streamEndpoint = undefined;
+    this.streamAuthorization = undefined;
     this.lifecycle++;
     this.starting = null;
     this.client = null;

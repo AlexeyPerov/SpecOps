@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** A source verified; B/C and external acceptance open
+**Status:** A/B source verified; C and external acceptance open
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -21,7 +21,7 @@ OpenCode is the second native runtime. Existing code/fixtures are input, not pro
 | Phase | Plan | State |
 | --- | --- | --- |
 | AS04-A | [Ownership and finite parity ledger](execution-plan-phase-a-host-lifecycle.md) | Source verified; acceptance open |
-| AS04-B | [Core session/event parity](execution-plan-phase-b-core-parity.md) | Planned |
+| AS04-B | [Core session/event parity](execution-plan-phase-b-core-parity.md) | Source verified; native lifecycle verified; acceptance open |
 | AS04-C | [Core cutover and acceptance](execution-plan-phase-c-cutover-exit.md) | Planned |
 
 ## Dependencies and delivery
@@ -39,3 +39,5 @@ OpenCode is the second native runtime. Existing code/fixtures are input, not pro
 No persisted-data migrations or compatibility shims. Planned prerequisites are gates, not claims of completed work. Archival of earlier implementation does not close reopened acceptance.
 
 Implementation evidence and finite classifications: [AS04-A notes](implementation-notes-phase-a.md). Host ownership is default; legacy requires explicit process-start parity mode until C removes its files.
+
+AS04-B native core evidence and concrete cutover handoff: [implementation notes](implementation-notes-phase-b.md). Installed/live-provider core acceptance remains open.

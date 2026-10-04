@@ -50,9 +50,9 @@ import { createAgentHostClient } from '../session/host/agentHostClient';
 import { bindAgentHostClientForTests } from './agentHostRuntime';
 import { executeProviderTurn } from '../ai/chatSendPipeline';
 import { registerPermissionPromptRunner } from './permissionPrompt';
-const nativeRuntimes: CodexRuntimeAdapter[] = [];
+const nativeRuntimes: (CodexRuntimeAdapter | OpenCodeRuntimeAdapter)[] = [];
 afterEach(() => { nativeRuntimes.splice(0).forEach(adapter => adapter.close()); bindAgentHostClientForTests(null); registerPermissionPromptRunner(null); });
-async function nativeClient(adapter: CodexRuntimeAdapter, generation: number) {
+async function nativeClient(adapter: import('../session/adapter').AgentRuntimeAdapter, generation: number) {
   const registry = new AdapterRegistry(); registry.register(adapter);
   let notification: ((payload: unknown) => void) | undefined; let id = 0;
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
@@ -109,3 +109,119 @@ it.each(['divergent', 'corrupt'] as const)('native fixture (%s cache) passes dis
   expect(chatStore.getSessionLink(sessionId, root)?.nativeSessionId).toBe(binding.nativeSessionId); expect(chatStore.getMessages(sessionId).some(m => m.content === 'Hello native')).toBe(true);
   const afterMissing = await readFile(join(fresh.store.home(profile.id), 'fixture-requests.jsonl'), 'utf8'); expect(afterMissing.match(/thread\/start/g)).toHaveLength(1);
 });
+
+import { copyFileSync, chmodSync } from "node:fs";
+import { OpenCodeRuntimeAdapter } from "../../../host/src/opencode/adapter";
+it.each(["divergent", "corrupt"] as const)(
+  "OpenCode native %s cache uses production dispatcher/client/pipeline/persistence and resumes without replay",
+  async (cache) => {
+    const root = join(dataDir, "workspace");
+    await mkdir(root);
+    const executable = join(dataDir, "native-core.mjs");
+    copyFileSync(
+      join(process.cwd(), "host/src/opencode/nativeFixture.mjs"),
+      executable,
+    );
+    chmodSync(executable, 0o700);
+    const options = { profileRoot: join(dataDir, "profiles"), executable };
+    const first = new OpenCodeRuntimeAdapter(options);
+    nativeRuntimes.push(first);
+    const profile = first.store.create("Core profile");
+    const client = await nativeClient(first, 1);
+    bindAgentHostClientForTests(() => client);
+    chatStore.setActiveWorkspaceRoot(root);
+    const sessionId = chatStore.createDraftSession()!;
+    chatStore.updateThreadMetadata({
+      runtimeId: "opencode",
+      connectionProfileId: profile.id,
+      selectedModelId: "fixture/model",
+      selectedModeId: "build",
+    });
+    chatStore.appendMessage(
+      { id: "user-first", role: "user", content: "hello", createdAt: "t" },
+      { sessionId },
+    );
+    chatStore.beginTurn("first", sessionId);
+    expect(
+      await executeProviderTurn({
+        root,
+        activeSessionId: sessionId,
+        turnId: "first",
+      }),
+    ).toMatchObject({ ok: true });
+    const binding = chatStore.getSessionLink(sessionId, root)!;
+    expect(binding).toMatchObject({
+      runtimeId: "opencode",
+      connectionProfileId: profile.id,
+      modelId: "fixture/model",
+      modeId: "build",
+    });
+    const saved = chatStore.getActiveThreadSnapshot(sessionId)!;
+    if (cache === "divergent")
+      saved.messages = saved.messages.map((message) => ({
+        ...message,
+        content: "stale cache",
+      }));
+    await persistSessionThreadSnapshot(root, sessionId, saved);
+    await flushSessionIndexPersistence(root);
+    if (cache === "corrupt") {
+      const { getSessionThreadFilePath } = await import(
+        "./chatPersistencePaths"
+      );
+      await writeFile(
+        await getSessionThreadFilePath(root, sessionId),
+        "{broken",
+      );
+    }
+    first.close();
+    chatStore.reset();
+    chatStore.setActiveWorkspaceRoot(root);
+    await chatStore.loadWorkspaceSessions(root);
+    expect(chatStore.getSessionLink(sessionId, root)).toEqual(binding);
+    const fresh = new OpenCodeRuntimeAdapter(options);
+    nativeRuntimes.push(fresh);
+    const freshClient = await nativeClient(fresh, 2);
+    bindAgentHostClientForTests(() => freshClient);
+    chatStore.setActiveSessionId(sessionId);
+    chatStore.appendMessage(
+      { id: "user-next", role: "user", content: "permission", createdAt: "t2" },
+      { sessionId },
+    );
+    chatStore.beginTurn("next", sessionId);
+    registerPermissionPromptRunner(async () => ({ reply: "once" }));
+    expect(
+      await executeProviderTurn({
+        root,
+        activeSessionId: sessionId,
+        turnId: "next",
+      }),
+    ).toMatchObject({ ok: true });
+    const messages = chatStore.getMessages(sessionId);
+    expect(
+      messages.filter((message) => message.id === "user-first"),
+    ).toHaveLength(1);
+    expect(messages.some((message) => message.content === "stale cache")).toBe(
+      false,
+    );
+    expect(
+      messages.filter((message) => message.role === "assistant"),
+    ).toHaveLength(2);
+    expect(chatStore.getSessionLink(sessionId, root)).toEqual(binding);
+    const history = await fresh.resumeSession({
+      native: { ...binding, nativeSessionId: binding.nativeSessionId as never },
+      workspaceRootPath: root,
+    });
+    expect(
+      history.history
+        ?.filter((message) => message.role === "user")
+        .map((message) => message.content),
+    ).toEqual(["hello", "permission"]);
+    const sessions = JSON.parse(
+      await readFile(
+        join(fresh.store.home(profile.id), "fixture-sessions.json"),
+        "utf8",
+      ),
+    );
+    expect(Object.keys(sessions)).toHaveLength(1);
+  },
+);

@@ -128,7 +128,7 @@ describe("host runtime bootstrap", () => {
     await expect(c.start()).rejects.toThrow("connection failed");
     expect(c.child).toBeNull();
   });
-  it("offline runtime returns safe health and refuses unsupported core work", async () => {
+  it("offline runtime returns safe health and rejects native work without an executable", async () => {
     const s = store();
     const adapter = new OpenCodeRuntimeAdapter({
       profileRoot: s.root,
@@ -144,7 +144,14 @@ describe("host runtime bootstrap", () => {
     expect(JSON.stringify(auth)).not.toContain("apiKeyValue");
     expect(
       (await adapter.describeCapabilities()).details.nativeTurns.supported,
-    ).toBe(false);
+    ).toBe(true);
+    await expect(
+      adapter.createSession({
+        runtimeId: "opencode",
+        connectionProfileId: auth.profile!.id,
+        workspaceRootPath: s.root,
+      }),
+    ).rejects.toThrow("connection failed");
     adapter.close();
   });
 });

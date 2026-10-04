@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 20:27 MSK — Add second-runtime native core session parity
+
+- Implemented AS04-B native create/read/resume/history with immutable profile/workspace/model/mode binding in native metadata and persisted native/client message identity. Production dispatcher/client/pipeline/disk fixtures recover divergent or corrupt caches without replay or duplicate messages.
+- Added a separate bounded cancellable SSE subscription, normalized text/reasoning/tools/steps/subtasks/file changes/usage/errors/retry/compaction, host cursors/generation isolation and bounded redacted unknown events. Correlated permissions/questions resolve once; Stop/deadline/fault settles native work before releasing the session, with late-ack abort and owner-only retirement on unconfirmed cancel.
+- Validation: 154 host tests passed (two opt-in skips), 38 explicit bundled-native bootstrap/core tests passed including account-free native create/restart/read/resume, 56 focused frontend regression/integration tests and host/frontend checks/builds passed. Source scope is complete; C retains concrete runtime/profile UI, private-file credential import and legacy removal. Live provider/account/tool/interactions, installed/platform cleanup and release gates remain unverified; rich native extensions remain unavailable. No data migration or compatibility shim.
+
 ## 2026-10-04 20:05 MSK — Add isolated second-runtime host bootstrap
 
 - Implemented AS04-A source ownership/profile/bootstrap: exact host SDK/runtime 1.17.4 and reproducible host lockfile, packaged executable propagation, isolated native homes/config/provider auth, host-only loopback password/port, explicit external endpoint ownership and finite core/extension ledger.

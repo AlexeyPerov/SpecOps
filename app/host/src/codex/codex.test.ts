@@ -13,7 +13,7 @@ import { nativeRoutingKey } from '../../../src/lib/session/profiles';
 const cleanup: (() => void)[] = [];
 afterEach(() => { for (const close of cleanup.splice(0).reverse()) close(); });
 function temporary(): string { const path = mkdtempSync(join(tmpdir(), 'specops-codex-test-')); cleanup.push(() => rmSync(path, { recursive: true, force: true })); return path; }
-function fixture(): string { const path = join(temporary(), 'codex-fixture'); writeFileSync(path, controlPlaneFixture, { mode: 0o700 }); return path; }
+function fixture(replacements: Record<string, string> = {}): string { const path = join(temporary(), 'codex-fixture'); writeFileSync(path, Object.entries(replacements).reduce((source,[key,value]) => source.replaceAll(key,value), controlPlaneFixture), { mode: 0o700 }); return path; }
 function adapter(options: ConstructorParameters<typeof CodexRuntimeAdapter>[0] = {}) {
   const runtime = new CodexRuntimeAdapter({ profileRoot: temporary(), executable: fixture(), experimental: true, openBrowser: async () => {}, ...options }); cleanup.push(() => runtime.close()); return runtime;
 }
@@ -39,7 +39,7 @@ describe('isolated profiles', () => {
     expect(() => store.list()).toThrow('Unsafe');
   });
   it('removes ambient credentials and provider overrides, preserving tool environment', () => {
-    expect(isolatedEnvironment('/private/b', { HOME: '/desktop', PATH: '/tools', WORKSPACE_FIXTURE: 'kept', CODEX_HOME: '/desktop/.codex', OPENAI_API_KEY: 'KEY-CANARY', OPENAI_BASE_URL: 'https://wrong', CODEX_API_KEY: 'KEY-CANARY', CODEX_SQLITE_HOME: '/desktop/db', CHATGPT_TOKEN: 'TOKEN-CANARY', AWS_PROFILE: 'wrong' })).toEqual({ HOME: '/desktop', PATH: '/tools', WORKSPACE_FIXTURE: 'kept', CODEX_HOME: '/private/b' });
+    expect(isolatedEnvironment('/private/b', { HOME: '/desktop', PATH: '/tools', WORKSPACE_FIXTURE: 'kept', CODEX_HOME: '/desktop/.codex', OPENAI_API_KEY: 'KEY-CANARY', OPENAI_BASE_URL: 'https://wrong', CODEX_API_KEY: 'KEY-CANARY', CODEX_SQLITE_HOME: '/desktop/db', CHATGPT_TOKEN: 'TOKEN-CANARY', AWS_PROFILE: 'wrong' })).toEqual({ HOME: '/private/b', USERPROFILE: '/private/b', PATH: '/tools', CODEX_HOME: '/private/b', XDG_CONFIG_HOME: '/private/b/.config', XDG_DATA_HOME: '/private/b/.local/share', XDG_CACHE_HOME: '/private/b/.cache', APPDATA: '/private/b/.config', LOCALAPPDATA: '/private/b/.local/share' });
   });
 });
 describe('pinned child transport', () => {
@@ -47,15 +47,15 @@ describe('pinned child transport', () => {
     const home = temporary(); const executable = fixture();
     const transport = new CodexTransport(executable, home, { ...process.env, OPENAI_API_KEY: 'KEY-CANARY', CODEX_API_KEY: 'KEY-CANARY', WORKSPACE_FIXTURE: 'kept' }); cleanup.push(() => transport.close());
     await transport.start(); expect(transport.generation).toBe(1);
-    expect(await transport.request('fixture/env')).toMatchObject({ CODEX_HOME: home, OPENAI_API_KEY: null, CODEX_API_KEY: null, WORKSPACE_FIXTURE: 'kept' });
-    const wrong = new CodexTransport(executable, home, { ...process.env, SPECOPS_FIXTURE_VERSION: '0.0.0' }); cleanup.push(() => wrong.close());
+    expect(await transport.request('fixture/env')).toMatchObject({ CODEX_HOME: home, OPENAI_API_KEY: null, CODEX_API_KEY: null });
+    const wrong = new CodexTransport(fixture({ 'process.env.SPECOPS_FIXTURE_VERSION': '"0.0.0"' }), home); cleanup.push(() => wrong.close());
     await expect(wrong.start()).rejects.toThrow('incompatible');
-    const malformed = new CodexTransport(executable, home, { ...process.env, SPECOPS_FIXTURE_BAD_INIT: '1' }); cleanup.push(() => malformed.close());
+    const malformed = new CodexTransport(fixture({ 'process.env.SPECOPS_FIXTURE_BAD_INIT': 'true' }), home); cleanup.push(() => malformed.close());
     await expect(malformed.start()).rejects.toThrow('initialization');
     await expect(transport.request('fixture/large', { text: 'a'.repeat(1024 * 1024) })).rejects.toThrow('limit');
   });
   it('cancel during version probe prevents late spawn; restart retires profile descendants', async () => {
-    const cancelled = new CodexTransport(fixture(), temporary(), { ...process.env, SPECOPS_FIXTURE_SLOW_VERSION: '1' }); cleanup.push(() => cancelled.close());
+    const cancelled = new CodexTransport(fixture({ 'process.env.SPECOPS_FIXTURE_SLOW_VERSION': 'true' }), temporary()); cleanup.push(() => cancelled.close());
     const starting = cancelled.start(); cancelled.close(); await expect(starting).rejects.toThrow('cancelled'); expect(cancelled.running).toBe(false); expect(cancelled.generation).toBe(0);
     const transport = new CodexTransport(fixture(), temporary()); cleanup.push(() => transport.close()); await transport.start();
     const raw = await transport.request('fixture/descendant') as { pid: number }; transport.close(); await tick();

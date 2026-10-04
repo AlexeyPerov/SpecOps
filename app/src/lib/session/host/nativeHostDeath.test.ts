@@ -9,7 +9,7 @@ import { PROTOCOL_VERSION } from '../../../../host/src/protocol';
 import { asSpecOpsTurnId } from '../ids';
 const cleanup: (() => void)[] = [];
 afterEach(() => cleanup.splice(0).reverse().forEach(close => close()));
-it('actual whole-host death settles two native streams including a pending approval and preserves immutable bindings without replay', async () => {
+it('actual whole-host death settles two equal-ID profile-native streams including a pending approval and preserves immutable bindings without replay', async () => {
   const root = mkdtempSync(join(tmpdir(), 'specops-host-death-')); cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const executable = join(root, 'native.cjs'); writeFileSync(executable, threadFixture, { mode: 0o700 });
   const hostDir = resolve('host'); const built = spawnSync(process.execPath, ['scripts/build.mjs'], { cwd: hostDir, encoding: 'utf8' }); expect(built.status).toBe(0);
@@ -31,14 +31,18 @@ it('actual whole-host death settles two native streams including a pending appro
   await client.start();
   const created = await client.authenticate({ runtimeId: 'codex', workspaceRootPath: root, options: { action: 'create-profile' } }); const profile = created.profile!;
   await client.authenticate({ runtimeId: 'codex', workspaceRootPath: root, connectionProfileId: profile.id, options: { action: 'experimental-on' } });
-  const a = await client.createSession({ runtimeId: 'codex', workspaceRootPath: root, connectionProfileId: profile.id }); const b = await client.createSession({ runtimeId: 'codex', workspaceRootPath: root, connectionProfileId: profile.id });
+  const otherProfile = (await client.authenticate({ runtimeId: 'codex', workspaceRootPath: root, options: { action: 'create-profile', label: 'Second profile' } })).profile!;
+  await client.authenticate({ runtimeId: 'codex', workspaceRootPath: root, connectionProfileId: otherProfile.id, options: { action: 'experimental-on' } });
+  const a = await client.createSession({ runtimeId: 'codex', workspaceRootPath: root, connectionProfileId: profile.id }); const b = await client.createSession({ runtimeId: 'codex', workspaceRootPath: root, connectionProfileId: otherProfile.id });
   const first = client.sendTurn({ native: a, turnId: asSpecOpsTurnId('turn-a'), workspaceRootPath: root, prompt: 'approval' })[Symbol.asyncIterator]();
   let event = await first.next(); while (event.value?.type !== 'permission.requested') event = await first.next();
   const second = client.sendTurn({ native: b, turnId: asSpecOpsTurnId('turn-b'), workspaceRootPath: root, prompt: 'cancel' })[Symbol.asyncIterator](); await second.next();
   const failedA = expect(first.next()).rejects.toThrow(/Host.*(?:exited|stopped)/); const failedB = (async () => { try { for (;;) { const value = await second.next(); if (value.done) break; } throw new Error('unexpected completion'); } catch (error) { expect(String(error)).toMatch(/Host.*(?:exited|stopped)/); } })();
   host.kill('SIGKILL'); await failedA; await failedB;
-  expect(exited).toBe(true); expect(listeners.size).toBe(0); expect(a.nativeSessionId).not.toBe(b.nativeSessionId); expect(a.connectionProfileId).toBe(profile.id);
-  const requests = readFileSync(join(root, 'profiles', profile.id, 'home', 'fixture-requests.jsonl'), 'utf8'); expect(requests.match(/thread\/start/g)).toHaveLength(2); const history = JSON.parse(readFileSync(join(root, 'profiles', profile.id, 'home', 'fixture-history.json'), 'utf8')); expect(Object.values(history).map(value => (value as { turns: unknown[] }).turns.length)).toEqual([1, 1]);
+  expect(exited).toBe(true); expect(listeners.size).toBe(0); expect(a.nativeSessionId).toBe(b.nativeSessionId); expect(a.connectionProfileId).not.toBe(b.connectionProfileId); expect(a.connectionProfileId).toBe(profile.id);
+  const requests = readFileSync(join(root, 'profiles', profile.id, 'home', 'fixture-requests.jsonl'), 'utf8'); expect(requests.match(/thread\/start/g)).toHaveLength(1); const history = JSON.parse(readFileSync(join(root, 'profiles', profile.id, 'home', 'fixture-history.json'), 'utf8')); expect(Object.values(history).map(value => (value as { turns: unknown[] }).turns.length)).toEqual([1]);
+  const otherRequests = readFileSync(join(root, 'profiles', otherProfile.id, 'home', 'fixture-requests.jsonl'), 'utf8'); expect(otherRequests.match(/thread\/start/g)).toHaveLength(1);
+  const otherHistory = JSON.parse(readFileSync(join(root, 'profiles', otherProfile.id, 'home', 'fixture-history.json'), 'utf8')); expect(otherHistory[b.nativeSessionId].turns).toHaveLength(1);
 }, 15000);
 
 it.each([false, true])('actual whole-host death settles Codex/OpenCode and optional Claude=%s without replay', async (withClaude) => {

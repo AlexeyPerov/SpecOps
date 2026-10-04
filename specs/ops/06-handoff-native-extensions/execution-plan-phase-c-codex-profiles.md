@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 
-**Status:** Planned
+**Status:** Source implemented and verified; actual account/installed acceptance open
 
 **Prerequisites:** AS02-D accepted. Default delivery stage 06; not a prerequisite for first Codex preview.
 
@@ -44,3 +44,7 @@ Persist/reload two profiles and threads across installed-app restart; add same-I
 ## Exit and next work
 
 Record 06-C independently; first-preview baseline remains 02-A–D. Rerun 08-A for a release advertising simultaneous profiles. Mark tasks Done only with recorded evidence; update scope/index/roadmap and `specs/changelog.md` when implementation lands. No persisted-data migrations or compatibility shims.
+
+## Source implementation record
+
+[AS06-C implementation evidence](implementation-notes-phase-c.md) records Codex-only named CRUD, native account summary/stable UUID, durable private account/session guards, controlled isolated homes, owner mutation reservations, equal-ID two-process faults and production application persistence. All three tasks are source implemented; actual two-account and signed installed acceptance remains unchecked. The default-skipped real-account harness requires explicitly authorized paid native requests and user-provided private credential files. Upstream experimental/default-off and release gates remain open in [selected baseline](../08-release-gates/baseline-06-c.md).

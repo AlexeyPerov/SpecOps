@@ -14,6 +14,7 @@
   let runtimes = $state<readonly AgentRuntimeDescriptor[]>([]);
   let profiles = $state<readonly ConnectionProfileSnapshot[]>([]);
   let label = $state('');
+  let renameLabel = $state('');
   let providerId = $state('');
   let providerIds = $state<string[]>([]);
   let ownership = $state<'local' | 'external'>('local');
@@ -56,11 +57,12 @@
     busy = true; error = '';
     try {
       await ensureAgentHostStarted();
-      const result = await getAgentHostClient().authenticate({ runtimeId: selectedRuntime, connectionProfileId: selectedProfile, workspaceRootPath: '', options: { action, ...(action === 'create-profile' ? { label, ...(selectedRuntime === 'opencode' && ownership === 'external' ? { endpoint } : {}) } : {}), ...(selectedRuntime === 'opencode' ? { providerId } : {}) }, ...(action === 'login-api-key' ? { credential: { kind: 'api-key', ref: 'profile-api-key' } as const } : {}) });
+      const result = await getAgentHostClient().authenticate({ runtimeId: selectedRuntime, connectionProfileId: selectedProfile, workspaceRootPath: '', options: { action, ...(action === 'rename-profile' ? { label: renameLabel } : {}), ...(action === 'create-profile' ? { label, ...(selectedRuntime === 'opencode' && ownership === 'external' ? { endpoint } : {}) } : {}), ...(selectedRuntime === 'opencode' ? { providerId } : {}) }, ...(action === 'login-api-key' ? { credential: { kind: 'api-key', ref: 'profile-api-key' } as const } : {}) });
       if (selectedRuntime !== runtimeId || selectedProfile !== connectionProfileId) return;
       if (result.profiles) { profiles = mergeProfiles(result.profiles); if (!bound && action === 'create-profile') onSelect(selectedRuntime, result.profile?.id); }
-      if (result.profile) { profiles = profiles.map(p => p.id === result.profile!.id && isNewerProfileSnapshot(p, result.profile!) ? result.profile! : p); chatStore.applyConnectionProfileState(result.profile.id, result.profile.generation, result.profile.state === 'auth-required', result.profile.hostGeneration); }
-      label = ''; onRefresh();
+      if (result.profile) { profiles = profiles.map(p => p.id === result.profile!.id && isNewerProfileSnapshot(p, result.profile!) ? result.profile! : p); chatStore.applyConnectionProfileState(result.profile.id, result.profile.generation, ['auth-required', 'missing-profile'].includes(result.profile.state), result.profile.hostGeneration); }
+      if (action === 'remove-profile' && !bound) onSelect(selectedRuntime, undefined);
+      label = ''; renameLabel = ''; onRefresh();
       await refresh();
     } catch (failure) { error = failure instanceof Error ? failure.message : 'Connection is unavailable. Retry.'; await refresh().catch(() => {}); }
     finally { busy = false; }
@@ -74,7 +76,7 @@
     let unlisten: (() => void) | undefined;
     void getAgentHostClient().subscribeProfiles(update => {
       if (disposed || update.runtimeId !== runtimeId) return;
-      chatStore.applyConnectionProfileState(update.connectionProfileId, update.generation, update.profile.state === 'auth-required', update.hostGeneration);
+      chatStore.applyConnectionProfileState(update.connectionProfileId, update.generation, ['auth-required', 'missing-profile'].includes(update.profile.state), update.hostGeneration);
       profiles = profiles.map(p => p.id === update.connectionProfileId && isNewerProfileSnapshot(p, update.profile) ? update.profile : p);
       if (update.connectionProfileId === connectionProfileId && update.profile.state === 'authenticated') {
         void loadSessionCatalogs(runtimeId, connectionProfileId).then(() => onRefresh());
@@ -111,6 +113,11 @@
     {#if selected}
       <span role="status">{selected.state}{selected.account?.type === 'chatgpt' ? `: ${selected.account.email ?? 'ChatGPT account'} (${selected.account.planType})` : selected.account?.type === 'apiKey' ? ': API key' : ''}</span>
       {#if runtimeId === 'codex'}
+      <span>Profile ID: {selected.id}</span>
+      <input aria-label="Rename profile" placeholder={selected.label} bind:value={renameLabel} disabled={busy} maxlength="80" />
+      <button onclick={() => action('rename-profile')} disabled={busy || !renameLabel.trim()}>Rename profile</button>
+      <button onclick={() => action('remove-profile')} disabled={busy}>Remove profile</button>
+      <span class="note">Removal signs out this profile and keeps saved sessions and its private native history. Existing sessions keep their original profile ID.</span>
       {#if selected.state === 'login-pending'}
         <span>Complete sign-in in the browser, then verify the account.</span>
         <button onclick={() => action('cancel')} disabled={busy}>Cancel sign-in</button>

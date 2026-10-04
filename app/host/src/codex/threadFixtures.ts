@@ -3,6 +3,7 @@ export const threadFixture = String.raw`#!/usr/bin/env node
 if (process.argv.includes('--version')) { console.log('codex-cli 0.160.0'); process.exit(0); }
 const fs = require('node:fs'); const path = require('node:path'); const readline = require('node:readline');
 const home = process.env.CODEX_HOME; const dbPath = path.join(home, 'fixture-history.json');
+const authPath=path.join(home,'auth.json'); if(!fs.existsSync(authPath))fs.writeFileSync(authPath,JSON.stringify({OPENAI_API_KEY:'fixture-key-'+home}),{mode:0o600});
 let db = fs.existsSync(dbPath) ? JSON.parse(fs.readFileSync(dbPath,'utf8')) : {}; let active = new Map(); let replies = new Map(); let counter = 0; let experimental = false;
 const save = () => fs.writeFileSync(dbPath, JSON.stringify(db));
 const frame = value => process.stdout.write(JSON.stringify(value)+'\n');
@@ -16,7 +17,12 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  if(!req.method) { const next=replies.get(req.id); if(next){replies.delete(req.id);next(req.result??{decision:'decline'});}return; }
  const p=req.params??{}; let result={};
  if(req.method==='initialize'){experimental=p.capabilities?.experimentalApi===true;result={userAgent:'fixture'};}
- else if(req.method==='account/read')result={account:{type:'apiKey'},requiresOpenaiAuth:true};
+ else if(req.method==='account/read')result={account:fs.existsSync(authPath)?{type:'apiKey'}:null,requiresOpenaiAuth:true};
+ else if(req.method==='account/rateLimits/read')result={ordinaryUsageAllowed:true,rateLimits:{limitId:'coding',primary:{usedPercent:0}}};
+ else if(req.method==='account/login/start'){fs.writeFileSync(authPath,JSON.stringify({OPENAI_API_KEY:p.apiKey}),{mode:0o600});result={type:'apiKey'};}
+ else if(req.method==='account/logout'){if(fs.existsSync(authPath))fs.unlinkSync(authPath);}
+ else if(req.method==='fixture/env')result={pid:process.pid,env:process.env};
+ else if(req.method==='fixture/crash'){process.exit(23);}
  else if(req.method==='model/list')result={data:[{id:'fixture-model',model:'fixture-model',displayName:'Fixture model',hidden:false,isDefault:true,supportedReasoningEfforts:[{reasoningEffort:'medium'},{reasoningEffort:'high'}],defaultReasoningEffort:'medium'}],nextCursor:null};
  else if(req.method==='collaborationMode/list')result={data:[{name:'Default',mode:'default'},{name:'Plan',mode:'plan'}]};
  else if(req.method==='thread/start') { const id='thread-'+Object.keys(db).length; const thread={id,cwd:p.cwd,turns:[],historyMode:p.historyMode??'paginated'}; db[id]=thread;save();result={thread,model:p.model}; }

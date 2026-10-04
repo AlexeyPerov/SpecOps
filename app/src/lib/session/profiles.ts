@@ -19,7 +19,7 @@ export interface ConnectionProfileSnapshot {
   experimental?: boolean;
   hostGeneration?: number;
   generation: number;
-  state: 'disconnected' | 'connecting' | 'auth-required' | 'login-pending' | 'authenticated' | 'missing-runtime' | 'incompatible-runtime' | 'error';
+  state: 'missing-profile' | 'disconnected' | 'connecting' | 'auth-required' | 'login-pending' | 'authenticated' | 'missing-runtime' | 'incompatible-runtime' | 'error';
   account?: { type: 'apiKey' | 'chatgpt'; email?: string; planType?: string };
   usage?: ProfileUsageSnapshot;
   recovery?: 'auth-required' | 'quota' | 'offline' | 'retry';

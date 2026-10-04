@@ -1,8 +1,8 @@
 /** Account-free native control-plane fixture. All values are synthetic canaries. */
 export const controlPlaneFixture = `#!/usr/bin/env node
 if (process.argv.includes('--version')) { const version = 'codex-cli ' + (process.env.SPECOPS_FIXTURE_VERSION || '0.160.0'); if (process.env.SPECOPS_FIXTURE_SLOW_VERSION) setTimeout(() => { console.log(version); process.exit(0); }, 150); else { console.log(version); process.exit(0); } }
-const readline = require('node:readline');
-let account = null; let login = 0;
+const readline = require('node:readline'); const fs = require('node:fs'); const path = require('node:path'); const authPath = path.join(process.env.CODEX_HOME, 'auth.json'); const saveAuth = value => fs.writeFileSync(authPath, JSON.stringify(value), { mode: 0o600 });
+const loginPath=path.join(process.env.CODEX_HOME,'fixture-login-count'); let account = null; let login = fs.existsSync(loginPath)?Number(fs.readFileSync(loginPath,'utf8')):0; const nextLogin=()=>{fs.writeFileSync(loginPath,String(++login));return login;};
 readline.createInterface({ input: process.stdin }).on('line', line => {
  const req = JSON.parse(line);
  if (req.id === undefined) return;
@@ -14,11 +14,11 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
  if (req.method === 'thread/start') result = { thread: { id: 'same-native-id', historyMode: 'legacy' }, model: 'fixture-model' };
  if (req.method === 'account/logout') account = null;
  if (req.method === 'account/login/start') {
-   if (req.params.type === 'apiKey') { account = { type: 'apiKey' }; result = { type: 'apiKey' }; }
-   else if (req.params.type === 'chatgptDeviceCode') result = { type: 'chatgptDeviceCode', loginId: 'login-' + (++login), verificationUrl: 'https://auth.openai.com/device', userCode: 'DEVICE-CANARY' };
-   else result = { type: 'chatgpt', loginId: 'login-' + (++login), authUrl: 'https://auth.openai.com/authorize?code=AUTH-URL-CANARY' };
+   if (req.params.type === 'apiKey') { account = { type: 'apiKey' }; saveAuth({ OPENAI_API_KEY: req.params.apiKey }); result = { type: 'apiKey' }; }
+   else if (req.params.type === 'chatgptDeviceCode') result = { type: 'chatgptDeviceCode', loginId: 'login-' + (nextLogin()), verificationUrl: 'https://auth.openai.com/device', userCode: 'DEVICE-CANARY' };
+   else result = { type: 'chatgpt', loginId: 'login-' + (nextLogin()), authUrl: 'https://auth.openai.com/authorize?code=AUTH-URL-CANARY' };
  }
- if (req.method === 'fixture/complete') { account = { type: 'chatgpt', email: 'profile@example.test', planType: 'plus' }; process.stdout.write(JSON.stringify({ method: 'account/login/completed', params: { loginId: req.params.loginId, success: true, error: null, onboardingEntrypoint: null } }) + '\\n'); }
+ if (req.method === 'fixture/complete') { saveAuth({tokens:{account_id:'fixture-account-' + process.env.CODEX_HOME}}); account = { type: 'chatgpt', email: 'profile@example.test', planType: 'plus' }; process.stdout.write(JSON.stringify({ method: 'account/login/completed', params: { loginId: req.params.loginId, success: true, error: null, onboardingEntrypoint: null } }) + '\\n'); }
  if (req.method === 'fixture/descendant') { const child = require('node:child_process').spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' }); result = { pid: child.pid }; }
  if (req.method === 'fixture/notify') process.stdout.write(JSON.stringify({ method: req.params.method, params: req.params.params }) + '\\n');
  if (req.method === 'fixture/crash') { process.exit(23); }

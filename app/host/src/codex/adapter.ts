@@ -12,7 +12,7 @@ import { nativeRoutingKey } from '../../../src/lib/session/profiles';
 import { asSpecOpsTurnId } from '../../../src/lib/session/ids';
 import type { LoginAccountParams } from './generated/v2/LoginAccountParams';
 import type { ModelListParams } from './generated/v2/ModelListParams';
-import { readFileSync, unlinkSync, existsSync } from 'node:fs';
+import { unlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -46,6 +46,7 @@ async function openBrowser(url: string): Promise<void> {
 export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigurationExtension, CatalogExtension, PermissionExtension, QuestionExtension, LifecycleExtension {
   readonly runtimeId = 'codex' as const;
   readonly store: ProfileStore;
+  private readonly mutations = new Set<string>();
   private readonly connections = new Map<string, ProfileConnection>();
   private readonly turns = new Map<string, NativeTurn>();
   private readonly cursors = new Map<string, number>();
@@ -76,17 +77,21 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       const executable = this.options.executable === undefined ? resolveCodexExecutable() : this.options.executable;
       if (!executable) { c.snapshot.state = 'missing-runtime'; c.snapshot.message = `Install Codex CLI ${CODEX_VERSION} or configure its executable path.`; this.publish(c); throw new Error(c.snapshot.message); }
       c.transport = this.options.transportFactory?.(executable, this.store.home(c.profile.id)) ?? new CodexTransport(executable, this.store.home(c.profile.id), process.env, this.options.experimental || c.profile.experimental);
+      c.transport.generation = c.snapshot.generation;
       c.transport.onExit = generation => {
+        if (this.connections.get(c.profile.id) !== c) return;
         for (const turn of this.turns.values()) if (turn.request.native.connectionProfileId === c.profile.id && turn.generation === generation) turn.finish('turn.failed', 'Native profile process exited; resume explicitly to continue.');
-        c.attempt++; delete c.loginId; delete c.snapshot.loginId; delete c.snapshot.account;
+        c.attempt++;
+        delete c.loginId; delete c.snapshot.loginId; delete c.snapshot.account;
         c.snapshot.generation = generation; c.snapshot.state = 'disconnected'; if (!['quota', 'auth-required'].includes(c.snapshot.recovery ?? '')) c.snapshot.recovery = 'offline'; c.snapshot.message = 'Connection lost. Reconnect this profile, then explicitly resume.'; this.publish(c);
       };
       c.transport.onRequest = (id, method, params, generation) => {
+        if (this.connections.get(c.profile.id) !== c) return;
         const turn = object(params) && typeof params.threadId === 'string' ? this.turns.get(nativeRoutingKey('codex', c.profile.id, params.threadId)) : undefined;
         if (!turn || turn.ended || generation !== turn.generation || (method === 'item/tool/requestUserInput' && !this.experimental(c.profile.id))) { c.transport!.reject(id, generation); return; }
         try { turn.serverRequest(id, method, params, generation); } catch { turn.finish('turn.failed', 'Invalid native interaction'); c.transport!.reject(id, generation); }
       };
-      c.transport.onNotification = (method, params, generation) => { void this.notification(c, method, params, generation).catch(() => { if (method !== 'account/rateLimits/updated') c.snapshot.state = 'error'; c.snapshot.message = method === 'account/rateLimits/updated' ? 'Usage update unavailable. Verify account to retry.' : 'Incompatible authentication notification'; this.publish(c); }); };
+      c.transport.onNotification = (method, params, generation) => { void this.notification(c, method, params, generation).catch(() => { if (this.connections.get(c.profile.id) !== c) return; if (method !== 'account/rateLimits/updated') c.snapshot.state = 'error'; c.snapshot.message = method === 'account/rateLimits/updated' ? 'Usage update unavailable. Verify account to retry.' : 'Incompatible authentication notification'; this.publish(c); }); };
     }
     if (!c.transport.running) {
       c.snapshot.state = 'connecting'; this.publish(c);
@@ -94,6 +99,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
         await c.transport.start(); c.snapshot.generation = c.transport.generation;
         await this.readAccount(c);
       } catch {
+        if (this.connections.get(c.profile.id) !== c) throw new Error('Bound profile is missing; session metadata was preserved');
         c.snapshot.state = 'incompatible-runtime'; c.snapshot.message = `Could not initialize Codex ${CODEX_VERSION}. Check the executable and reconnect.`;
         this.publish(c); throw new Error(c.snapshot.message);
       }
@@ -106,7 +112,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     const attempt = c.attempt;
     const previousIdentity = c.accountIdentity;
     const raw = await transport.request('account/read', { refreshToken: false });
-    if (generation !== transport.generation || attempt !== c.attempt || !transport.running) return;
+    if (this.connections.get(c.profile.id) !== c || generation !== transport.generation || attempt !== c.attempt || !transport.running) return;
     if (!object(raw) || typeof raw.requiresOpenaiAuth !== 'boolean' || !('account' in raw)) throw new Error('Incompatible account payload');
     if (raw.account === null) { delete c.snapshot.account; delete c.snapshot.usage; c.snapshot.recovery = 'auth-required'; c.snapshot.state = c.loginId ? 'login-pending' : 'auth-required'; }
     else if (object(raw.account) && raw.account.type === 'apiKey') { c.snapshot.account = { type: 'apiKey' }; c.snapshot.state = 'authenticated'; }
@@ -114,9 +120,17 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       c.snapshot.account = { type: 'chatgpt', ...(typeof raw.account.email === 'string' ? { email: redactSecretStringValue(raw.account.email, 320) } : {}), planType: redactSecretStringValue(raw.account.planType, 80) };
       c.snapshot.state = 'authenticated';
     } else throw new Error('Incompatible account identity');
-    const nextIdentity = c.snapshot.account?.type === 'chatgpt' ? c.snapshot.account.email : c.snapshot.account?.type;
+    const nextIdentity = c.snapshot.account ? this.store.identity(c.profile.id, c.snapshot.account) : undefined;
     c.accountIdentity = nextIdentity;
-    if (previousIdentity !== nextIdentity) { delete c.snapshot.usage; delete c.snapshot.recovery; }
+    if (previousIdentity !== nextIdentity) {
+      delete c.snapshot.usage; delete c.snapshot.recovery;
+      if (previousIdentity && nextIdentity) {
+        const activeOwned = [...this.turns.values()].some(turn => turn.request.native.connectionProfileId === c.profile.id && !turn.ended);
+        for (const turn of this.turns.values()) if (turn.request.native.connectionProfileId === c.profile.id) turn.finish('turn.failed', 'Native account changed; explicit original-account resume is required.');
+        for (const key of this.sessions.keys()) if (JSON.parse(key)[1] === c.profile.id) this.sessions.delete(key);
+        if (activeOwned) { c.transport?.close(); c.reauthRequired = true; }
+      }
+    }
     if (c.reauthRequired) { c.snapshot.state = 'auth-required'; delete c.snapshot.account; delete c.snapshot.usage; }
     if (c.snapshot.state === 'auth-required') c.snapshot.recovery = 'auth-required';
     if (c.snapshot.state === 'authenticated' && c.snapshot.recovery === 'auth-required') delete c.snapshot.recovery;
@@ -126,7 +140,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     const transport = c.transport!; const generation = transport.generation; const attempt = c.attempt;
     try {
       const raw = await transport.request('account/rateLimits/read');
-      if (!transport.running || generation !== transport.generation || attempt !== c.attempt) return;
+      if (this.connections.get(c.profile.id) !== c || !transport.running || generation !== transport.generation || attempt !== c.attempt) return;
       c.snapshot.usage = mergeUsage(c.snapshot.usage, raw);
       if (usageBlocked(c.snapshot.usage)) c.snapshot.recovery = 'quota';
       // Only explicit backend permission permits recovery; reset time/percentages do not.
@@ -134,13 +148,13 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       this.publish(c);
     } catch {
       // Unavailable usage must not disable an otherwise authenticated profile.
-      if (transport.running && generation === transport.generation && attempt === c.attempt) {
+      if (this.connections.get(c.profile.id) === c && transport.running && generation === transport.generation && attempt === c.attempt) {
         c.snapshot.message = 'Usage is unavailable. Verify account to retry; missing usage does not block work.'; this.publish(c);
       }
     }
   }
   private async notification(c: ProfileConnection, method: string, raw: unknown, generation: number): Promise<void> {
-    if (generation !== c.transport?.generation || !c.transport.running) return;
+    if (this.connections.get(c.profile.id) !== c || generation !== c.transport?.generation || !c.transport.running) return;
     if (method === 'account/rateLimits/updated') {
       c.snapshot.usage = mergeUsage(c.snapshot.usage, raw);
       if (usageBlocked(c.snapshot.usage)) c.snapshot.recovery = 'quota';
@@ -152,6 +166,11 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       if (!raw.success) { c.snapshot.state = 'auth-required'; c.snapshot.message = 'Sign-in did not complete. Retry authentication.'; this.publish(c); }
       else await this.readAccount(c);
     } else if (method === 'account/updated') {
+      const active = [...this.turns.values()].filter(turn => turn.request.native.connectionProfileId === c.profile.id && !turn.ended);
+      if (active.length) {
+        for (const turn of active) turn.finish('turn.failed', 'Native account changed; explicitly verify and resume the original account.');
+        c.transport.close(); c.reauthRequired = true; c.snapshot.state = 'auth-required'; c.snapshot.recovery = 'auth-required'; this.publish(c); return;
+      }
       if (!object(raw) || (raw.authMode !== null && !['apikey', 'chatgpt', 'chatgptAuthTokens', 'headers', 'agentIdentity', 'personalAccessToken', 'bedrockApiKey', 'bedrockAccessKeys'].includes(String(raw.authMode))) || (raw.planType !== null && typeof raw.planType !== 'string')) throw new Error('Invalid account update');
       // A pending attempt is verified only by its matching login completion or explicit refresh.
       if (!c.loginId) await this.readAccount(c);
@@ -168,6 +187,21 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     } else { c.transport.unknownNotifications = Math.min(100, c.transport.unknownNotifications + 1); }
   }
   async authenticate(request: AgentAuthRequest): Promise<AgentAuthResult> {
+    const action = request.options?.action ?? 'read'; const profileId = request.connectionProfileId;
+    if (!['read', 'list-profiles', 'create-profile', 'rename-profile', 'remove-profile', 'logout', 'cancel', 'login-browser', 'login-device', 'login-api-key', 'restart', 'experimental-on', 'experimental-off'].includes(String(action))) throw new Error('Unsupported authentication action');
+    const mutates = typeof profileId === 'string' && !['read', 'list-profiles', 'create-profile', 'rename-profile'].includes(String(action));
+    if (mutates && this.mutations.has(profileId)) throw new Error('Selected profile authentication is busy');
+    if (mutates) {
+      this.mutations.add(profileId);
+      const c = this.connections.get(profileId);
+      if (c && action !== 'cancel') {
+        c.attempt++;
+        for (const turn of this.turns.values()) if (turn.request.native.connectionProfileId === profileId) turn.finish('turn.failed', 'Selected profile authentication changed; explicitly resume after sign-in.');
+        c.transport?.close();
+        for (const key of this.sessions.keys()) if (JSON.parse(key)[1] === profileId) this.sessions.delete(key);
+        this.models.delete(profileId);
+      }
+    }
     try { return redactForSerialization(await this.authenticateProfile(request), Infinity) as AgentAuthResult; }
     catch (error) {
       const c = typeof request.connectionProfileId === 'string' ? this.connections.get(request.connectionProfileId) : undefined;
@@ -182,7 +216,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
         this.publish(c);
       }
       throw new Error(redactSecretStringValue(message));
-    }
+    } finally { if (mutates) this.mutations.delete(profileId); }
   }
   private async authenticateProfile(request: AgentAuthRequest): Promise<AgentAuthResult> {
     const action = request.options?.action ?? 'read';
@@ -193,8 +227,28 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     }
     if (action === 'list-profiles' || action === 'create-profile') return { status: 'challenge', profiles: this.store.list().map(profile => ({ ...this.connection(profile.id).snapshot })) };
     const c = this.connection(request.connectionProfileId);
+    if (action === 'rename-profile') {
+      if (typeof request.options?.label !== 'string') throw new Error('Profile name is required');
+      c.profile = this.store.rename(c.profile.id, request.options.label); c.snapshot.label = c.profile.label; this.publish(c);
+      return { status: 'challenge', profile: { ...c.snapshot }, profiles: this.store.list().map(profile => ({ ...this.connection(profile.id).snapshot })) };
+    }
+    if (action === 'remove-profile') {
+      c.attempt++; c.transport?.close(); c.transport = null;
+      for (const turn of this.turns.values()) if (turn.request.native.connectionProfileId === c.profile.id) turn.finish('turn.failed', 'Bound profile was removed; saved session metadata was preserved.');
+      this.store.remove(c.profile.id); this.models.delete(c.profile.id);
+      delete c.snapshot.account; delete c.snapshot.usage; delete c.snapshot.loginId; delete c.loginId;
+      c.snapshot.state = 'missing-profile'; c.snapshot.message = 'Bound profile removed. Session metadata and private native history remain preserved.'; this.publish(c);
+      this.connections.delete(c.profile.id);
+      return { status: 'challenge', profile: { ...c.snapshot }, profiles: this.store.list().map(profile => ({ ...this.connection(profile.id).snapshot })) };
+    }
     if (action === 'experimental-on' || action === 'experimental-off') {
       c.transport?.close(); c.transport = null; c.profile = this.store.setExperimental(c.profile.id, action === 'experimental-on'); c.snapshot = { ...c.snapshot, ...c.profile }; this.models.delete(c.profile.id); this.publish(c);
+      return { status: 'challenge', profile: { ...c.snapshot } };
+    }
+    if (action === 'logout') {
+      c.attempt++; c.transport?.close(); this.store.clearCredentials(c.profile.id);
+      delete c.snapshot.account; delete c.snapshot.usage; delete c.accountIdentity; delete c.loginId; delete c.snapshot.loginId;
+      c.reauthRequired = true; c.snapshot.state = 'auth-required'; c.snapshot.recovery = 'auth-required'; this.publish(c);
       return { status: 'challenge', profile: { ...c.snapshot } };
     }
     if (action === 'restart') {
@@ -203,23 +257,17 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       await this.connect(c.profile.id);
       if (action === 'logout' || action === 'cancel' || action === 'login-browser' || action === 'login-device' || action === 'login-api-key') {
         c.attempt++;
+        if (action !== 'cancel') for (const turn of this.turns.values()) if (turn.request.native.connectionProfileId === c.profile.id) turn.finish('turn.failed', 'Selected profile authentication changed; explicitly resume after sign-in.');
         if (action !== 'cancel') { delete c.snapshot.usage; delete c.snapshot.recovery; c.reauthRequired = action === 'logout'; delete c.accountIdentity; }
         const oldLogin = c.loginId; delete c.loginId; delete c.snapshot.loginId;
         if (oldLogin) await c.transport!.request('account/login/cancel', { loginId: oldLogin });
       }
-      if (action === 'logout') {
-        await c.transport!.request('account/logout');
-        this.store.secure(c.profile.id);
-        for (const name of ['api-key', 'auth.json']) { const path = join(this.store.home(c.profile.id), name); if (existsSync(path)) unlinkSync(path); }
-        for (const key of this.sessions.keys()) if (JSON.parse(key)[1] === c.profile.id) this.sessions.delete(key);
-        for (const turn of this.turns.values()) if (turn.request.native.connectionProfileId === c.profile.id) turn.finish('turn.failed', 'Profile signed out. Authenticate and explicitly resume.');
-        delete c.snapshot.account; delete c.snapshot.usage; c.snapshot.recovery = 'auth-required'; await this.readAccount(c); c.transport!.close(); c.snapshot.state = 'auth-required'; c.snapshot.recovery = 'auth-required'; this.publish(c);
-      } else if (action === 'login-api-key') {
+      if (action === 'login-api-key') {
         if (request.credential?.ref !== 'profile-api-key') throw new Error('Provide a private api-key file in the selected profile home.');
         this.store.secure(c.profile.id);
         const path = join(this.store.home(c.profile.id), 'api-key');
         if (!existsSync(path)) throw new Error('Private API key file is missing');
-        const apiKey = readFileSync(path, 'utf8').trim();
+        const apiKey = this.store.importKey(c.profile.id);
         if (!apiKey || apiKey.length > 16384) throw new Error('Invalid private API key file');
         await c.transport!.request('account/login/start', { type: 'apiKey', apiKey } satisfies LoginAccountParams);
         unlinkSync(path); await this.readAccount(c);
@@ -303,14 +351,28 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     if (!modes.some(m => m.id === config.collaborationMode)) throw new Error('Unsupported collaboration mode for this runtime');
     return { config, model };
   }
+  private available(id: unknown): void { if (typeof id === 'string' && this.mutations.has(id)) throw new Error('Selected profile authentication is busy'); }
+  private operation(c: ProfileConnection): () => void {
+    const transport = c.transport; const generation = transport?.generation; const attempt = c.attempt; const identity = c.accountIdentity;
+    return () => {
+      this.store.require(c.profile.id); this.available(c.profile.id);
+      if (this.connections.get(c.profile.id) !== c || !transport?.running || c.transport !== transport || generation !== transport.generation || attempt !== c.attempt || identity !== c.accountIdentity) throw new Error('Native profile operation was superseded; explicitly resume');
+      if (c.snapshot.state !== 'authenticated' || !c.snapshot.account) throw adapterErrors.authenticationRequired();
+      if (identity !== this.store.identity(c.profile.id, c.snapshot.account)) throw new Error('Native account binding mismatch; verify the original account before resuming');
+    };
+  }
   async createSession(request: CreateAgentSessionRequest): Promise<NativeSessionRef> {
-    const c = await this.connect(request.connectionProfileId);
+    this.available(request.connectionProfileId);
+    const c = await this.connect(request.connectionProfileId); const assertCurrent = this.operation(c);
     if (c.snapshot.state !== 'authenticated') throw new Error('Authenticate the selected Codex profile before creating a session.');
     if (!this.experimental(c.profile.id)) throw new Error('Enable experimental protocol for this profile before creating a coding session: this pinned runtime requires legacy history for resume.');
-    const { config, model } = await this.selection(c.profile.id, request.modelId, request.runtimeMetadata, request.modeId);
+    const { config, model } = await this.selection(c.profile.id, request.modelId, request.runtimeMetadata, request.modeId); assertCurrent();
     const raw = await c.transport!.request('thread/start', { cwd: request.workspaceRootPath, model: model.model, sandbox: config.sandbox, approvalPolicy: config.approvalPolicy, approvalsReviewer: 'user', ephemeral: false, historyMode: 'legacy', config: { model_reasoning_effort: config.effort } } satisfies ThreadStartParams);
+    assertCurrent();
     if (!object(raw) || !object(raw.thread) || typeof raw.thread.id !== 'string' || raw.thread.historyMode !== 'legacy') throw new Error('Incompatible native thread response');
     const native: NativeSessionRef = { runtimeId: 'codex', connectionProfileId: c.profile.id, nativeSessionId: asNativeSessionId(raw.thread.id), modelId: model.id, modeId: config.collaborationMode, runtimeMetadata: { ...config, writeCapability: config.sandbox !== 'read-only' } };
+    if (!c.accountIdentity) throw adapterErrors.authenticationRequired();
+    this.store.bindSession(c.profile.id, String(native.nativeSessionId), c.accountIdentity);
     this.sessions.set(this.key(native), { cwd: request.workspaceRootPath, generation: c.transport!.generation, settings: config, modelId: model.id });
     return native;
   }
@@ -318,17 +380,22 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     if (!request.native.connectionProfileId) throw adapterErrors.sessionNotFound(String(request.native.nativeSessionId));
     if (request.native.runtimeId !== 'codex' || !request.native.connectionProfileId || (request.connectionProfileId && request.connectionProfileId !== request.native.connectionProfileId)) throw new Error('Native profile binding mismatch');
     try { this.store.require(request.native.connectionProfileId); } catch { throw adapterErrors.sessionNotFound(String(request.native.nativeSessionId)); }
-    const c = await this.connect(request.native.connectionProfileId);
+    this.available(request.native.connectionProfileId);
+    const c = await this.connect(request.native.connectionProfileId); const assertCurrent = this.operation(c);
+    if (!c.accountIdentity || c.snapshot.state !== 'authenticated') throw adapterErrors.authenticationRequired();
+    this.store.assertSessionIdentity(c.profile.id, String(request.native.nativeSessionId), c.accountIdentity);
     if (!this.experimental(c.profile.id)) throw new Error('Enable experimental protocol for the bound profile to resume native history.');
     const key = this.key(request.native);
     if (this.turns.has(key) && !this.turns.get(key)!.ended) throw new Error('Thread already has an active turn');
-    const { config, model } = await this.selection(c.profile.id, request.native.modelId, request.native.runtimeMetadata, request.native.modeId);
+    const { config, model } = await this.selection(c.profile.id, request.native.modelId, request.native.runtimeMetadata, request.native.modeId); assertCurrent();
     const read = await c.transport!.request('thread/read', { threadId: request.native.nativeSessionId, includeTurns: false }).catch(error => { if (error instanceof NativeRpcError && error.missingHistory) throw adapterErrors.sessionNotFound(String(request.native.nativeSessionId)); throw error; });
+    assertCurrent();
     if (!object(read) || !object(read.thread) || read.thread.id !== request.native.nativeSessionId) throw adapterErrors.sessionNotFound(String(request.native.nativeSessionId));
     if (read.thread.cwd !== request.workspaceRootPath) throw new Error('Native workspace binding mismatch');
     const raw = await c.transport!.request('thread/resume', { threadId: request.native.nativeSessionId, cwd: request.workspaceRootPath, model: model.model, approvalPolicy: config.approvalPolicy, approvalsReviewer: 'user', sandbox: config.sandbox, config: { model_reasoning_effort: config.effort }, excludeTurns: false } satisfies ThreadResumeParams);
+    assertCurrent();
     if (!object(raw) || !object(raw.thread) || raw.thread.id !== request.native.nativeSessionId) throw new Error('Native resume identity mismatch');
-    const history = await this.history(c.transport!, request.native, raw.thread);
+    const history = await this.history(c.transport!, request.native, raw.thread); assertCurrent();
     this.sessions.set(key, { cwd: request.workspaceRootPath, generation: c.transport!.generation, settings: config, modelId: model.id });
     return { ...request.native, modelId: model.id, modeId: config.collaborationMode, runtimeMetadata: { ...config, writeCapability: config.sandbox !== 'read-only' }, history };
   }
@@ -378,17 +445,21 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     return history;
   }
   async *send(request: AgentTurnRequest): AsyncIterable<SessionEvent> {
-    const c = await this.connect(request.native.connectionProfileId); const key = this.key(request.native); const bound = this.sessions.get(key);
+    this.available(request.native.connectionProfileId);
+    const c = await this.connect(request.native.connectionProfileId); const assertCurrent = this.operation(c); const key = this.key(request.native); const bound = this.sessions.get(key);
     if (!bound || bound.generation !== c.transport!.generation || bound.cwd !== request.workspaceRootPath) throw new Error('Explicit native resume is required before sending');
     if (this.turns.has(key) && !this.turns.get(key)!.ended) throw new Error('Thread already has an active turn');
     if (c.snapshot.state !== 'authenticated') throw adapterErrors.authenticationRequired();
-    const { config, model } = await this.selection(c.profile.id, request.native.modelId, request.native.runtimeMetadata, request.native.modeId);
+    if (!c.accountIdentity) throw adapterErrors.authenticationRequired();
+    this.store.assertSessionIdentity(c.profile.id, String(request.native.nativeSessionId), c.accountIdentity);
+    const { config, model } = await this.selection(c.profile.id, request.native.modelId, request.native.runtimeMetadata, request.native.modeId); assertCurrent();
     if (c.snapshot.recovery === 'quota') throw new Error('Usage limit reached. Verify the selected profile after recovery, then explicitly retry.');
     if (request.attachments?.length) throw new Error('Attachments are unsupported by this developer slice');
     if (this.turns.has(key) && !this.turns.get(key)!.ended) throw new Error('Thread already has an active turn');
     const turn = new NativeTurn(request, c.transport!, () => { const seq = (this.cursors.get(key) ?? 0) + 1; this.cursors.set(key, seq); return seq; }, this.options.interactionTimeoutMs);
     this.turns.set(key, turn);
-    void c.transport!.request('turn/start', { threadId: request.native.nativeSessionId, input: [{ type: 'text', text: request.prompt, text_elements: [] }], clientUserMessageId: typeof request.context?.clientUserMessageId === 'string' ? request.context.clientUserMessageId : null, model: model.model, effort: config.effort, approvalPolicy: config.approvalPolicy, approvalsReviewer: 'user', ...(this.experimental(c.profile.id) ? { collaborationMode: { mode: config.collaborationMode, settings: { model: model.model, reasoning_effort: config.effort, developer_instructions: null } } } : {}) } satisfies TurnStartParams).then(raw => { if (!turn.ended) { if (!object(raw) || !object(raw.turn)) throw new Error('Invalid native turn start'); turn.bind(raw.turn.id); } }).catch(() => { turn.finish('turn.failed', 'Native turn could not start; resume explicitly before retrying.'); c.transport!.close(); });
+    const transport = c.transport!;
+    void transport.request('turn/start', { threadId: request.native.nativeSessionId, input: [{ type: 'text', text: request.prompt, text_elements: [] }], clientUserMessageId: typeof request.context?.clientUserMessageId === 'string' ? request.context.clientUserMessageId : null, model: model.model, effort: config.effort, approvalPolicy: config.approvalPolicy, approvalsReviewer: 'user', ...(this.experimental(c.profile.id) ? { collaborationMode: { mode: config.collaborationMode, settings: { model: model.model, reasoning_effort: config.effort, developer_instructions: null } } } : {}) } satisfies TurnStartParams).then(raw => { if (!turn.ended) { if (!object(raw) || !object(raw.turn)) throw new Error('Invalid native turn start'); turn.bind(raw.turn.id); } }).catch(() => { turn.finish('turn.failed', 'Native turn could not start; resume explicitly before retrying.'); transport.close(); });
     try { yield* turn.events(); } finally { if (!turn.ended) await this.cancel({ native: request.native, turnId: request.turnId }); if (this.turns.get(key) === turn) this.turns.delete(key); }
   }
   private active(native: NativeSessionRef, turnId?: string): NativeTurn | undefined { const turn = this.turns.get(this.key(native)); if (turnId && turn && turn.request.turnId !== turnId) throw new Error('Interaction belongs to another turn'); return turn; }

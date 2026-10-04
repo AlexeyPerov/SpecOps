@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-04 23:17 MSK — Add simultaneous named native account profiles
+
+- Implemented AS06-C Codex profile rename/remove, stable ID/native account display and explicit missing-profile state. Removal/logout retire only the selected native process and credentials while retaining application/native session history and workspace files. Bound sessions never move to another profile.
+- Added durable private original-principal guards, bounded no-follow identity reads, atomic profile metadata, finite inherited execution environment and private home/config roots. Credential/process mutations reserve their owner before awaits; wrong-account resumes, unknown principals/actions and stale native operations fail explicitly without replay or quota rotation.
+- Verified separate real fixture processes with equal native IDs, sibling fault/cancel/quota/login isolation, production two-profile persistence and actual whole-host loss. Added a default-skipped explicitly authorized real-account harness; actual account/browser/signed installed/platform/cleanup acceptance remains open and the expanded release baseline remains blocked. No migrations or compatibility shims.
+
 ## 2026-10-04 22:58 MSK — Add bounded native session lifecycle and workspace catalogs
 
 - Implemented AS06-B finite host capability requests, explicit fork/revert/restore/publish/revoke and configured tool-server connect/disconnect, with profile reservations and immutable generation/binding checks. Common Sessions attaches fresh fork lineage and reconciles native checkpoint history without replay; workspace watchers refresh.

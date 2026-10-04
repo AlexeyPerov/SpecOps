@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-04
 
-**Status:** Handoff and selected native extensions source implemented; external acceptance and C remain open
+**Status:** Handoff, selected native extensions and simultaneous profiles source implemented; external acceptance remains open
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -22,7 +22,7 @@ Group later work without blocking initial native baselines: handoff, retained Op
 | --- | --- | --- |
 | AS06-A | [Reviewable handoff and lineage](execution-plan-phase-a-handoff.md) | Source verified; live/installed pending |
 | AS06-B | [OpenCode native extensions](execution-plan-phase-b-opencode-extensions.md) | Source verified; live/installed pending |
-| AS06-C | [Simultaneous Codex profiles](execution-plan-phase-c-codex-profiles.md) | Planned |
+| AS06-C | [Simultaneous Codex profiles](execution-plan-phase-c-codex-profiles.md) | Source verified; actual account/installed pending |
 
 ## Dependencies and delivery
 
@@ -41,3 +41,5 @@ No persisted-data migrations or compatibility shims. Planned prerequisites are g
 **AS06-A source evidence:** [Review packet, durable intent and ordered native adapter fixtures](implementation-notes-phase-a.md). Nine fixture pairs and common source regression pass; paid/provider/account and signed installed acceptance remains open. Unix durable storage is mandatory; unsupported platforms fail closed before native creation. [Selected 08-A recommendation](../08-release-gates/baseline-06-a.md) remains blocked.
 
 **AS06-B source evidence:** [Bounded native extensions and explicit exclusions](implementation-notes-phase-b.md), [finite retained ledger](../04-opencode-adapter/cutover-reference-evidence.md) and [blocked selected release baseline](../08-release-gates/baseline-06-b.md). Existing native instructions/configuration remain authoritative; no arbitrary editor, inferred permission guarantee or unowned inference action is advertised.
+
+**AS06-C source evidence:** [Simultaneous named profiles](implementation-notes-phase-c.md) records independent process/home/account guards, profile management, production persistence and equal-ID fault fixtures. [Selected release baseline](../08-release-gates/baseline-06-c.md) stays blocked pending actual accounts and signed installed/platform evidence.

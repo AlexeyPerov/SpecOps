@@ -299,3 +299,29 @@ it.each(handoffPairs)('reviewed %s → %s pair uses real source adapters/dispatc
  await openKnownHandoffTarget(saved);expect(chatStore.getMetadata('handoff-target')?.handoff?.sourceSessionId).toBe(sourceId);
  expect(chatStore.updateThreadMetadata({selectedModelId:'another-model'},undefined,'handoff-target')).toBe(false);
 },30_000);
+
+it('two equal native IDs retain distinct profiles/homes and resume own production pipeline/disk threads; removed profile keeps saved metadata',async()=>{
+ const root=join(dataDir,'workspace');await mkdir(root);const executable=join(dataDir,'native-two.cjs');writeFileSync(executable,threadFixture,{mode:0o700});
+ const options={profileRoot:join(dataDir,'profiles'),executable,experimental:true};const first=new CodexRuntimeAdapter(options);nativeRuntimes.push(first);
+ const profiles=[first.store.create('First account'),first.store.create('Second account')];const client=await nativeClient(first,1);bindAgentHostClientForTests(()=>client);
+ chatStore.setActiveWorkspaceRoot(root);const sessions:string[]=[];
+ for(const [index,profile] of profiles.entries()){
+   const session=chatStore.createDraftSession()!;sessions.push(session);chatStore.updateThreadMetadata({runtimeId:'codex',connectionProfileId:profile.id,selectedModelId:'fixture-model'});
+   chatStore.appendMessage({id:'profile-user-'+index,role:'user',content:'profile prompt '+index,createdAt:'t'},{sessionId:session});chatStore.beginTurn('first-'+index,session);
+   expect(await executeProviderTurn({root,activeSessionId:session,turnId:'first-'+index})).toMatchObject({ok:true});
+ }
+ const bindings=sessions.map(session=>chatStore.getSessionLink(session,root)!);expect(bindings[0].nativeSessionId).toBe(bindings[1].nativeSessionId);expect(bindings[0].connectionProfileId).not.toBe(bindings[1].connectionProfileId);
+ await flushSessionIndexPersistence(root);first.close();chatStore.reset();chatStore.setActiveWorkspaceRoot(root);await chatStore.loadWorkspaceSessions(root);
+ const fresh=new CodexRuntimeAdapter(options);nativeRuntimes.push(fresh);const next=await nativeClient(fresh,2);bindAgentHostClientForTests(()=>next);
+ for(const [index,session] of sessions.entries()){
+   chatStore.setActiveSessionId(session);expect(chatStore.getSessionLink(session,root)).toEqual(bindings[index]);
+   chatStore.appendMessage({id:'continue-'+index,role:'user',content:'hello',createdAt:'t2'},{sessionId:session});chatStore.beginTurn('next-'+index,session);
+   expect(await executeProviderTurn({root,activeSessionId:session,turnId:'next-'+index})).toMatchObject({ok:true});
+   const users=chatStore.getMessages(session).filter(message=>message.role==='user');expect(users.some(message=>message.content==='profile prompt '+index)).toBe(true);expect(users.some(message=>message.content==='profile prompt '+(1-index))).toBe(false);
+   const requests=await readFile(join(fresh.store.home(profiles[index].id),'fixture-requests.jsonl'),'utf8');expect(requests.match(/thread\/start/g)).toHaveLength(1);
+ }
+ await next.authenticate({runtimeId:'codex',connectionProfileId:profiles[0].id,workspaceRootPath:root,options:{action:'remove-profile'}});
+ await flushSessionIndexPersistence(root);chatStore.reset();chatStore.setActiveWorkspaceRoot(root);await chatStore.loadWorkspaceSessions(root);expect(chatStore.getSessionLink(sessions[0],root)).toEqual(bindings[0]);
+ await expect(next.resumeSession({native:{...bindings[0],nativeSessionId:bindings[0].nativeSessionId as never},workspaceRootPath:root})).rejects.toThrow();
+ expect((await next.resumeSession({native:{...bindings[1],nativeSessionId:bindings[1].nativeSessionId as never},workspaceRootPath:root})).history?.filter(message=>message.role==='user').map(message=>message.content)).toEqual(['profile prompt 1','hello']);
+});

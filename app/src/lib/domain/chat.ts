@@ -35,12 +35,16 @@ export interface ChatReasoningPart {
   text: string;
 }
 
-export type ChatSubtaskStatus = "running" | "completed" | "failed";
+export type ChatSubtaskStatus = "running" | "completed" | "failed" | "pending" | "interrupted" | "shutdown" | "not-found" | "unknown";
 
 export interface ChatSubtaskPart {
   type: "subtask";
   id?: string;
   agent: string;
+  nativeItemId?: string;
+  nativeThreadId?: string;
+  agentPath?: string;
+  category?: "agent" | "context";
   description?: string;
   prompt?: string;
   status: ChatSubtaskStatus;

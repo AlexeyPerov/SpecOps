@@ -226,3 +226,8 @@ it("shows recovered interrupted partial work explicitly", () => {
   const { host } = mountList([{ ...assistantMessage({ content: "Partial work" }), completionState: "interrupted" }]);
   expect(host.textContent).toContain("Interrupted"); expect(host.textContent).toContain("continue with a new message"); expect(host.textContent).toContain("Partial work");
 });
+
+it("carries rich native activity fields and honest context status through the real message list", () => {
+ const {host}=mountList([assistantMessage({content:"",parts:[{type:"subtask",id:"agent:child",agent:"Native agent",status:"interrupted",nativeItemId:"activity",nativeThreadId:"child",agentPath:"workers/reviewer",category:"agent",description:"Native agent interrupted"},{type:"subtask",id:"context:c",agent:"Native context compaction",status:"unknown",category:"context",description:"Parent ended; completion unobserved"}]})]);
+ expect(host.querySelectorAll(".subtask-card")).toHaveLength(2); expect(host.textContent).toContain("Interrupted");expect(host.textContent).toContain("Unknown");expect(host.textContent).toContain("workers/reviewer");expect(host.textContent).toContain("Native agent: child");expect(host.textContent).toContain("Native context compaction");
+});

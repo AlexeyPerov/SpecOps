@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-05 17:02 MSK — Project bounded native activity and submit finite parity
+
+- Implemented AS02-G native child-state/activity and context-compaction events/cards through live reducers, stable history reconciliation, message layout and persisted codecs. Completed control tools do not imply child success; unfinished terminal activity remains explicitly unknown. Manual compact observes structured native progress. Native catalog permissions are hidden behind useful row labels.
+- Added selected-profile credential discovery/redaction before truncation, split-fragment protection, foreign-sender/malformed/capacity guards, single failed terminal on finalization overflow and a concurrent-send ownership check. Fixed live subtask status folding and bounded secret-pattern scanning on long lexical atoms.
+- Recorded the agreed A–G finite feature ledger and a separate fresh E–G source release submission with expanded required source/account/installed gates; historical evidence remains intact. No real account inference, global credentials, migrations or fallback SDK; rollback/plugins/OAuth and authenticated/installed/distribution/process acceptance remain explicit limits.
+
 ## 2026-10-05 16:41 MSK — Expose finite native ecosystem and profile configuration
 
 - Implemented AS02-F native skills catalog/toggles, bounded current-thread tool/resource inventory, existing profile-owned server enable/disable with native reload, and versioned private web-search/reasoning-summary/verbosity defaults in the common native session panel. Disabled configured servers remain selectable for reconnect; native reload acknowledgment is distinguished from observed connection status.

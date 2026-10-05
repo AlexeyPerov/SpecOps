@@ -38,18 +38,7 @@ export class NativeEcosystem {
     }
     this.clear(c.key, 'skill'); this.clear(c.key, 'server');
     const config = await this.config(c);
-    const secrets: string[] = [];
-    if (object(config.user.mcp_servers)) {
-      const servers = Object.values(config.user.mcp_servers); if (servers.length > 256) throw new Error('Native server configuration exceeds its limit');
-      for (const server of servers) if (object(server)) {
-        for (const field of ['env', 'http_headers']) if (object(server[field])) {
-          const values = Object.values(server[field]); if (values.length > 256) throw new Error('Native server credentials exceed their limit');
-          for (const value of values) if (typeof value === 'string' && value.length) { if (value.length > 16384) throw new Error('Native credential exceeds its limit'); secrets.push(value); }
-        }
-        for (const field of ['bearer_token', 'token', 'api_key', 'client_secret']) if (typeof server[field] === 'string' && server[field].length) { if (server[field].length > 16384) throw new Error('Native credential exceeds its limit'); secrets.push(server[field]); }
-      }
-    }
-    if (secrets.length > 2048 || secrets.reduce((n, v) => n + v.length, 0) > 1048576) throw new Error('Native server credentials exceed their limit');
+    const secrets = nativeConfigCredentials(config.user);
     const safe = (text: string, limit: number) => { for (const secret of secrets) text = text.split(secret).join('[redacted]'); return c.safe(text, limit); };
     const observed = new Set<string>();
     const raw = await c.request('skills/list', { cwds: [c.cwd], forceReload: true } satisfies SkillsListParams); c.check();
@@ -114,4 +103,21 @@ export class NativeEcosystem {
     }
     return { generation: c.generation };
   }
+}
+
+/** Bounded selected native configuration credential projection; values never leave the host. */
+export function nativeConfigCredentials(config: Record<string, unknown>): string[] {
+  const secrets: string[] = [];
+  if (object(config.mcp_servers)) {
+    const servers = Object.values(config.mcp_servers); if (servers.length > 256) throw new Error('Native server configuration exceeds its limit');
+    for (const server of servers) if (object(server)) {
+    for (const field of ['env', 'http_headers']) if (object(server[field])) {
+      const values = Object.values(server[field]); if (values.length > 256) throw new Error('Native server credentials exceed their limit');
+      for (const value of values) if (typeof value === 'string' && value.length >= 8) { if (value.length > 16384) throw new Error('Native credential exceeds its limit'); secrets.push(value); }
+    }
+    for (const field of ['bearer_token', 'token', 'api_key', 'client_secret']) if (typeof server[field] === 'string' && server[field].length) { if (server[field].length > 16384) throw new Error('Native credential exceeds its limit'); secrets.push(server[field]); }
+    }
+  }
+  if (secrets.length > 2048 || secrets.reduce((n, v) => n + v.length, 0) > 1048576) throw new Error('Native server credentials exceed their limit');
+  return secrets;
 }

@@ -23,6 +23,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
  else if(req.method==='account/logout'){if(fs.existsSync(authPath))fs.unlinkSync(authPath);}
  else if(req.method==='fixture/env')result={pid:process.pid,env:process.env};
  else if(req.method==='fixture/crash'){process.exit(23);}
+ else if(req.method==='config/read')result={config:{mcp_servers:{fixture:{env:{PRIVATE:'opaque-mcp-canary-value',PYTHONUNBUFFERED:'1',PORT:'3000'}}}}};
  else if(req.method==='model/list')result={data:[{id:'fixture-model',model:'fixture-model',displayName:'Fixture model',hidden:false,isDefault:true,supportedReasoningEfforts:[{reasoningEffort:'medium'},{reasoningEffort:'high'}],defaultReasoningEffort:'medium'}],nextCursor:null};
  else if(req.method==='collaborationMode/list')result={data:[{name:'Default',mode:'default'},{name:'Plan',mode:'plan'}]};
  else if(req.method==='thread/start') { const id='thread-'+Object.keys(db).length; const thread={id,cwd:p.cwd,turns:[],historyMode:p.historyMode??'paginated'}; db[id]=thread;save();result={thread,model:p.model}; }
@@ -35,6 +36,15 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
    frame({id:req.id,result});notify('turn/started',{threadId:thread.id,turn});
    const prompt=p.input[0].text;
    if(prompt.startsWith('malformed-')) { const kind=prompt.slice(10);item(thread.id,turn.id,{type:kind,id:'malformed-item',status:'completed',changes:[{path:42,diff:'bad'}]},true);return;}
+   if(prompt==='rich-activity') {
+     const secret=JSON.parse(fs.readFileSync(authPath,'utf8')).OPENAI_API_KEY;
+     const start={type:'collabAgentToolCall',id:'spawn',tool:'spawnAgent',status:'completed',senderThreadId:thread.id,receiverThreadIds:['child'],prompt:'Explore '+secret+' opaque-mcp-canary-value',model:null,reasoningEffort:null,agentsStates:{child:{status:'running',message:null}}};
+     item(thread.id,turn.id,start,true);turn.items.push(start);
+     const activity={type:'subAgentActivity',id:'activity',kind:'interacted',agentThreadId:'child',agentPath:'workers/'+secret};item(thread.id,turn.id,activity,true);turn.items.push(activity);
+     const compact={type:'contextCompaction',id:'automatic-context'};item(thread.id,turn.id,compact,false);item(thread.id,turn.id,compact,true);turn.items.push(compact);
+     const wait={...start,id:'wait',tool:'wait',prompt:null,agentsStates:{child:{status:'completed',message:'Result '+secret+' opaque-mcp-canary-value'}}};item(thread.id,turn.id,wait,true);turn.items.push(wait);
+     finishText(thread.id,turn,'Activity complete');return;
+   }
    if(prompt==='child-failure'){setTimeout(()=>process.exit(9),20);return;}
    if(prompt==='cancel'||prompt==='ignored-cancel')return;
    if(prompt==='failure'){setTimeout(()=>end(thread.id,turn,'failed'),5);return;}

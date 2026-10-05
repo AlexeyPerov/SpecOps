@@ -131,3 +131,15 @@ it.each(['agentMessage', 'reasoning', 'fileChange'])('malformed required %s item
   const events = await collectContractEvents(adapter.send(request(native, workspace, 'malformed-' + kind)));
   expect(events.filter(event => event.type === 'turn.failed')).toHaveLength(1); expect(events.some(event => event.type === 'turn.finished')).toBe(false); expect(native).toEqual(original);
 });
+
+it('rich native activity traverses transport/adapter and authoritative history without generic duplicate tools or private credentials',async()=>{
+ const {adapter,native,workspace,profile}=await setup();const events=await collectContractEvents(adapter.send(request(native,workspace,'rich-activity')));const privateKey=JSON.parse(readFileSync(join(adapter.store.home(profile.id),'auth.json'),'utf8')).OPENAI_API_KEY;
+ const updates=events.filter(e=>e.type==='subtask.updated');expect(updates.at(-1)).toMatchObject({subtask:{id:'agent:child',status:'completed',agentPath:'workers/[redacted]'}});expect(events.some(e=>e.type==='context.compaction')).toBe(true);expect(events.some(e=>e.type==='tool.started')).toBe(false);
+ const resumed=await adapter.resumeSession({native,workspaceRootPath:workspace});expect(resumed.history?.filter(m=>m.role==='assistant')).toHaveLength(1);const encoded=JSON.stringify({events,history:resumed.history});expect(encoded).not.toContain(privateKey);expect(encoded).not.toContain('opaque-mcp-canary-value');
+});
+it('delayed native credential discovery cannot allow two sends to overwrite one owned turn',async()=>{
+ class DelayedConfigTransport extends CodexTransport { override async request(method:string,params:unknown={},timeout?:number) { if(method==='config/read')await new Promise(r=>setTimeout(r,25));return super.request(method,params,timeout); } }
+ const {adapter,native,workspace}=await setup({transportFactory:(exe:string,home:string)=>new DelayedConfigTransport(exe,home,process.env,true)});
+ const a=adapter.send(request(native,workspace,'cancel','a'))[Symbol.asyncIterator]();const b=adapter.send(request(native,workspace,'cancel','b'))[Symbol.asyncIterator]();const settled=await Promise.allSettled([a.next(),b.next()]);expect(settled.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(settled.filter(r=>r.status==='rejected')).toHaveLength(1);
+ await new Promise(r=>setTimeout(r,15));await adapter.cancel({native});const winner=settled[0]?.status==='fulfilled'?a:b;while(!(await winner.next()).done){}
+});

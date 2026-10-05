@@ -40,3 +40,7 @@ Task prefix is `AS02-<phase>-<NN>`. Numeric folders reflect the default delivery
 **Phase E:** [Native session controls](execution-plan-phase-e-native-session-parity.md) — verified native fork, compact lifecycle and active-turn steering source; selected legacy conversation rollback explicitly unsupported. [Evidence and finite ledger](implementation-notes-phase-e.md). Ecosystem management is implemented in F; detailed subagent UI is subsequent work. Authenticated/installed acceptance remains open.
 
 **Phase F:** [Native ecosystem/configuration](execution-plan-phase-f-ecosystem-config-parity.md) and [implementation ledger](implementation-notes-phase-f.md); source implemented, authenticated/installed gates open.
+
+## Finite native feature parity extension
+
+AS02-E/F/G source is implemented in separate sequential plans: [session controls](execution-plan-phase-e-native-session-parity.md), [ecosystem/configuration](execution-plan-phase-f-ecosystem-config-parity.md), [native activity/submission](execution-plan-phase-g-native-activity-parity.md). [Finite feature ledger](implementation-notes-phase-g.md) and [selected source submission](../08-release-gates/release-2026-10-05-codex-parity.md) preserve unavailable controls and external account/installed gates. Earlier plan acceptance checkboxes retain their original real-account/installed requirements.

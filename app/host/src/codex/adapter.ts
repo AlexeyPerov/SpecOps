@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { NativeEcosystem } from './ecosystem';
+import { NativeEcosystem, nativeConfigCredentials } from './ecosystem';
 import type { NativeExtensions, NativeExtensionSnapshot, NativeExtensionResult } from '../../../src/lib/session/adapter/nativeExtensions';
 import type { ThreadForkParams } from './generated/v2/ThreadForkParams';
 import type { TurnSteerParams } from './generated/v2/TurnSteerParams';
@@ -410,6 +410,12 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     this.sessions.set(key, { cwd: request.workspaceRootPath, generation: c.transport!.generation, settings: config, modelId: model.id });
     return { ...request.native, modelId: model.id, modeId: config.collaborationMode, runtimeMetadata: { ...config, writeCapability: config.sandbox !== 'read-only' }, history };
   }
+  private async turnCredentials(transport: CodexTransport, profileId: string, cwd: string): Promise<string[]> {
+    this.store.secure(profileId);
+    const raw = await transport.request('config/read', { cwd, includeLayers: false });
+    if (!object(raw) || !object(raw.config)) throw new Error('Native credential projection is unavailable');
+    return [...this.store.credentialValues(profileId), ...this.store.mcpCredentialValues(profileId), ...nativeConfigCredentials(raw.config)];
+  }
   private async history(transport: CodexTransport, native: NativeSessionRef, thread: Record<string, unknown>): Promise<NonNullable<NativeSessionRef['history']>> {
     if (thread.historyMode !== 'legacy') throw new Error('This pinned runtime cannot hydrate paginated native history. Preserve this record and use a supported runtime.');
     if (!Array.isArray(thread.turns)) throw new Error('Native history snapshot is incomplete; cached history was preserved.');
@@ -423,6 +429,8 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     }
     const turns = [...byTurn.values()].sort((a, b) => Number(a.startedAt ?? 0) - Number(b.startedAt ?? 0));
     if (turns.length > 10000) throw new Error('Native history exceeds hydration limit');
+    if (!native.connectionProfileId) throw new Error('Native profile is required');
+    const credentials = await this.turnCredentials(transport, native.connectionProfileId, String(thread.cwd));
     const history: NonNullable<NativeSessionRef['history']>[number][] = [];
     for (const turn of turns) {
       if (!['completed', 'failed', 'interrupted', 'inProgress'].includes(String(turn.status))) throw new Error('Invalid native history status');
@@ -441,10 +449,10 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       const turnId = String(turn.id);
       const at = new Date(typeof turn.startedAt === 'number' ? turn.startedAt * 1000 : 0).toISOString();
       let seq = 0;
-      const mapped = new NativeTurn({ native, turnId: asSpecOpsTurnId(turnId), workspaceRootPath: String(thread.cwd), prompt: '' }, transport, () => ++seq);
+      const mapped = new NativeTurn({ native, turnId: asSpecOpsTurnId(turnId), workspaceRootPath: String(thread.cwd), prompt: '' }, transport, () => ++seq, undefined, credentials);
       mapped.bind(turnId);
       for (const item of items.values()) {
-        if (item.type === 'userMessage') history.push({ id: item.clientId ?? item.id, nativeTurnId: turnId, nativeItemId: item.id, role: 'user', content: item.content.filter(v => v.type === 'text').map(v => v.type === 'text' ? redactSecretStringValue(v.text, Infinity) : '').join(''), createdAt: at });
+        if (item.type === 'userMessage') history.push({ id: item.clientId ?? item.id, nativeTurnId: turnId, nativeItemId: item.id, role: 'user', content: item.content.filter(v => v.type === 'text').map(v => v.type === 'text' ? redactSecretStringValue(credentials.reduce((text, secret) => text.split(secret).join('[redacted]'), v.text), Infinity) : '').join(''), createdAt: at });
         else mapped.item(item, true);
       }
       mapped.finish(turn.status === 'completed' ? 'turn.finished' : 'turn.failed', 'Native history turn was interrupted or failed; continue with a new message explicitly.');
@@ -550,13 +558,14 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       } finally { if (this.controlReservations.get(c.profile.id) === ownerToken) this.controlReservations.delete(c.profile.id); }
     }
     if (input.target !== undefined) { if (this.controlReservations.get(c.profile.id) === ownerToken) this.controlReservations.delete(c.profile.id); throw new Error('Compact does not accept a checkpoint'); }
-    const turn = new NativeTurn({ native: input.native, workspaceRootPath: bound.cwd, prompt: '', turnId: asSpecOpsTurnId('compact-' + randomUUID()) }, transport, () => { const n = (this.cursors.get(key) ?? 0) + 1; this.cursors.set(key, n); return n; });
+    let credentials: string[]; try { credentials = await this.turnCredentials(transport, c.profile.id, bound.cwd); assertControl(); } catch (error) { if (this.controlReservations.get(c.profile.id) === ownerToken) this.controlReservations.delete(c.profile.id); throw error; }
+    const turn = new NativeTurn({ native: input.native, workspaceRootPath: bound.cwd, prompt: '', turnId: asSpecOpsTurnId('compact-' + randomUUID()) }, transport, () => { const n = (this.cursors.get(key) ?? 0) + 1; this.cursors.set(key, n); return n; }, undefined, credentials);
     this.turns.set(key, turn); this.controls.set(key, { id: ownerToken!, status: 'running', detail: 'Native compaction requested; waiting for native progress.' });
     const timer = setTimeout(() => { turn.finish('turn.failed', 'Native compaction timed out; explicitly inspect history.'); transport.close(); }, 300000);
     void (async () => {
       try {
         for await (const event of turn.events()) {
-          if (event.type === 'diagnostic' && event.message.startsWith('Native context compaction')) this.controls.set(key, { id: ownerToken!, status: 'running', detail: event.message });
+          if (event.type === 'context.compaction') this.controls.set(key, { id: ownerToken!, status: 'running', detail: event.subtask.description ?? 'Native context compaction progress.' });
           else if (event.type === 'turn.finished' || event.type === 'turn.failed' || event.type === 'turn.cancelled') this.controls.set(key, { id: ownerToken!, status: event.type === 'turn.finished' ? 'completed' : event.type === 'turn.cancelled' ? 'cancelled' : 'failed', detail: event.type === 'turn.finished' ? 'Native compaction completed.' : 'Native compaction stopped or failed; explicitly inspect history.' });
         }
       } finally { clearTimeout(timer); if (this.turns.get(key) === turn) this.turns.delete(key); if (this.controlReservations.get(c.profile.id) === ownerToken) this.controlReservations.delete(c.profile.id); }
@@ -576,7 +585,9 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     if (c.snapshot.recovery === 'quota') throw new Error('Usage limit reached. Verify the selected profile after recovery, then explicitly retry.');
     if (request.attachments?.length) throw new Error('Attachments are unsupported by this developer slice');
     if (this.turns.has(key) && !this.turns.get(key)!.ended) throw new Error('Thread already has an active turn');
-    const turn = new NativeTurn(request, c.transport!, () => { const seq = (this.cursors.get(key) ?? 0) + 1; this.cursors.set(key, seq); return seq; }, this.options.interactionTimeoutMs);
+    const credentials = await this.turnCredentials(c.transport!, c.profile.id, bound.cwd); assertCurrent();
+    if (this.turns.has(key) && !this.turns.get(key)!.ended) throw new Error("Thread already has an active turn");
+    const turn = new NativeTurn(request, c.transport!, () => { const seq = (this.cursors.get(key) ?? 0) + 1; this.cursors.set(key, seq); return seq; }, this.options.interactionTimeoutMs, credentials);
     this.turns.set(key, turn);
     const transport = c.transport!;
     void transport.request('turn/start', { threadId: request.native.nativeSessionId, input: [{ type: 'text', text: request.prompt, text_elements: [] }], clientUserMessageId: typeof request.context?.clientUserMessageId === 'string' ? request.context.clientUserMessageId : null, model: model.model, effort: config.effort, approvalPolicy: config.approvalPolicy, approvalsReviewer: 'user', ...(this.experimental(c.profile.id) ? { collaborationMode: { mode: config.collaborationMode, settings: { model: model.model, reasoning_effort: config.effort, developer_instructions: null } } } : {}) } satisfies TurnStartParams).then(raw => { if (!turn.ended) { if (!object(raw) || !object(raw.turn)) throw new Error('Invalid native turn start'); turn.bind(raw.turn.id); } }).catch(() => { turn.finish('turn.failed', 'Native turn could not start; resume explicitly before retrying.'); transport.close(); });

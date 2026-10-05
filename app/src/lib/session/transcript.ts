@@ -246,12 +246,16 @@ export function applySessionEvent(transcript: SessionTranscript, event: SessionE
         ...t,
         toolCalls: applyToolStatus(t.toolCalls, event.callId, event.status, event.output),
       }));
+    case "subtask.updated":
+    case "context.compaction":
     case "subtask.started":
     case "subtask.completed":
     case "subtask.failed":
       return withTurn(transcript, index, (t) => ({
         ...t,
-        parts: [...t.parts.filter((part) => !(part.kind === "subtask" && part.subtask.id === event.subtask.id)), { kind: "subtask", subtask: event.subtask }],
+        parts: t.parts.some(part => part.kind === "subtask" && part.subtask.id === event.subtask.id)
+          ? t.parts.map(part => part.kind === "subtask" && part.subtask.id === event.subtask.id ? { kind: "subtask", subtask: event.subtask } : part)
+          : [...t.parts, { kind: "subtask", subtask: event.subtask }],
       }));
     case "step.started":
     case "step.finished":

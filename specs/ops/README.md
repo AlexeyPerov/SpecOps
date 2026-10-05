@@ -14,3 +14,5 @@
 | 08 | [Repeatable release gates and final closure](08-release-gates/README.md) |
 
 Folders sort in the default delivery order. Stage 03 is an early gate for installed Codex acceptance in 02-D. Stage 08 runs for each selected release, including the first Codex preview; its final closure follows the complete queue. Completed implementation/review evidence lives in `done`; unresolved acceptance is kept in active plans.
+
+Codex A–G source now includes native session controls, finite ecosystem/configuration and native agent/context cards. The [finite feature ledger](02-codex-adapter/implementation-notes-phase-g.md) and [selected parity submission](08-release-gates/release-2026-10-05-codex-parity.md) distinguish source evidence from open authenticated/installed acceptance.

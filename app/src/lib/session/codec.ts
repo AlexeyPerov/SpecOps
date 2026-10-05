@@ -215,7 +215,7 @@ function decodePart(value: unknown): SessionTurnPart | null {
     const id = readString(subtask.id);
     const agent = readString(subtask.agent);
     const status = readString(subtask.status);
-    if (id === null || agent === null || status === null || !["running", "completed", "failed"].includes(status)) {
+    if (id === null || agent === null || status === null || !["running", "completed", "failed", "pending", "interrupted", "shutdown", "not-found", "unknown"].includes(status)) {
       return null;
     }
     return {
@@ -223,7 +223,9 @@ function decodePart(value: unknown): SessionTurnPart | null {
       subtask: {
         id,
         agent,
-        status: status as "running" | "completed" | "failed",
+        status: status as import("./events").SubtaskStatus,
+        ...Object.fromEntries(["nativeItemId", "nativeThreadId", "agentPath"].filter(k => typeof subtask[k] === "string").map(k => [k, subtask[k]])),
+        ...(subtask.category === "agent" || subtask.category === "context" ? { category: subtask.category } : {}),
         ...(subtask.description !== undefined ? { description: readOptionalString(subtask.description) } : {}),
         ...(subtask.prompt !== undefined ? { prompt: readOptionalString(subtask.prompt) } : {}),
         ...(subtask.output !== undefined ? { output: readOptionalString(subtask.output) } : {}),

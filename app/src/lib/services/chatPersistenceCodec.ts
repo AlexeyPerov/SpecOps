@@ -220,13 +220,17 @@ function parseMessagePart(value: unknown): ChatMessagePart | null {
         return null;
       }
       const status =
-        value.status === "running" || value.status === "completed" || value.status === "failed"
-          ? value.status
-          : "running";
+        typeof value.status === "string" && ["running", "completed", "failed", "pending", "interrupted", "shutdown", "not-found", "unknown"].includes(value.status)
+          ? value.status as import("../domain/chat").ChatSubtaskStatus
+          : "unknown";
       return {
         type: "subtask",
         ...(id !== undefined ? { id } : {}),
         agent: value.agent,
+        nativeItemId: parseOptionalString(value.nativeItemId),
+        nativeThreadId: parseOptionalString(value.nativeThreadId),
+        agentPath: parseOptionalString(value.agentPath),
+        ...(value.category === "agent" || value.category === "context" ? { category: value.category } : {}),
         description: parseOptionalString(value.description),
         prompt: parseOptionalString(value.prompt),
         status,

@@ -1,0 +1,378 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-05T14:04:48.772Z",
+  "sourceCommit": "70fbc46b80f07e5bee09e8814a9432654cf44525",
+  "workingTree": "AS02-G native activity/redaction/projection/regression/finite ledger and new release submission pending parent review/commit; AS02-E 141df64 and AS02-F 70fbc46 already committed",
+  "recommendation": "blocked",
+  "roadmapComplete": false,
+  "platform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "osVersion": "14.4",
+    "osBuild": "23E214",
+    "node": "24.15.0"
+  },
+  "distribution": "source checkout and copied adjacent no-account payload; signed installed app not accepted",
+  "runtimes": [
+    {
+      "id": "codex",
+      "version": "0.160.0",
+      "constraints": [
+        "Native app-server; full legacy history experimental/default-off with explicit per-profile opt-in",
+        "Named isolated profiles; API key/official browser/device where available; original-principal native binding",
+        "E native fork/owned compact/steering; F owned skills/MCP/finite config; G bounded native child/context activity cards",
+        "Legacy conversation rollback, upstream development-only plugins, OAuth/elicitation/new server editing unavailable; account/installed controls acceptance pending"
+      ]
+    },
+    {
+      "id": "opencode",
+      "version": "1.17.4",
+      "constraints": [
+        "Private local profiles; external owner-managed loopback HTTP/HTTPS core-only",
+        "Nine native views/seven actions; no unowned inference/configuration/OAuth editors"
+      ]
+    },
+    {
+      "id": "claude",
+      "version": "0.3.289",
+      "constraints": [
+        "Native CLI 2.1.289; third-party dedicated API-key baseline only",
+        "Finite native permission/question callbacks and tool/mode/turn/budget settings; managed native policy may apply"
+      ]
+    },
+    {
+      "id": "cursor",
+      "version": "1.0.35",
+      "constraints": [
+        "Official local SDK; native JSONL agent/run store; API/service keys only",
+        "Browser lifecycle/Cloud/approval/questions/hooks/MCP/skills/subagents unavailable",
+        "Finite automatic file tools/sandbox/catalog enums; no read-only guarantee"
+      ]
+    }
+  ],
+  "assetSha256": {
+    "app/host/dist/claude/assets.json": "c03da5db4f40971581784fc880e1af08177a5d22565f2fa15b9e39f5f66a6343",
+    "app/host/dist/cursor/assets.json": "a8abe5076eac9e0c4d331e1c81fc1415769dabe0e231c6c6c9ac9ee4f71abf13",
+    "app/host/dist/index.js": "4664f0d68499c99c7e0a2484822894c6962e50b0d3951d372c9f4ee34c70c9d9",
+    "app/src-tauri/binaries/opencode-aarch64-apple-darwin": "13a01fc41fec09e84cebde3383c6293fa00f1a5c29795ed505512eaa42766c1c"
+  },
+  "gates": [
+    {
+      "id": "codex-source-lifecycle",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected codex-source-lifecycle production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": true
+    },
+    {
+      "id": "codex-live-lifecycle",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual authorized account/auth/inference/native tools/policy/supported interactions/cancel/restart/resume/logout acceptance not executed; catalog/account-free assets do not establish it.",
+      "required": true
+    },
+    {
+      "id": "codex-installed-lifecycle",
+      "scope": "installed",
+      "status": "not-run",
+      "evidence": "Signed installed app install/resolve/auth/create/send/tool/config/cancel/restart/resume/logout/quit and descendants not accepted; no checkout/PATH fallback permitted.",
+      "required": true
+    },
+    {
+      "id": "opencode-source-lifecycle",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected opencode-source-lifecycle production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": true
+    },
+    {
+      "id": "opencode-live-lifecycle",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual authorized account/auth/inference/native tools/policy/supported interactions/cancel/restart/resume/logout acceptance not executed; catalog/account-free assets do not establish it.",
+      "required": true
+    },
+    {
+      "id": "opencode-installed-lifecycle",
+      "scope": "installed",
+      "status": "not-run",
+      "evidence": "Signed installed app install/resolve/auth/create/send/tool/config/cancel/restart/resume/logout/quit and descendants not accepted; no checkout/PATH fallback permitted.",
+      "required": true
+    },
+    {
+      "id": "claude-source-lifecycle",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected claude-source-lifecycle production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": true
+    },
+    {
+      "id": "claude-live-lifecycle",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual authorized account/auth/inference/native tools/policy/supported interactions/cancel/restart/resume/logout acceptance not executed; catalog/account-free assets do not establish it.",
+      "required": true
+    },
+    {
+      "id": "claude-installed-lifecycle",
+      "scope": "installed",
+      "status": "not-run",
+      "evidence": "Signed installed app install/resolve/auth/create/send/tool/config/cancel/restart/resume/logout/quit and descendants not accepted; no checkout/PATH fallback permitted.",
+      "required": true
+    },
+    {
+      "id": "cursor-source-lifecycle",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected cursor-source-lifecycle production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": true
+    },
+    {
+      "id": "cursor-live-lifecycle",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual authorized account/auth/inference/native tools/policy/supported interactions/cancel/restart/resume/logout acceptance not executed; catalog/account-free assets do not establish it.",
+      "required": true
+    },
+    {
+      "id": "cursor-installed-lifecycle",
+      "scope": "installed",
+      "status": "not-run",
+      "evidence": "Signed installed app install/resolve/auth/create/send/tool/config/cancel/restart/resume/logout/quit and descendants not accepted; no checkout/PATH fallback permitted.",
+      "required": true
+    },
+    {
+      "id": "full-regression",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected full-regression production/native fixtures are included; source-only proof, no actual account/installed acceptance. Record validator13 pass; all10 sequential runner steps pass.",
+      "required": true
+    },
+    {
+      "id": "shared-workspace",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected shared-workspace production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": true
+    },
+    {
+      "id": "runtime-failure-isolation",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected runtime-failure-isolation production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": true
+    },
+    {
+      "id": "handoff-16-pairs",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected handoff-16-pairs production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": true
+    },
+    {
+      "id": "secret-bounded-protocol",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected secret-bounded-protocol production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": true
+    },
+    {
+      "id": "copied-assets",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected copied-assets production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": true
+    },
+    {
+      "id": "actual-two-codex-accounts",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Default-skipped explicit paid account harness not run; synthetic equal native IDs and distinct fixture keys are not real account-A/B proof.",
+      "required": true
+    },
+    {
+      "id": "actual-handoff-16-pairs",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "All advertised ordered account/provider pairs require real authorized runtime/account acceptance; source fixtures do not accept policy or actual inference.",
+      "required": true
+    },
+    {
+      "id": "native-policy-and-extensions",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual permission allow/deny/question/tool/budget/sandbox enforcement; OpenCode file restoration/tool management/share/revoke; Claude managed policy; Cursor native tool/parameter/sandbox enforcement unverified.",
+      "required": true
+    },
+    {
+      "id": "distribution-clearance",
+      "scope": "distribution",
+      "status": "not-run",
+      "evidence": "Signed/notarized package and current vendor redistribution/SDK Terms/licenses/notices clearance unresolved; Cursor native package lacks standalone license. No permission inferred from package download.",
+      "required": true
+    },
+    {
+      "id": "other-platforms",
+      "scope": "platform",
+      "status": "not-run",
+      "evidence": "Linux/Windows/other architectures not accepted; Windows durable handoff confirmation fails closed. They are not advertised supported.",
+      "required": false
+    },
+    {
+      "id": "manual-descendant-cleanup",
+      "scope": "process",
+      "status": "not-run",
+      "evidence": "Source observed-descendant cleanup passes; installed quit/crash manual child/grandchild inspection and immediate unobserved spawn/exit race remain open.",
+      "required": true
+    },
+    {
+      "id": "unsupported-extensions",
+      "scope": "source",
+      "status": "excluded",
+      "evidence": "Fresh source gate 2026-10-05T14:04:48.772Z: 348 host pass/7 explicit skips, 2948 frontend pass, Rust79; checks/builds and private copied-asset probes pass. Existing selected unsupported-extensions production/native fixtures are included; source-only proof, no actual account/installed acceptance.",
+      "required": false
+    },
+    {
+      "id": "selected-platform",
+      "scope": "platform",
+      "status": "not-run",
+      "required": true,
+      "evidence": "Selected Darwin arm64 installed native sandbox/file enforcement/durability and lifecycle acceptance remains open; copied source controls are insufficient."
+    },
+    {
+      "id": "codex-session-parity-source",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "AS02-E native checkpoint fork/source-preserving lineage, owned compact acknowledgment/progress/Stop/faults and exact active-turn single-use steering with durable receipt; full source native and production pipeline/store/disk fixtures pass.",
+      "required": true
+    },
+    {
+      "id": "codex-ecosystem-parity-source",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "AS02-F bounded native skills/MCP inventory/owned toggles and finite config CAS, opaque transport/principal/generation permissions/private file secret masking; full source native/production/UI fixtures pass. Unsupported OAuth/elicitation/plugins explicit.",
+      "required": true
+    },
+    {
+      "id": "codex-native-activity-source",
+      "scope": "source",
+      "status": "pass",
+      "evidence": "AS02-G exact bounded native child states/activity and distinct context-compaction events/cards; full transport/adapter/production dispatcher/client/pipeline/disk/cache-corruption/UI and secret/late-event/capacity/concurrent ownership fixtures pass. Generic tool completion never fabricates child completion.",
+      "required": true
+    },
+    {
+      "id": "codex-parity-account-controls",
+      "scope": "account",
+      "status": "not-run",
+      "evidence": "Actual authorized native fork/compact/steering, skills/server toggles/config defaults and collaborative/context activity acceptance not run. No actual keys or paid inference used.",
+      "required": true
+    },
+    {
+      "id": "codex-parity-installed-controls",
+      "scope": "installed",
+      "status": "not-run",
+      "evidence": "Signed installed private native profiles, controls/activity/resume/recovery/Stop/UI/assets/process acceptance not run; source checkout/copied adjacent probes do not accept it.",
+      "required": true
+    }
+  ],
+  "sourceRunner": {
+    "outputDirectory": "/tmp/specops-codex-parity-source-20261005-1703",
+    "recordedAt": "2026-10-05T14:04:48.772Z",
+    "results": [
+      {
+        "id": "host-check",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "host-check.log"
+      },
+      {
+        "id": "host-build",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "host-build.log"
+      },
+      {
+        "id": "host-tests",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "host-tests.log"
+      },
+      {
+        "id": "frontend-check",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "frontend-check.log"
+      },
+      {
+        "id": "frontend-build",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "frontend-build.log"
+      },
+      {
+        "id": "frontend-tests",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "frontend-tests.log"
+      },
+      {
+        "id": "rust-tests",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "rust-tests.log"
+      },
+      {
+        "id": "claude-copied-assets",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "claude-copied-assets.log"
+      },
+      {
+        "id": "cursor-copied-assets",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "cursor-copied-assets.log"
+      },
+      {
+        "id": "record-validator-tests",
+        "status": "pass",
+        "exitCode": 0,
+        "log": "record-validator-tests.log"
+      }
+    ],
+    "tests": {
+      "host": {
+        "passed": 348,
+        "skipped": 7,
+        "filesPassed": 25,
+        "filesSkipped": 2
+      },
+      "frontend": {
+        "passed": 2948,
+        "filesPassed": 283
+      },
+      "rust": {
+        "passed": 79
+      },
+      "recordValidator": {
+        "passed": 13
+      }
+    }
+  },
+  "workingTreeDirty": true,
+  "assetIdentityNote": "Hashes recorded after the sequential source run; generated payloads are not a signed installed candidate and later rebuilds require a fresh record.",
+  "selectedScope": "codex-native-parity-e-f-g",
+  "sourcePayloadSha256": {
+    "app/host/src/codex/turn.ts": "dd5927b721ac2110802c6d1df998ef8ab8b32fed1685ed9a1d8dc831e16f55d9",
+    "app/host/src/codex/adapter.ts": "58331f9d46de139cace7ab2fe59132f5341acbb3b755b749c14ef982b9843038",
+    "app/host/src/codex/ecosystem.ts": "08cf88f3dde1f5ea440d49a9404ab78614b8a47945a9c12fc5ede211859a8740",
+    "app/host/src/codex/activity.test.ts": "4d9cf3aea761a6e96b070426a5cd17917886f0e9632f0de2d5d8174fcc8587f7",
+    "app/src/lib/session/events.ts": "c462e21854f49ab2b974b1ad9aac6fa227314e7645f1a9ed75a72d0d110b567b",
+    "app/src/lib/session/host/hostTurnReducer.ts": "daf9baa2505b502445096922e81722dcf852c7f65e71d0950e9e524d5f0a74ce",
+    "app/src/lib/session/redact.ts": "5f4a948ab9086e357d17f4b0e1f2a2e9d137e030939f74147f8b3d61d0137cca",
+    "app/src/lib/services/chatPersistenceCodec.ts": "7cb2033bb6b725b3f262671855c8a181115171a1d70ca9f4862c6c05f2bdd877",
+    "app/src/lib/components/SubtaskCard.svelte": "dd9f4b876e789a950da58efa81da62b845190c4918383c3146551a8aea03060f",
+    "app/src/lib/ai/chatMessageLayout.ts": "8ce0c5fd3525bbe234cdced20285d30eb219baab8cfd022cfbd19bf3e0bdcc58",
+    "scripts/release/check-record.mjs": "f836b1b3463e306fa2516fc1259b894dad3ba612f181187757f05363a4b4e927"
+  }
+}

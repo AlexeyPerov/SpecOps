@@ -26,11 +26,15 @@ export interface ToolCallSnapshot {
   progress?: unknown;
 }
 
-export type SubtaskStatus = "running" | "completed" | "failed";
+export type SubtaskStatus = "running" | "completed" | "failed" | "pending" | "interrupted" | "shutdown" | "not-found" | "unknown";
 
 export interface SubtaskSnapshot {
   id: string;
   agent: string;
+  nativeItemId?: string;
+  nativeThreadId?: string;
+  agentPath?: string;
+  category?: "agent" | "context";
   description?: string;
   prompt?: string;
   status: SubtaskStatus;
@@ -103,6 +107,8 @@ export type SessionEventKind =
   | "tool.started"
   | "tool.progress"
   | "tool.completed"
+  | "subtask.updated"
+  | "context.compaction"
   | "subtask.started"
   | "subtask.completed"
   | "subtask.failed"
@@ -143,6 +149,8 @@ export type SessionEvent = BaseSessionEvent &
     | { readonly type: "tool.started"; readonly turnId: SpecOpsTurnId; readonly toolCall: ToolCallSnapshot }
     | { readonly type: "tool.progress"; readonly turnId: SpecOpsTurnId; readonly callId: string; readonly progress: unknown }
     | { readonly type: "tool.completed"; readonly turnId: SpecOpsTurnId; readonly callId: string; readonly status: ToolCallStatus; readonly output?: unknown }
+    | { readonly type: "subtask.updated"; readonly turnId: SpecOpsTurnId; readonly subtask: SubtaskSnapshot }
+    | { readonly type: "context.compaction"; readonly turnId: SpecOpsTurnId; readonly subtask: SubtaskSnapshot }
     | { readonly type: "subtask.started"; readonly turnId: SpecOpsTurnId; readonly subtask: SubtaskSnapshot }
     | { readonly type: "subtask.completed"; readonly turnId: SpecOpsTurnId; readonly subtask: SubtaskSnapshot }
     | { readonly type: "subtask.failed"; readonly turnId: SpecOpsTurnId; readonly subtask: SubtaskSnapshot }

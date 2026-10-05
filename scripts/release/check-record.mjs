@@ -26,6 +26,15 @@ export function validateRecord(record) {
   }
   for (const scope of ['source', 'installed', 'account', 'distribution', 'platform', 'process']) if (!(record.gates ?? []).some(g => g.scope === scope && g.required)) errors.push(`Missing required ${scope} gate`);
   for (const id of requiredGates) if (!(record.gates ?? []).some(g => g.id === id && g.required)) errors.push(`Missing required gate ${id}`);
+  if (record.selectedScope !== undefined && record.selectedScope !== 'codex-native-parity-e-f-g') errors.push('Unknown selected parity scope');
+  if (record.selectedScope === 'codex-native-parity-e-f-g') {
+    if (typeof record.workingTreeDirty !== 'boolean' || (record.workingTreeDirty && (typeof record.workingTree !== 'string' || !record.workingTree.trim()))) errors.push('Parity source identity must identify clean or described pending changes');
+    for (const [id, scope] of [['codex-session-parity-source','source'],['codex-ecosystem-parity-source','source'],['codex-native-activity-source','source'],['codex-parity-account-controls','account'],['codex-parity-installed-controls','installed']]) {
+      const gate = record.gates.find(g => g.id === id);
+      if (!gate?.required) errors.push(`Missing required parity gate ${id}`);
+      if (gate && gate.scope !== scope) errors.push(`Changed parity gate scope ${id}`);
+    }
+  }
   const blockers = (record.gates ?? []).filter(g => g.required && g.status !== 'pass');
   for (const gate of record.gates ?? []) {
     const expectedScope = gate.id.endsWith('-source-lifecycle') || ['full-regression','shared-workspace','runtime-failure-isolation','handoff-16-pairs','secret-bounded-protocol','copied-assets'].includes(gate.id) ? 'source' : gate.id.endsWith('-live-lifecycle') || ['actual-two-codex-accounts','actual-handoff-16-pairs','native-policy-and-extensions'].includes(gate.id) ? 'account' : gate.id.endsWith('-installed-lifecycle') ? 'installed' : gate.id === 'distribution-clearance' ? 'distribution' : gate.id === 'selected-platform' ? 'platform' : gate.id === 'manual-descendant-cleanup' ? 'process' : undefined;

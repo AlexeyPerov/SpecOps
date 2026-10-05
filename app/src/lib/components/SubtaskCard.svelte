@@ -13,18 +13,19 @@
   function statusLabel(status: MessageSubtask["status"]): string {
     if (status === "running") return "Running";
     if (status === "completed") return "Completed";
-    return "Failed";
+    return ({ failed: "Failed", pending: "Pending", interrupted: "Interrupted", shutdown: "Shutdown", "not-found": "Not found", unknown: "Unknown" } as const)[status];
   }
 
   function statusIcon(status: MessageSubtask["status"]): string {
     if (status === "running") return "⏳";
     if (status === "completed") return "✓";
-    return "✗";
+    return status === "failed" ? "✗" : "—";
   }
 
   /** Has any expandable detail (prompt or output/error) worth showing. */
   let hasDetails = $derived(
     Boolean(
+      subtask.agentPath || subtask.nativeThreadId || subtask.description ||
       (subtask.prompt && subtask.prompt.trim().length > 0) ||
         (subtask.output && subtask.output.trim().length > 0) ||
         (subtask.error && subtask.error.trim().length > 0),
@@ -68,6 +69,8 @@
 
   <div class="subtask-body-wrapper">
     <div class="subtask-body">
+      {#if subtask.agentPath}<p class="subtask-description">Path: {subtask.agentPath}</p>{/if}
+      {#if subtask.nativeThreadId}<p class="subtask-description">Native agent: {subtask.nativeThreadId}</p>{/if}
       {#if subtask.description}
         <p class="subtask-description">{subtask.description}</p>
       {/if}

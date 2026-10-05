@@ -12,6 +12,10 @@ export interface MessageSubtask {
   id: string;
   /** Sub-agent name (e.g. the OpenCode agent id). */
   agent: string;
+  nativeItemId?: string;
+  nativeThreadId?: string;
+  agentPath?: string;
+  category?: "agent" | "context";
   description?: string;
   prompt?: string;
   status: ChatSubtaskStatus;
@@ -44,6 +48,10 @@ export function extractMessageSubtasks(message: ChatMessage): MessageSubtask[] {
     subtasks.push({
       id: part.id && part.id.length > 0 ? part.id : `${message.id}:subtask:${index}`,
       agent,
+      ...(part.nativeItemId ? { nativeItemId: part.nativeItemId } : {}),
+      ...(part.nativeThreadId ? { nativeThreadId: part.nativeThreadId } : {}),
+      ...(part.agentPath ? { agentPath: part.agentPath } : {}),
+      ...(part.category ? { category: part.category } : {}),
       ...(part.description ? { description: part.description } : {}),
       ...(part.prompt ? { prompt: part.prompt } : {}),
       status: part.status,

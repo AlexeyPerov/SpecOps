@@ -66,17 +66,16 @@ export function foldSessionEvent(state: TurnFoldState, event: SessionEvent): Tur
         parts: applyReasoningEnded(state.parts, { reasoningId: event.reasoningId, text: event.text }),
       };
 
+    case "subtask.updated":
+    case "context.compaction":
     case "subtask.started":
     case "subtask.completed":
     case "subtask.failed":
       return {
         ...state,
-        parts: applySubtaskStarted(state.parts, {
-          subtaskId: event.subtask.id,
-          agent: event.subtask.agent,
-          description: event.subtask.description ?? null,
-          prompt: event.subtask.prompt ?? null,
-        }),
+        parts: state.parts.some(p => p.type === "subtask" && p.id === event.subtask.id)
+          ? state.parts.map(p => p.type === "subtask" && p.id === event.subtask.id ? { ...p, ...event.subtask } : p)
+          : [...state.parts, { type: "subtask", ...event.subtask }],
       };
 
     case "step.started":

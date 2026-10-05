@@ -30,8 +30,8 @@ const SECRET_VALUE_PATTERNS = [
   /AIza[0-9A-Za-z_-]{20,}/g,
   /(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{16,}/g,
   /(?:AKIA|ASIA)[A-Z0-9]{16}/g,
-  /["\']?(?:[\w-]*token|[\w-]*secret|password|api[_-]?key|device[_-]?(?:code|auth[_-]?code)|user[_-]?code|authUrl|verificationUrl)["\']?\s*[=:]\s*["\']?[^\s,;}"\']+/gi,
-  /((?:[\w-]*token|[\w-]*secret|password|api[_-]?key)\s*[=:]\s*)[^\s,;]+/gi,
+  /(?<![\w-])["\']?(?:[\w-]*token|[\w-]*secret|password|api[_-]?key|device[_-]?(?:code|auth[_-]?code)|user[_-]?code|authUrl|verificationUrl)["\']?\s*[=:]\s*["\']?[^\s,;}"\']+/gi,
+  /(?<![\w-])((?:[\w-]*token|[\w-]*secret|password|api[_-]?key)\s*[=:]\s*)[^\s,;]+/gi,
 ];
 
 const MAX_STRING_LENGTH = 4_096;

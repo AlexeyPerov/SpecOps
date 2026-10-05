@@ -57,6 +57,10 @@ export type MessageRenderSlot =
 export interface RenderSubtask {
   id: string;
   agent: string;
+  nativeItemId?: string;
+  nativeThreadId?: string;
+  agentPath?: string;
+  category?: "agent" | "context";
   description?: string;
   prompt?: string;
   status: ChatSubtaskStatus;
@@ -250,6 +254,10 @@ export function buildMessageRenderSlots(message: ChatMessage): MessageRenderSlot
       const subtask: RenderSubtask = {
         id,
         agent,
+        ...(part.nativeItemId ? { nativeItemId: part.nativeItemId } : {}),
+        ...(part.nativeThreadId ? { nativeThreadId: part.nativeThreadId } : {}),
+        ...(part.agentPath ? { agentPath: part.agentPath } : {}),
+        ...(part.category ? { category: part.category } : {}),
         ...(part.description ? { description: part.description } : {}),
         ...(part.prompt ? { prompt: part.prompt } : {}),
         status: part.status,

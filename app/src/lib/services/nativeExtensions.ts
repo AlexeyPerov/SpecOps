@@ -13,7 +13,7 @@ export function extensionSession(root: string, sessionId: string): NativeSession
   return { runtimeId: link.runtimeId, nativeSessionId: asNativeSessionId(link.nativeSessionId), connectionProfileId: link.connectionProfileId, modelId: link.modelId, modeId: link.modeId, runtimeMetadata: link.runtimeMetadata };
 }
 const pending = new Set<string>();
-export async function performNativeAction(root: string, sessionId: string, action: NativeAction, target?: string, onProgress?: (snapshot: NativeExtensionSnapshot) => void) {
+export async function performNativeAction(root: string, sessionId: string, action: NativeAction, target?: string, onProgress?: (snapshot: NativeExtensionSnapshot) => void, value?: string) {
   const key = `${root}\0${sessionId}`;
   if (pending.has(key)) throw new Error('Native action is still pending.');
   pending.add(key);
@@ -27,7 +27,7 @@ export async function performNativeAction(root: string, sessionId: string, actio
     await ensureAgentHostStarted();
     stillSelected();
     if (action === 'compact') chatStore.setNativeOperation(sessionId, { id: operationId, kind: 'compact' }, root);
-    const result = await getAgentHostClient().actNative({ native, workspaceRootPath: root, action, target });
+    const result = await getAgentHostClient().actNative({ native, workspaceRootPath: root, action, target, value });
     if (!result.pending) stillSelected();
     if (result.pending) {
       const deadline = Date.now() + 310000;

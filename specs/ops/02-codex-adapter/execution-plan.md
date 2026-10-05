@@ -17,6 +17,7 @@
 | C | [Native config, limits and reconciliation](execution-plan-phase-c-capabilities-history.md) | M/L |
 | D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | M/L |
 | E | [Native session controls](execution-plan-phase-e-native-session-parity.md) | L |
+| F | [Native ecosystem and profile configuration](execution-plan-phase-f-ecosystem-config-parity.md) | L |
 
 **Phase A evidence:** [Implementation and support ledger](implementation-notes-phase-a.md); automated/bootstrap accepted, manual account-B gate open.
 
@@ -36,4 +37,6 @@ Task prefix is `AS02-<phase>-<NN>`. Numeric folders reflect the default delivery
 
 **Phase D evidence:** [Fault/security closure, setup/recovery and AS08-A selected-scope submission](implementation-notes-phase-d.md). Actual bundled-host death settles two native streams including pending approval; native split-secret masking, bounded accumulated state and observed descendant retirement are source-verified. Immediate orphan race, installed AS03-A/B and human account-A/B smoke remain open; baseline preview and milestone A–D are not Done.
 
-**Phase E:** [Native session controls](execution-plan-phase-e-native-session-parity.md) — verified native fork, compact lifecycle and active-turn steering source; selected legacy conversation rollback explicitly unsupported. [Evidence and finite ledger](implementation-notes-phase-e.md). Ecosystem management and detailed subagent UI are subsequent plans. Authenticated/installed acceptance remains open.
+**Phase E:** [Native session controls](execution-plan-phase-e-native-session-parity.md) — verified native fork, compact lifecycle and active-turn steering source; selected legacy conversation rollback explicitly unsupported. [Evidence and finite ledger](implementation-notes-phase-e.md). Ecosystem management is implemented in F; detailed subagent UI is subsequent work. Authenticated/installed acceptance remains open.
+
+**Phase F:** [Native ecosystem/configuration](execution-plan-phase-f-ecosystem-config-parity.md) and [implementation ledger](implementation-notes-phase-f.md); source implemented, authenticated/installed gates open.

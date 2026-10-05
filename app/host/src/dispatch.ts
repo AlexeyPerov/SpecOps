@@ -213,9 +213,10 @@ export class HostDispatcher {
         } else {
           if (!NATIVE_ACTIONS.includes(extra.action as any) || (extra.target !== undefined && (typeof extra.target !== "string" || extra.target.length > 256))) return this.invalidParams(id, "Unsupported native action");
           if (extra.action !== "steer" && (extra.text !== undefined || extra.clientMessageId !== undefined)) return this.invalidParams(id, "Unexpected native action payload");
+          if (extra.value !== undefined && (typeof extra.value !== "string" || extra.value.length > 32 || !["setSkillEnabled", "setNativeConfig"].includes(extra.action as string))) return this.invalidParams(id, "Invalid native control value");
           if (extra.action !== "steer" && this.activeTurns.has(this.turnKey(value.native))) throw new Error("Stop the turn before a native action");
           if ((extra.text !== undefined && (typeof extra.text !== "string" || !extra.text.trim() || extra.text.length > 65536)) || (extra.clientMessageId !== undefined && (typeof extra.clientMessageId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(extra.clientMessageId)))) return this.invalidParams(id, "Invalid native action payload");
-          await this.respond(makeResponse(id, await adapter.actNative({ ...value, action: extra.action as any, target: extra.target as string | undefined, text: extra.text as string | undefined, clientMessageId: extra.clientMessageId as string | undefined })));
+          await this.respond(makeResponse(id, await adapter.actNative({ ...value, action: extra.action as any, target: extra.target as string | undefined, text: extra.text as string | undefined, clientMessageId: extra.clientMessageId as string | undefined, value: extra.value as string | undefined })));
         }
         return;
       }

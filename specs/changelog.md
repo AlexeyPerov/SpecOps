@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-05 16:41 MSK — Expose finite native ecosystem and profile configuration
+
+- Implemented AS02-F native skills catalog/toggles, bounded current-thread tool/resource inventory, existing profile-owned server enable/disable with native reload, and versioned private web-search/reasoning-summary/verbosity defaults in the common native session panel. Disabled configured servers remain selectable for reconnect; native reload acknowledgment is distinguished from observed connection status.
+- Added opaque transport/principal/generation-scoped catalog permissions, synchronous profile reservations, active-turn blocking, consumed no-replay write tokens, private canonical config CAS and symlink guards. Native MCP credentials are forced to the private file store; bounded known credential/env/header values mask projected metadata before truncation.
+- Verified exact isolated native contracts/config CAS and production dispatcher/client/service/UI/persistence fixtures; actual accounts, OAuth/elicitation, upstream development-only plugins, installed/native enforcement/distribution/process acceptance remain open. No provider inference/global account reads, migrations or shims; historical release evidence unchanged.
+
 ## 2026-10-05 16:15 MSK — Expose verified native session controls
 
 - Implemented AS02-E pinned native checkpoint fork with durable child account/settings binding and local parent lineage; source history stays intact. Manual compact observes its owned native turn after the control acknowledgment, exposes progress/activity/Stop and blocks competing sends. Native active-turn steering uses the exact turn precondition, stable native user ID and a private durable no-replay dispatch receipt; no interrupt/follow-up fallback.

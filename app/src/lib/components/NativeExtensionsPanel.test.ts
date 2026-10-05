@@ -44,3 +44,12 @@ it('compact requires explicit usage confirmation, shows observed native progress
   button(host, 'Stop').click(); await settle(); expect(mocks.cancel).toHaveBeenCalledTimes(1);
   finish({ generation: 1 }); await settle(); expect(button(host, 'Stop')).toBeUndefined();
 });
+
+it('native skill/config dropdowns dispatch only opaque catalog targets and refresh; failed writes clear stale controls', async () => {
+  mocks.inspect.mockResolvedValue({ generation: 1, scope: 'Profile native settings', actions: [], rows: [{ id: 'opaque-skill', label: 'Local skill', control: { action: 'setSkillEnabled', value: 'true', choices: ['true','false'] } }] });
+  const { host } = mountComponent(NativeExtensionsPanel, { root: '/workspace', sessionId: 'session' }); await settle(); button(host, 'Refresh').click(); await settle();
+  const select = host.querySelector('[aria-label="Native setting Local skill"]') as HTMLSelectElement;
+  select.value = 'false'; select.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+  expect(mocks.action).toHaveBeenCalledWith('/workspace', 'session', 'setSkillEnabled', 'opaque-skill', undefined, 'false');expect(mocks.inspect).toHaveBeenCalledTimes(2);
+  mocks.action.mockRejectedValue(new Error('lost acknowledgement')); const current=host.querySelector('[aria-label="Native setting Local skill"]') as HTMLSelectElement;current.value='false';current.dispatchEvent(new Event('change',{bubbles:true}));await settle();expect(host.textContent).toContain('outcome is uncertain');expect(host.querySelector('[aria-label="Native setting Local skill"]')).toBeNull();
+});

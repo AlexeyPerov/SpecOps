@@ -12,6 +12,10 @@ env.CODEX_HOME = join(temporary, 'home'); mkdirSync(env.CODEX_HOME, { mode: 0o70
 env.HOME = env.CODEX_HOME; env.USERPROFILE = env.CODEX_HOME;
 const contracts = [
   'InitializeParams', 'InitializeResponse',
+  'v2/SkillsListParams', 'v2/SkillsListResponse', 'v2/SkillsConfigWriteParams', 'v2/SkillsConfigWriteResponse',
+  'v2/ConfigReadParams', 'v2/ConfigReadResponse', 'v2/ConfigValueWriteParams', 'v2/ConfigWriteResponse',
+  'v2/ListMcpServerStatusParams', 'v2/ListMcpServerStatusResponse',
+  'v2/McpServerRefreshResponse',
   'v2/LoginAccountParams', 'v2/LoginAccountResponse', 'v2/GetAccountParams', 'v2/GetAccountResponse',
   'v2/CancelLoginAccountParams', 'v2/CancelLoginAccountResponse', 'v2/LogoutAccountResponse',
   'v2/GetAccountRateLimitsResponse', 'v2/AccountRateLimitsUpdatedNotification',

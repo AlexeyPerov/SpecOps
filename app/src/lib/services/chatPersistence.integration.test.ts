@@ -405,3 +405,17 @@ it('Codex native session actions pass dispatcher/client/pipeline and durable par
   expect(requests.match(/turn\/steer/g)).toHaveLength(1); expect(requests.match(/thread\/fork/g)).toHaveLength(1); expect(requests.match(/thread\/start/g)).toHaveLength(1);
   expect(requests).not.toMatch(/thread\/(rollback|revert)/);
 });
+
+import { ecosystemFixture } from '../../../host/src/codex/ecosystemFixtures';
+it('native ecosystem actions cross dispatcher/client/service and persist only selected profile config while conversation binding/history stay intact', async () => {
+  const root=realpathSync(dataDir);const executable=join(root,'ecosystem-native.cjs');writeFileSync(executable,ecosystemFixture,{mode:0o700});
+  const options={profileRoot:join(root,'ecosystem-profiles'),executable,experimental:true};const adapter=new CodexRuntimeAdapter(options);nativeRuntimes.push(adapter);const profile=adapter.store.create('Owner');const client=await nativeClient(adapter,1);bindAgentHostClientForTests(()=>client);
+  const native=await client.createSession({runtimeId:'codex',connectionProfileId:profile.id,workspaceRootPath:root});chatStore.setActiveWorkspaceRoot(root);const session=chatStore.createDraftSession()!;chatStore.setSessionLink(session,{...native,nativeSessionId:String(native.nativeSessionId)},root);await flushSessionIndexPersistence(root);
+  const original=JSON.stringify(chatStore.getSessionLink(session,root));const inspect=(view:'ecosystem'|'configuration')=>client.inspectNative({native,workspaceRootPath:root,view});
+  const ecosystem=await inspect('ecosystem');await performNativeAction(root,session,'setSkillEnabled',ecosystem.rows.find(r=>r.control)!.id,undefined,'false');
+  let snapshot=await inspect('ecosystem');expect(snapshot.rows.find(r=>r.control)?.control?.value).toBe('false');await performNativeAction(root,session,'disconnectToolServer',snapshot.rows.find(r=>r.targetKind==='toolServer')!.id);
+  snapshot=await inspect('ecosystem');expect(snapshot.rows.find(r=>r.targetKind==='toolServer')?.detail).toContain('Disabled');await performNativeAction(root,session,'connectToolServer',snapshot.rows.find(r=>r.targetKind==='toolServer')!.id);
+  expect((await inspect('ecosystem')).rows.find(r=>r.targetKind==='toolServer')?.detail).toContain('connected');const config=await inspect('configuration');await performNativeAction(root,session,'setNativeConfig',config.rows.find(r=>r.label==='web search')!.id,undefined,'disabled');
+  expect(JSON.stringify(chatStore.getSessionLink(session,root))).toBe(original);expect(chatStore.getMessages(session)).toHaveLength(0);adapter.close();const fresh=new CodexRuntimeAdapter(options);nativeRuntimes.push(fresh);const restored=await nativeClient(fresh,2);bindAgentHostClientForTests(()=>restored);await restored.resumeSession({native,workspaceRootPath:root});expect((await restored.inspectNative({native,workspaceRootPath:root,view:'configuration'})).rows.find(r=>r.label==='web search')?.control?.value).toBe('disabled');
+  await expect(performNativeAction(root,session,'setNativeConfig',config.rows[0]!.id,undefined,'live')).rejects.toThrow();
+});

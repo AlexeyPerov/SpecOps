@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { NativeExtensions, NativeExtensionSnapshot } from '../../../src/lib/session/adapter/nativeExtensions';
+import { NativeEcosystem } from './ecosystem';
+import type { NativeExtensions, NativeExtensionSnapshot, NativeExtensionResult } from '../../../src/lib/session/adapter/nativeExtensions';
 import type { ThreadForkParams } from './generated/v2/ThreadForkParams';
 import type { TurnSteerParams } from './generated/v2/TurnSteerParams';
 import { redactForSerialization, redactSecretStringValue } from '../../../src/lib/session/redact';
@@ -16,7 +17,7 @@ import { nativeRoutingKey } from '../../../src/lib/session/profiles';
 import { asSpecOpsTurnId } from '../../../src/lib/session/ids';
 import type { LoginAccountParams } from './generated/v2/LoginAccountParams';
 import type { ModelListParams } from './generated/v2/ModelListParams';
-import { unlinkSync, existsSync } from 'node:fs';
+import { unlinkSync, existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -50,6 +51,7 @@ async function openBrowser(url: string): Promise<void> {
 export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigurationExtension, CatalogExtension, PermissionExtension, QuestionExtension, LifecycleExtension, NativeExtensions {
   readonly runtimeId = 'codex' as const;
   readonly store: ProfileStore;
+  private readonly ecosystem = new NativeEcosystem();
   private readonly controls = new Map<string, NativeExtensionSnapshot["operation"]>();
   private readonly controlReservations = new Map<string, string>();
   private readonly mutations = new Set<string>();
@@ -64,7 +66,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     this.store = new ProfileStore(root);
   }
   async describe() { return { id: this.runtimeId, label: 'Codex' }; }
-  async describeCapabilities() { return { schemaVersion: 1 as const, supported: ['catalogs', 'permissions', 'questions', 'nativeExtensions'], details: { nativeExtensions: { supported: true, notes: 'Verified native fork, compact lifecycle and active-turn steering. Legacy rollback is unavailable.' }, catalogs: { supported: true }, permissions: { supported: true }, questions: { supported: true, notes: 'Requires explicit selected-profile experimental opt-in; otherwise requests are rejected. Secret input is unsupported.' }, nativeTurns: { supported: true }, steer: { supported: true, notes: 'Native active-turn precondition, durable client identity; no fallback or replay.' }, rollback: { supported: false, notes: 'Pinned thread/revert supports paginated history only; selected legacy history cannot safely roll back.' } } }; }
+  async describeCapabilities() { return { schemaVersion: 1 as const, supported: ['catalogs', 'permissions', 'questions', 'nativeExtensions'], details: { nativeExtensions: { supported: true, notes: 'Verified native fork, compact lifecycle, steering, skills and bounded native config/MCP management. Legacy rollback, OAuth and plugin APIs are unavailable.' }, catalogs: { supported: true }, permissions: { supported: true }, questions: { supported: true, notes: 'Requires explicit selected-profile experimental opt-in; otherwise requests are rejected. Secret input is unsupported.' }, nativeTurns: { supported: true }, steer: { supported: true, notes: 'Native active-turn precondition, durable client identity; no fallback or replay.' }, plugins: { supported: false, notes: 'Upstream plugin APIs are under development; production list/read/install/uninstall issue no RPC.' }, mcpOAuth: { supported: false, notes: 'Native file-only credential storage is forced. Interactive OAuth/elicitation lifecycle remains unverified and unavailable.' }, rollback: { supported: false, notes: 'Pinned thread/revert supports paginated history only; selected legacy history cannot safely roll back.' } } }; }
   private connection(id: unknown): ProfileConnection {
     const profile = this.store.require(id);
     let connection = this.connections.get(profile.id);
@@ -465,10 +467,18 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     return { c, bound, check };
   }
   private extensionText(profileId: string, text: string, limit: number): string {
-    for (const secret of this.store.credentialValues(profileId)) text = text.split(secret).join('[redacted]');
+    for (const secret of [...this.store.credentialValues(profileId), ...this.store.mcpCredentialValues(profileId)]) text = text.split(secret).join('[redacted]');
     return redactSecretStringValue(text, limit);
   }
+  private ecosystemContext(input: Parameters<NativeExtensions['inspectNative']>[0] | Parameters<NativeExtensions['actNative']>[0], c: ProfileConnection, check: () => void) {
+    return { owner: c.transport!, revision: `${c.attempt}:${c.accountIdentity}`, key: this.key(input.native), generation: c.transport!.generation, home: realpathSync(this.store.home(c.profile.id)), cwd: input.workspaceRootPath, threadId: String(input.native.nativeSessionId), check, secure: () => this.store.secure(c.profile.id),
+      request: (method: string, params: unknown) => c.transport!.request(method, params), safe: (text: string, limit: number) => this.extensionText(c.profile.id, text, limit) };
+  }
   async inspectNative(input: Parameters<NativeExtensions['inspectNative']>[0]): Promise<NativeExtensionSnapshot> {
+    if (['ecosystem', 'configuration'].includes(input.view)) {
+      const { c, check } = await this.extensionBinding(input, true);
+      return this.ecosystem.inspect(this.ecosystemContext(input, c, check), input.view);
+    }
     if (input.view !== 'checkpoints') throw adapterErrors.capabilityNotSupported(input.view);
     const { c, check } = await this.extensionBinding(input, true);
     const raw = await c.transport!.request('thread/read', { threadId: input.native.nativeSessionId, includeTurns: true }); check();
@@ -485,9 +495,9 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     }
     return { generation: c.transport!.generation, scope: 'Native conversation history. Fork preserves source history. Rollback is unavailable: this pin only supports revert for paginated history; selected legacy history is preserved. Compact may use model inference and does not undo files.', actions: ['fork', 'compact'], rows, operation: this.controls.get(this.key(input.native)) };
   }
-  async actNative(input: Parameters<NativeExtensions['actNative']>[0]) {
+  async actNative(input: Parameters<NativeExtensions['actNative']>[0]): Promise<NativeExtensionResult> {
     const id = input.native.connectionProfileId;
-    const ownerToken = ['fork', 'compact'].includes(input.action) ? randomUUID() : undefined;
+    const ownerToken = ['fork', 'compact', 'setSkillEnabled', 'setNativeConfig', 'connectToolServer', 'disconnectToolServer'].includes(input.action) ? randomUUID() : undefined;
     if (ownerToken) {
       if (!id) throw new Error('Missing native profile binding');
       this.available(id); this.controlReservations.set(id, ownerToken);
@@ -496,6 +506,16 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     catch (error) { if (ownerToken && id && this.controlReservations.get(id) === ownerToken) this.controlReservations.delete(id); throw error; }
   }
   private async runNativeAction(input: Parameters<NativeExtensions['actNative']>[0], ownerToken?: string) {
+    if (['setSkillEnabled', 'setNativeConfig', 'connectToolServer', 'disconnectToolServer'].includes(input.action)) {
+      if (input.text !== undefined || input.clientMessageId !== undefined) throw new Error('Unexpected native control payload');
+      try {
+        const { c, check } = await this.extensionBinding(input, true);
+        if ([...this.turns.values()].some(t => t.request.native.connectionProfileId === c.profile.id && !t.ended)) throw new Error('Stop profile turns before changing native configuration');
+        return await this.ecosystem.act(this.ecosystemContext(input, c, check), input.action, input.target, input.value);
+      } catch { throw new Error('Native control failed or its outcome is uncertain; refresh explicitly without replaying'); }
+      finally { if (input.native.connectionProfileId && this.controlReservations.get(input.native.connectionProfileId) === ownerToken) this.controlReservations.delete(input.native.connectionProfileId); }
+    }
+    if (input.value !== undefined) throw new Error('Unexpected native control value');
     if (!['fork', 'compact', 'steer'].includes(input.action)) throw adapterErrors.capabilityNotSupported(input.action);
     if (input.action !== 'steer' && (input.text !== undefined || input.clientMessageId !== undefined)) throw new Error('Unexpected native action payload');
     if (input.target !== undefined && (typeof input.target !== 'string' || !input.target || input.target.length > 256 || /[\x00-\x1f]/.test(input.target))) throw new Error('Invalid native target');

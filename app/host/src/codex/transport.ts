@@ -58,7 +58,7 @@ export class CodexTransport {
     const env = isolatedEnvironment(this.home, this.ambient);
     await checkCodexVersion(this.executable, env);
     if (token !== this.lifecycle) throw new Error('Codex startup was cancelled');
-    const child = spawn(this.executable, ['app-server', '--listen', 'stdio://', '-c', 'cli_auth_credentials_store="file"', '-c', 'model_provider="openai"'], { env, cwd: this.home, stdio: 'pipe' });
+    const child = spawn(this.executable, ['app-server', '--listen', 'stdio://', '-c', 'cli_auth_credentials_store="file"', '-c', 'model_provider="openai"', '-c', 'mcp_oauth_credentials_store="file"'], { env, cwd: this.home, stdio: 'pipe' });
     this.child = child;
     this.descendants.clear();
     if (child.pid && process.platform !== 'win32') { this.descendantTimer = setInterval(() => this.pollDescendants(child.pid!), 250); this.descendantTimer.unref(); }

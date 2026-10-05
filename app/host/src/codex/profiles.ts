@@ -49,7 +49,7 @@ export class ProfileStore {
   create(label: string): ConnectionProfile {
     const profile: ConnectionProfile = { id: randomUUID(), label: String(redactForLogs(label.trim().slice(0, 80))) || 'Codex account', runtimeId: 'codex', createdAt: new Date().toISOString() };
     const home = this.home(profile.id);
-    writeFileSync(join(home, 'config.toml'), 'cli_auth_credentials_store = "file"\nmodel_provider = "openai"\n', { mode: 0o600, flag: 'wx' });
+    writeFileSync(join(home, 'config.toml'), 'cli_auth_credentials_store = "file"\nmcp_oauth_credentials_store = "file"\nmodel_provider = "openai"\n', { mode: 0o600, flag: 'wx' });
     writeFileSync(join(this.root, profile.id, 'profile.json'), JSON.stringify(profile, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
     return profile;
   }
@@ -108,6 +108,25 @@ export class ProfileStore {
     const tokens = auth.tokens && typeof auth.tokens === 'object' && !Array.isArray(auth.tokens) ? auth.tokens : {};
     return [auth.OPENAI_API_KEY, tokens.access_token, tokens.refresh_token, tokens.id_token].filter((value): value is string => typeof value === 'string' && value.length >= 8 && value.length <= 16384);
   }
+  /** Read only recognized secret fields from the native profile's bounded file store. */
+  mcpCredentialValues(id: string): string[] {
+    this.require(id); this.secure(id);
+    const path = join(this.home(id), '.credentials.json'); if (!existsSync(path)) return [];
+    let root: unknown;
+    try { root = JSON.parse(readPrivate(path, 1048576)); } catch { throw new Error('Native credential storage is unreadable'); }
+    const values: string[] = []; let count = 0;
+    const visit = (value: unknown, depth: number): void => {
+      if (++count > 4096 || depth > 16) throw new Error('Native credentials exceed their limit');
+      if (!value || typeof value !== 'object') return;
+      for (const [key, field] of Object.entries(value)) {
+        if (++count > 4096) throw new Error('Native credentials exceed their limit');
+        if (/^(access_token|refresh_token|id_token|client_secret|bearer_token|api_key)$/i.test(key) && typeof field === 'string' && field.length) {
+          if (field.length > 16384) throw new Error('Native credential exceeds its limit'); values.push(field);
+        } else if (field && typeof field === 'object') visit(field, depth + 1);
+      }
+    };
+    visit(root, 0); return values;
+  }
   reserveSteering(id: string, nativeId: string, clientId: string): void {
     this.require(id);
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(clientId)) throw new Error('Invalid steering identity');
@@ -144,7 +163,7 @@ export class ProfileStore {
   }
   secure(id: string): void {
     const home = this.home(id);
-    for (const name of ['config.toml', 'auth.json', 'api-key']) {
+    for (const name of ['config.toml', 'auth.json', 'api-key', '.credentials.json']) {
       const path = join(home, name);
       if (entryExists(path)) {
         if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) throw new Error('Unsafe credential storage');

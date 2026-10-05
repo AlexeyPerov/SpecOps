@@ -15,6 +15,7 @@ export async function collectHandoffDraft(root: string, sourceSessionId: string,
   const source = chatStore.getSessionLink(sourceSessionId, root);
   const thread = chatStore.getWorkspaceSessionsState(root)?.threadsBySessionId[sourceSessionId];
   if (!source || !thread) throw new Error('Select a bound source session with common history.');
+  if (chatStore.getRuntimeState(sourceSessionId, root).nativeOperation) throw new Error('Wait for native context compaction or Stop before reviewing a handoff.');
   let changedPaths: string[] = []; let diff = ''; let evidence = 'Workspace change evidence unavailable';
   try {
     const status = await queryWorkingTreeStatus(root);
@@ -93,6 +94,7 @@ export async function confirmHandoff(approved: HandoffAttempt): Promise<HandoffA
     const saved = journal.attempts.find(a => a.id === approved.id);
     const reviewed = saved ?? approved;
     const assertWorkspace = () => {
+      if (chatStore.getRuntimeState(reviewed.sourceSessionId, reviewed.workspaceRootPath).nativeOperation) throw new Error('Wait for native context compaction or Stop before continuing this handoff.');
       if (chatStore.getActiveChatScopeKey() !== reviewed.workspaceRootPath || !chatStore.getSessionLink(reviewed.sourceSessionId, reviewed.workspaceRootPath)) throw new Error('Return to the approved workspace and source session before creating a target.');
     };
     return await executeHandoff(saved ?? approved, {
@@ -101,6 +103,7 @@ export async function confirmHandoff(approved: HandoffAttempt): Promise<HandoffA
       create: (target, workspaceRootPath) => { assertWorkspace(); return getAgentHostClient().createSession({ ...target, workspaceRootPath }); },
       bind: bindKnownTarget,
       send: async attempt => {
+        assertWorkspace();
         if (chatStore.getActiveChatScopeKey() !== attempt.workspaceRootPath) throw new Error('Workspace changed before native dispatch.');
         const turnId = beginTurn(attempt.targetSessionId);
         if (!turnId) throw new Error('Target is already running. Initial prompt will not be retried.');

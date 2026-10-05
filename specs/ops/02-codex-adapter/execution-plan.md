@@ -1,6 +1,6 @@
 # 02 — Execution plan index: Codex native harness and isolated account
 
-**Updated:** 2026-10-04
+**Updated:** 2026-10-05
 
 **Status:** In progress — A–D source implemented; experimental developer/live account and installed acceptance pending
 
@@ -16,6 +16,7 @@
 | B | [Native coding slice and minimum resume](execution-plan-phase-b-thread-events.md) | L |
 | C | [Native config, limits and reconciliation](execution-plan-phase-c-capabilities-history.md) | M/L |
 | D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | M/L |
+| E | [Native session controls](execution-plan-phase-e-native-session-parity.md) | L |
 
 **Phase A evidence:** [Implementation and support ledger](implementation-notes-phase-a.md); automated/bootstrap accepted, manual account-B gate open.
 
@@ -34,3 +35,5 @@ Task prefix is `AS02-<phase>-<NN>`. Numeric folders reflect the default delivery
 **Phase C evidence:** [Configuration, usage/recovery and reconciliation ledger](implementation-notes-phase-c.md). Optional neutral session controls, profile-scoped sparse limits/auth recovery, host/child epoch guards, authoritative materialized-legacy hydration and divergent/corrupt/missing-cache recovery are fixture-verified. The pinned unavailable paginated-items API and native management panels remain explicit deferrals; default coding stays gated and authenticated/installed acceptance stays open.
 
 **Phase D evidence:** [Fault/security closure, setup/recovery and AS08-A selected-scope submission](implementation-notes-phase-d.md). Actual bundled-host death settles two native streams including pending approval; native split-secret masking, bounded accumulated state and observed descendant retirement are source-verified. Immediate orphan race, installed AS03-A/B and human account-A/B smoke remain open; baseline preview and milestone A–D are not Done.
+
+**Phase E:** [Native session controls](execution-plan-phase-e-native-session-parity.md) — verified native fork, compact lifecycle and active-turn steering source; selected legacy conversation rollback explicitly unsupported. [Evidence and finite ledger](implementation-notes-phase-e.md). Ecosystem management and detailed subagent UI are subsequent plans. Authenticated/installed acceptance remains open.

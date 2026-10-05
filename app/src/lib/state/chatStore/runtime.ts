@@ -161,7 +161,7 @@ export function createRuntimeSlice(deps: {
         return false;
       }
       const runtime = runtimeForSession(getSnapshot(), targetSessionId);
-      if (runtime.isGenerating) {
+      if (runtime.isGenerating || runtime.nativeOperation) {
         return false;
       }
       return updateSessionRuntime(targetSessionId, () => ({
@@ -218,7 +218,13 @@ export function createRuntimeSlice(deps: {
     },
     canRetryLastTurn(sessionId?: string): boolean {
       const runtime = this.getRuntimeState(sessionId);
-      return runtime.lastFailedTurnId !== null && !runtime.isGenerating;
+      return runtime.lastFailedTurnId !== null && !runtime.isGenerating && !runtime.nativeOperation;
+    },
+    setNativeOperation(sessionId: string, operation: { id: string; kind: 'compact' } | null, workspaceRoot: string, ownerId?: string): boolean {
+      return updateSessionRuntime(sessionId, current => {
+        if (!operation && ownerId && current.nativeOperation?.id !== ownerId) return current;
+        return { ...current, nativeOperation: operation ?? undefined };
+      }, workspaceRoot);
     },
     setWaitingForPermission(sessionId: string, waiting: boolean, workspaceRoot?: string | null): boolean {
       return updateSessionRuntime(sessionId, (current) => ({

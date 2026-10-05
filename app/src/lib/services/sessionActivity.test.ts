@@ -32,3 +32,15 @@ it('native file restrictions and sandbox never imply a read-only guarantee; enab
  chatStore.updateThreadMetadata({runtimeId:'cursor',runtimeMetadata:{toolset:'files-write',sandbox:'enabled',writeCapability:'possible'}});expect(workspaceActivity(chatStore.getSnapshot(),'/workspace')[0].writeCapability).toBe('possible');
  chatStore.updateThreadMetadata({runtimeId:'cursor',runtimeMetadata:{toolset:'files-read',sandbox:'read-only',writeCapability:'read-only'}});expect(workspaceActivity(chatStore.getSnapshot(),'/workspace')[0].writeCapability).toBe('unknown');
 });
+
+it('owned native compaction is activity without a fake coding turn, blocks send/delete and clears only its own flag', async () => {
+ const root = '/workspace'; chatStore.setActiveWorkspaceRoot(root); const id = chatStore.createDraftSession()!;
+ chatStore.updateThreadMetadata({ runtimeId: 'codex', connectionProfileId: 'owner', runtimeMetadata: { sandbox: 'read-only' } });
+ chatStore.setNativeOperation(id, { id: 'first', kind: 'compact' }, root);
+ expect(chatStore.getRuntimeState(id, root).isGenerating).toBe(false);
+ expect(workspaceActivity(chatStore.getSnapshot(), root)[0]).toMatchObject({ sessionId: id, profileId: 'owner', action: 'compact', writeCapability: 'read-only' });
+ expect(chatStore.beginTurn('overlap', id)).toBe(false); expect(await chatStore.deleteSession(id)).toBe(false);
+ chatStore.setNativeOperation(id, { id: 'replacement', kind: 'compact' }, root); chatStore.setNativeOperation(id, null, root, 'first');
+ expect(chatStore.getRuntimeState(id, root).nativeOperation?.id).toBe('replacement');
+ chatStore.setNativeOperation(id, null, root, 'replacement'); expect(workspaceActivity(chatStore.getSnapshot(), root)).toEqual([]);
+});

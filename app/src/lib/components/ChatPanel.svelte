@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { steerNativeTurn, stopNativeOperation } from "../services/nativeExtensions";
   import NativeExtensionsPanel from "./NativeExtensionsPanel.svelte";
   import SessionHandoffDialog from "./SessionHandoffDialog.svelte";
   let handoffSource = $state<{ sessionId: string; root: string } | null>(null);
@@ -109,6 +110,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
   });
   const canDeleteSession = $derived(activeSessionId !== null);
   const workspaceRootPath = $derived(chatStore.getActiveWorkspaceRoot() ?? "");
+  const nativeControlBusy = $derived(Boolean(activeSessionId && $chatStore.workspaces[workspaceRootPath]?.runtimeBySessionId[activeSessionId]?.nativeOperation));
 
   // --- Neutral runtime identity + catalogs (host discovery / catalogs) -----
   const sessionIndex = $derived($chatSessionIndex);
@@ -292,14 +294,14 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
         </button>
       {/if}
       {#if sessionIndexEntry?.nativeSessionId && activeSessionId}
-        <button type="button" class="btn btn-sm" disabled={isGenerating || isBlocked} onclick={() => { if (activeSessionId) handoffSource = { sessionId: activeSessionId, root: workspaceRootPath }; }}>Handoff</button>
+        <button type="button" class="btn btn-sm" disabled={isGenerating || isBlocked || nativeControlBusy} onclick={() => { if (activeSessionId) handoffSource = { sessionId: activeSessionId, root: workspaceRootPath }; }}>Handoff</button>
       {/if}
       {#if canDeleteSession}
         <button
           type="button"
           class="chat-delete-button"
           onclick={() => void deleteSession()}
-          disabled={isBlocked || isGenerating}
+          disabled={isBlocked || isGenerating || nativeControlBusy}
         >
           Delete session
         </button>
@@ -314,7 +316,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
       </p>
     {/if}
     {#if activeSessionId && sessionIndexEntry?.nativeSessionId}
-      <NativeExtensionsPanel root={workspaceRootPath} sessionId={activeSessionId} disabled={isGenerating || isBlocked} />
+      <NativeExtensionsPanel root={workspaceRootPath} sessionId={activeSessionId} disabled={isGenerating || isBlocked || nativeControlBusy} />
     {/if}
     <ChatBlockedState isAccessBlocked={isBlocked} {accessBlockedCopy} />
 
@@ -349,7 +351,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
       {#each activities as activity (activity.sessionId)}
         <div>{activity.title}: {activity.runtimeId}, profile {activity.profileId ?? 'unknown'}, model {activity.modelId ?? 'default'} — {activity.action}; {activity.writeCapability === 'unknown' ? 'write capability unknown' : activity.writeCapability === 'possible' ? 'may write files' : 'native read-only sandbox'}
           {#if activity.overlaps.length}<span>Reported path overlap: {activity.overlaps.join(', ')}</span>{/if}
-          <button onclick={() => abortTurn(activity.sessionId, workspaceRootPath)}>Stop</button>
+          <button onclick={() => { if (activity.action === "compact") void stopNativeOperation(workspaceRootPath, activity.sessionId).catch(() => { inlineError = "Native Stop failed. Inspect this profile before continuing."; }); else abortTurn(activity.sessionId, workspaceRootPath); }}>Stop</button>
         </div>
       {/each}
       <span>Shared workspace. Stop does not undo file changes. Changed-path overlap is best-effort; incomplete native path data cannot prove isolation.</span>
@@ -357,7 +359,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
   {/if}
 
     <ChatComposer
-      {isBlocked}
+      isBlocked={isBlocked || nativeControlBusy}
       {isGenerating}
       {canRetryLastTurn}
       workspaceRootPath={workspaceRootPath}
@@ -367,11 +369,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
       {catalog}
       activeModelId={activeModel}
       activeModeId={activeMode}
-      onAbortTurn={() => {
-        if (activeSessionId) {
-          abortTurn(activeSessionId, workspaceRootPath);
-        }
-      }}
+      onSteer={runtimeId === "codex" ? async (text) => { if (!activeSessionId) throw new Error("Select an active session"); await steerNativeTurn(workspaceRootPath, activeSessionId, text); } : undefined}
       onInlineError={(message) => {
         inlineError = message;
       }}

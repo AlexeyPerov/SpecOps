@@ -212,8 +212,10 @@ export class HostDispatcher {
           await this.respond(makeResponse(id, await adapter.inspectNative({ ...value, view: extra.view as any })));
         } else {
           if (!NATIVE_ACTIONS.includes(extra.action as any) || (extra.target !== undefined && (typeof extra.target !== "string" || extra.target.length > 256))) return this.invalidParams(id, "Unsupported native action");
-          if (this.activeTurns.has(this.turnKey(value.native))) throw new Error("Stop the turn before a native action");
-          await this.respond(makeResponse(id, await adapter.actNative({ ...value, action: extra.action as any, target: extra.target as string | undefined })));
+          if (extra.action !== "steer" && (extra.text !== undefined || extra.clientMessageId !== undefined)) return this.invalidParams(id, "Unexpected native action payload");
+          if (extra.action !== "steer" && this.activeTurns.has(this.turnKey(value.native))) throw new Error("Stop the turn before a native action");
+          if ((extra.text !== undefined && (typeof extra.text !== "string" || !extra.text.trim() || extra.text.length > 65536)) || (extra.clientMessageId !== undefined && (typeof extra.clientMessageId !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(extra.clientMessageId)))) return this.invalidParams(id, "Invalid native action payload");
+          await this.respond(makeResponse(id, await adapter.actNative({ ...value, action: extra.action as any, target: extra.target as string | undefined, text: extra.text as string | undefined, clientMessageId: extra.clientMessageId as string | undefined })));
         }
         return;
       }

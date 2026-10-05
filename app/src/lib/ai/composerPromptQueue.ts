@@ -6,7 +6,7 @@
  * execution-plan-m3 M3-T5 description):
  *
  *   - **queue**: deliver the prompt after the running turn completes.
- *   - **steer**: interrupt the running turn and append the new prompt.
+ *   - **steer**: append text to a supported native active turn with its exact turn precondition.
  *
  * The manager is intentionally framework-agnostic — it owns the queued item
  * list and exposes simple accessors. The composer (Svelte) binds these to the
@@ -110,7 +110,7 @@ export function createComposerPromptQueue(): {
 /**
  * Returns the suggested default queue mode for a prompt sent while a turn is
  * running. The recommendation is `queue` (non-destructive, run after the
- * current turn) — `steer` is opt-in because it interrupts the running turn.
+ * current turn) — `steer` is available only for a native adapter that supports active-turn input.
  */
 export function defaultQueueMode(): ChatQueueMode {
   return "queue";

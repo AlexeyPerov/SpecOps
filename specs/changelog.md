@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-05 16:15 MSK — Expose verified native session controls
+
+- Implemented AS02-E pinned native checkpoint fork with durable child account/settings binding and local parent lineage; source history stays intact. Manual compact observes its owned native turn after the control acknowledgment, exposes progress/activity/Stop and blocks competing sends. Native active-turn steering uses the exact turn precondition, stable native user ID and a private durable no-replay dispatch receipt; no interrupt/follow-up fallback.
+- Regenerated exact native contracts, added production dispatcher/client/pipeline/store/disk and lost-ack/fault/security/UI fixtures, and retained honest per-runtime action subsets. Conversation rollback is explicitly unavailable: the pinned replacement requires paginated history while selected coding/resume supports legacy history. Context-only reconciliation does not refresh file-change watchers.
+- Recorded finite source ledger and open authenticated/installed acceptance. No real inference/account credentials were used, no migrations or compatibility shims, and the historical blocked release record is unchanged.
+
 ## 2026-10-05 01:00 MSK — Record repeatable expanded source release gates
 
 - Implemented AS08-A dated four-runtime release/support record with exact pins, selected Darwin arm64/Node 24.15.0 distribution and asset hashes, per-runtime source/account/installed lifecycle rows and explicit pass/not-run/excluded dispositions. Added fixed required-gate/pin/platform validation and a bounded private-output sequential source runner that never accepts external gates or discovers account credentials.

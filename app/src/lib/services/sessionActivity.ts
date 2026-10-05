@@ -4,7 +4,7 @@ import { appState } from '../state/appState';
 import { requestConfirm } from './confirmDialogUi';
 export interface SessionActivity {
   sessionId: string; title: string; runtimeId: string; profileId?: string; modelId?: string;
-  action: 'running' | 'permission' | 'question';
+  action: 'running' | 'permission' | 'question' | 'compact';
   writeCapability: 'read-only' | 'possible' | 'unknown';
   changedPaths: readonly string[]; overlaps: readonly string[];
 }
@@ -14,14 +14,14 @@ export function workspaceActivity(state: ChatStoreState, root: string): SessionA
   if (!workspace) return [];
   const activities: SessionActivity[] = workspace.sessionIndex.flatMap(entry => {
     const runtime = workspace.runtimeBySessionId[entry.id];
-    if (!runtime?.isGenerating) return [];
+    if (!runtime?.isGenerating && !runtime?.nativeOperation) return [];
     const metadata = workspace.threadsBySessionId[entry.id]?.metadata;
     const runtimeId = entry.runtimeId ?? metadata?.runtimeId ?? 'unknown';
     const settings = entry.runtimeMetadata ?? metadata?.runtimeMetadata;
     const sandbox = settings?.sandbox;
     const writeCapability = (runtimeId === 'claude' || runtimeId === 'cursor') && settings?.writeCapability === 'possible' ? 'possible' : runtimeId === 'codex' && sandbox === 'read-only' ? 'read-only' : runtimeId === 'codex' && (sandbox === 'workspace-write' || sandbox === 'danger-full-access') ? 'possible' : 'unknown';
     const changedPaths = [...new Set(workspace.threadsBySessionId[entry.id]?.messages.find(message => message.id === `assistant-${runtime.activeTurnId}`)?.parts?.flatMap(part => part.type === 'diff' ? part.files ?? [] : []) ?? [])].slice(0, 256);
-    return [{ changedPaths, overlaps: [], sessionId: entry.id, title: entry.title, runtimeId, profileId: entry.connectionProfileId ?? metadata?.connectionProfileId, modelId: entry.modelId ?? metadata?.selectedModelId, action: runtime.isWaitingForPermission ? 'permission' : runtime.isWaitingForQuestion ? 'question' : 'running', writeCapability }];
+    return [{ changedPaths, overlaps: [], sessionId: entry.id, title: entry.title, runtimeId, profileId: entry.connectionProfileId ?? metadata?.connectionProfileId, modelId: entry.modelId ?? metadata?.selectedModelId, action: runtime.nativeOperation ? 'compact' : runtime.isWaitingForPermission ? 'permission' : runtime.isWaitingForQuestion ? 'question' : 'running', writeCapability }];
   });
   const owners = new Map<string, number>();
   for (const activity of activities) for (const path of activity.changedPaths) owners.set(path, (owners.get(path) ?? 0) + 1);

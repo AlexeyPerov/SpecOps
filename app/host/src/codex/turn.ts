@@ -115,6 +115,7 @@ export class NativeTurn {
     if (done && this.completed.has(item.id)) return;
     if (item.type === 'agentMessage' || item.type === 'plan') { if (done) this.texts.set(item.id, item.text); else if (!this.texts.has(item.id)) this.texts.set(item.id, ''); }
     else if (item.type === 'reasoning' && done) { for (const [kind, sections] of [['summary', item.summary], ['content', item.content]] as const) sections.forEach((text, index) => { const id = `${item.id}:${kind}:${index}`; this.reasonings.set(id, text); this.emit({ type: 'reasoning.ended', turnId, reasoningId: id, text }); }); }
+    else if (item.type === 'contextCompaction') this.emit({ type: 'diagnostic', level: 'info', message: done ? 'Native context compaction completed.' : 'Native context compaction started.' });
     else if (['commandExecution','fileChange','mcpToolCall','dynamicToolCall','webSearch','imageView','collabAgentToolCall'].includes(item.type)) {
       const raw = item as unknown as Record<string, unknown>;
       if (!this.tools.has(item.id)) { this.tools.add(item.id); this.emit({ type: 'tool.started', turnId, toolCall: { callId: item.id, toolName: item.type, status: 'running', input: raw.command ?? raw.arguments ?? raw.changes ?? raw.prompt } }); }

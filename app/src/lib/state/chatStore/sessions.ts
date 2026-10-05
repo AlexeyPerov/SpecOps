@@ -991,6 +991,7 @@ export function createSessionsSlice(deps: {
     },
     async deleteSession(sessionId: string): Promise<boolean> {
       const root = getActiveChatScopeKey();
+      if (root && getSnapshot().workspaces[root]?.runtimeBySessionId[sessionId]?.nativeOperation) return false;
       if (!root) {
         return false;
       }

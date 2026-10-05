@@ -1,5 +1,6 @@
 import type { NativeExtensions, NativeExtensionRequest, NativeExtensionSnapshot, NativeExtensionResult, NativeView, NativeAction } from "../../../src/lib/session/adapter/nativeExtensions";
-import { NATIVE_ACTIONS, NATIVE_VIEWS } from "../../../src/lib/session/adapter/nativeExtensions";
+const OPENCODE_NATIVE_ACTIONS = ['fork', 'revert', 'restore', 'share', 'revokeShare', 'connectToolServer', 'disconnectToolServer'] as const;
+import { NATIVE_VIEWS } from "../../../src/lib/session/adapter/nativeExtensions";
 import { extensionScrubber, projectRows } from "./extensions";
 import { realpathSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -834,7 +835,7 @@ export class OpenCodeRuntimeAdapter
         case "checkpoints": {
           const messages = (await read(client.session.messages({ ...session, limit: 100 }))).data;
           if (!messages || messages.length > 100) throw new Error("Native checkpoints unavailable");
-          return { generation, scope: "Recent native user checkpoints; selecting revert can restore files", actions: [...NATIVE_ACTIONS], rows: messages.filter(row => row.info.role === "user").map(row => ({ id: scrub(row.info.id), label: scrub(row.parts.filter(part => part.type === "text").map(part => part.type === "text" ? part.text : "").join("")).slice(0, 240), targetKind: "checkpoint" as const })) };
+          return { generation, scope: "Recent native user checkpoints; selecting revert can restore files", actions: [...OPENCODE_NATIVE_ACTIONS], rows: messages.filter(row => row.info.role === "user").map(row => ({ id: scrub(row.info.id), label: scrub(row.parts.filter(part => part.type === "text").map(part => part.type === "text" ? part.text : "").join("")).slice(0, 240), targetKind: "checkpoint" as const })) };
         }
         case "sessions": data = (await read(client.session.list({ ...scope, limit: 100 }))).data?.filter(v => record(v.metadata?.specopsBinding) && v.metadata.specopsBinding.connectionProfileId === input.native.connectionProfileId && v.directory === directory); fields = ["parentID"]; break;
         case "todos": data = (await read(client.session.todo(session))).data; fields = ["status", "priority"]; break;
@@ -855,7 +856,7 @@ export class OpenCodeRuntimeAdapter
           const toolRows = projectRows(mcp, ["status"], scrub).map(row => ({ ...row, targetKind: "toolServer" as const }));
           const catalogRows = projectRows([...skills.map(v => ({ name: v.name, status: "skill" })), ...agents.map(v => ({ name: v.name, status: v.mode }))], ["status"], scrub);
           if (toolRows.length + catalogRows.length > 256 || Buffer.byteLength(JSON.stringify([...toolRows, ...catalogRows])) > 512 * 1024) throw new Error("Native ecosystem exceeds capacity");
-          return { generation, scope: "Configured tool servers and native skill/agent catalogs in selected profile/workspace", actions: [...NATIVE_ACTIONS], rows: [...toolRows, ...catalogRows] };
+          return { generation, scope: "Configured tool servers and native skill/agent catalogs in selected profile/workspace", actions: [...OPENCODE_NATIVE_ACTIONS], rows: [...toolRows, ...catalogRows] };
 
         }
         case "configuration": {
@@ -866,11 +867,11 @@ export class OpenCodeRuntimeAdapter
         }
       }
       fresh(); if (data === undefined) throw new Error("Native view unavailable");
-      return { generation, scope: "Selected profile / canonical workspace; effective native catalogs (read only)", actions: [...NATIVE_ACTIONS], rows: projectRows(data, fields, scrub) };
+      return { generation, scope: "Selected profile / canonical workspace; effective native catalogs (read only)", actions: [...OPENCODE_NATIVE_ACTIONS], rows: projectRows(data, fields, scrub) };
     } catch { throw new Error("Selected native view is unavailable, expired or exceeds capacity."); }
   }
   async actNative(input: NativeExtensionRequest & { action: NativeAction; target?: string }): Promise<NativeExtensionResult> {
-    if (!NATIVE_ACTIONS.includes(input.action)) throw new Error("Unsupported native action");
+    if (!OPENCODE_NATIVE_ACTIONS.includes(input.action as any)) throw new Error("Unsupported native action");
     const profile = this.store.require(input.native.connectionProfileId);
     if (this.extensionReservations.has(profile.id) || this.creationReservations.has(profile.id) || [...this.turns.values()].some(t => t.request.native.connectionProfileId === profile.id)) throw new Error("Stop active profile turns before a native action");
     this.extensionReservations.add(profile.id);

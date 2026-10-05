@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import type { NativeExtensions, NativeExtensionSnapshot } from '../../../src/lib/session/adapter/nativeExtensions';
+import type { ThreadForkParams } from './generated/v2/ThreadForkParams';
+import type { TurnSteerParams } from './generated/v2/TurnSteerParams';
 import { redactForSerialization, redactSecretStringValue } from '../../../src/lib/session/redact';
 import { mergeUsage, usageBlocked, failureRecovery } from './limits';
 import { adapterErrors } from '../../../src/lib/session/adapter/errors';
@@ -43,9 +47,11 @@ async function openBrowser(url: string): Promise<void> {
   const args = process.platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
   await new Promise<void>((resolve, reject) => execFile(command, args, { timeout: 5000 }, error => error ? reject(new Error('Could not open authentication browser')) : resolve()));
 }
-export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigurationExtension, CatalogExtension, PermissionExtension, QuestionExtension, LifecycleExtension {
+export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigurationExtension, CatalogExtension, PermissionExtension, QuestionExtension, LifecycleExtension, NativeExtensions {
   readonly runtimeId = 'codex' as const;
   readonly store: ProfileStore;
+  private readonly controls = new Map<string, NativeExtensionSnapshot["operation"]>();
+  private readonly controlReservations = new Map<string, string>();
   private readonly mutations = new Set<string>();
   private readonly connections = new Map<string, ProfileConnection>();
   private readonly turns = new Map<string, NativeTurn>();
@@ -58,7 +64,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     this.store = new ProfileStore(root);
   }
   async describe() { return { id: this.runtimeId, label: 'Codex' }; }
-  async describeCapabilities() { return { schemaVersion: 1 as const, supported: ['catalogs', 'permissions', 'questions'], details: { catalogs: { supported: true }, permissions: { supported: true }, questions: { supported: true, notes: 'Requires explicit selected-profile experimental opt-in; otherwise requests are rejected. Secret input is unsupported.' }, nativeTurns: { supported: true }, steer: { supported: false, notes: 'Send only after the active turn completes.' } } }; }
+  async describeCapabilities() { return { schemaVersion: 1 as const, supported: ['catalogs', 'permissions', 'questions', 'nativeExtensions'], details: { nativeExtensions: { supported: true, notes: 'Verified native fork, compact lifecycle and active-turn steering. Legacy rollback is unavailable.' }, catalogs: { supported: true }, permissions: { supported: true }, questions: { supported: true, notes: 'Requires explicit selected-profile experimental opt-in; otherwise requests are rejected. Secret input is unsupported.' }, nativeTurns: { supported: true }, steer: { supported: true, notes: 'Native active-turn precondition, durable client identity; no fallback or replay.' }, rollback: { supported: false, notes: 'Pinned thread/revert supports paginated history only; selected legacy history cannot safely roll back.' } } }; }
   private connection(id: unknown): ProfileConnection {
     const profile = this.store.require(id);
     let connection = this.connections.get(profile.id);
@@ -89,6 +95,9 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
         if (this.connections.get(c.profile.id) !== c) return;
         const turn = object(params) && typeof params.threadId === 'string' ? this.turns.get(nativeRoutingKey('codex', c.profile.id, params.threadId)) : undefined;
         if (!turn || turn.ended || generation !== turn.generation || (method === 'item/tool/requestUserInput' && !this.experimental(c.profile.id))) { c.transport!.reject(id, generation); return; }
+        if (this.controls.get(this.key(turn.request.native))?.status === 'running') {
+          c.transport!.reject(id, generation); turn.finish('turn.failed', 'Native compaction requested an unsupported interaction; inspect history explicitly.'); c.transport!.close(); return;
+        }
         try { turn.serverRequest(id, method, params, generation); } catch { turn.finish('turn.failed', 'Invalid native interaction'); c.transport!.reject(id, generation); }
       };
       c.transport.onNotification = (method, params, generation) => { void this.notification(c, method, params, generation).catch(() => { if (this.connections.get(c.profile.id) !== c) return; if (method !== 'account/rateLimits/updated') c.snapshot.state = 'error'; c.snapshot.message = method === 'account/rateLimits/updated' ? 'Usage update unavailable. Verify account to retry.' : 'Incompatible authentication notification'; this.publish(c); }); };
@@ -351,11 +360,11 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     if (!modes.some(m => m.id === config.collaborationMode)) throw new Error('Unsupported collaboration mode for this runtime');
     return { config, model };
   }
-  private available(id: unknown): void { if (typeof id === 'string' && this.mutations.has(id)) throw new Error('Selected profile authentication is busy'); }
-  private operation(c: ProfileConnection): () => void {
+  private available(id: unknown, control = false): void { if (!control && typeof id === "string" && this.controlReservations.has(id)) throw new Error("Native session operation is pending; Stop or wait for completion"); if (typeof id === 'string' && this.mutations.has(id)) throw new Error('Selected profile authentication is busy'); }
+  private operation(c: ProfileConnection, control = false): () => void {
     const transport = c.transport; const generation = transport?.generation; const attempt = c.attempt; const identity = c.accountIdentity;
     return () => {
-      this.store.require(c.profile.id); this.available(c.profile.id);
+      this.store.require(c.profile.id); this.available(c.profile.id, control);
       if (this.connections.get(c.profile.id) !== c || !transport?.running || c.transport !== transport || generation !== transport.generation || attempt !== c.attempt || identity !== c.accountIdentity) throw new Error('Native profile operation was superseded; explicitly resume');
       if (c.snapshot.state !== 'authenticated' || !c.snapshot.account) throw adapterErrors.authenticationRequired();
       if (identity !== this.store.identity(c.profile.id, c.snapshot.account)) throw new Error('Native account binding mismatch; verify the original account before resuming');
@@ -443,6 +452,97 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
       history.push({ id: `native-assistant:${turnId}`, nativeTurnId: turnId, ...(textItems.length === 1 ? { nativeItemId: textItems[0]!.id } : {}), role: 'assistant', completionState: turn.status === 'completed' ? 'completed' : turn.status === 'failed' ? 'failed' : 'interrupted', content: text?.type === 'text.finished' ? text.text : '', createdAt: at, events });
     }
     return history;
+  }
+  private async extensionBinding(input: Parameters<NativeExtensions['inspectNative']>[0] | Parameters<NativeExtensions['actNative']>[0], control = false) {
+    const native = input.native;
+    if (native.runtimeId !== 'codex' || !native.connectionProfileId) throw new Error('Invalid native profile binding');
+    this.available(native.connectionProfileId, control);
+    const c = await this.connect(native.connectionProfileId); const check = this.operation(c, control); check();
+    this.store.assertSessionIdentity(c.profile.id, String(native.nativeSessionId), c.accountIdentity!);
+    const bound = this.sessions.get(this.key(native));
+    if (!bound || bound.cwd !== input.workspaceRootPath || bound.generation !== c.transport!.generation || bound.modelId !== native.modelId || JSON.stringify(bound.settings) !== JSON.stringify(settings(native.runtimeMetadata)) || bound.settings.collaborationMode !== native.modeId) throw new Error('Explicit native resume with the original binding is required');
+    if (!this.experimental(c.profile.id)) throw new Error('Native session actions require selected-profile experimental opt-in');
+    return { c, bound, check };
+  }
+  private extensionText(profileId: string, text: string, limit: number): string {
+    for (const secret of this.store.credentialValues(profileId)) text = text.split(secret).join('[redacted]');
+    return redactSecretStringValue(text, limit);
+  }
+  async inspectNative(input: Parameters<NativeExtensions['inspectNative']>[0]): Promise<NativeExtensionSnapshot> {
+    if (input.view !== 'checkpoints') throw adapterErrors.capabilityNotSupported(input.view);
+    const { c, check } = await this.extensionBinding(input, true);
+    const raw = await c.transport!.request('thread/read', { threadId: input.native.nativeSessionId, includeTurns: true }); check();
+    if (!object(raw) || !object(raw.thread) || raw.thread.id !== input.native.nativeSessionId || raw.thread.cwd !== input.workspaceRootPath || raw.thread.historyMode !== 'legacy' || !Array.isArray(raw.thread.turns)) throw new Error('Native session snapshot is unavailable');
+    const rows: NativeExtensionSnapshot['rows'][number][] = [];
+    if (raw.thread.turns.length > 10000) throw new Error('Native history exceeds inspection limit');
+    for (const turn of raw.thread.turns.slice(-100)) {
+      if (!object(turn) || typeof turn.id !== 'string' || !Array.isArray(turn.items)) throw new Error('Invalid native checkpoint');
+      const user = turn.items.find(v => object(v) && v.type === 'userMessage');
+      if (object(user) && Array.isArray(user.content) && turn.status !== 'inProgress') {
+        if (!/^[a-zA-Z0-9_-]{1,256}$/.test(turn.id) || this.extensionText(c.profile.id, turn.id, 256) !== turn.id) throw new Error('Unsafe native checkpoint identity');
+        rows.push({ id: turn.id, label: this.extensionText(c.profile.id, user.content.filter(v => object(v) && v.type === 'text' && typeof v.text === 'string').map(v => v.text).join(''), 240), targetKind: 'checkpoint' });
+      }
+    }
+    return { generation: c.transport!.generation, scope: 'Native conversation history. Fork preserves source history. Rollback is unavailable: this pin only supports revert for paginated history; selected legacy history is preserved. Compact may use model inference and does not undo files.', actions: ['fork', 'compact'], rows, operation: this.controls.get(this.key(input.native)) };
+  }
+  async actNative(input: Parameters<NativeExtensions['actNative']>[0]) {
+    const id = input.native.connectionProfileId;
+    const ownerToken = ['fork', 'compact'].includes(input.action) ? randomUUID() : undefined;
+    if (ownerToken) {
+      if (!id) throw new Error('Missing native profile binding');
+      this.available(id); this.controlReservations.set(id, ownerToken);
+    }
+    try { return await this.runNativeAction(input, ownerToken); }
+    catch (error) { if (ownerToken && id && this.controlReservations.get(id) === ownerToken) this.controlReservations.delete(id); throw error; }
+  }
+  private async runNativeAction(input: Parameters<NativeExtensions['actNative']>[0], ownerToken?: string) {
+    if (!['fork', 'compact', 'steer'].includes(input.action)) throw adapterErrors.capabilityNotSupported(input.action);
+    if (input.action !== 'steer' && (input.text !== undefined || input.clientMessageId !== undefined)) throw new Error('Unexpected native action payload');
+    if (input.target !== undefined && (typeof input.target !== 'string' || !input.target || input.target.length > 256 || /[\x00-\x1f]/.test(input.target))) throw new Error('Invalid native target');
+    const { c, bound, check } = await this.extensionBinding(input, Boolean(ownerToken)); const key = this.key(input.native); const transport = c.transport!;
+    const active = this.turns.get(key);
+    if (input.action === 'steer') {
+      if (input.target !== undefined || typeof input.text !== 'string' || !input.text.trim() || input.text.length > 65536 || typeof input.clientMessageId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(input.clientMessageId)) throw new Error('Invalid steering payload');
+      if (!active || active.ended || !active.nativeTurnId || this.controls.get(key)?.status === 'running') throw new Error('No steerable native turn is active');
+      const turnId = active.nativeTurnId;
+      this.store.reserveSteering(c.profile.id, String(input.native.nativeSessionId), input.clientMessageId);
+      const raw = await transport.request('turn/steer', { threadId: input.native.nativeSessionId, expectedTurnId: turnId, clientUserMessageId: input.clientMessageId, input: [{ type: 'text', text: input.text, text_elements: [] }] } satisfies TurnSteerParams).catch(() => { throw new Error('Steering was rejected or its outcome is uncertain; inspect native history without replaying'); });
+      check();
+      if (!object(raw) || raw.turnId !== turnId) throw new Error('Steering acknowledgment is incompatible; inspect native history without replaying');
+      return { generation: transport.generation, nativeTurnId: turnId };
+    }
+    if ([...this.turns.values()].some(turn => turn.request.native.connectionProfileId === c.profile.id && !turn.ended)) throw new Error('Stop active turns in this profile before a native session action');
+    const assertControl = this.operation(c, true);
+    if (input.action === 'fork') {
+      try {
+        const snapshot = await transport.request('thread/read', { threadId: input.native.nativeSessionId, includeTurns: true }); assertControl();
+        if (!object(snapshot) || !object(snapshot.thread) || snapshot.thread.id !== input.native.nativeSessionId || snapshot.thread.cwd !== input.workspaceRootPath || snapshot.thread.historyMode !== 'legacy' || !Array.isArray(snapshot.thread.turns)) throw new Error('Native fork source is unavailable');
+        if (input.target && !snapshot.thread.turns.some(t => object(t) && t.id === input.target && t.status !== 'inProgress')) throw new Error('Selected native checkpoint is absent or active');
+        const model = this.models.get(c.profile.id)?.find(m => m.id === bound.modelId); if (!model) throw new Error('Bound native model is unavailable');
+        const raw = await transport.request('thread/fork', { threadId: input.native.nativeSessionId, ...(input.target ? { lastTurnId: input.target } : {}), cwd: bound.cwd, model: model.model, approvalPolicy: bound.settings.approvalPolicy, approvalsReviewer: 'user', sandbox: bound.settings.sandbox, config: { model_reasoning_effort: bound.settings.effort }, excludeTurns: false, deferGoalContinuation: true } satisfies ThreadForkParams).catch(() => { throw new Error('Native fork outcome is uncertain; inspect native history manually before another fork'); });
+        assertControl();
+        if (!object(raw) || !object(raw.thread) || typeof raw.thread.id !== 'string' || !raw.thread.id || raw.thread.id === input.native.nativeSessionId || raw.thread.cwd !== bound.cwd || raw.thread.historyMode !== 'legacy' || raw.model !== model.model || raw.approvalPolicy !== bound.settings.approvalPolicy || raw.cwd !== bound.cwd || raw.approvalsReviewer !== 'user' || raw.reasoningEffort !== bound.settings.effort || !object(raw.sandbox) || raw.sandbox.type !== ({ 'read-only': 'readOnly', 'workspace-write': 'workspaceWrite', 'danger-full-access': 'dangerFullAccess' }[bound.settings.sandbox])) throw new Error('Native fork binding is incompatible; inspect native history manually');
+        if (!/^[a-zA-Z0-9_-]{1,256}$/.test(raw.thread.id) || this.extensionText(c.profile.id, raw.thread.id, 256) !== raw.thread.id) throw new Error('Unsafe native fork identity');
+        const native = { ...input.native, nativeSessionId: asNativeSessionId(raw.thread.id) }; delete native.history;
+        this.store.bindSession(c.profile.id, raw.thread.id, c.accountIdentity!);
+        this.sessions.set(this.key(native), { ...bound });
+        return { generation: transport.generation, native };
+      } finally { if (this.controlReservations.get(c.profile.id) === ownerToken) this.controlReservations.delete(c.profile.id); }
+    }
+    if (input.target !== undefined) { if (this.controlReservations.get(c.profile.id) === ownerToken) this.controlReservations.delete(c.profile.id); throw new Error('Compact does not accept a checkpoint'); }
+    const turn = new NativeTurn({ native: input.native, workspaceRootPath: bound.cwd, prompt: '', turnId: asSpecOpsTurnId('compact-' + randomUUID()) }, transport, () => { const n = (this.cursors.get(key) ?? 0) + 1; this.cursors.set(key, n); return n; });
+    this.turns.set(key, turn); this.controls.set(key, { id: ownerToken!, status: 'running', detail: 'Native compaction requested; waiting for native progress.' });
+    const timer = setTimeout(() => { turn.finish('turn.failed', 'Native compaction timed out; explicitly inspect history.'); transport.close(); }, 300000);
+    void (async () => {
+      try {
+        for await (const event of turn.events()) {
+          if (event.type === 'diagnostic' && event.message.startsWith('Native context compaction')) this.controls.set(key, { id: ownerToken!, status: 'running', detail: event.message });
+          else if (event.type === 'turn.finished' || event.type === 'turn.failed' || event.type === 'turn.cancelled') this.controls.set(key, { id: ownerToken!, status: event.type === 'turn.finished' ? 'completed' : event.type === 'turn.cancelled' ? 'cancelled' : 'failed', detail: event.type === 'turn.finished' ? 'Native compaction completed.' : 'Native compaction stopped or failed; explicitly inspect history.' });
+        }
+      } finally { clearTimeout(timer); if (this.turns.get(key) === turn) this.turns.delete(key); if (this.controlReservations.get(c.profile.id) === ownerToken) this.controlReservations.delete(c.profile.id); }
+    })();
+    try { await transport.request('thread/compact/start', { threadId: input.native.nativeSessionId }); assertControl(); return { generation: transport.generation, pending: true, operationId: ownerToken }; }
+    catch { turn.finish('turn.failed', 'Native compaction start is uncertain; explicitly inspect history.'); transport.close(); throw new Error('Native compaction start failed; explicitly inspect history without replaying'); }
   }
   async *send(request: AgentTurnRequest): AsyncIterable<SessionEvent> {
     this.available(request.native.connectionProfileId);

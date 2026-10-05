@@ -99,6 +99,26 @@ export class ProfileStore {
     const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try { writeFileSync(fd, JSON.stringify({ nativeId, identity }) + '\n'); fsyncSync(fd); } finally { closeSync(fd); }
   }
+  credentialValues(id: string): string[] {
+    this.require(id); this.secure(id);
+    const path = join(this.home(id), 'auth.json');
+    if (!existsSync(path)) return [];
+    const auth = JSON.parse(readPrivate(path, 1024 * 1024));
+    if (!auth || typeof auth !== 'object' || Array.isArray(auth)) throw new Error('Invalid private authentication storage');
+    const tokens = auth.tokens && typeof auth.tokens === 'object' && !Array.isArray(auth.tokens) ? auth.tokens : {};
+    return [auth.OPENAI_API_KEY, tokens.access_token, tokens.refresh_token, tokens.id_token].filter((value): value is string => typeof value === 'string' && value.length >= 8 && value.length <= 16384);
+  }
+  reserveSteering(id: string, nativeId: string, clientId: string): void {
+    this.require(id);
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(clientId)) throw new Error('Invalid steering identity');
+    const directory = join(this.root, id, 'operations'); privateDirectory(directory);
+    const path = join(directory, createHash('sha256').update(JSON.stringify([nativeId, clientId])).digest('hex') + '.json');
+    if (existsSync(path)) throw new Error('Steering was already dispatched or its outcome is uncertain; inspect native history without replaying');
+    const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    try { writeFileSync(fd, JSON.stringify({ nativeId, clientId, state: 'dispatched' }) + '\n'); fsyncSync(fd); } finally { closeSync(fd); }
+    const parent = openSync(directory, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try { fsyncSync(parent); } finally { closeSync(parent); }
+  }
   assertSessionIdentity(id: string, nativeId: string, identity: string): void {
     const path = this.bindingPath(id, nativeId);
     if (!existsSync(path)) throw adapterErrors.sessionNotFound(nativeId);

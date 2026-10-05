@@ -1,6 +1,6 @@
 # 02 — Codex native harness and isolated account
 
-**Updated:** 2026-10-04
+**Updated:** 2026-10-05
 
 **Status:** In progress — A–D source implemented; experimental developer/live account and installed acceptance pending
 
@@ -24,6 +24,7 @@ Codex is the first production runtime and the second active milestone. A–D del
 | AS02-B | [Native coding slice and minimum resume](execution-plan-phase-b-thread-events.md) | Experimental source/fixtures verified; authenticated developer smoke pending |
 | AS02-C | [Native config, limits and reconciliation](execution-plan-phase-c-capabilities-history.md) | Experimental legacy source/fixtures verified; unsupported native surfaces and live acceptance explicit |
 | AS02-D | [Installed account-B acceptance](execution-plan-phase-d-hardening-exit.md) | Source hardening verified; installed/account gates blocked |
+| AS02-E | [Native session controls](execution-plan-phase-e-native-session-parity.md) | Source/fixtures verified; legacy rollback unavailable; real account/installed gates open |
 
 **Phase A evidence:** [Implementation and support ledger](implementation-notes-phase-a.md). Automated profile/protocol/bootstrap checks pass; no live account-B login is claimed.
 
@@ -45,3 +46,5 @@ No persisted-data migrations or compatibility shims. Planned prerequisites are g
 **Phase C evidence:** [Configuration, usage/recovery and reconciliation ledger](implementation-notes-phase-c.md). Optional neutral session controls, profile-scoped sparse limits/auth recovery, host/child epoch guards, authoritative materialized-legacy hydration and divergent/corrupt/missing-cache recovery are fixture-verified. The pinned unavailable paginated-items API and native management panels remain explicit deferrals; default coding stays gated and authenticated/installed acceptance stays open.
 
 **Phase D evidence:** [Fault/security closure, setup/recovery and AS08-A selected-scope submission](implementation-notes-phase-d.md). Actual bundled-host death settles two native streams including pending approval; native split-secret masking, bounded accumulated state and observed descendant retirement are source-verified. Immediate orphan race, installed AS03-A/B and human account-A/B smoke remain open; baseline preview and milestone A–D are not Done.
+
+**Phase E:** [Native session controls](execution-plan-phase-e-native-session-parity.md) — verified native fork, compact lifecycle and active-turn steering source; selected legacy conversation rollback explicitly unsupported. [Evidence and finite ledger](implementation-notes-phase-e.md). Ecosystem management and detailed subagent UI are subsequent plans. Authenticated/installed acceptance remains open.

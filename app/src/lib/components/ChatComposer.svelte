@@ -42,11 +42,7 @@
     catalog: SessionCatalogSnapshot;
     activeModelId: string;
     activeModeId: string;
-    /**
-     * Aborts the running turn (steer mode). Optional — when omitted, steer
-     * falls back to plain queueing.
-     */
-    onAbortTurn?: () => void;
+    onSteer?: (text: string) => Promise<void>;
     onInlineError?: (message: string) => void;
   }
 
@@ -61,7 +57,7 @@
     catalog,
     activeModelId,
     activeModeId,
-    onAbortTurn,
+    onSteer,
     onInlineError = () => {},
   }: Props = $props();
 
@@ -287,7 +283,7 @@
 
   /**
    * When a turn is running:
-   *  - steer mode → abort the running turn and send the new prompt now.
+   *  - steer mode → append text to the native active turn using its precondition.
    *  - queue mode → enqueue the prompt; it's drained after the turn ends.
    * Returns `true` when the prompt was handled (so the caller doesn't fall
    * through to a plain submitMessage).
@@ -302,35 +298,10 @@
     }
     const context = buildSendContext({ mentions: [], attachments });
     if (queueMode === "steer") {
-      // Interrupt + append: abort the running turn, then send the new prompt
-      // immediately. Cleanup runs in the onAfterSend hook of submitMessage.
-      onAbortTurn?.();
-      // Defer the send to the next microtask so the abort can settle (the
-      // store flips isGenerating asynchronously once the turn state clears).
-      const prompt = content;
-      const ctx = context;
-      const snapshotAttachments = attachments;
-      draft = "";
-      attachments = [];
-      queueMicrotask(() => {
-        void submitMessage({
-          ...(ctx ? { context: ctx } : {}),
-          onAfterSend: (sent) => {
-            historyStore?.record(sent);
-            historyIndex = -1;
-            // Revoke any blob URLs from the snapshot we just sent.
-            snapshotAttachments.forEach((attachment) => {
-              if (attachment.url.startsWith("blob:")) {
-                try {
-                  URL.revokeObjectURL(attachment.url);
-                } catch {
-                  // ignore
-                }
-              }
-            });
-          },
-        });
-      });
+      if (!onSteer || attachments.length) { onInlineError('Native steering requires a supported runtime and a text-only message.'); return true; }
+      if (submitInFlight) return true;
+      submitInFlight = true;
+      void onSteer(content).then(() => { if (draft.trim() === content) draft = ''; historyStore?.record(content); historyIndex = -1; }).catch(() => onInlineError('Steering was rejected or its outcome is uncertain. Resume native history explicitly; no follow-up was sent.')).finally(() => { submitInFlight = false; });
       return true;
     }
     const entry = promptQueue.enqueue({ prompt: content, mode: "queue", context });
@@ -432,6 +403,7 @@
             type="button"
             class={`chat-queued-mode-btn${queueMode === "steer" ? " is-active" : ""}`}
             aria-pressed={queueMode === "steer"}
+            disabled={!onSteer || submitInFlight}
             onclick={() => setQueueMode("steer")}
             title="Interrupt the running turn and append"
           >

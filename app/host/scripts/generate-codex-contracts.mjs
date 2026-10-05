@@ -7,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const executable = process.env.SPECOPS_CODEX_EXECUTABLE ?? 'codex';
 const temporary = mkdtempSync(join(tmpdir(), 'specops-contracts-'));
-const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(CODEX_|OPENAI_|CHATGPT_|AZURE_OPENAI_)/.test(key)));
+const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(PATH|SystemRoot|WINDIR|COMSPEC|PATHEXT|TMP|TEMP|TMPDIR|LANG|LC_[A-Z_]+|TERM|COLORTERM)$/i.test(key)));
 env.CODEX_HOME = join(temporary, 'home'); mkdirSync(env.CODEX_HOME, { mode: 0o700 });
+env.HOME = env.CODEX_HOME; env.USERPROFILE = env.CODEX_HOME;
 const contracts = [
   'InitializeParams', 'InitializeResponse',
   'v2/LoginAccountParams', 'v2/LoginAccountResponse', 'v2/GetAccountParams', 'v2/GetAccountResponse',
@@ -19,6 +20,8 @@ const contracts = [
   'v2/ThreadStartParams', 'v2/ThreadStartResponse', 'v2/ThreadReadParams', 'v2/ThreadReadResponse',
   'v2/ThreadTurnsListParams', 'v2/ThreadTurnsListResponse', 'v2/ThreadItemsListParams', 'v2/ThreadItemsListResponse',
   'v2/CollaborationModeListParams', 'v2/CollaborationModeListResponse', 'v2/ThreadResumeParams', 'v2/ThreadResumeResponse', 'v2/TurnStartParams', 'v2/TurnStartResponse',
+  'v2/ThreadForkParams', 'v2/ThreadForkResponse', 'v2/ThreadRevertParams', 'v2/ThreadRevertResponse',
+  'v2/ThreadCompactStartParams', 'v2/ThreadCompactStartResponse', 'v2/TurnSteerParams', 'v2/TurnSteerResponse',
   'v2/TurnInterruptParams', 'v2/TurnInterruptResponse', 'v2/TurnStartedNotification', 'v2/TurnCompletedNotification',
   'v2/ItemStartedNotification', 'v2/ItemCompletedNotification', 'v2/AgentMessageDeltaNotification',
   'v2/ReasoningSummaryTextDeltaNotification', 'v2/ReasoningTextDeltaNotification',

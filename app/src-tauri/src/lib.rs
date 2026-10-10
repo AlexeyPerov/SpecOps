@@ -1,10 +1,11 @@
 mod agent_host;
-mod components;
 mod component_catalog;
-mod handoff;
+mod component_manager;
+mod components;
 mod file_watcher;
 mod git;
 mod git_askpass;
+mod handoff;
 mod native_assets;
 mod session_fs;
 
@@ -60,6 +61,9 @@ fn take_pending_opened_paths() -> Vec<String> {
 
 /// Stop Agent Host and reap in-flight git children. Idempotent.
 fn run_shutdown_cleanup(app_handle: &tauri::AppHandle) {
+    if let Some(manager) = app_handle.try_state::<component_manager::ComponentManager>() {
+        manager.shutdown();
+    }
     if let Some(host_state) = app_handle.try_state::<AgentHostState>() {
         host_state.stop_sync();
     }
@@ -88,6 +92,11 @@ pub fn run() {
         .manage(FileWatcherState::new())
         .manage(AgentHostState::new())
         .setup(|app| {
+            let component_manager =
+                component_manager::ComponentManager::new(&app.path().app_data_dir()?);
+            // Fail closed in management diagnostics; a recovery fault must not prevent the editor opening.
+            let _ = component_manager.recover();
+            app.manage(component_manager);
             git_askpass::set_git_askpass_app_handle(app.handle().clone());
             if let Some(watcher_state) = app.try_state::<FileWatcherState>() {
                 watcher_state.set_app_handle(app.handle().clone());
@@ -97,6 +106,16 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            component_manager::component_list,
+            component_manager::component_plan,
+            component_manager::component_install,
+            component_manager::component_cancel,
+            component_manager::component_retry,
+            component_manager::component_update,
+            component_manager::component_select,
+            component_manager::component_remove,
+            component_manager::component_clean_cache,
+            component_manager::component_diagnostics,
             handoff::handoff_workspace_excerpts,
             handoff::handoff_write_journal,
             handoff::handoff_read_journal,

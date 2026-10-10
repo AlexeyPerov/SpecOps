@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-10 23:12 MSK — Add native verified component installer
+
+- Implemented AS09-C Node-independent finite catalog/list/plan/install/cancel/retry/update/select/remove/cache/diagnostic APIs, explicit hashed window confirmations, bounded credential-free downloads and generation/sequence status snapshots.
+- Added strict tar/file/hash/target verification, isolated bounded native probes, immutable version receipts and atomic activation/recovery, cross-process mutation/runtime lease locks, safe active removal and private data preservation. All-five signed fixture installs, six network faults, five crash boundaries and child-process lock death pass; all 103 native tests and a focused frontend event test pass.
+- Kept production downloads unavailable under embedded signed trust; preserved existing bundled payloads for D/H host/bootstrap and clean installed/signing/account/distribution acceptance. No migrations, compatibility shims or publication.
+
 ## 2026-10-10 23:00 MSK — Build trusted optional component artifact pipeline
 
 - Implemented AS09-B native strict Ed25519 catalog/manifest authentication, exact immutable URL/target binding, finite archive identity, expiry/revision/equivocation and authenticated revocation boundaries. Embedded a signed engineering candidate catalog with all five production rows unavailable; fixture keys and endpoint policy are compile gated from installed release trust.

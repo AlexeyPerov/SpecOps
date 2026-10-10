@@ -2,7 +2,9 @@
 
 **Date:** 2026-10-10
 
-**Status:** Planned; all tasks open
+**Status:** Native implementation and C-02–C-06 source/fixture acceptance complete; C-01 clean installed startup remains D/H gated
+
+**Evidence:** [Native installer notes](implementation-notes-phase-c.md)
 
 **Prerequisites:** AS09-A; AS09-B fixture artifacts and trust metadata.
 
@@ -16,7 +18,7 @@ Deliver native bootstrap and durable installer for optional first-party agent co
 
 ### AS09-C-01 — Implement Node-independent component management
 
-**State:** [TODO]
+**State:** [TODO] — native management implemented; clean installed editor/base host acceptance remains D/H
 
 Implement catalog verification, component inventory and download/install operations in Rust/Tauri. Ship a small host JS bundle in the base app, but do not start it until a compatible downloaded Node is ready. Management/discovery UI works without Agent Host or vendor SDK availability.
 
@@ -24,7 +26,7 @@ Implement catalog verification, component inventory and download/install operati
 
 ### AS09-C-02 — Implement explicit bounded download jobs
 
-**State:** [TODO]
+**State:** [DONE] — native source/fixture acceptance; installed evidence is separately recorded
 
 Start downloads only for the confirmed component/dependency plan. Expose bytes/progress/cancel/retry; bound response size, time, redirect count, endpoint policy and simultaneous jobs. Validate available disk for download/unpack/retained versions; bind jobs to component/version/target and deduplicate requests across windows.
 
@@ -32,7 +34,7 @@ Start downloads only for the confirmed component/dependency plan. Expose bytes/p
 
 ### AS09-C-03 — Verify and safely extract component packages
 
-**State:** [TODO]
+**State:** [DONE] — native source/fixture acceptance; installed evidence is separately recorded
 
 Verify signed metadata and archive hash before extraction; allowlist formats and enforce entry/file/count/size limits. Reject traversal, absolute paths, dangerous links/special files and archive expansion abuse. Apply reviewed executable permissions and target checks without privilege elevation or shell interpolation.
 
@@ -40,7 +42,7 @@ Verify signed metadata and archive hash before extraction; allowlist formats and
 
 ### AS09-C-04 — Commit installation atomically and recover interrupted work
 
-**State:** [TODO]
+**State:** [DONE] — native source/fixture acceptance; installed evidence is separately recorded
 
 Install to a private staging directory, validate complete inventory and a bounded no-account version probe, then atomically activate an immutable version with a durable receipt. Recover download/verification/activation interruption after app or machine crash; active versions stay usable until successful activation.
 
@@ -48,7 +50,7 @@ Install to a private staging directory, validate complete inventory and a bounde
 
 ### AS09-C-05 — Coordinate locks, ownership and application shutdown
 
-**State:** [TODO]
+**State:** [DONE] — native source/fixture acceptance; installed evidence is separately recorded
 
 Use bounded cross-window/process installation locks with stale-owner handling and generation-scoped events. Define cancellation/quit behavior during download, extraction and activation; serialize mutations per component. Resume partial downloads only when remote identity/range metadata and final hash permit it.
 
@@ -56,7 +58,7 @@ Use bounded cross-window/process installation locks with stale-owner handling an
 
 ### AS09-C-06 — Expose finite component APIs and safe diagnostics
 
-**State:** [TODO]
+**State:** [DONE] — native source/fixture acceptance; installed evidence is separately recorded
 
 Provide typed list/plan/install/cancel/retry/update/select/remove/clean-cache commands and bounded status events independent of host. Use approved catalog IDs, never arbitrary URL/path commands. Exports include component/version/verification/job state and redact sensitive headers, auth URLs and private absolute paths.
 

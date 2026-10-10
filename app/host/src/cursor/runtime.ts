@@ -1,3 +1,4 @@
+import { managedEntry, managedRoot } from "../componentRuntime";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -97,6 +98,8 @@ export function verifyCursorAssetDirectory(root: string): CursorAssets {
   }
 }
 export function resolveCursorAssets(): CursorAssets {
+  const main = managedEntry("cursor");
+  if (main) return { sdk: managedEntry("cursor", "sdk")!, worker: managedEntry("cursor", "profileWorker")!, root: managedRoot("cursor")!, sdkVersion: CURSOR_SDK_VERSION };
   const base = dirname(fileURLToPath(import.meta.url));
   // Installed/bundled host has only the adjacent verified payload. No developer fallback.
   if (!base.endsWith(join("src", "cursor")))

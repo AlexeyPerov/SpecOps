@@ -109,7 +109,8 @@ export async function loadSessionCatalogs(
 ): Promise<SessionCatalogSnapshot> {
   const client = getAgentHostClient();
   try {
-    await ensureAgentHostStarted();
+    const status = await client.getStatus();
+    if (!status.running) return EMPTY_SESSION_CATALOG;
     const [modelsResult, modesResult] = await Promise.all([
       client.catalogModels(runtimeId, undefined, connectionProfileId),
       client.catalogModes(runtimeId, undefined, connectionProfileId),

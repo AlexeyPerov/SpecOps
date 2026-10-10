@@ -1,3 +1,4 @@
+import { codexCapabilities } from "../../../src/lib/session/runtimeCapabilities";
 import { randomUUID } from 'node:crypto';
 import { NativeEcosystem, nativeConfigCredentials } from './ecosystem';
 import type { NativeExtensions, NativeExtensionSnapshot, NativeExtensionResult } from '../../../src/lib/session/adapter/nativeExtensions';
@@ -66,7 +67,7 @@ export class CodexRuntimeAdapter implements AgentRuntimeAdapter, SessionConfigur
     this.store = new ProfileStore(root);
   }
   async describe() { return { id: this.runtimeId, label: 'Codex' }; }
-  async describeCapabilities() { return { schemaVersion: 1 as const, supported: ['catalogs', 'permissions', 'questions', 'nativeExtensions'], details: { nativeExtensions: { supported: true, notes: 'Verified native fork, compact lifecycle, steering, skills and bounded native config/MCP management. Legacy rollback, OAuth and plugin APIs are unavailable.' }, catalogs: { supported: true }, permissions: { supported: true }, questions: { supported: true, notes: 'Requires explicit selected-profile experimental opt-in; otherwise requests are rejected. Secret input is unsupported.' }, nativeTurns: { supported: true }, steer: { supported: true, notes: 'Native active-turn precondition, durable client identity; no fallback or replay.' }, plugins: { supported: false, notes: 'Upstream plugin APIs are under development; production list/read/install/uninstall issue no RPC.' }, mcpOAuth: { supported: false, notes: 'Native file-only credential storage is forced. Interactive OAuth/elicitation lifecycle remains unverified and unavailable.' }, rollback: { supported: false, notes: 'Pinned thread/revert supports paginated history only; selected legacy history cannot safely roll back.' } } }; }
+  async describeCapabilities() { return codexCapabilities(); }
   private connection(id: unknown): ProfileConnection {
     const profile = this.store.require(id);
     let connection = this.connections.get(profile.id);

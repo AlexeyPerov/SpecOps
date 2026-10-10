@@ -314,6 +314,7 @@ function toHostTurnErrorMessage(error: unknown): string {
         return "The runtime took too long to respond. Retry the turn.";
       case "protocol":
       case "io":
+      case "componentUnavailable":
       case "nodeMissing":
       case "hostPathMissing":
         return typeof hostError.message === "string" && hostError.message.trim().length > 0

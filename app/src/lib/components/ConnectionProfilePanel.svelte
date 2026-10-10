@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { componentManager } from '../services/componentManager';
   import { sessionSupportSnapshot } from '../services/sessionSupport';
   import { chatStore } from '../state/chatStore';
   import { onMount } from 'svelte';
@@ -23,28 +24,34 @@
   let busy = $state(false);
   let error = $state('');
   let diagnostics = $state('');
+  let recovery = $state('');
   const selected = $derived(profiles.find(p => p.id === connectionProfileId));
   function mergeProfiles(incoming: readonly ConnectionProfileSnapshot[]): readonly ConnectionProfileSnapshot[] {
     return incoming.map(profile => { const previous = profiles.find(p => p.id === profile.id); return previous && !isNewerProfileSnapshot(previous, profile) ? previous : profile; });
   }
-  async function refresh(): Promise<void> {
+  async function refresh(probe = false): Promise<void> {
+    recovery = '';
     const selectedRuntime = runtimeId;
     const selectedProfile = connectionProfileId;
     const epoch = ++refreshEpoch;
-    await ensureAgentHostStarted();
     const client = getAgentHostClient();
     const discovered = (await client.discover()).runtimes;
     if (epoch !== refreshEpoch || selectedRuntime !== runtimeId) return;
     runtimes = discovered;
+    if (!(await client.getStatus()).running) { recovery = "Install the selected component in Software, then connect explicitly. Existing session and profile bindings are preserved."; return; }
     if (selectedRuntime !== 'codex' && selectedRuntime !== 'opencode' && selectedRuntime !== 'claude' && selectedRuntime !== 'cursor') { profiles = []; return; }
+    const installed = await componentManager.list().catch(() => []);
+    if (!installed.some(component => component.id === selectedRuntime && component.active && component.verified)) { recovery = "Install or repair the selected component in Software, then reconnect explicitly."; return; }
     const result = await client.authenticate({ runtimeId: selectedRuntime, workspaceRootPath: '', options: { action: 'list-profiles' } });
     if (epoch !== refreshEpoch || selectedRuntime !== runtimeId) return;
     profiles = mergeProfiles(result.profiles ?? []);
-    const [hostStatus, nativeHealth] = await Promise.all([client.getStatus(), client.health(selectedRuntime, selectedProfile).catch(() => undefined)]);
+    const hostStatus = await client.getStatus();
+    if (epoch !== refreshEpoch || selectedRuntime !== runtimeId || selectedProfile !== connectionProfileId) return;
+    const nativeHealth = probe ? await client.health(selectedRuntime, selectedProfile).catch(() => undefined) : undefined;
     if (epoch !== refreshEpoch || selectedRuntime !== runtimeId || selectedProfile !== connectionProfileId) return;
     diagnostics = sessionSupportSnapshot(hostStatus, nativeHealth, profiles.find(profile => profile.id === selectedProfile));
     providerIds = [];
-    if (selectedRuntime === 'opencode' && selectedProfile) {
+    if (probe && selectedRuntime === 'opencode' && selectedProfile) {
       const catalog = await client.catalogModels(selectedRuntime, undefined, selectedProfile).catch(() => null);
       if (epoch !== refreshEpoch || selectedRuntime !== runtimeId || selectedProfile !== connectionProfileId) return;
       providerIds = [...new Set(catalog?.models.map(model => model.id.split('/')[0]) ?? [])];
@@ -87,10 +94,11 @@
 </script>
 
 <div class="connection-profiles" aria-label="Session connection">
+  {#if recovery}<p role="status">{recovery}</p>{/if}
   <label>Runtime
     <select value={runtimeId} disabled={bound || busy} onchange={event => onSelect(event.currentTarget.value as AgentRuntimeId)}>
       {#if !runtimes.length}<option value={runtimeId}>{runtimeId}</option>{/if}
-      {#each runtimes as runtime}<option value={runtime.id}>{runtime.label}</option>{/each}
+      {#each runtimes as runtime (runtime.id)}<option value={runtime.id}>{runtime.label}</option>{/each}
     </select>
   </label>
   {#if runtimeId === 'codex' || runtimeId === 'opencode' || runtimeId === 'claude' || runtimeId === 'cursor'}
@@ -98,7 +106,7 @@
       <select value={connectionProfileId ?? ''} disabled={bound || busy} onchange={event => onSelect(runtimeId, event.currentTarget.value || undefined)}>
         <option value="">Select a profile</option>
         {#if connectionProfileId && !selected}<option value={connectionProfileId}>Missing profile — saved session binding preserved</option>{/if}
-        {#each profiles as profile}<option value={profile.id}>{profile.label}</option>{/each}
+        {#each profiles as profile (profile.id)}<option value={profile.id}>{profile.label}</option>{/each}
       </select>
     </label>
     {#if bound && connectionProfileId && !selected}<span role="alert">The saved profile is missing. Session metadata and native history binding are preserved. Restore the selected profile before explicitly resuming this session.</span>{/if}
@@ -137,7 +145,7 @@
       {:else}
         <label>Provider<select bind:value={providerId} disabled={busy} aria-label="Native provider">
           <option value="">Select provider</option>
-          {#each providerIds as id}<option value={id}>{id}</option>{/each}
+          {#each providerIds as id (id)}<option value={id}>{id}</option>{/each}
         </select></label>
         <button onclick={() => action('login-api-key')} disabled={busy || !providerId || !selected.support.apiKey}>Import private API key</button>
         <button onclick={() => action('logout')} disabled={busy || !providerId || !selected.support.apiKey}>Remove provider credential</button>
@@ -155,7 +163,7 @@
     {/if}
   {/if}
   {#if diagnostics}<button onclick={() => { void navigator.clipboard.writeText(diagnostics).catch(() => { error = 'Could not copy support details.'; }); }}>Copy safe support details</button>{/if}
-  <button onclick={() => { void refresh().then(() => onRefresh()).catch(() => { error = 'Runtime discovery failed.'; }); }} disabled={busy}>Retry discovery</button>
+  <button onclick={() => { void refresh(true).then(() => onRefresh()).catch(() => { error = 'Runtime discovery failed.'; }); }} disabled={busy}>Retry discovery</button>
   {#if error}<span role="alert">{error}</span>{/if}
 </div>
 

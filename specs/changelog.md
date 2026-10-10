@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-10 23:28 MSK — Resolve optional runtimes lazily from verified components
+
+- Implemented AS09-D managed shared Node host launch, static exact runtime/capability discovery, deferred selected adapter imports, native-only authenticated component root/manifest injection and all-four managed SDK/native/helper entry resolution with bounded complete-tree hashing and path-free errors.
+- Retained shared Node/agent leases for owned host generations through process-group stop/crash cleanup; generation-pinned request admission preserves concurrent cancellation/approvals and rejects stale restart bindings. Passive catalogs/profile settings start no host; missing components preserve original runtime/profile/native session without replacement or prompt replay and show explicit Software/reconnect recovery.
+- Accepted D-02/D-04 source boundaries: 105 native tests, all-five real-host fixture leases/cleanup, focused resolver/process/adapter/frontend controls, TypeScript/Svelte checks and builds pass. Existing ambient installed Codex probe found an incompatible native executable; its account/installed acceptance is not inferred from filtered source tests. Trusted production bootstrap, managed vendor/reinstall/account and signed installed update/process gates remain open under the unavailable catalog; heavy packaging stays until H.
+
 ## 2026-10-10 23:12 MSK — Add native verified component installer
 
 - Implemented AS09-C Node-independent finite catalog/list/plan/install/cancel/retry/update/select/remove/cache/diagnostic APIs, explicit hashed window confirmations, bounded credential-free downloads and generation/sequence status snapshots.

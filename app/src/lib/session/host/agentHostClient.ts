@@ -1,3 +1,4 @@
+import { staticRuntimeDiscovery } from "../runtime";
 import type { NativeExtensions } from "../adapter/nativeExtensions";
 import type { SessionConfigurationSchema } from "../adapter/extensions";
 /**
@@ -58,6 +59,7 @@ export type AgentHostClientError =
   | { kind: "hostPathMissing"; message: string }
   | { kind: "nodeMissing"; message: string }
   | { kind: "launchFailure"; message: string }
+  | { kind: "componentUnavailable"; component: string; message: string }
   | { kind: "initializeTimeout"; message: string }
   | { kind: "protocolVersionMismatch"; client: number; server: number; message: string }
   | { kind: "requestTimeout"; id: number; message: string }
@@ -304,7 +306,7 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
       };
     },
     async discover() {
-      return request<DiscoverResult>("discover");
+      return { runtimes: staticRuntimeDiscovery() };
     },
     async authenticate(req) {
       const epoch = hostEpoch;

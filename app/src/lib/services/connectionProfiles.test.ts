@@ -31,7 +31,7 @@ describe('connection profile production boundaries', () => {
   const encoded = toPersistedSettings({ ...defaultSettings, wrapLines: true, zoomPercent: 100, sessionsEnabled: true });
   expect(encoded.sessionsEnabled).toBe(true); expect(encoded).not.toHaveProperty("opencode");
  });
- it('starts before catalogs, retries failure and detects host replacement', async () => {
+ it('reads catalogs only on an already running host, retries failure and explicitly restarts', async () => {
   let generation = 1; let running = true;
   const calls: string[] = []; let failed = true;
   const client = createAgentHostClient({ invoke: async (cmd, args) => {
@@ -44,10 +44,13 @@ describe('connection profile production boundaries', () => {
   }, listen: async () => () => {} });
   bindAgentHostClientForTests(() => client);
   expect((await loadSessionCatalogs('codex', 'profile-b')).status).toBe('error');
-  expect(calls[0]).toBe('agent_host_start');
+  expect(calls[0]).toBe('agent_host_status');
   expect((await loadSessionCatalogs('codex', 'profile-b')).status).toBe('ready');
-  running = false; generation = 2; await ensureAgentHostStarted();
-  expect(calls.filter(c => c === 'agent_host_start')).toHaveLength(2);
+  running = false; generation = 2;
+  expect((await loadSessionCatalogs('codex', 'profile-b')).status).toBe('idle');
+  expect(calls).not.toContain('agent_host_start');
+  await ensureAgentHostStarted();
+  expect(calls.filter(c => c === 'agent_host_start')).toHaveLength(1);
  });
  it('routes equal native ids by runtime/profile and auth notifications outside turn streams', async () => {
   let emit: (payload: unknown) => void = () => {};

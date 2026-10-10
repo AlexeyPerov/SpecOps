@@ -1,3 +1,4 @@
+import { managedEntry } from "../componentRuntime";
 import { boundedResponse } from "./boundedResponse";
 import {
   createOpencodeClient,
@@ -23,6 +24,7 @@ export class RuntimeStartupError extends Error {
 export function resolveExecutable(
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {
+  const managed = managedEntry("opencode"); if (managed) return managed;
   const override = env.SPECOPS_OPENCODE_EXECUTABLE;
   if (override !== undefined)
     return isAbsolute(override) && existsSync(override) ? override : null;

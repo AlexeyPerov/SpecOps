@@ -1,3 +1,4 @@
+import { managedEntry } from "../componentRuntime";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -23,6 +24,8 @@ export interface ClaudeAssets {
   nativeVersion: string;
 }
 export function resolveClaudeAssets(): ClaudeAssets {
+  const sdk = managedEntry("claude");
+  if (sdk) return { sdk, executable: managedEntry("claude", "native")!, sdkVersion: CLAUDE_SDK_VERSION, nativeVersion: CLAUDE_NATIVE_VERSION };
   try {
     const base = dirname(fileURLToPath(import.meta.url));
     const packaged = join(base, "claude");

@@ -7,10 +7,6 @@
  * registered; phase 02–05 add real runtimes here.
  */
 
-import { CursorRuntimeAdapter } from "./cursor/adapter";
-import { ClaudeRuntimeAdapter } from "./claude/adapter";
-import { OpenCodeRuntimeAdapter } from "./opencode/adapter";
-import { CodexRuntimeAdapter } from "./codex/adapter";
 import { AdapterRegistry } from "./registry";
 import { HostDispatcher, type HostWritable } from "./dispatch";
 import { readMessages } from "./framing";
@@ -52,10 +48,10 @@ export function createDefaultRegistry(extra: readonly AgentRuntimeAdapter[] = []
       },
     }),
   );
-  registry.register(new CodexRuntimeAdapter());
-  registry.register(new OpenCodeRuntimeAdapter());
-  registry.register(new ClaudeRuntimeAdapter());
-  registry.register(new CursorRuntimeAdapter());
+  registry.registerLazy("codex", async () => new (await import("./codex/adapter")).CodexRuntimeAdapter());
+  registry.registerLazy("opencode", async () => new (await import("./opencode/adapter")).OpenCodeRuntimeAdapter());
+  registry.registerLazy("claude", async () => new (await import("./claude/adapter")).ClaudeRuntimeAdapter());
+  registry.registerLazy("cursor", async () => new (await import("./cursor/adapter")).CursorRuntimeAdapter());
   for (const adapter of extra) {
     registry.register(adapter);
   }

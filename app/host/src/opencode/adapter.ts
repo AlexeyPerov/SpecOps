@@ -1,3 +1,4 @@
+import { opencodeCapabilities } from "../../../src/lib/session/runtimeCapabilities";
 import type { NativeExtensions, NativeExtensionRequest, NativeExtensionSnapshot, NativeExtensionResult, NativeView, NativeAction } from "../../../src/lib/session/adapter/nativeExtensions";
 const OPENCODE_NATIVE_ACTIONS = ['fork', 'revert', 'restore', 'share', 'revokeShare', 'connectToolServer', 'disconnectToolServer'] as const;
 import { NATIVE_VIEWS } from "../../../src/lib/session/adapter/nativeExtensions";
@@ -87,27 +88,7 @@ export class OpenCodeRuntimeAdapter
   async describe() {
     return { id: this.runtimeId, label: "OpenCode" };
   }
-  async describeCapabilities() {
-    return {
-      schemaVersion: 1 as const,
-      supported: [
-        "nativeExtensions" as const,
-        "catalogs" as const,
-        "permissions" as const,
-        "questions" as const,
-      ],
-      details: {
-        nativeExtensions: { supported: true, notes: "Bounded native views and explicit idle-session actions; configuration inspection only." },
-        catalogs: { supported: true },
-        permissions: { supported: true },
-        questions: { supported: true },
-        nativeTurns: {
-          supported: true,
-          notes: "Profile-bound native sessions and cancellable event streams.",
-        },
-      },
-    };
-  }
+  async describeCapabilities() { return opencodeCapabilities(); }
   snapshot(profile: RuntimeProfile): ConnectionProfileSnapshot {
     let value = this.snapshots.get(profile.id);
     if (!value) {

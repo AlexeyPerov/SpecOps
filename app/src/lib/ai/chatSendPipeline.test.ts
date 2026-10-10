@@ -216,6 +216,21 @@ describe("chatSendPipeline (host-backed turns)", () => {
     );
   });
 
+  it("missing component keeps the original runtime/profile/session and never creates or sends a replacement", async () => {
+    const sessionId = await seedThreadWithUserMessage();
+    const binding = { runtimeId: "codex" as const, connectionProfileId: "original-profile", nativeSessionId: "original-thread" };
+    chatStore.setSessionLink(sessionId, binding, "/work/host-pipeline");
+    harness.resumeSession.mockRejectedValue({ kind: "componentUnavailable", component: "codex", message: "Install or repair the component in Software, then reconnect the original profile explicitly." });
+    const sending = vi.spyOn(harness.client, "sendTurn");
+    const result = await executeProviderTurn({ root: "/work/host-pipeline", activeSessionId: sessionId, turnId: "turn-test-1" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toContain("Software");
+    expect(chatStore.getSessionLink(sessionId, "/work/host-pipeline")).toMatchObject(binding);
+    expect(harness.resumeSession).toHaveBeenCalledOnce();
+    expect(sending).not.toHaveBeenCalled();
+    expect(harness.createSession).not.toHaveBeenCalled();
+  });
+
   it("rejects a changed native ID on resume without sending a prompt or replacing the binding", async () => {
     const sessionId = await seedThreadWithUserMessage();
     chatStore.setSessionLink(sessionId, { runtimeId: "fake", nativeSessionId: "original" }, "/work/host-pipeline");

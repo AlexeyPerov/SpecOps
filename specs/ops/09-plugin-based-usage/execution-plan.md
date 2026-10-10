@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-10
 
-**Status:** A/B/C source contracts/security accepted (12 tasks); 36 open tasks across eight phases, including A-01/A-06 acceptance
+**Status:** A/B/C and D-02/D-04 source contracts/security accepted (14 tasks); 34 open tasks across eight phases, including A-01/A-06 acceptance
 
 **Scope:** [README](README.md) · [Roadmap](../roadmap.md)
 
@@ -31,12 +31,14 @@ E's four agent integrations can be implemented independently after the shared re
 
 ## Scope and acceptance boundary
 
-A contracts, B trusted artifact pipeline and C native installer are implemented; A-01/A-06 and B-01/B-03/B-06 acceptance plus C-01/D–H remain open. [C evidence](implementation-notes-phase-c.md) records native installation/security/crash/ownership fixture acceptance and its installed gates. [B evidence](implementation-notes-phase-b.md) records exact native/candidate/copied controls and production unavailable gates. [A evidence](implementation-notes-phase-a.md) distinguishes source passes, missing finite native payloads, numeric budgets and unavailable clean installed baseline. Existing source adapter evidence is reusable where unchanged, but component delivery changes require fresh installed/signing/distribution/account/process evidence. H covers all four agents for full AS09 completion; selected smaller releases remain possible without silently shrinking this milestone. No account credentials, paid inference or publication is authorized merely by this planning document.
+A contracts, B trusted artifact pipeline, C native installer and D lazy host/resolver are implemented; A-01/A-06 and B-01/B-03/B-06 acceptance plus C-01/D-01/D-03/D-05/D-06 and E–H remain open. [C evidence](implementation-notes-phase-c.md) records native installation/security/crash/ownership fixture acceptance and its installed gates. [B evidence](implementation-notes-phase-b.md) records exact native/candidate/copied controls and production unavailable gates. [A evidence](implementation-notes-phase-a.md) distinguishes source passes, missing finite native payloads, numeric budgets and unavailable clean installed baseline. Existing source adapter evidence is reusable where unchanged, but component delivery changes require fresh installed/signing/distribution/account/process evidence. H covers all four agents for full AS09 completion; selected smaller releases remain possible without silently shrinking this milestone. No account credentials, paid inference or publication is authorized merely by this planning document.
 
 Phase A fixes numeric budgets before implementation acceptance. Phase B fixes signed catalog/artifact policy before production installs. Phase C owns installation natively; it cannot require the not-yet-installed Node or an active Agent Host. Phase D/E preserve immutable profile/session/native ownership. Phase G/H prove secure maintenance and actual lean delivery.
 
 ## Task tracking
 
-Task prefix is `AS09-<phase>-<NN>`. Each phase defines six tasks with concrete acceptance; A-02–A-05 B-02/B-04/B-05 and C-02–C-06 source contracts/security are `[DONE]`; A-01/A-06 and B-01/B-03/B-06 retain their stated acceptance gates. Record source fixtures, actual no-account probes, authenticated evidence, signed installed tests and distribution decisions separately. Mark only implemented and accepted tasks `[DONE]`; unresolved acceptance stays visible.
+Task prefix is `AS09-<phase>-<NN>`. Each phase defines six tasks with concrete acceptance; A-02–A-05 B-02/B-04/B-05 C-02–C-06 and D-02/D-04 source contracts/security are `[DONE]`; A-01/A-06 and B-01/B-03/B-06 retain their stated acceptance gates. Record source fixtures, actual no-account probes, authenticated evidence, signed installed tests and distribution decisions separately. Mark only implemented and accepted tasks `[DONE]`; unresolved acceptance stays visible.
 
 When implementation lands, add phase implementation evidence, update this index/README/roadmap and dated `specs/changelog.md` entries. Preserve historical release records. Follow repository direct-to-master workflow; do not add persisted-data migrations or compatibility shims.
+
+[D evidence](implementation-notes-phase-d.md) accepts static no-start discovery and all-five process-generation leases, with native/host/frontend source checks and explicit production/installed bootstrap/vendor/reinstall gates.

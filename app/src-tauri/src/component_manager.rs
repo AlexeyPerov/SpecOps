@@ -1689,7 +1689,7 @@ pub fn component_diagnostics(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::component_catalog::TrustPolicy;
     use std::net::{TcpListener, TcpStream};
@@ -1703,7 +1703,7 @@ mod tests {
         )
         .unwrap()
     }
-    struct Temp(PathBuf);
+    pub(crate) struct Temp(PathBuf);
     impl Temp {
         fn new() -> Self {
             let p = std::env::temp_dir().join(format!(
@@ -1836,7 +1836,7 @@ mod tests {
         }
         let _ = stream.write_all(&body);
     }
-    fn installed_manager(id: ComponentId) -> (Temp, ComponentManager) {
+    pub(crate) fn installed_manager(id: ComponentId) -> (Temp, ComponentManager) {
         let temp = Temp::new();
         let manager = manager(&temp);
         let c = catalog();

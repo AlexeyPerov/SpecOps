@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-10
 
-**Status:** A contracts, B trusted artifact pipeline and C native installer implemented (12/18 local tasks accepted); finite native/copy source evidence recorded. Production hosting/signing/installed acceptance and C-01/D–H remain open.
+**Status:** A contracts, B trusted artifact pipeline, C native installer and D lazy host/resolver implemented (14/24 local tasks accepted); native/copy/process source evidence recorded. Production hosting/signing/installed acceptance, C-01/D-01/D-03/D-05/D-06 and E–H remain open.
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -38,7 +38,7 @@ The approximate prepared Node/Claude/Cursor payload size previously discussed is
 | AS09-A | [Component contracts and distribution decisions](execution-plan-phase-a-component-contracts.md) | Source contracts/decisions accepted; A-01/A-06 open |
 | AS09-B | [Trusted component artifacts and catalog](execution-plan-phase-b-artifact-pipeline.md) | Source pipeline/security verified; B-01/B-03/B-06 release/integration gates open |
 | AS09-C | [Native bootstrap and durable installer](execution-plan-phase-c-native-install-manager.md) | C-02–C-06 native fixtures accepted; C-01 installed startup remains D/H |
-| AS09-D | [Lazy Agent Host and installed component resolution](execution-plan-phase-d-lazy-host-runtime-resolution.md) | Planned |
+| AS09-D | [Lazy Agent Host and installed component resolution](execution-plan-phase-d-lazy-host-runtime-resolution.md) | D-02/D-04 source accepted; production bootstrap/vendor/installed gates remain |
 | AS09-E | [All four agent components and future adapter registration](execution-plan-phase-e-agent-components.md) | Planned |
 | AS09-F | [Agent installation, first use and recovery UX](execution-plan-phase-f-installation-ux.md) | Planned |
 | AS09-G | [Updates, storage maintenance and security hardening](execution-plan-phase-g-maintenance-security.md) | Planned |
@@ -68,3 +68,5 @@ No task is complete merely because a plan exists or mocks pass. No persisted-dat
 [B artifact evidence](implementation-notes-phase-b.md) records exact five-component finite assembly, copied no-account source controls and native Ed25519 catalog verification. [Release/retention/revocation policy](artifact-release-procedure.md) keeps production unavailable until reviewed release approval; bundled resources remain until the replacement bootstrap is functional.
 
 [Phase C evidence](implementation-notes-phase-c.md) records signed all-five native fixture installs, bounded confirmed jobs, strict archive/hash/target validation, durable receipts/recovery, process/window locks and typed safe APIs. Production install availability remains blocked by the signed unavailable catalog; host bootstrap and installed acceptance remain D/E/H.
+
+[Phase D evidence](implementation-notes-phase-d.md) records native verified shared Node launch, static exact descriptors, deferred selected adapter imports, all-four managed roots/entries, path-free integrity errors, generation-pinned requests and all-five leases retained through real host stop/crash cleanup. Actual trusted production bootstrap and all-four installed vendor/account acceptance remain E/F/G/H.

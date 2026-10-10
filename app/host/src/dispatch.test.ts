@@ -404,7 +404,7 @@ describe("stabilization failure boundaries", () => {
   });
 });
 
-it("bounds cancellation of an adapter that acknowledges cancel but never ends its stream", async () => {
+it("settles owned cancellation despite component faults when an adapter acknowledges but never ends its stream", async () => {
   const adapter = createFakeRuntimeAdapter();
   adapter.cancel = async () => {};
   adapter.send = async function* () { await new Promise(() => {}); };
@@ -414,7 +414,7 @@ it("bounds cancellation of an adapter that acknowledges cancel but never ends it
   await initialize(dispatcher);
   const native = { runtimeId: "fake", nativeSessionId: "n" };
   await call(dispatcher, 8, "turn.send", { native, turnId: "t", workspaceRootPath: "/ws", prompt: "hang" });
-  await call(dispatcher, 9, "turn.cancel", { native, turnId: "t" });
+  await call(dispatcher, 9, "turn.cancel", { native, turnId: "t", __managedComponent: { root: "missing", manifest: null } });
   await waitForIdle(dispatcher);
   expect(eventsFor(stdout).map((entry) => entry.params.event.type)).toEqual(["turn.cancelled"]);
 });

@@ -1,3 +1,5 @@
+const software = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock('../services/componentManager', () => ({ componentManager: software }));
 import { beforeEach, expect, it, vi } from 'vitest';
 import { tick } from 'svelte';
 import { mountComponent } from './_testComponentMount';
@@ -7,7 +9,7 @@ vi.mock('../services/agentHostRuntime',()=>({ensureAgentHostStarted:async()=>{},
 const profile={id:'stable-profile-id',runtimeId:'codex',label:'First',createdAt:'t',generation:1,state:'authenticated',account:{type:'chatgpt',email:'native@example.test',planType:'plus'},support:{browser:true,device:true,apiKey:true}};
 async function settle(){for(let index=0;index<8;index++){await Promise.resolve();await tick();}}
 function button(host:HTMLElement,text:string){return [...host.querySelectorAll('button')].find(node=>node.textContent===text)!;}
-beforeEach(()=>{let removed=false;mocks.auth.mockReset().mockImplementation(async(request)=>{if(request.options.action==='remove-profile')removed=true;return ({status:'challenge',profiles:removed?[]:[profile],...(request.options.action==='rename-profile'?{profile:{...profile,label:request.options.label}}:request.options.action==='remove-profile'?{profile:{...profile,state:'missing-profile'}}:{})});});});
+beforeEach(()=>{software.list.mockResolvedValue(['codex', 'claude', 'cursor', 'opencode'].map(id => ({ id, active: true, verified: true })));let removed=false;mocks.auth.mockReset().mockImplementation(async(request)=>{if(request.options.action==='remove-profile')removed=true;return ({status:'challenge',profiles:removed?[]:[profile],...(request.options.action==='rename-profile'?{profile:{...profile,label:request.options.label}}:request.options.action==='remove-profile'?{profile:{...profile,state:'missing-profile'}}:{})});});});
 it('bound session displays native account and stable ID, rename keeps binding and removal leaves explicit missing state',async()=>{
  const onSelect=vi.fn();const {host}=mountComponent(ConnectionProfilePanel,{runtimeId:'codex',connectionProfileId:profile.id,bound:true,onSelect});await settle();
  expect(host.textContent).toContain('native@example.test');expect(host.textContent).toContain(profile.id);expect((host.querySelector('select') as HTMLSelectElement).disabled).toBe(true);
@@ -27,4 +29,10 @@ it('Cursor profile uses opaque private import and keeps browser/cloud/native rea
  button(host,'Import private API key').click();await settle();
  expect(mocks.auth.mock.calls.some(([request])=>request.runtimeId==='cursor'&&request.connectionProfileId===profile.id&&request.credential?.ref==='profile-api-key'&&request.options.action==='login-api-key')).toBe(true);
  expect(host.querySelector('input[type="password"]')).toBeNull();expect([...host.querySelectorAll('button')].map(button=>button.textContent)).not.toContain('Sign in with ChatGPT');
+});
+
+it('missing selected component shows recovery without loading its adapter or changing saved selection', async () => {
+ software.list.mockResolvedValue([]);const onSelect=vi.fn();const {host}=mountComponent(ConnectionProfilePanel,{runtimeId:'codex',connectionProfileId:profile.id,bound:true,onSelect});await settle();
+ expect(host.textContent).toContain('Install or repair the selected component in Software');
+ expect(mocks.auth).not.toHaveBeenCalled();expect(onSelect).not.toHaveBeenCalled();
 });

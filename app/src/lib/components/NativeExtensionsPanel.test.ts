@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { mountComponent } from './_testComponentMount';
 import NativeExtensionsPanel from './NativeExtensionsPanel.svelte';
 const mocks = vi.hoisted(() => ({ discover: vi.fn(), inspect: vi.fn(), action: vi.fn(), cancel: vi.fn() }));
-vi.mock('../services/agentHostRuntime', () => ({ ensureAgentHostStarted: async () => {}, getAgentHostClient: () => ({ discover: mocks.discover, inspectNative: mocks.inspect, cancelTurn: mocks.cancel }) }));
+vi.mock('../services/agentHostRuntime', () => ({ ensureAgentHostStarted: async () => {}, getAgentHostClient: () => ({ getStatus: async () => ({ running: true }), discover: mocks.discover, inspectNative: mocks.inspect, cancelTurn: mocks.cancel }) }));
 vi.mock('../services/nativeExtensions', () => ({ extensionSession: () => ({ runtimeId: 'opencode', connectionProfileId: 'profile', nativeSessionId: 'native' }), performNativeAction: mocks.action }));
 async function settle() { await Promise.resolve(); await tick(); await Promise.resolve(); await tick(); }
 function button(host: HTMLElement, text: string) { return [...host.querySelectorAll('button')].find(b => b.textContent?.includes(text))!; }

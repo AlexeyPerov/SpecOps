@@ -23,6 +23,8 @@
 //!   bounded grace window, then process-group termination so the host's children
 //!   and grandchildren are reaped on supported Unix targets.
 
+use crate::component_manager::{ComponentManager, RuntimeLease};
+use crate::components::ComponentId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -77,6 +79,10 @@ pub enum AgentHostError {
         message: String,
     },
     LaunchFailure {
+        message: String,
+    },
+    ComponentUnavailable {
+        component: String,
         message: String,
     },
     InitializeTimeout {
@@ -181,6 +187,7 @@ impl PendingEntry {
 
 struct AgentHostInner {
     child: Option<Child>,
+    leases: HashMap<String, RuntimeLease>,
     stdin: Option<SyncSender<(u64, Vec<u8>)>>,
     generation: u64,
     health: AgentHostHealth,
@@ -198,6 +205,7 @@ impl AgentHostInner {
     fn new() -> Self {
         AgentHostInner {
             child: None,
+            leases: HashMap::new(),
             stdin: None,
             generation: 0,
             health: AgentHostHealth::Unknown,
@@ -238,6 +246,7 @@ impl AgentHostInner {
                             message: "Agent Host exited".into(),
                         },
                     );
+                    self.leases.clear();
                     self.child = None;
                     self.stdin = None;
                     if !matches!(self.health, AgentHostHealth::Error) {
@@ -355,52 +364,34 @@ fn read_bounded_line<R: BufRead>(
 // Binary resolution
 // ---------------------------------------------------------------------------
 
-fn find_on_path(name: &str) -> Option<PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path_var) {
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-        #[cfg(windows)]
-        {
-            let exe = dir.join(format!("{name}.exe"));
-            if exe.is_file() {
-                return Some(exe);
-            }
-        }
-    }
-    None
-}
-
-fn resolve_node_binary(app: &AppHandle) -> Result<PathBuf, AgentHostError> {
+fn resolve_node_binary(app: &AppHandle) -> Result<(PathBuf, Option<RuntimeLease>), AgentHostError> {
+    #[cfg(debug_assertions)]
     if let Some(raw) = std::env::var_os("SPECOPS_NODE_EXECUTABLE") {
         let path = PathBuf::from(raw);
         if path.is_absolute() && path.is_file() {
-            return Ok(path);
+            return Ok((path, None));
         }
         return Err(AgentHostError::NodeMissing {
-            message: "Explicit Node executable is missing or not absolute".to_string(),
+            message: "Explicit development Node path must be absolute and present".into(),
         });
     }
-    if let Ok(resources) = app.path().resource_dir() {
-        let name = if cfg!(windows) { "node.exe" } else { "node" };
-        let path = resources.join("agent-host").join(name);
-        if path.is_file() {
-            return Ok(path);
-        }
-    }
-    #[cfg(debug_assertions)]
-    if let Some(path) = find_on_path("node") {
-        return Ok(path);
-    }
-    Err(AgentHostError::NodeMissing { message: "Bundled Node runtime is missing. Reinstall SpecOps or set an explicit absolute SPECOPS_NODE_EXECUTABLE path.".to_string() })
+    let lease = app.state::<ComponentManager>().acquire_runtime(ComponentId::Node)
+        .map_err(|_| AgentHostError::NodeMissing { message: "Install or repair the shared Node component in Software, then reconnect explicitly.".into() })?;
+    let entry = lease
+        .manifest
+        .entries
+        .get("main")
+        .ok_or_else(|| AgentHostError::NodeMissing {
+            message: "Shared Node entry is unavailable".into(),
+        })?;
+    Ok((lease.root.join(entry), Some(lease)))
 }
 
 /// Resolve the built host bundle. Order: `SPECOPS_HOST_PATH` env override,
 /// bundled `resource_dir/agent-host/index.js`, then the dev repo-relative path
 /// (`<crate>/../host/dist/index.js`, present while running from source).
 fn resolve_host_script(app: &AppHandle) -> Result<PathBuf, AgentHostError> {
+    #[cfg(debug_assertions)]
     if let Ok(raw) = std::env::var("SPECOPS_HOST_PATH") {
         let path = PathBuf::from(raw);
         if path.is_absolute() && path.is_file() {
@@ -432,8 +423,8 @@ fn resolve_host_script(app: &AppHandle) -> Result<PathBuf, AgentHostError> {
     })
 }
 
-fn build_host_command(app: &AppHandle) -> Result<Command, AgentHostError> {
-    let node = resolve_node_binary(app)?;
+fn build_host_command(app: &AppHandle) -> Result<(Command, Option<RuntimeLease>), AgentHostError> {
+    let (node, lease) = resolve_node_binary(app)?;
     let script = resolve_host_script(app)?;
     let mut command = Command::new(node);
     command.arg(script);
@@ -444,20 +435,8 @@ fn build_host_command(app: &AppHandle) -> Result<Command, AgentHostError> {
             message: "Cannot resolve profile storage".to_string(),
         })?;
     command.env("SPECOPS_PROFILE_ROOT", data_dir.join("connection-profiles"));
-    if std::env::var_os("SPECOPS_OPENCODE_EXECUTABLE").is_none() {
-        match crate::native_assets::resolve_opencode_binary(app) {
-            Ok(binary) => {
-                command.env("SPECOPS_OPENCODE_EXECUTABLE", binary);
-            }
-            Err(message) => {
-                log::warn!("{message}");
-                // An explicit empty override disables host PATH discovery while
-                // keeping other installed runtimes available.
-                command.env("SPECOPS_OPENCODE_EXECUTABLE", "");
-            }
-        }
-    }
-    Ok(command)
+    command.env("SPECOPS_MANAGED_COMPONENTS", "1");
+    Ok((command, lease))
 }
 
 // ---------------------------------------------------------------------------
@@ -515,6 +494,7 @@ fn mark_exited(inner_arc: &Arc<Mutex<AgentHostInner>>, generation: u64, code: Op
         inner.stdin = None;
         inner.bump_generation();
         reap_child(child, true);
+        inner.leases.clear();
     }
     let already_error = matches!(inner.health, AgentHostHealth::Error);
     if !already_error {
@@ -595,6 +575,7 @@ fn stop_child(inner: &mut AgentHostInner, force: bool) -> Result<(), AgentHostEr
         inner.stdin = None;
         inner.bump_generation();
         reap_child(child, force);
+        inner.leases.clear();
         inner.health = AgentHostHealth::Unknown;
         fail_all_pending(
             inner,
@@ -773,6 +754,16 @@ impl AgentHostState {
         params: Option<Value>,
         timeout: Duration,
     ) -> Result<Value, AgentHostError> {
+        self.request_generation(method, params, timeout, None)
+    }
+
+    fn request_generation(
+        &self,
+        method: &str,
+        params: Option<Value>,
+        timeout: Duration,
+        expected: Option<u64>,
+    ) -> Result<Value, AgentHostError> {
         let (id, entry, deadline, generation) = {
             let mut inner = self.inner.lock().map_err(|e| AgentHostError::io(e))?;
             if inner.shutting_down && method != "shutdown" {
@@ -781,6 +772,9 @@ impl AgentHostState {
                 });
             }
             if !inner.refresh_liveness() {
+                return Err(AgentHostError::not_running());
+            }
+            if expected.is_some_and(|generation| generation != inner.generation) {
                 return Err(AgentHostError::not_running());
             }
             let id = inner.next_request_id();
@@ -840,18 +834,28 @@ impl AgentHostState {
 
     /// Spawn (or reuse) the host and complete version negotiation.
     pub fn start(&self, app: &AppHandle) -> Result<AgentHostStatus, AgentHostError> {
-        let command = build_host_command(app)?;
-        self.start_command(command, Some(app.clone()))
+        let (command, lease) = build_host_command(app)?;
+        self.start_leased_command(command, Some(app.clone()), lease)
     }
 
     /// Core spawn path, given a pre-built command. App-handle concerns (resource
     /// resolution) live in [`build_host_command`]; this is the part supervision
     /// tests drive with fixture processes. `emitter_app` spawns the WebView event
     /// emitter; `None` (tests) drops notifications on a closed channel.
+    #[cfg(test)]
     fn start_command(
+        &self,
+        command: Command,
+        emitter_app: Option<AppHandle>,
+    ) -> Result<AgentHostStatus, AgentHostError> {
+        self.start_leased_command(command, emitter_app, None)
+    }
+
+    fn start_leased_command(
         &self,
         mut command: Command,
         emitter_app: Option<AppHandle>,
+        lease: Option<RuntimeLease>,
     ) -> Result<AgentHostStatus, AgentHostError> {
         let _lifecycle = self.lifecycle.lock().map_err(AgentHostError::io)?;
         #[cfg(windows)]
@@ -907,6 +911,9 @@ impl AgentHostState {
             let stderr = child.stderr.take();
             let generation = inner.bump_generation();
             inner.child = Some(child);
+            if let Some(lease) = lease {
+                inner.leases.insert("node".into(), lease);
+            }
             let (writer_tx, writer_rx) = mpsc::sync_channel::<(u64, Vec<u8>)>(8);
             inner.stdin = Some(writer_tx);
             if let Some(mut pipe) = stdin {
@@ -1101,8 +1108,9 @@ pub fn agent_host_status(
 #[tauri::command(async)]
 pub async fn agent_host_request(
     method: String,
-    params: Option<Value>,
+    mut params: Option<Value>,
     timeout_ms: Option<u64>,
+    app: AppHandle,
     state: State<'_, AgentHostState>,
 ) -> Result<Value, AgentHostError> {
     let state = state.inner().clone();
@@ -1110,7 +1118,29 @@ pub async fn agent_host_request(
         .map(Duration::from_millis)
         .unwrap_or(DEFAULT_REQUEST_TIMEOUT)
         .clamp(Duration::from_millis(1), DEFAULT_REQUEST_TIMEOUT);
-    tauri::async_runtime::spawn_blocking(move || state.request(&method, params, timeout))
+    tauri::async_runtime::spawn_blocking(move || {
+        let _lifecycle = state.lifecycle.lock().map_err(AgentHostError::io)?;
+        if let Some(object) = params.as_mut().and_then(Value::as_object_mut) {
+            object.remove("__managedComponent");
+            let runtime = object.get("runtimeId").or_else(|| object.get("native").and_then(|n| n.get("runtimeId"))).and_then(Value::as_str).map(str::to_owned);
+            if let Some(runtime) = runtime.filter(|_| !matches!(method.as_str(), "discover" | "initialize" | "shutdown")) {
+                let id = match runtime.as_str() { "codex" => Some(ComponentId::Codex), "opencode" => Some(ComponentId::Opencode), "claude" => Some(ComponentId::Claude), "cursor" => Some(ComponentId::Cursor), _ => None };
+                if let Some(id) = id {
+                    let mut inner = state.inner.lock().map_err(AgentHostError::io)?;
+                    if !inner.refresh_liveness() { return Err(AgentHostError::not_running()); }
+                    if !inner.leases.contains_key(&runtime) {
+                        let lease = app.state::<ComponentManager>().acquire_runtime(id).map_err(|_| AgentHostError::ComponentUnavailable { component: runtime.clone(), message: format!("The {runtime} component is unavailable or incompatible. Install or repair it in Software, then reconnect the original profile explicitly.") })?;
+                        inner.leases.insert(runtime.clone(), lease);
+                    }
+                    let lease = &inner.leases[&runtime];
+                    object.insert("__managedComponent".into(), serde_json::json!({ "root": lease.root, "manifest": lease.manifest }));
+                }
+            }
+        }
+        let generation = state.inner.lock().map_err(AgentHostError::io)?.generation;
+        drop(_lifecycle);
+        state.request_generation(&method, params, timeout, Some(generation))
+    })
         .await
         .map_err(|e| AgentHostError::Io {
             message: format!("agent_host_request task failed: {e}"),
@@ -1125,6 +1155,79 @@ pub async fn agent_host_request(
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn generation_pinned_request_never_reaches_replacement_host() {
+        ensure_host_built();
+        let state = AgentHostState::new();
+        let mut command = Command::new(node_path());
+        command.arg(host_dist());
+        state.start_command(command, None).unwrap();
+        let old = state.status().unwrap().generation;
+        state.stop().unwrap();
+        let mut command = Command::new(node_path());
+        command.arg(host_dist());
+        state.start_command(command, None).unwrap();
+        assert!(state
+            .request_generation("discover", None, DEFAULT_REQUEST_TIMEOUT, Some(old))
+            .is_err());
+        state.stop().unwrap();
+    }
+
+    #[test]
+    fn host_generation_holds_all_verified_leases_until_stop_and_crash_cleanup() {
+        ensure_host_built();
+        for id in [
+            ComponentId::Node,
+            ComponentId::Codex,
+            ComponentId::Opencode,
+            ComponentId::Claude,
+            ComponentId::Cursor,
+        ] {
+            for crash in [false, true] {
+                let (_temp, manager) = crate::component_manager::tests::installed_manager(id);
+                let lease = manager.acquire_runtime(ComponentId::Node).unwrap();
+                let request = crate::component_manager::Request {
+                    id,
+                    version: manager.acquire_runtime(id).unwrap().manifest.version,
+                };
+                let state = AgentHostState::new();
+                let mut command = Command::new(node_path());
+                command.arg(host_dist());
+                state
+                    .start_leased_command(command, None, Some(lease))
+                    .unwrap();
+                if id != ComponentId::Node {
+                    state
+                        .inner
+                        .lock()
+                        .unwrap()
+                        .leases
+                        .insert(id.as_str().into(), manager.acquire_runtime(id).unwrap());
+                }
+                assert!(manager.remove(request.clone()).is_err());
+                if crash {
+                    state
+                        .inner
+                        .lock()
+                        .unwrap()
+                        .child
+                        .as_mut()
+                        .unwrap()
+                        .kill()
+                        .unwrap();
+                    let deadline = Instant::now() + Duration::from_secs(5);
+                    while state.status().unwrap().running && Instant::now() < deadline {
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                } else {
+                    state.stop().unwrap();
+                }
+                assert!(!state.status().unwrap().running);
+                assert!(manager.remove(request).is_ok());
+            }
+        }
+    }
 
     #[test]
     fn read_bounded_line_short_lines() {
@@ -1293,7 +1396,10 @@ mod tests {
     }
 
     fn node_path() -> PathBuf {
-        find_on_path("node").expect("node must be on PATH to run agent_host integration tests")
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+            .map(|dir| dir.join("node"))
+            .find(|path| path.is_file())
+            .expect("Explicit test environment must supply Node")
     }
 
     /// Build the real host bundle once for the process-suite tests.

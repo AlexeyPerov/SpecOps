@@ -62,12 +62,13 @@ function fakeBindings(): AgentHostBindings & {
 }
 
 describe("agent host client", () => {
-  it("routes discovery + create + health through agent_host_request", async () => {
+  it("discovers statically without invoking native code and routes create + health", async () => {
     const fb = fakeBindings();
     const client = createAgentHostClient(fb);
 
     const discovered = await client.discover();
-    expect(discovered.runtimes).toEqual([]);
+    expect(discovered.runtimes.map(runtime => runtime.id)).toEqual(["claude", "codex", "opencode", "cursor"]);
+    expect(fb.calls).toEqual([]);
     const created = await client.createSession({
       runtimeId: "fake",
       workspaceRootPath: "/ws",
@@ -79,7 +80,6 @@ describe("agent host client", () => {
 
     const requestCalls = fb.calls.filter((c) => c.cmd === "agent_host_request");
     expect(requestCalls.map((c) => (c.args as { method: string }).method)).toEqual([
-      "discover",
       "session.create",
       "health",
     ]);
@@ -196,7 +196,7 @@ describe("agent host client", () => {
       return null;
     });
     const client = createAgentHostClient(fb);
-    await expect(client.discover()).rejects.toMatchObject({
+    await expect(client.health()).rejects.toMatchObject({
       kind: "protocol",
       code: -32006,
     });

@@ -1,3 +1,4 @@
+import { bindManagedComponent } from "./componentRuntime";
 import { adapterErrors } from "../../src/lib/session/adapter/errors";
 import { isNativeExtensions, NATIVE_VIEWS, NATIVE_ACTIONS } from "../../src/lib/session/adapter/nativeExtensions";
 /**
@@ -111,9 +112,11 @@ export class HostDispatcher {
 
   constructor(private readonly deps: HostDispatcherDeps) {
     this.maxConcurrentTurns = deps.maxConcurrentTurns ?? MAX_CONCURRENT_TURNS;
-    for (const adapter of deps.registry.list()) {
+    const attach = (adapter: AgentRuntimeAdapter): void => {
       if ("onAuthUpdate" in adapter) (adapter as unknown as { onAuthUpdate: (update: unknown) => void }).onAuthUpdate = update => { void this.enqueue(makeNotification("profile.authUpdated", redactForLogs(update))).catch(() => {}); };
-    }
+    };
+    deps.registry.onActivate = attach;
+    for (const adapter of deps.registry.list()) attach(adapter);
   }
 
   get isInitialized(): boolean {
@@ -166,6 +169,7 @@ export class HostDispatcher {
     }
 
     try {
+      if (!["turn.cancel", "permission.reply", "question.reply"].includes(method) && request.params && typeof request.params === "object" && "__managedComponent" in request.params) bindManagedComponent((request.params as { __managedComponent: unknown }).__managedComponent);
       await this.bounded(this.route(method, id, request.params), this.deps.requestTimeoutMs ?? (method === RequestMethod.Initialize ? INITIALIZE_TIMEOUT_MS : DEFAULT_REQUEST_TIMEOUT_MS));
     } catch (error) {
       await this.respond(makeErrorResponse(id, toProtocolError(error)));
@@ -173,6 +177,9 @@ export class HostDispatcher {
   }
 
   private async route(method: string, id: RequestId, params: unknown): Promise<void> {
+    const routing = params as { runtimeId?: string; native?: { runtimeId?: string } } | undefined;
+    const runtimeId = routing?.runtimeId ?? routing?.native?.runtimeId;
+    if (runtimeId && !new Set<string>([RequestMethod.Discover, RequestMethod.Initialize, RequestMethod.Shutdown, RequestMethod.TurnCancel, RequestMethod.PermissionReply, RequestMethod.QuestionReply]).has(method)) await this.deps.registry.activate(runtimeId);
     switch (method) {
       case RequestMethod.Initialize:
         return this.handleInitialize(id, params);
@@ -271,14 +278,7 @@ export class HostDispatcher {
   }
 
   private async handleDiscover(id: RequestId): Promise<void> {
-    const adapters = this.deps.registry.list();
-    const entries = await Promise.all(
-      adapters.map(async (adapter) => {
-        const [descriptor, capabilities] = await Promise.all([adapter.describe(), adapter.describeCapabilities()]);
-        return { ...descriptor, capabilities };
-      }),
-    );
-    const result: DiscoverResult = { runtimes: entries };
+    const result: DiscoverResult = { runtimes: await this.deps.registry.discovery() };
     await this.respond(makeResponse(id, result));
   }
 

@@ -1,3 +1,4 @@
+import { codexCapabilities, opencodeCapabilities, claudeCapabilities, cursorCapabilities } from "./runtimeCapabilities";
 /**
  * Runtime-neutral runtime identity (phase B domain, extended in phase C).
  *
@@ -77,4 +78,10 @@ export function allAgentRuntimeDescriptors(): readonly AgentRuntimeDescriptor[] 
 /** Product runtime descriptors only (excludes the dev fake). */
 export function productRuntimeDescriptors(): readonly AgentRuntimeDescriptor[] {
   return PRODUCT_RUNTIME_IDS.map((id) => RUNTIME_DESCRIPTORS[id]);
+}
+
+/** Shipped availability metadata; reading it never starts an agent or probes native code. */
+export function staticRuntimeDiscovery() {
+  const capabilities = { codex: codexCapabilities, opencode: opencodeCapabilities, claude: claudeCapabilities, cursor: cursorCapabilities };
+  return productRuntimeDescriptors().map(descriptor => ({ ...descriptor, capabilities: capabilities[descriptor.id as ProductRuntimeId]() }));
 }

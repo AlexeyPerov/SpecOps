@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10
 
-**Status:** Planned; all tasks open
+**Status:** Source implementation landed; D-02/D-04 source acceptance complete; D-01/D-03/D-05/D-06 integration/installed gates remain open
 
 **Prerequisites:** AS09-C verified installation APIs; existing supervision and binding contracts.
 
@@ -24,7 +24,7 @@ Resolve Node from the verified component store and launch the shipped host JS wi
 
 ### AS09-D-02 — Make runtime discovery independent of runtime execution
 
-**State:** [TODO]
+**State:** [DONE] (source fixtures; installed evidence remains E/G/H)
 
 Describe available agents from shipped descriptors/catalog before host startup. Ensure imports, constructors, discovery, settings and ordinary workspace open cannot eagerly resolve vendor SDKs or spawn native processes. Activate only the chosen installed runtime/profile for the requested operation.
 
@@ -40,7 +40,7 @@ Replace adjacent-resource/bundled-sidecar assumptions with a verified resolver t
 
 ### AS09-D-04 — Lease component versions to live processes
 
-**State:** [TODO]
+**State:** [DONE] (source fixtures; installed evidence remains E/G/H)
 
 Tie runtime and shared Node version leases to host/profile/worker generations. Prevent replacing/removing a version used by auth, a turn, approval, history reconciliation or another window. Decide activation at a quiescent explicit boundary; changes to shared Node require an owned host restart.
 
@@ -63,6 +63,8 @@ Exercise missing/corrupt Node, missing helper, runtime probe timeout, host crash
 **Acceptance:** Component failures leave healthy siblings/editor usable where possible; shared host loss settles all owned work once, and quit/crash/restart leaves no installer/host/runtime descendants.
 
 ## Verification and evidence
+
+[Phase D source evidence](implementation-notes-phase-d.md) records exact fixture versions, native process leases, managed resolver failures, static discovery and remaining production/installed gates. D-01/D-03/D-05/D-06 are implemented but retain their stated integrated acceptance.
 
 Record exact app/host/component/catalog versions and target for the tasks above. Use bounded no-account fixtures for source/security checks; use clean signed installed builds and authorized accounts where acceptance calls for them. Record pass, failed, not-run and unavailable separately. No runtime/account/installed/distribution result is inferred from a successful source build.
 

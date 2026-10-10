@@ -1,3 +1,4 @@
+import { claudeCapabilities } from "../../../src/lib/session/runtimeCapabilities";
 import { realpathSync } from "node:fs";
 import { randomUUID, createHash } from "node:crypto";
 import {
@@ -137,42 +138,7 @@ export class ClaudeRuntimeAdapter
   async describe() {
     return { id: this.runtimeId, label: "Claude" };
   }
-  async describeCapabilities() {
-    return {
-      schemaVersion: 1 as const,
-      supported: ["catalogs" as const, "permissions" as const, "questions" as const],
-      details: {
-        permissions: {supported: true, notes: "Native request-scoped allow/deny; session rules only when safe suggestions exist."},
-        questions: {supported: true, notes: "Native AskUserQuestion; unsupported user dialog kinds are cancelled."},
-        catalogs: {
-          supported: true,
-          notes:
-            "Native discoverable models; access is determined by the selected API key.",
-        },
-        nativeTurns: {
-          supported: this.options.enableNativeTurns !== false,
-          notes: "Native SDK sessions with correlated approvals and questions; installed/live acceptance remains open.",
-        },
-        subscriptionLogin: {
-          supported: false,
-          notes:
-            "Third-party subscription login is unsupported. Use a dedicated API key.",
-        },
-        userDialogs: {supported: false, notes: "No supported dialog kinds are declared; unknown native dialogs are cancelled."},
-        mcp: {supported: false, notes: "No selected servers or management surface; native MCP configuration is strict and empty."},
-        skills: {supported: false, notes: "Empty native skill filter; no skill catalog or editor."},
-        hooks: {supported: false, notes: "No configurable SDK hooks; user/project/local settings are excluded, managed policy may still apply."},
-        subagents: {supported: false, notes: "Native built-in Agent tool remains native; dedicated subagent catalog/settings/display are unavailable."},
-        commands: {supported: false, notes: "No native command catalog or execution action is exposed."},
-        nativeConfiguration: {supported: true, notes: "Validated immutable session policy; filesystem setting sources excluded, native managed policy may still apply."},
-        lifecycle: {supported: true, notes: "Scoped interrupt retires native query; profile reconnect increments generation and interrupts pending callbacks. Resume never replays them."},
-        cloudCredentials: {
-          supported: false,
-          notes: "Cloud credential import is not implemented.",
-        },
-      },
-    };
-  }
+  async describeCapabilities() { const capabilities = claudeCapabilities(); return { ...capabilities, details: { ...capabilities.details, nativeTurns: { ...capabilities.details.nativeTurns, supported: this.options.enableNativeTurns !== false } } }; }
   snapshot(p: ClaudeProfile) {
     let s = this.snapshots.get(p.id);
     if (!s) {

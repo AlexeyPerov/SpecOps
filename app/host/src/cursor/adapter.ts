@@ -1,3 +1,4 @@
+import { cursorCapabilities } from "../../../src/lib/session/runtimeCapabilities";
 import { cursorParameters, cursorPolicy, PARAM_PREFIX, type CursorParameter } from "./policy";
 import { realpathSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
@@ -96,56 +97,7 @@ export class CursorRuntimeAdapter
   async describe() {
     return { id: this.runtimeId, label: "Cursor" };
   }
-  async describeCapabilities() {
-    return {
-      schemaVersion: 1 as const,
-      supported: ["catalogs" as const],
-      details: {
-        catalogs: {
-          supported: true,
-          notes:
-            "Official native SDK model catalog for the selected user/service API key. Model parameters come only from the selected profile native catalog.",
-        },
-        nativeTurns: {
-          supported: true,
-          limits: { localOnly: true, builtinTools: 7, attachments: false },
-          notes: "Durable local native agents/runs with explicit model, tools disabled by default and finite file tool presets. File tools run without interactive approval; filesystem settings sources excluded.",
-        },
-        browserLogin: {
-          supported: false,
-          notes:
-            "Official SDK browser key minting exists; its host challenge/cancel lifecycle is not implemented.",
-        },
-        deviceLogin: {
-          supported: false,
-          notes: "No native device login flow is exposed.",
-        },
-        permissions: {
-          supported: false,
-          notes:
-            "Local SDK has no programmatic interactive approval callback. Native sandbox has no approval callback; file hooks are excluded.",
-        },
-        questions: {
-          supported: false,
-          notes: "No native interaction bridge is exposed.",
-        },
-        nativeFileTools: { supported: true, limits: { interactiveApproval: false, enforcedReadOnly: false, shell: false, task: false, mcp: false }, notes: "Finite native file tool presets only. Writes execute automatically; selected restrictions apply on every resume." },
-        nativeSandbox: { supported: true, limits: { enforcementVerified: false }, notes: "Native enabled/disabled option; workspace and private profile native sandbox policy may also apply. Platform/native enforcement acceptance remains open." },
-        fork: { supported: false, notes: "No verified local fork/restore lifecycle is exposed." },
-        checkpoint: { supported: false, notes: "Native internal checkpoints are storage evidence, not an exposed restore action." },
-        cloudExecution: {
-          supported: false,
-          notes:
-            "Cloud execution is outside the supported local runtime scope.",
-        },
-        nativeConfiguration: {
-          supported: true,
-          notes:
-            "Immutable native file tool presets, sandbox option and selected-profile catalog model parameters. Enforcement remains native/platform acceptance.",
-        },
-      },
-    };
-  }
+  async describeCapabilities() { return cursorCapabilities(); }
   snapshot(p: CursorProfile) {
     let s = this.snapshots.get(p.id);
     if (!s) {

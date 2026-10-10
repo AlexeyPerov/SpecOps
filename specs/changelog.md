@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-10 22:33 MSK — Plan on-demand agent component delivery
+
+- Added AS09 full-scope execution plans: 48 open tasks across component contracts, trusted artifacts, a Node-independent native installer, lazy host/bootstrap, four agent integrations, installation UX, maintenance/security and lean installed release acceptance.
+- Planned shared Node and complete SDK/native/helper downloads on explicit request, compatible signed catalogs, bounded atomic installation/recovery, process version leases and removal that preserves accounts/history/workspace files.
+- Linked stage 09 from the operations queue and roadmap; kept stage 08 recurring with new delivery acceptance and historical release evidence intact. Planning only; no runtime implementation, publication, account execution or persisted-data migrations.
+
 ## 2026-10-05 17:02 MSK — Project bounded native activity and submit finite parity
 
 - Implemented AS02-G native child-state/activity and context-compaction events/cards through live reducers, stable history reconciliation, message layout and persisted codecs. Completed control tools do not imply child success; unfinished terminal activity remains explicitly unknown. Manual compact observes structured native progress. Native catalog permissions are hidden behind useful row labels.

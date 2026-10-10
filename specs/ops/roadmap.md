@@ -1,8 +1,8 @@
 # SpecOps agent sessions roadmap
 
-**Updated:** 2026-10-05
+**Updated:** 2026-10-10
 
-**Status:** Active acceptance plan; four native adapters, reviewed handoff/extensions/profiles and repeatable release records are source verified. Authenticated, signed installed, distribution and process gates remain open; expanded release is blocked.
+**Status:** Active acceptance plan; four native adapters, reviewed handoff/extensions/profiles and repeatable release records are source verified. Authenticated, signed installed, distribution and process gates remain open; expanded release is blocked. Stage 09 adds planned on-demand Node/agent delivery; its implementation and acceptance are open.
 
 **Source of truth:** This roadmap and the linked milestone scope/execution plans. The [2026-10-04 audit](done/reviews/audit-2026-10-04.md) is historical evidence; its proposed order is adopted here. Active folders and task IDs are numbered in the default delivery order; shared early gates and repeated release acceptance are explicit exceptions. Completed records are in [done](done/README.md).
 
@@ -25,7 +25,8 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 | [05 — Claude](05-claude-adapter/README.md) | A–D source native SDK/API key/sessions/interactions/policy/recovery/security implemented; installed/live baseline open | Installed/live acceptance |
 | [06 — Handoff/native extensions](06-handoff-native-extensions/README.md) | A/B/C source verified; 16 ordered handoff pairs/native extensions/simultaneous Codex profiles; live/installed gates open | Actual account handoff/extensions/two-profile and installed acceptance |
 | [07 — Cursor](07-cursor-adapter/README.md) | A–D local SDK/profile/lifecycle/settings/fault/security/16-pair handoff source and copied assets verified; native/authenticated/installed/distribution gates open | External D acceptance and selected 08-A gate |
-| [08 — Release gates](08-release-gates/README.md) | Versioned expanded source record/validator/runner verified; release blocked | External selected-scope gates; final closure after full active scope |
+| [08 — Release gates](08-release-gates/README.md) | Versioned expanded source record/validator/runner verified; release blocked | External selected-scope gates; repeat for 09 and close after full active scope |
+| [09 — Plugin-based usage](09-plugin-based-usage/README.md) | A–H planned; 48 open tasks | Native installer, shared Node and four optional agent components; lean installed release |
 
 A completed implementation marker is not a release acceptance record. Implemented source phases retain explicit external acceptance; the dated [expanded AS08-A decision](08-release-gates/release-2026-10-05.md) is blocked. A source marker does not close the roadmap.
 
@@ -41,7 +42,8 @@ A completed implementation marker is not a release acceptance record. Implemente
 | 05 | [AS05-A → B → C → D](05-claude-adapter/execution-plan.md) | Third native runtime, current auth policy and tested capability coverage |
 | 06 | [AS06-A](06-handoff-native-extensions/execution-plan-phase-a-handoff.md), [AS06-B](06-handoff-native-extensions/execution-plan-phase-b-opencode-extensions.md), [AS06-C](06-handoff-native-extensions/execution-plan-phase-c-codex-profiles.md) | Reviewable handoff, valuable native extensions and multiple simultaneous SpecOps Codex profiles |
 | 07 | [AS07-A → B → C → D](07-cursor-adapter/execution-plan.md) | Cursor with pinned SDK and verified auth, capabilities, history and native assets |
-| 08 | [AS08-A](08-release-gates/execution-plan-phase-a-release-exit.md) | Final matrix and roadmap closure after all active scope is verified; the same gate already runs for earlier subset releases |
+| 08 | [AS08-A](08-release-gates/execution-plan-phase-a-release-exit.md) | Recurring selected release matrix; final closure after all active scope, including 09; earlier subset releases remain independent |
+| 09 | [AS09-A → B → C → D → E → F → G → H](09-plugin-based-usage/execution-plan.md) | Lean editor-only base; shared Node and four native runtime payloads installed on explicit request; trusted updates/removal and fresh selected 08-A installed acceptance |
 
 OpenCode is second because code and fixtures already exist. If its core cutover proves larger than a new Claude adapter, record an explicit scheduling swap of stages 04/05 without moving Codex off the critical path. Handoff is technically eligible after two accepted runtimes; its default delivery stage is 06. No implementation needs to wait for Cursor to release Codex.
 
@@ -57,7 +59,10 @@ OpenCode is second because code and fixtures already exist. If its core cutover 
 accepted runtimes >= 2 + 03-A/B → 06-A (later handoff)
 accepted core/contract evidence → 07-A → 07-B → 07-C → 07-D
 selected adapter gates + 03-A/B + advertised handoff → 08-A (each release)
+01–07 source contracts → 09-A → B → C → D → E → F → G → H → 08-A (on-demand release)
 ```
+
+Stage 09 may reuse verified source contracts before older external gates close, but its release repeats relevant installed/account/distribution/process acceptance. Stage 08 is recurring and follows 09-H for the new delivery mode, not a prerequisite that must have final closure first. No existing early preview is blocked merely by the new planned milestone.
 
 03-A and 03-B have no dependency on handoff or later adapters. Packaging design/build preparation may start after 01-S; its runtime smoke uses 02-B. Readiness for future adapters is validated when they are added, not by blocking the Codex preview.
 
@@ -134,12 +139,13 @@ After two runtimes are accepted, user reviews a bounded packet with goal, decisi
 ## Release policy and acceptance
 
 - First usable preview targets macOS and Codex only. Its gates are 01-S, 02-A–D, 03-A/B and a selected-scope 08-A record.
-- Bundle Agent Host and a compatible Node runtime; developer PATH is not installed-build evidence. Vendor binary may be bundled/installed where permitted or explicitly user-managed with version/setup diagnostics.
+- Existing 03 delivery bundles Agent Host and a compatible Node runtime; developer PATH is not installed-build evidence. Vendor binary may be bundled/installed where permitted or explicitly user-managed with version/setup diagnostics.
+- Planned [09 delivery](09-plugin-based-usage/README.md) keeps small host/adapter code in the base app and downloads shared Node plus agent SDK/native/helper payloads through a trusted Rust/Tauri installer on explicit request. Installed component identity replaces adjacent-resource resolution only after verification; profile/auth/history remain separate. Current bundled source evidence does not prove this future delivery mode.
 - 02-B is a developer slice, not an installed-product readiness claim. Minimal history/cancel/approvals are required there, not deferred to final polish.
 - Neutral Sessions gate replaces provider-shaped settings. Each adapter/profile has independent setup/health state. No beta release is gated on complete legacy feature parity or all four runtimes.
 - API-key and account smokes are explicit opt-in runs. Record selected version, account access category, support scope and unavailable auth methods without inferring model entitlement from catalog listing.
 - Before adding Linux/Windows support, verify install, auth, resume, crash, cancel and child/grandchild cleanup on each advertised target.
-- Release readiness is per enabled runtime/platform subset. Roadmap Done requires all active phases, including later extensions/multiple profiles and advertised handoff, or an explicit scope revision. Do not mark missing implementations Done through a deferment note.
+- Release readiness is per enabled runtime/platform subset. Roadmap Done requires all active phases, including later extensions/multiple profiles, advertised handoff and 09 on-demand delivery, or an explicit scope revision. Do not mark missing implementations Done through a deferment note.
 - Native/history schemas may reset cleanly; no data migrations, compatibility codecs or upgrade paths for persisted data. Document resets when implementation lands.
 
 ## Completion evidence
@@ -150,6 +156,7 @@ Each phase records automated checks, pinned contracts and actual smoke/support e
 
 | Date | Change |
 | --- | --- |
+| 2026-10-10 | Add full AS09 A–H on-demand Node/four-agent delivery plan, trusted native installation, maintenance UX and fresh installed release gates |
 | 2026-10-04 | Renumber active stages 01–08, split preview/extensions/release plans, move completed evidence to done |
 | 2026-10-04 | Adopt Codex-first order; reopen foundation acceptance as S; isolated account profiles; early activity/packaging; OpenCode core before extensions; subset release gates |
 | 2026-08-15 | Historical foundation implementation A–F marked Done; acceptance gaps subsequently recorded |

@@ -45,3 +45,7 @@ The [expanded source decision](release-2026-10-05.md), [machine record](release-
 AS08-A-01/-02/-03/-04 source record/shared/security/docs work is verified. Their actual installed/account/native-enforcement/process/distribution acceptance remains open; no full task Done is inferred. AS08-A-05 is **open**, because full active roadmap acceptance is incomplete. Expanded recommendation is **blocked**.
 
 **Native parity selected submission:** [2026-10-05 E–G source record](release-2026-10-05-codex-parity.md) and [machine evidence](release-2026-10-05-codex-parity.json) add native session/ecosystem/activity proof and actual-account/installed controls gates. All ten fresh source steps pass; recommendation remains blocked with 16 external gates. Historical AS08-A evidence remains unchanged.
+
+## Planned on-demand component delivery
+
+[Stage 09](../09-plugin-based-usage/README.md) adds a future lean base app with shared Node and optional agent payloads installed on request. Its H phase requires a new selected release record for catalog/artifact trust, Node-independent bootstrap, installer recovery/security, compatible maintenance, base-package budgets and actual installed/account/process/distribution acceptance. Historical bundled-delivery records stay unchanged; AS08 final closure also depends on this new active scope.

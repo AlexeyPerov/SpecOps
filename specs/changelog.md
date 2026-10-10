@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-11 00:07 MSK — Add deliberate software maintenance and trust hardening
+
+- Added bounded authenticated catalog refresh/caching with monotonic replay/cumulative revocation and immutable manifest enforcement, reviewed signing-key overlap, exact tested update/retained/in-use producers, known native-store contract guards and actual allocated disk accounting including preserved unknown software identities. Production refresh/downloads remain unavailable until approved hosting/signing/distribution.
+- Added active disk/retention budgets, operation-owned recovery, separate cache/retained cleanup and exact reviewed dependent-first group removal with all leases preflighted. Added fd-relative nofollow directory/file/create/rename/unlink boundaries, private permission/hardlink checks and latest catalog/graph/root identity validation on leased executable requests while existing cleanup replies remain available.
+- Added explicit tested-update checks, safe copied diagnostics and public software recovery/packaging guidance. Native/source transport/key rotation/update/ownership/adversarial/process controls and focused UI/type/build checks pass; G-02/G-04/G-06 source acceptance lands. G-01/G-03/G-05 actual native-store/clean signed installed/full-disk/reboot/adversarial acceptance remains open. Accounts/history and historical phase evidence are preserved; no migration, unverified import, account operation or publication.
+
 ## 2026-10-10 23:51 MSK — Add reviewed agent software installation and recovery
 
 - Added Software settings and contextual Sessions/handoff management with authenticated version/platform/reason/size/dependency inventory. Exact finite installation reviews require explicit confirmation; unavailable production distribution remains disabled. Selection/settings do not download software or start provider work.

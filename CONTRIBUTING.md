@@ -70,3 +70,7 @@ Do not add data migrations or upgrade paths for on-disk formats unless explicitl
 ## License
 
 By contributing, you agree that your contributions are licensed under the [MIT License](./LICENSE).
+
+## Optional agent software
+
+Read [component packaging and maintenance](docs/component-packaging.md) before changing catalogs, trust roots, installers or managed launch boundaries. Public recovery guidance lives in [agent software and recovery](docs/agent-software.md). Keep source fixtures, copied native probes, authenticated account results and clean signed installed distribution acceptance separate; unavailable production delivery must remain unavailable until its release gates pass.

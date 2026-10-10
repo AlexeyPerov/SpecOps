@@ -198,4 +198,4 @@ Product plans and the changelog live under [`specs/`](./specs/) (development mat
 
 [MIT](./LICENSE)
 
-Agent software is managed in **Settings → Software** or from **Manage selected software** in Sessions. Review the finite versions/dependencies/download/disk plan before explicitly installing. Account connection and session continuation remain separate explicit actions. Distribution is currently unavailable until release approval; see [installation source evidence](specs/ops/09-plugin-based-usage/implementation-notes-phase-f.md).
+Agent software is managed in **Settings → Software** or from **Manage selected software** in Sessions. Review the finite versions/dependencies/download/disk plan before explicitly installing. Account connection and session continuation remain separate explicit actions. Distribution is currently unavailable until release approval; see [agent software and recovery](docs/agent-software.md).

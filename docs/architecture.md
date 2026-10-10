@@ -299,5 +299,10 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 
 - [../README.md](../README.md) — product scope and dev commands
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) — contribution workflow
-- [`../specs/text-editor-parity-v3/README.md`](../specs/text-editor-parity-v3/README.md) — current public editor roadmap
+- [Agent software and recovery](agent-software.md) — finite installation, updates, removal and incident recovery
+- [Component packaging](component-packaging.md) — signing/trust, native store ownership and developer verification
 - [`../specs/changelog.md`](../specs/changelog.md) — dated implementation history; other local planning material is not part of a clean clone
+
+### Optional software maintenance
+
+Native `component_manager.rs` owns authenticated metadata refresh/cache, exact reviewed install/removal plans, allocated disk accounting, retention, process leases and source-only fault seams. Signed catalog replay/revocation remains authoritative for existing leases at each executable request boundary; owned cancellation/approval replies can finish existing activity. Production hosting and distribution remain unavailable until approved. Private account/profile/native history roots are never component cleanup targets. See [component packaging](component-packaging.md) for the trust/ownership contract and [agent software recovery](agent-software.md) for user controls.

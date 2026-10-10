@@ -38,6 +38,19 @@ struct PublicKey {
     key_id: String,
     public_key: String,
 }
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct AuthorizedKey {
+    key_id: String,
+    public_key: String,
+    minimum_revision: u64,
+    maximum_revision: Option<u64>,
+}
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrustRoots {
+    keys: Vec<AuthorizedKey>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Availability {
@@ -89,26 +102,72 @@ pub enum VerificationPurpose {
 }
 /// Constructor is private: caller cannot supply a trust key or fixture policy in a release.
 pub struct TrustPolicy {
-    key: PublicKey,
+    keys: Vec<AuthorizedKey>,
     origin: Option<&'static str>,
 }
 impl TrustPolicy {
     pub fn embedded() -> Result<Self, TrustError> {
-        Ok(Self {
-            key: serde_json::from_str(TRUST).map_err(|_| TrustError::Schema)?,
-            // Release endpoint is not yet approved. No remote available row is authorized.
-            origin: None,
-        })
+        let roots: TrustRoots = serde_json::from_str(TRUST).map_err(|_| TrustError::Schema)?;
+        Self::roots(roots.keys, None)
+    }
+    fn roots(keys: Vec<AuthorizedKey>, origin: Option<&'static str>) -> Result<Self, TrustError> {
+        let mut identities = BTreeSet::new();
+        if keys.is_empty() || keys.len() > 4 {
+            return Err(TrustError::Limit);
+        }
+        for key in &keys {
+            if !identifier(&key.key_id)
+                || !identities.insert(&key.key_id)
+                || key.minimum_revision == 0
+                || key
+                    .maximum_revision
+                    .is_some_and(|v| v < key.minimum_revision)
+                || decode_hex(&key.public_key)?.len() != 32
+            {
+                return Err(TrustError::Schema);
+            }
+        }
+        Ok(Self { keys, origin })
     }
     #[cfg(test)]
     pub(crate) fn fixture() -> Self {
-        Self {
-            key: serde_json::from_str(include_str!(
-                "../fixtures/components/distribution/trust.json"
-            ))
-            .unwrap(),
-            origin: Some("https://fixtures.invalid/v1/"),
+        let key: PublicKey = serde_json::from_str(include_str!(
+            "../fixtures/components/distribution/trust.json"
+        ))
+        .unwrap();
+        Self::roots(
+            vec![AuthorizedKey {
+                key_id: key.key_id,
+                public_key: key.public_key,
+                minimum_revision: 1,
+                maximum_revision: None,
+            }],
+            Some("https://fixtures.invalid/v1/"),
+        )
+        .unwrap()
+    }
+    /// The application release owns this exact immutable endpoint. Signed payloads and
+    /// archives cannot nominate catalog origins or add signing keys.
+    pub fn catalog_endpoint(&self) -> Option<&'static str> {
+        self.origin.map(|origin| {
+            if origin == "https://fixtures.invalid/v1/" {
+                "https://fixtures.invalid/v1/catalog.json"
+            } else {
+                origin
+            }
+        })
+    }
+    fn catalog_key(&self, id: &str, revision: u64) -> Result<(), TrustError> {
+        let key = self
+            .keys
+            .iter()
+            .find(|key| key.key_id == id)
+            .ok_or(TrustError::Signature)?;
+        if revision < key.minimum_revision || key.maximum_revision.is_some_and(|max| revision > max)
+        {
+            return Err(TrustError::Signature);
         }
+        Ok(())
     }
     fn signature(
         &self,
@@ -116,10 +175,12 @@ impl TrustPolicy {
         domain: &[u8],
         payload: &[u8],
     ) -> Result<(), TrustError> {
-        if signature.key_id != self.key.key_id {
-            return Err(TrustError::Signature);
-        }
-        let key: [u8; 32] = decode_hex(&self.key.public_key)?
+        let trusted = self
+            .keys
+            .iter()
+            .find(|key| key.key_id == signature.key_id)
+            .ok_or(TrustError::Signature)?;
+        let key: [u8; 32] = decode_hex(&trusted.public_key)?
             .try_into()
             .map_err(|_| TrustError::Signature)?;
         let signature_bytes: [u8; 64] = decode_hex(&signature.value)?
@@ -219,6 +280,7 @@ impl VerifiedCatalog {
         {
             return Err(TrustError::Schema);
         }
+        policy.catalog_key(&envelope.signature.key_id, catalog.revision)?;
         let watermark = CatalogWatermark {
             revision: catalog.revision,
             payload_sha256: sha256(&payload),
@@ -411,6 +473,98 @@ mod tests {
             .collect::<String>()
             .into();
         serde_json::to_vec(&envelope).unwrap()
+    }
+    #[test]
+    fn reviewed_key_overlap_rotates_catalog_signer_and_preserves_retained_manifest_verification() {
+        let old = TrustPolicy::fixture().keys.remove(0);
+        let next_signer = SigningKey::from_bytes(&[73; 32]);
+        let next_public = next_signer
+            .verifying_key()
+            .to_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+        let overlap = TrustPolicy::roots(
+            vec![
+                AuthorizedKey {
+                    maximum_revision: Some(2),
+                    ..old
+                },
+                AuthorizedKey {
+                    key_id: "fixture-next".into(),
+                    public_key: next_public,
+                    minimum_revision: 3,
+                    maximum_revision: None,
+                },
+            ],
+            Some("https://fixtures.invalid/v1/"),
+        )
+        .unwrap();
+        let unsigned = signed_mutation(|p| p["revision"] = 3.into());
+        let mut envelope: serde_json::Value = serde_json::from_slice(&unsigned).unwrap();
+        let payload = decode_hex(envelope["payloadHex"].as_str().unwrap()).unwrap();
+        let mut message = CATALOG_DOMAIN.to_vec();
+        message.extend(&payload);
+        envelope["signature"]["keyId"] = "fixture-next".into();
+        envelope["signature"]["value"] = next_signer
+            .sign(&message)
+            .to_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+            .into();
+        let rotated = serde_json::to_vec(&envelope).unwrap();
+        let old_catalog = VerifiedCatalog::verify(
+            &bytes(),
+            &overlap,
+            now(),
+            VerificationPurpose::InstalledReceipt,
+            None,
+        )
+        .unwrap();
+        let current = VerifiedCatalog::verify(
+            &rotated,
+            &overlap,
+            now(),
+            VerificationPurpose::NewInstall,
+            Some(old_catalog.watermark()),
+        )
+        .unwrap();
+        assert_eq!(current.rows().len(), 5); // Manifests still carry the approved old key.
+        assert!(matches!(
+            VerifiedCatalog::verify(
+                &unsigned,
+                &overlap,
+                now(),
+                VerificationPurpose::NewInstall,
+                None
+            ),
+            Err(TrustError::Signature)
+        ));
+        assert!(matches!(
+            VerifiedCatalog::verify(
+                &rotated,
+                &TrustPolicy::fixture(),
+                now(),
+                VerificationPurpose::NewInstall,
+                None
+            ),
+            Err(TrustError::Signature)
+        ));
+        assert!(matches!(
+            VerifiedCatalog::verify(
+                &bytes(),
+                &overlap,
+                now(),
+                VerificationPurpose::InstalledReceipt,
+                Some(current.watermark())
+            ),
+            Err(TrustError::Replay)
+        ));
+        assert!(matches!(
+            TrustPolicy::roots(vec![], None),
+            Err(TrustError::Limit)
+        ));
     }
     #[test]
     fn native_authentication_all_five_and_production_is_unavailable() {

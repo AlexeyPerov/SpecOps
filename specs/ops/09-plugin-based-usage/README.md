@@ -41,7 +41,7 @@ The approximate prepared Node/Claude/Cursor payload size previously discussed is
 | AS09-D | [Lazy Agent Host and installed component resolution](execution-plan-phase-d-lazy-host-runtime-resolution.md) | D-02/D-04 source accepted; production bootstrap/vendor/installed gates remain |
 | AS09-E | [All four agent components and future adapter registration](execution-plan-phase-e-agent-components.md) | Planned |
 | AS09-F | [Agent installation, first use and recovery UX](execution-plan-phase-f-installation-ux.md) | F-01–F-03 source/fixtures pass; F-04–F-06 UI implemented, maintenance/installed acceptance open |
-| AS09-G | [Updates, storage maintenance and security hardening](execution-plan-phase-g-maintenance-security.md) | Planned |
+| AS09-G | [Updates, storage maintenance and security hardening](execution-plan-phase-g-maintenance-security.md) | G-02/G-04/G-06 source acceptance passes; G-01/G-03/G-05 source implemented, actual installed/native-store/adversarial acceptance open |
 | AS09-H | [Lean release packaging and installed acceptance](execution-plan-phase-h-release-acceptance.md) | Planned |
 
 [Phase A evidence](implementation-notes-phase-a.md) records strict native contracts, measured prepared payload bytes, numeric budgets and truthful unavailable distribution entries. The tracked OpenCode sidecar is a developer PATH wrapper; observed Codex is incompatible with the tested pin. Clean signed installed/process/account acceptance remains open.
@@ -74,3 +74,5 @@ No task is complete merely because a plan exists or mocks pass. No persisted-dat
 **AS09-E source evidence (2026-10-10):** [Managed agent notes](implementation-notes-phase-e.md) record all-four real copied managed controls, a separate managed OpenCode SDK recipe, independent shared Node reuse and first-party registration. E-05/E-06 source acceptance passes; account/native-policy/clean signed installed/distribution gates for E-01–E-04 remain open. Historical inventories and heavy bundles are retained until H.
 
 F source/fixture evidence: [Installation and recovery UX](implementation-notes-phase-f.md). No production installation/update/rollback availability is inferred from UI fixtures.
+
+G source evidence: [Maintenance and security](implementation-notes-phase-g.md). Signed metadata refresh, retained/update/in-use producers, actual allocated disk ownership, reviewed group removal, nofollow fd mutations, trust-root overlap and leased revocation request guards are implemented. Production availability and actual native-store/installed/full-disk/reboot acceptance remain explicit open gates.

@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10
 
-**Status:** Planned; all tasks open
+**Status:** Source maintenance/security implemented; G-02/G-04/G-06 source acceptance passes; G-01/G-03/G-05 complete installed/native-store/adversarial acceptance open. [Evidence](implementation-notes-phase-g.md).
 
 **Prerequisites:** AS09-B trust policy; AS09-C/D installer/process ownership; AS09-F operations.
 
@@ -16,7 +16,7 @@ Deliver updates, storage maintenance and security hardening for optional first-p
 
 ### AS09-G-01 — Implement deliberate compatible update activation
 
-**State:** [TODO]
+**State:** [TODO] — source implementation/fixtures pass; full actual acceptance open, see evidence
 
 Use verified catalog metadata to offer only tested compatible versions. Download on explicit user action and activate after leases are released or a reviewed stop/restart. App upgrades check installed components against the newly shipped adapter contract without automatic data conversion.
 
@@ -24,7 +24,7 @@ Use verified catalog metadata to offer only tested compatible versions. Download
 
 ### AS09-G-02 — Implement bounded cleanup and disk accounting
 
-**State:** [TODO]
+**State:** [DONE] — source/fixture acceptance; installed release evidence remains H
 
 Report active/retained versions, shared dependencies, staging and archive cache separately. Apply explicit cache/retention budgets and remove only owned unleased software artifacts. In-progress installation recovery and profile/native history roots are excluded from reclamation.
 
@@ -32,7 +32,7 @@ Report active/retained versions, shared dependencies, staging and archive cache 
 
 ### AS09-G-03 — Harden component store and trust lifecycle
 
-**State:** [TODO]
+**State:** [TODO] — source implementation/fixtures pass; full actual acceptance open, see evidence
 
 Protect private directories, catalog revision/receipts and extraction/activation against symlink/path substitution and permissions changes. Revalidate execution identity at the defined launch boundary; handle disk tampering, signed revocation and key rotation. Bound metadata and never accept trust from the downloaded archive itself.
 
@@ -40,7 +40,7 @@ Protect private directories, catalog revision/receipts and extraction/activation
 
 ### AS09-G-04 — Harden network, logs and installation environment
 
-**State:** [TODO]
+**State:** [DONE] — source/fixture acceptance; installed release evidence remains H
 
 Use explicit trusted endpoint/redirect rules and bounded proxy/network error handling. Avoid account credentials in catalog/download requests, scrub temporary URLs/headers/errors, and suppress unreviewed install scripts. Keep install subprocess environments separate from account/native profile environments.
 
@@ -48,7 +48,7 @@ Use explicit trusted endpoint/redirect rules and bounded proxy/network error han
 
 ### AS09-G-05 — Run the interruption, concurrency and adversarial matrix
 
-**State:** [TODO]
+**State:** [TODO] — source implementation/fixtures pass; full actual acceptance open, see evidence
 
 Exercise cancel, full disk, corrupted/truncated archive, decompression limits, stale locks, concurrent windows/processes, shutdown/reboot simulation, dependency failure, active lease removal, signed catalog replay and pending update under native activity.
 
@@ -56,7 +56,7 @@ Exercise cancel, full disk, corrupted/truncated archive, decompression limits, s
 
 ### AS09-G-06 — Document support and incident recovery
 
-**State:** [TODO]
+**State:** [DONE] — source/fixture acceptance; installed release evidence remains H
 
 Provide user guidance for install/offline/update/remove/reinstall plus safe component diagnostics and support scope. Document compromised version remediation, manual verified component recovery and explicit native data incompatibility. Update architecture and developer packaging docs without linking public docs to untracked specs.
 

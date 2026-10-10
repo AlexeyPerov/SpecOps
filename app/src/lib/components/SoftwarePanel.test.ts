@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { mountComponent } from './_testComponentMount';
 import SoftwarePanel from './SoftwarePanel.svelte';
 import { newerComponentJob } from '../services/componentManager';
-const fixture = vi.hoisted(() => ({ diagnostics: vi.fn(), plan: vi.fn(), update: vi.fn(), install: vi.fn(), cancel: vi.fn(), retry: vi.fn(), select: vi.fn(), remove: vi.fn(), cleanCache: vi.fn(), event: undefined as undefined | ((job: any) => void) }));
+const fixture = vi.hoisted(() => ({ diagnostics: vi.fn(), plan: vi.fn(), update: vi.fn(), install: vi.fn(), cancel: vi.fn(), retry: vi.fn(), select: vi.fn(), remove: vi.fn(), cleanCache: vi.fn(), cleanRetained: vi.fn(), refreshCatalog: vi.fn(), removalPlan: vi.fn(), removeGroup: vi.fn(), event: undefined as undefined | ((job: any) => void) }));
 vi.mock('../services/componentManager', async importOriginal => ({ ...(await importOriginal<object>()), componentManager: fixture, listenComponentJobs: async (fn: (job: any) => void) => { fixture.event = fn; return () => {}; } }));
 const row = { id: 'codex', version: '0.160.0', state: 'missing', active: false, verified: false, target: { os: 'darwin', arch: 'arm64' }, downloadBytes: 1000, installedBytes: 2000, dependencies: [{ id: 'node', version: '24.15.0' }] };
 const plan = { planId: 'p-one', digest: 'review-digest', catalogRevision: 1, expiresAt: Math.ceil(Date.now() / 1000) + 300, components: [{ id: 'node', version: '24.15.0' }, { id: 'codex', version: '0.160.0' }], downloadBytes: 12345, requiredDiskBytes: 34567 };
@@ -14,7 +14,7 @@ beforeEach(() => {
  vi.clearAllMocks();fixture.event = undefined;
  fixture.diagnostics.mockResolvedValue({ target: { os: 'darwin', arch: 'arm64' }, catalogRevision: 1, components: [row], jobs: [] });
  fixture.plan.mockResolvedValue(plan); fixture.update.mockResolvedValue(plan); fixture.install.mockResolvedValue(job); fixture.retry.mockResolvedValue({ ...job, operationId: 'operation-two' });
- fixture.cancel.mockResolvedValue({ ...job, sequence: 2 }); fixture.select.mockResolvedValue(undefined); fixture.remove.mockResolvedValue(undefined);fixture.cleanCache.mockResolvedValue(undefined);
+ fixture.cancel.mockResolvedValue({ ...job, sequence: 2 }); fixture.select.mockResolvedValue(undefined); fixture.remove.mockResolvedValue(undefined);fixture.cleanCache.mockResolvedValue(undefined); fixture.cleanRetained.mockResolvedValue(undefined); fixture.refreshCatalog.mockResolvedValue(2); fixture.removalPlan.mockResolvedValue({ components: [{id: 'codex', version: '0.160.0'}, {id: 'node', version: '24.15.0'}], catalogRevision: 2, digest: 'group-review' }); fixture.removeGroup.mockResolvedValue(undefined);
 });
 it('opening, dismissing and unavailable distribution never download or install', async () => {
  const { host } = mountComponent(SoftwarePanel, {}); await settle();expect(fixture.plan).not.toHaveBeenCalled(); expect(fixture.install).not.toHaveBeenCalled();
@@ -58,4 +58,23 @@ it('unknown totals are indeterminate and expired review cannot authorize install
 it('expired review refuses confirmation and offline missing components keep the editor usable',async()=>{
  fixture.plan.mockResolvedValue({...plan,expiresAt:1});const {host}=mountComponent(SoftwarePanel,{});await settle();button(host,'Review installation').click();await settle();button(host,'Install reviewed components').click();await settle();expect(fixture.install).not.toHaveBeenCalled();expect(host.textContent).toContain('expired');
  Object.defineProperty(navigator,'onLine',{value:false,configurable:true});window.dispatchEvent(new Event('offline'));await settle();expect(button(host,'Review installation').disabled).toBe(true);expect(host.textContent).toContain('editor and installed software remain available');Object.defineProperty(navigator,'onLine',{value:true,configurable:true});window.dispatchEvent(new Event('online'));
+});
+
+it('remote checks are explicit, actual storage is separate and reviewed group removal preserves running ownership', async () => {
+ fixture.diagnostics.mockResolvedValue({ target: { os: 'darwin', arch: 'arm64' }, components: [{ ...row, state: 'installed', verified: true, active: true }], jobs: [], disk: { activeBytes: 8192, retainedBytes: 4096, sharedBytes: 16384, stagingBytes: 0, cacheBytes: 0, activeBudgetBytes: 4294967296, cacheBudgetBytes: 1073741824, retainedPerComponent: 1, unrecognizedBytes: 4096 } });
+ const {host} = mountComponent(SoftwarePanel, {}); await settle();
+ expect(fixture.refreshCatalog).not.toHaveBeenCalled(); expect(host.textContent).toContain('Actual allocated disk'); expect(host.textContent).toContain('counted once');
+ button(host, 'Check tested updates').click(); await settle(); expect(fixture.refreshCatalog).toHaveBeenCalledOnce(); expect(fixture.install).not.toHaveBeenCalled();
+ button(host, 'Review all software removal').click(); await settle(); expect(fixture.removeGroup).not.toHaveBeenCalled(); expect(host.textContent).toContain('Credentials, profiles, workspace sessions and native history are preserved');
+ button(host, 'Keep software').click(); await settle(); expect(fixture.removeGroup).not.toHaveBeenCalled();
+ button(host, 'Review all software removal').click(); await settle(); fixture.removeGroup.mockRejectedValueOnce('in-use'); button(host, 'Remove reviewed software group').click(); await settle();
+ expect(fixture.removeGroup).toHaveBeenCalledWith({ components: [{id: 'codex', version: '0.160.0'}, {id: 'node', version: '24.15.0'}], catalogRevision: 2, digest: 'group-review' });
+ expect(host.querySelector('[role=dialog]')).not.toBeNull(); expect(fixture.install).not.toHaveBeenCalled();
+});
+
+it('support diagnostics copy requires an explicit action and excludes installation activity', async () => {
+ const writeText = vi.fn().mockResolvedValue(undefined); Object.defineProperty(navigator, 'clipboard', { value: {writeText}, configurable: true });
+ const {host} = mountComponent(SoftwarePanel, {}); await settle(); expect(writeText).not.toHaveBeenCalled();
+ button(host, 'Copy software diagnostics').click(); await settle(); expect(writeText).toHaveBeenCalledOnce();
+ expect(JSON.parse(writeText.mock.calls[0][0]).components[0].version).toBe('0.160.0'); expect(host.textContent).toContain('Software diagnostics copied'); expect(fixture.install).not.toHaveBeenCalled();
 });

@@ -1102,6 +1102,22 @@ pub fn agent_host_status(
     state.status()
 }
 
+fn validate_component_request(
+    manager: &ComponentManager,
+    leases: &HashMap<String, RuntimeLease>,
+    method: &str,
+    runtime: &str,
+) -> Result<(), AgentHostError> {
+    if matches!(method, "turn.cancel" | "permission.reply" | "question.reply") { return Ok(()); }
+    for lease in leases.values() {
+        manager.validate_launch(lease).map_err(|_| AgentHostError::ComponentUnavailable {
+            component: runtime.into(),
+            message: "Software identity changed or was revoked. Finish or cancel existing work, review Software and reconnect explicitly.".into(),
+        })?;
+    }
+    Ok(())
+}
+
 /// Generic JSON-RPC forwarder. The WebView calls this with a host method + params
 /// and receives the host `result`; protocol errors arrive as
 /// `AgentHostError::Protocol` and transport failures as the other variants.
@@ -1133,6 +1149,7 @@ pub async fn agent_host_request(
                         inner.leases.insert(runtime.clone(), lease);
                     }
                     let lease = &inner.leases[&runtime];
+                    validate_component_request(&app.state::<ComponentManager>(), &inner.leases, &method, &runtime)?;
                     object.insert("__managedComponent".into(), serde_json::json!({ "root": lease.root, "manifest": lease.manifest }));
                 }
             }
@@ -1227,6 +1244,26 @@ mod tests {
                 assert!(manager.remove(request).is_ok());
             }
         }
+    }
+
+    #[test]
+    fn real_host_keeps_owned_process_and_cleanup_after_signed_revocation_but_blocks_new_component_work() {
+        ensure_host_built();
+        let (_temp, manager) = crate::component_manager::tests::installed_manager(ComponentId::Codex);
+        let state = AgentHostState::new(); let mut command = Command::new(node_path()); command.arg(host_dist());
+        state.start_leased_command(command, None, Some(manager.acquire_runtime(ComponentId::Node).unwrap())).unwrap();
+        state.inner.lock().unwrap().leases.insert("codex".into(), manager.acquire_runtime(ComponentId::Codex).unwrap());
+        let before = state.status().unwrap();
+        { let inner = state.inner.lock().unwrap(); validate_component_request(&manager, &inner.leases, "session.list", "codex").unwrap(); }
+        manager.accept_catalog(include_bytes!("../fixtures/components/distribution/revoked-catalog.json")).unwrap();
+        { let inner = state.inner.lock().unwrap();
+            assert!(validate_component_request(&manager, &inner.leases, "turn.start", "codex").is_err());
+            for method in ["turn.cancel", "permission.reply", "question.reply"] { validate_component_request(&manager, &inner.leases, method, "codex").unwrap(); }
+        }
+        let after = state.status().unwrap(); assert!(after.running); assert_eq!(before.generation, after.generation);
+        assert!(manager.remove(crate::component_manager::Request { id: ComponentId::Codex, version: "0.160.0".into() }).is_err());
+        state.stop().unwrap(); assert!(!state.status().unwrap().running);
+        manager.remove(crate::component_manager::Request { id: ComponentId::Codex, version: "0.160.0".into() }).unwrap();
     }
 
     #[test]

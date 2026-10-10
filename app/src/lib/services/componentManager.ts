@@ -20,11 +20,16 @@ export interface ComponentInventory { id: ComponentId; version: string; state: C
   target: { os: string; arch: string }; availabilityReason: string;
   downloadBytes: number | null; installedBytes: number | null; dependencies: ComponentRequest[];
 }
+export interface ComponentDiskAccounting { activeBytes: number; retainedBytes: number; sharedBytes: number; stagingBytes: number; cacheBytes: number; activeBudgetBytes: number; cacheBudgetBytes: number; retainedPerComponent: number; unrecognizedBytes: number }
+export interface ComponentRemovalPlan { components: ComponentRequest[]; catalogRevision: number; digest: string }
 export interface ComponentDiagnostics {
   catalogRevision: number; target: { os: string; arch: string };
-  components: ComponentInventory[]; jobs: ComponentJob[];
+  components: ComponentInventory[]; jobs: ComponentJob[]; disk: ComponentDiskAccounting;
 }
 export const componentManager = {
+  refreshCatalog: () => invoke<number>("component_refresh_catalog"),
+  removalPlan: () => invoke<ComponentRemovalPlan>("component_removal_plan"),
+  removeGroup: (plan: ComponentRemovalPlan) => invoke<void>("component_remove_group", { plan, confirmed: true }),
   list: () => invoke<ComponentInventory[]>("component_list"),
   plan: (request: ComponentRequest) => invoke<ComponentPlan>("component_plan", { request }),
   install: (confirmation: ComponentConfirmation) => invoke<ComponentJob>("component_install", { confirmation }),
@@ -33,6 +38,7 @@ export const componentManager = {
   update: (request: ComponentRequest) => invoke<ComponentPlan>("component_update", { request }),
   select: (request: ComponentRequest) => invoke<void>("component_select", { request }),
   remove: (request: ComponentRequest) => invoke<void>("component_remove", { request }),
+  cleanRetained: () => invoke<void>("component_clean_retained"),
   cleanCache: () => invoke<void>("component_clean_cache"),
   diagnostics: () => invoke<ComponentDiagnostics>("component_diagnostics"),
 };

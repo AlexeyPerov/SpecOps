@@ -107,6 +107,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             component_manager::component_list,
+            component_manager::component_refresh_catalog,
             component_manager::component_plan,
             component_manager::component_install,
             component_manager::component_cancel,
@@ -114,7 +115,10 @@ pub fn run() {
             component_manager::component_update,
             component_manager::component_select,
             component_manager::component_remove,
+            component_manager::component_removal_plan,
+            component_manager::component_remove_group,
             component_manager::component_clean_cache,
+            component_manager::component_clean_retained,
             component_manager::component_diagnostics,
             handoff::handoff_workspace_excerpts,
             handoff::handoff_write_journal,

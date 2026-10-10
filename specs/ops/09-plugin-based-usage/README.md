@@ -1,8 +1,8 @@
 # 09 — Plugin-based agent usage
 
-**Updated:** 2026-10-10
+**Updated:** 2026-10-11
 
-**Status:** A contracts, B trusted artifact pipeline, C native installer D lazy host/resolver and E managed agents implemented (16/30 local tasks accepted); native/copy/process source evidence recorded. Production hosting/signing/installed acceptance, C-01/D-01/D-03/D-05/D-06 and E-01–E-04 and F–H remain open.
+**Status:** A–H source implementation and lean candidate verified; 23 of 48 source task acceptances pass. Production hosting/signing/clearance and clean installed/account/platform/process acceptance remain blocked.
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -27,9 +27,16 @@ Here, a plugin is a first-party optional execution component with a tested adapt
 
 ## Current source boundary
 
-The native supervisor and production runtime resolvers now use authenticated managed roots and generation-owned leases. The host build still prepares Claude/Cursor assets for candidate assembly, and heavy Node/agent resources plus the native sidecar remain packaged until H verifies a functional clean installed replacement. Managed OpenCode loads its separate SDK client graph on demand. Development source fallbacks remain outside installed managed execution. Account isolation, activity, history, policy and process ownership retain their native adapter contracts; real account and installed delivery acceptance remain explicit. Existing exact pins are reviewed component inputs.
-
-The approximate prepared Node/Claude/Cursor payload size previously discussed is planning context, not a measured installer reduction. AS09-A establishes actual package/startup/disk budgets and AS09-H measures the outcome.
+The native supervisor and production runtime resolvers use authenticated managed
+roots and generation-owned leases. All five actual finite candidate components have
+been installed through the native installer under isolated test-only trust and
+exercised without accounts. The base Tauri app now packages only its main executable,
+editor/frontend, small host JS and trust/descriptor metadata, with no Node, agent
+sidecar, SDK/native helper payloads. Component fixture preparation is separate.
+Production catalog/artifact distribution remains unavailable; source/debug paths
+cannot authorize installed execution. [H evidence](implementation-notes-phase-h.md)
+records a real 17.89 MiB unpacked / 8.15 MiB local-gzip candidate, separate A budgets
+and an explicitly blocked [selected release record](../08-release-gates/release-2026-10-11-components.md).
 
 ## Active scope
 
@@ -39,12 +46,12 @@ The approximate prepared Node/Claude/Cursor payload size previously discussed is
 | AS09-B | [Trusted component artifacts and catalog](execution-plan-phase-b-artifact-pipeline.md) | Source pipeline/security verified; B-01/B-03/B-06 release/integration gates open |
 | AS09-C | [Native bootstrap and durable installer](execution-plan-phase-c-native-install-manager.md) | C-02–C-06 native fixtures accepted; C-01 installed startup remains D/H |
 | AS09-D | [Lazy Agent Host and installed component resolution](execution-plan-phase-d-lazy-host-runtime-resolution.md) | D-02/D-04 source accepted; production bootstrap/vendor/installed gates remain |
-| AS09-E | [All four agent components and future adapter registration](execution-plan-phase-e-agent-components.md) | Planned |
+| AS09-E | [All four agent components and future adapter registration](execution-plan-phase-e-agent-components.md) | Source managed integrations verified; E-01–E-04 installed/account/distribution acceptance open |
 | AS09-F | [Agent installation, first use and recovery UX](execution-plan-phase-f-installation-ux.md) | F-01–F-03 source/fixtures pass; F-04–F-06 UI implemented, maintenance/installed acceptance open |
 | AS09-G | [Updates, storage maintenance and security hardening](execution-plan-phase-g-maintenance-security.md) | G-02/G-04/G-06 source acceptance passes; G-01/G-03/G-05 source implemented, actual installed/native-store/adversarial acceptance open |
-| AS09-H | [Lean release packaging and installed acceptance](execution-plan-phase-h-release-acceptance.md) | Planned |
+| AS09-H | [Lean release packaging and installed acceptance](execution-plan-phase-h-release-acceptance.md) | H-05 source gate accepted; lean local candidate passes size/inventory; signed installed/account/cost/publication acceptance open |
 
-[Phase A evidence](implementation-notes-phase-a.md) records strict native contracts, measured prepared payload bytes, numeric budgets and truthful unavailable distribution entries. The tracked OpenCode sidecar is a developer PATH wrapper; observed Codex is incompatible with the tested pin. Clean signed installed/process/account acceptance remains open.
+[Phase A evidence](implementation-notes-phase-a.md) records strict native contracts, measured prepared payload bytes, numeric budgets and truthful unavailable distribution entries. The historical A inventory remains preserved; E/H obtain the exact pinned native candidates and verify native installation under test-only trust. Clean signed installed/process/account acceptance remains open.
 
 ## Dependencies and delivery
 
@@ -71,8 +78,10 @@ No task is complete merely because a plan exists or mocks pass. No persisted-dat
 
 [Phase D evidence](implementation-notes-phase-d.md) records native verified shared Node launch, static exact descriptors, deferred selected adapter imports, all-four managed roots/entries, path-free integrity errors, generation-pinned requests and all-five leases retained through real host stop/crash cleanup. Actual trusted production bootstrap and all-four installed vendor/account acceptance remain E/F/G/H.
 
-**AS09-E source evidence (2026-10-10):** [Managed agent notes](implementation-notes-phase-e.md) record all-four real copied managed controls, a separate managed OpenCode SDK recipe, independent shared Node reuse and first-party registration. E-05/E-06 source acceptance passes; account/native-policy/clean signed installed/distribution gates for E-01–E-04 remain open. Historical inventories and heavy bundles are retained until H.
+**AS09-E source evidence (2026-10-10):** [Managed agent notes](implementation-notes-phase-e.md) record all-four real copied managed controls, a separate managed OpenCode SDK recipe, independent shared Node reuse and first-party registration. E-05/E-06 source acceptance passes; account/native-policy/clean signed installed/distribution gates for E-01–E-04 remain open. Historical inventories remain preserved; H removes heavy base payload declarations after actual native replacement controls.
 
 F source/fixture evidence: [Installation and recovery UX](implementation-notes-phase-f.md). No production installation/update/rollback availability is inferred from UI fixtures.
 
 G source evidence: [Maintenance and security](implementation-notes-phase-g.md). Signed metadata refresh, retained/update/in-use producers, actual allocated disk ownership, reviewed group removal, nofollow fd mutations, trust-root overlap and leased revocation request guards are implemented. Production availability and actual native-store/installed/full-disk/reboot acceptance remain explicit open gates.
+
+**AS09-H:** [Lean candidate and release acceptance](implementation-notes-phase-h.md) implements H source packaging, repeatable numerical/source gates and selected version-2 blocked release record. Actual signed installed/account/startup/RSS/platform/process/distribution/publication acceptance remains open.

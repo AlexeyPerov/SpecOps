@@ -2,7 +2,7 @@
   "name": "@specops/agent-host",
   "version": "0.1.0",
   "private": true,
-  "description": "SpecOps Agent Host — secret-safe local host that owns runtime adapters outside the WebView.",
+  "description": "SpecOps Agent Host \u2014 secret-safe local host that owns runtime adapters outside the WebView.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -12,7 +12,8 @@
     "build": "node scripts/build.mjs",
     "check": "../node_modules/.bin/tsc --noEmit -p tsconfig.json",
     "test": "../node_modules/.bin/vitest run",
-    "test:e2e": "node scripts/build.mjs && ../node_modules/.bin/vitest run src/process.test.ts"
+    "test:e2e": "node scripts/build.mjs && ../node_modules/.bin/vitest run src/process.test.ts",
+    "fixtures:assets": "node scripts/prepare-fixture-assets.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.8.0",

@@ -1,0 +1,337 @@
+{
+  "schemaVersion": 2,
+  "selectedScope": "optional-agent-components",
+  "recordedAt": "2026-10-10T21:24:14.927Z",
+  "source": {
+    "baseCommit": "96474d1562d0d8a9cd5493a89fdba16ac7a2a778",
+    "dirty": true,
+    "snapshotSha256": "1551ee4a272ee0de1e82cc7eda51806f6f6c28acf5f5a1d37f92a6a1359ab71c"
+  },
+  "app": {
+    "version": "0.3.0",
+    "sha256": null,
+    "signingTeam": null,
+    "notarizationId": null
+  },
+  "host": {
+    "version": "0.1.0",
+    "sha256": "84d058b7ac2945749256cbd7cbbe84ee53d449f394a0d5a9f5f2aee34b724b5f"
+  },
+  "platform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "osVersion": "14.4",
+    "osBuild": "23E214"
+  },
+  "catalog": {
+    "revision": null,
+    "keyId": null,
+    "sha256": null,
+    "url": null
+  },
+  "components": [
+    {
+      "id": "node",
+      "version": "24.15.0",
+      "target": "darwin-arm64",
+      "archiveSha256": "977221573ed5ddedc6e9d7364549f50626b95623a58b89016e521bf0ac0ee2ee",
+      "compressedBytes": 38642444,
+      "unpackedBytes": 120101534,
+      "distribution": "unavailable",
+      "manifestSha256": null,
+      "signingIdentity": null,
+      "url": null,
+      "noticeEvidence": "finite source candidate notices; production review unavailable"
+    },
+    {
+      "id": "claude",
+      "version": "0.3.289",
+      "target": "darwin-arm64",
+      "archiveSha256": "c5245388c1e1b41d7772772163e7d82e6915d9d6dec6ce8b3417910d6e7b8328",
+      "compressedBytes": 100047672,
+      "unpackedBytes": 234326475,
+      "distribution": "unavailable",
+      "manifestSha256": null,
+      "signingIdentity": null,
+      "url": null,
+      "noticeEvidence": "finite source candidate notices; production review unavailable"
+    },
+    {
+      "id": "cursor",
+      "version": "1.0.35",
+      "target": "darwin-arm64",
+      "archiveSha256": "7120c564913313c693a7769f99f2a875cc08cc7a3c8329a3f5a305e011c3d0b9",
+      "compressedBytes": 9355505,
+      "unpackedBytes": 40660632,
+      "distribution": "unavailable",
+      "manifestSha256": null,
+      "signingIdentity": null,
+      "url": null,
+      "noticeEvidence": "finite source candidate notices; production review unavailable"
+    },
+    {
+      "id": "codex",
+      "version": "0.160.0",
+      "target": "darwin-arm64",
+      "archiveSha256": "f797273ad19b7099b0d83c9d86667bdf0649ac44366f52ff1eba2a56f7d0925c",
+      "compressedBytes": 129973781,
+      "unpackedBytes": 332979473,
+      "distribution": "unavailable",
+      "manifestSha256": null,
+      "signingIdentity": null,
+      "url": null,
+      "noticeEvidence": "finite source candidate notices; production review unavailable"
+    },
+    {
+      "id": "opencode",
+      "version": "1.17.4",
+      "target": "darwin-arm64",
+      "archiveSha256": "c459eb51f538117638950b77076b1479db31cdfe9d2c04b45edcbe5859bb53fd",
+      "compressedBytes": 39941618,
+      "unpackedBytes": 119502973,
+      "distribution": "unavailable",
+      "manifestSha256": null,
+      "signingIdentity": null,
+      "url": null,
+      "noticeEvidence": "finite source candidate notices; production review unavailable"
+    }
+  ],
+  "advertisedTargets": [],
+  "recommendation": "blocked",
+  "roadmapComplete": false,
+  "gates": [
+    {
+      "id": "source-regression",
+      "scope": "source",
+      "required": true,
+      "status": "pass",
+      "evidence": "Fresh full source regression, native bootstrap/security/maintenance/subset/handoff/process fixtures pass. AS09-H notes distinguish actual signed installed/account acceptance."
+    },
+    {
+      "id": "native-install-managed-controls",
+      "scope": "source",
+      "required": true,
+      "status": "pass",
+      "evidence": "Fresh actual five finite native installs and managed no-account controls after fd/trust hardening pass under isolated test-only trust; 187.78s. AS09-H notes."
+    },
+    {
+      "id": "lean-base-inventory",
+      "scope": "source",
+      "required": true,
+      "status": "pass",
+      "evidence": "Actual ad-hoc base inventory: 18762344 regular bytes, 8543895 local gzip bytes; whole-tree contamination/oversize gates pass. No signed-installed result."
+    },
+    {
+      "id": "bootstrap-security",
+      "scope": "source",
+      "required": true,
+      "status": "pass",
+      "evidence": "Fresh full source regression, native bootstrap/security/maintenance/subset/handoff/process fixtures pass. AS09-H notes distinguish actual signed installed/account acceptance."
+    },
+    {
+      "id": "maintenance-security",
+      "scope": "source",
+      "required": true,
+      "status": "pass",
+      "evidence": "Fresh full source regression, native bootstrap/security/maintenance/subset/handoff/process fixtures pass. AS09-H notes distinguish actual signed installed/account acceptance."
+    },
+    {
+      "id": "subset-recovery-handoff-fixtures",
+      "scope": "source",
+      "required": true,
+      "status": "pass",
+      "evidence": "Fresh full source regression, native bootstrap/security/maintenance/subset/handoff/process fixtures pass. AS09-H notes distinguish actual signed installed/account acceptance."
+    },
+    {
+      "id": "trusted-production-catalog",
+      "scope": "distribution",
+      "required": true,
+      "status": "unavailable",
+      "evidence": "No approved production hosting, clearance, trust/signing custody or signed candidate; see AS09-H notes."
+    },
+    {
+      "id": "artifact-hosting",
+      "scope": "distribution",
+      "required": true,
+      "status": "unavailable",
+      "evidence": "No approved production hosting, clearance, trust/signing custody or signed candidate; see AS09-H notes."
+    },
+    {
+      "id": "distribution-clearance",
+      "scope": "distribution",
+      "required": true,
+      "status": "unavailable",
+      "evidence": "No approved production hosting, clearance, trust/signing custody or signed candidate; see AS09-H notes."
+    },
+    {
+      "id": "signed-notarized-app",
+      "scope": "distribution",
+      "required": true,
+      "status": "unavailable",
+      "evidence": "No approved production hosting, clearance, trust/signing custody or signed candidate; see AS09-H notes."
+    },
+    {
+      "id": "component-signing-quarantine",
+      "scope": "distribution",
+      "required": true,
+      "status": "unavailable",
+      "evidence": "No approved production hosting, clearance, trust/signing custody or signed candidate; see AS09-H notes."
+    },
+    {
+      "id": "component-notices",
+      "scope": "distribution",
+      "required": true,
+      "status": "unavailable",
+      "evidence": "No approved production hosting, clearance, trust/signing custody or signed candidate; see AS09-H notes."
+    },
+    {
+      "id": "installed-editor-offline",
+      "scope": "installed",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "installed-subsets-concurrency-recovery",
+      "scope": "installed",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "installed-handoff-16-pairs",
+      "scope": "account",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "actual-two-codex-accounts",
+      "scope": "account",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "native-store-update-rollback",
+      "scope": "installed",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "quit-crash-descendant-cleanup",
+      "scope": "process",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "baseline-size-startup-memory-budgets",
+      "scope": "installed",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "selected-platform",
+      "scope": "platform",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "codex-installed-lifecycle",
+      "scope": "installed",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "codex-account-lifecycle",
+      "scope": "account",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "opencode-installed-lifecycle",
+      "scope": "installed",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "opencode-account-lifecycle",
+      "scope": "account",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "claude-installed-lifecycle",
+      "scope": "installed",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "claude-account-lifecycle",
+      "scope": "account",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "cursor-installed-lifecycle",
+      "scope": "installed",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    },
+    {
+      "id": "cursor-account-lifecycle",
+      "scope": "account",
+      "required": true,
+      "status": "not-run",
+      "evidence": "Pending fresh source evidence or clean signed installed/authorized account acceptance; see AS09-H notes."
+    }
+  ],
+  "candidate": {
+    "kind": "ad-hoc-local-not-signed-installed",
+    "zipPath": "/tmp/specops-as09-h-release/SpecOps-darwin-arm64-candidate.zip",
+    "zipSha256": "d4964547004cc09b080f9dd442eaf87be1780ec1ec96c5eef05694555496fdf3",
+    "zipBytes": 8543804,
+    "mainExecutableSha256": "9e3946e05343a4e39e3d5b51faece8f0f6758b64832b7025ee089f01144795ff",
+    "unpackedBytes": 18762344,
+    "localTarGzBytes": 8543895,
+    "localTarGzSha256": "59965a4556fbb8784c93543096c6cb6b72530fcc2b950ca16e1c8760799fef37"
+  },
+  "nativeSourceProbe": {
+    "trust": "cfg-test-only",
+    "status": "pass",
+    "durationSeconds": 187.78,
+    "componentAllocatedBytes": {
+      "node": 134463488,
+      "claude": 239923200,
+      "cursor": 45056000,
+      "codex": 344743936,
+      "opencode": 134914048
+    },
+    "allFiveAllocatedBytes": 899100672,
+    "archiveCacheAllocatedBytes": 0,
+    "stagingAllocatedBytes": 0,
+    "firstPartyFixtureInstallResolveDescriptor": true,
+    "cursorSessionWorkerCreateHistory": true,
+    "managedResolvers": true,
+    "codexPrivateConfig": true,
+    "codexNoAccount": true,
+    "opencodePrivateServer": true,
+    "claudeModels": 5,
+    "cursorCreateResumeDispose": true,
+    "sharedNode": "v24.15.0",
+    "accountIsolation": "fixture-only",
+    "inference": false,
+    "signedInstalled": false
+  }
+}

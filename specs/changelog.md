@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-11 00:19 MSK — Package lean application and gate component releases
+
+- Removed mandatory agent sidecar and recursive Node/SDK/native resources from Tauri packaging; lean host build now bundles only shipped control/adapter code. Separate explicit fixture preparation keeps build/test component assets outside the base release payload.
+- Built and inventoried the actual Darwin arm64 ad-hoc candidate: 18,762,344 regular bytes and 8,543,895 deterministic local gzip bytes, below 80/25 MiB budgets. Added strict whole-tree contamination checks and numerical installed cost validation without inferring signed installer/startup/RSS savings.
+- Added a version-2 selected component release schema/blocked record, exact five component costs, fixed source/installed/account/distribution/platform/process gates and current-source identity validation. Historical records remain preserved. CI builds reviewable Darwin arm64 app/inventory candidates without publishing; source/component preparation is separate.
+- Added actual native-source allocated component/cache/staging measurements (899,100,672 bytes across all five software roots, shared Node once), aligned probe temp roots with private metadata permissions and corrected installed missing-host recovery guidance.
+- Updated setup, support and architecture docs, roadmap and H evidence. Full source regression and native managed no-account controls are recorded separately from unavailable production hosting/signing/clearance and not-run signed installed/accounts/measurements. H-05 source gate passes; other full acceptance remains open. No migration, account operation, paid inference or publication.
+
 ## 2026-10-11 00:07 MSK — Add deliberate software maintenance and trust hardening
 
 - Added bounded authenticated catalog refresh/caching with monotonic replay/cumulative revocation and immutable manifest enforcement, reviewed signing-key overlap, exact tested update/retained/in-use producers, known native-store contract guards and actual allocated disk accounting including preserved unknown software identities. Production refresh/downloads remain unavailable until approved hosting/signing/distribution.

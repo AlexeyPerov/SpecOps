@@ -306,3 +306,16 @@ These extend [AGENTS.md](../AGENTS.md) with architecture-specific guidance.
 ### Optional software maintenance
 
 Native `component_manager.rs` owns authenticated metadata refresh/cache, exact reviewed install/removal plans, allocated disk accounting, retention, process leases and source-only fault seams. Signed catalog replay/revocation remains authoritative for existing leases at each executable request boundary; owned cancellation/approval replies can finish existing activity. Production hosting and distribution remain unavailable until approved. Private account/profile/native history roots are never component cleanup targets. See [component packaging](component-packaging.md) for the trust/ownership contract and [agent software recovery](agent-software.md) for user controls.
+
+
+### Lean application boundary
+
+Production builds package only editor/app code, the small bundled Agent Host and
+compiled descriptors/trust metadata. The host build does not package vendor SDKs;
+source fixture preparation is a separate explicit command. Native installation and
+software settings require no Node/host. An explicit agent action resolves shared
+Node and exact agent assets from authenticated application-data receipts, leases
+immutable versions and launches the bundled host. Source checkout/PATH overrides
+are debug-only. The release workflow builds reviewable Darwin arm64 candidates;
+production signing/hosting/account/installed acceptance remains gated. See
+[component packaging](component-packaging.md).

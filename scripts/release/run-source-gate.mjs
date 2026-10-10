@@ -16,6 +16,7 @@ for (const key of Object.keys(env)) if (/KEY|TOKEN|SECRET|PASSWORD|SPECOPS_|NODE
 const steps = [
   ['host-check','app/host',['npm','run','check']],
   ['host-build','app/host',['npm','run','build']],
+  ['component-fixture-assets','app/host',['npm','run','fixtures:assets']],
   ['host-tests','app/host',['npm','test','--','--fileParallelism=false']],
   ['frontend-check','app',['npm','run','check']],
   ['frontend-build','app',['npm','run','build']],
@@ -23,7 +24,8 @@ const steps = [
   ['rust-tests','app/src-tauri',['cargo','test']],
   ['claude-copied-assets','app/host',[process.execPath,'scripts/probe-claude.mjs']],
   ['cursor-copied-assets','app/host',[process.execPath,'scripts/probe-cursor.mjs']],
-  ['record-validator-tests','.',[process.execPath,'--test','scripts/release/check-record.test.mjs']],
+  ['record-validator-tests','.',[process.execPath,'--test','scripts/release/check-record.test.mjs','scripts/release/check-component-record.test.mjs','scripts/release/check-costs.test.mjs']],
+  ['base-inventory-tests','.', ['python3','-m','unittest','discover','-s','scripts/release','-p','test_measure_base.py']],
 ];
 const results=[];
 for (const [id,cwd,[command,...args]] of steps) {

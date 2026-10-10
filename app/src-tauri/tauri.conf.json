@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm --prefix host run build && npm run dev",
     "devUrl": "http://localhost:1430",
-    "beforeBuildCommand": "npm run build && npm --prefix host run build && node host/scripts/package-assets.mjs",
+    "beforeBuildCommand": "npm run build && npm --prefix host run build",
     "frontendDist": "../build"
   },
   "app": {
@@ -52,9 +52,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": [
-      "binaries/opencode"
-    ],
     "fileAssociations": [
       {
         "ext": [
@@ -82,8 +79,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../host/dist/index.js": "agent-host/index.js",
-      "resources/agent-host/": "agent-host/"
+      "../host/dist/index.js": "agent-host/index.js"
     }
   },
   "plugins": {

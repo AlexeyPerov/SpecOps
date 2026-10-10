@@ -1,0 +1,7 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {checkCosts} from './check-costs.mjs';
+const b=JSON.parse(readFileSync(new URL('../../specs/ops/09-plugin-based-usage/delivery-budgets.json',import.meta.url)));
+function fixture(){return {schemaVersion:1,kind:'signed-installed',appSha256:'a'.repeat(64),signingTeam:'fixture',notarizationId:'fixture',workspaceIdentity:'fixture',target:'darwin-arm64',networkContext:'fixture',runs:Array.from({length:10},()=>({editorStartupMs:1999,editorRssBytes:100,ownedAgentProcessesAtEditorIdle:0,installedHostReadyMs:1400,firstUseNativeReadyMs:4900,localRuntimeRssBytes:100})),compressedInstallerBytes:100,unpackedBaseBytes:100,allActiveComponentsBytes:5,cacheBytes:100,componentCosts:Object.fromEntries(['node','codex','opencode','claude','cursor'].map(id=>[id,{transferBytes:1,diskBytes:1,installMs:1}])),baseline:{appSha256:'b'.repeat(64),signingTeam:'fixture',comparisonEvidence:'fixture'}};}
+test('cost budgets require installed context and ten runs, enforce p95 and independent disk/process limits',()=>{assert.deepEqual(checkCosts(fixture(),b),[]);for(const mutate of [m=>m.kind='source',m=>m.runs.pop(),m=>m.runs[9].editorStartupMs=2001,m=>m.runs[1].ownedAgentProcessesAtEditorIdle=1,m=>m.compressedInstallerBytes=26214401,m=>delete m.componentCosts.node,m=>delete m.baseline,m=>m.target='win32-x64',m=>m.baseline.appSha256='arbitrary',m=>m.allActiveComponentsBytes=0]){const m=fixture();mutate(m);assert.ok(checkCosts(m,b).length);}});

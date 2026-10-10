@@ -1,11 +1,12 @@
 import { packageCursorAssets } from "./cursor-assets.mjs";
-// Package the tested Node executable with an allowlisted identity manifest.
+// Source-only component preparation. Never invoked by the base app build.
 import { packageClaudeAssets } from './claude-assets.mjs';
 import { copyFileSync, chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+if (!process.argv.includes('--source-fixtures')) throw new Error('Use fixtures:assets for source-only component preparation');
 const hostDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const source = process.env.SPECOPS_NODE_SOURCE ?? process.execPath;
 if (!isAbsolute(source)) throw new Error('SPECOPS_NODE_SOURCE must be absolute');

@@ -49,3 +49,13 @@ AS08-A-01/-02/-03/-04 source record/shared/security/docs work is verified. Their
 ## Planned on-demand component delivery
 
 [Stage 09](../09-plugin-based-usage/README.md) adds a future lean base app with shared Node and optional agent payloads installed on request. Its H phase requires a new selected release record for catalog/artifact trust, Node-independent bootstrap, installer recovery/security, compatible maintenance, base-package budgets and actual installed/account/process/distribution acceptance. Historical bundled-delivery records stay unchanged; AS08 final closure also depends on this new active scope.
+
+
+## Selected optional-component submission — 2026-10-11
+
+[Version-2 component record](release-2026-10-11-components.md) adds exact five
+component identities/costs, trusted bootstrap/security/maintenance, lean inventory,
+size/startup/memory budgets and fresh required installed/account/distribution/process
+and platform gates. Source/candidate controls pass; selected production release is
+blocked and no downloadable target is advertised. Historical schema-1 evidence is
+preserved. AS08 final closure still requires full active roadmap acceptance.

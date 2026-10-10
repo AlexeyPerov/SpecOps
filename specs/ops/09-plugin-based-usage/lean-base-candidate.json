@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "kind": "unsigned-or-ad-hoc-local-candidate",
+  "source": {
+    "baseCommit": "96474d1562d0d8a9cd5493a89fdba16ac7a2a778",
+    "dirty": true,
+    "snapshotSha256": "1551ee4a272ee0de1e82cc7eda51806f6f6c28acf5f5a1d37f92a6a1359ab71c"
+  },
+  "platform": {
+    "os": "Darwin",
+    "arch": "arm64"
+  },
+  "inventory": [
+    {
+      "path": "Contents/Info.plist",
+      "bytes": 1568,
+      "sha256": "7cfb5e29b88192928c2aeccd228a319ff8b8a38e965c09d8418574b348f0d00b",
+      "mode": 420
+    },
+    {
+      "path": "Contents/MacOS/spec-ops",
+      "bytes": 17221776,
+      "sha256": "9e3946e05343a4e39e3d5b51faece8f0f6758b64832b7025ee089f01144795ff",
+      "mode": 493
+    },
+    {
+      "path": "Contents/Resources/agent-host/index.js",
+      "bytes": 434473,
+      "sha256": "84d058b7ac2945749256cbd7cbbe84ee53d449f394a0d5a9f5f2aee34b724b5f",
+      "mode": 493
+    },
+    {
+      "path": "Contents/Resources/icon.icns",
+      "bytes": 1104527,
+      "sha256": "7f7e9714d0aa950d76f66af8fe98635c3240399bb875e02270d44979d0494846",
+      "mode": 420
+    }
+  ],
+  "unpackedBytes": 18762344,
+  "localTarGzBytes": 8543895,
+  "localTarGzSha256": "59965a4556fbb8784c93543096c6cb6b72530fcc2b950ca16e1c8760799fef37",
+  "compressedKind": "deterministic-local-ustar-gzip-level-6-not-installer",
+  "budgetResult": "pass",
+  "errors": [],
+  "installedAcceptance": "not-run",
+  "startupRssProcessAcceptance": "not-run",
+  "baselineComparison": "unavailable: A installed baseline has no reproducible source/signing identity"
+}

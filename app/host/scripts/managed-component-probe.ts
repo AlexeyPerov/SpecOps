@@ -1,5 +1,5 @@
 /** No-account source control probe, built by CI and run with copied components outside checkout. */
-import { readFileSync, mkdirSync, realpathSync, existsSync } from 'node:fs';
+import { readFileSync, mkdirSync, realpathSync, existsSync, lstatSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { bindManagedComponent, managedEntry } from '../src/componentRuntime';
 import { CodexTransport, resolveCodexExecutable, object } from '../src/codex/transport';
@@ -56,4 +56,13 @@ const fixtureRegistry=new AdapterRegistry();
 fixtureRegistry.registerLazy('fake',async()=>{if(!managedEntry('codex')) throw new Error('Fixture managed dependency missing');return createFakeRuntimeAdapter({turns:{}})});
 await fixtureRegistry.activate('fake');
 if((await fixtureRegistry.discovery())[0]?.id!=='fake') throw new Error('Fixture descriptor contract failed');
-console.log(JSON.stringify({firstPartyFixtureInstallResolveDescriptor:true,cursorSessionWorkerCreateHistory:true,managedResolvers:true,codexPrivateConfig:true,codexNoAccount:true,opencodePrivateServer:true,claudeModels:models.length,cursorCreateResumeDispose:true,sharedNode:process.version,accountIsolation:'fixture-only',inference:false,signedInstalled:false}));
+// Account-free source cost measurement of the exact copied/native-installed roots.
+function allocatedBytes(directory: string): number {
+ if (!existsSync(directory)) return 0;
+ const pending=[directory];let bytes=0,count=0;
+ while(pending.length){const path=pending.pop()!;const stat=lstatSync(path);if(++count>120000 || stat.isSymbolicLink() || (!stat.isFile()&&!stat.isDirectory()))throw new Error('Unexpected source measurement tree');bytes+=stat.blocks*512;if(stat.isDirectory())for(const name of readdirSync(path))pending.push(join(path,name));}
+ return bytes;
+}
+const componentAllocatedBytes=Object.fromEntries(manifests.map((manifest: {id:string})=>[manifest.id,allocatedBytes(roots[manifest.id]??join(root,manifest.id))]));
+const allFiveAllocatedBytes=Object.values(componentAllocatedBytes).reduce((sum,value)=>sum+Number(value),0);
+console.log(JSON.stringify({componentAllocatedBytes,allFiveAllocatedBytes,archiveCacheAllocatedBytes:allocatedBytes(join(root,'components/cache')),stagingAllocatedBytes:allocatedBytes(join(root,'components/staging')),firstPartyFixtureInstallResolveDescriptor:true,cursorSessionWorkerCreateHistory:true,managedResolvers:true,codexPrivateConfig:true,codexNoAccount:true,opencodePrivateServer:true,claudeModels:models.length,cursorCreateResumeDispose:true,sharedNode:process.version,accountIsolation:'fixture-only',inference:false,signedInstalled:false}));

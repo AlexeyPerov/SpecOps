@@ -38,3 +38,21 @@ Use **Copy software diagnostics** to copy bounded software/catalog identities, v
 Catalog replay, signature failure, changed directory permissions, symlink substitution, hardlinked metadata or tampering block execution. Do not erase trust watermarks, import unsigned archives, add a new signing key, disable integrity checks, clear quarantine or run downloaded shell scripts as a workaround. Key rotation is a reviewed application update; downloaded artifacts cannot authorize their own key.
 
 Manual verified recovery is a support/release engineering procedure: obtain a reviewed signed application release with the approved trust roots and catalog, verify its distribution identity, then use its finite Software installation/removal controls. Do not copy arbitrary executables into the component store. If trust metadata itself is damaged or cannot be authenticated, preserve the store and native data for diagnosis; the application intentionally fails closed until a verified release/support procedure can establish the exact identity. No user-facing unverified import or persisted-data migration is supported.
+
+
+## Current release support
+
+The current source candidate targets macOS Apple silicon (Darwin arm64) with app
+0.3.0, host 0.1.0, shared Node 24.15.0, Codex 0.160.0, OpenCode 1.17.4,
+Claude SDK 0.3.289/native 2.1.289 and Cursor SDK 1.0.35. Native install and copied
+no-account controls have been tested; production distribution remains unavailable.
+There is no accepted downloadable component target yet. Historical installers do
+not establish support for this delivery mode. Intel macOS, Windows and Linux agents
+remain unsupported until their own release gates pass.
+
+The editor needs no optional agent installation or account. Version Control still
+uses the system Git prerequisite. First agent use adds shared Node once and that
+agent's execution files; installing all agents has a separate combined disk cost.
+Candidate regular-file/gzip size results do not establish installer size, startup
+speed or RAM savings. Do not use developer executables, unsigned imports or
+quarantine removal to work around unavailable delivery.

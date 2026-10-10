@@ -27,7 +27,7 @@ and **workspace sessions** for coding-agent runtimes (dev preview). Built with
 
 ## Install
 
-- **Releases** — download macOS / Windows installers from [GitHub Releases](https://github.com/AlexeyPerov/spec-ops/releases) (published when a semver tag is pushed; see [CI releases](#ci-releases)).
+- **Releases** — historical installers remain on [GitHub Releases](https://github.com/AlexeyPerov/spec-ops/releases). The current optional-agent candidate is blocked pending signed installed and distribution acceptance; see [CI releases](#ci-releases).
 - **From source** — see [Development](#development) below.
 
 ## Workspace sessions
@@ -38,10 +38,11 @@ runtime for life; turns, tools, permissions, questions, and cancellation all
 flow through one supervised local **Agent Host** (the WebView never loads agent
 SDKs or spawns runtimes).
 
-Currently the deterministic **dev runtime** is registered (no external
-runtime credentials — it exercises the full session lifecycle end to end). Real
-runtime adapters — Claude, Codex, OpenCode, Cursor — arrive per the
-[roadmap](./specs/ops/roadmap.md).
+Claude, Codex, OpenCode and Cursor adapters are implemented behind the host.
+Optional software is managed separately from account connections and saved native
+sessions. Production downloads currently report unavailable until their exact
+artifacts, catalog, signing and distribution are approved. The deterministic dev
+runtime remains available for source lifecycle verification.
 
 ### Quick start
 
@@ -53,10 +54,14 @@ runtime adapters — Claude, Codex, OpenCode, Cursor — arrive per the
    can be restarted from the session header. Restart does not replay the previous
    prompt; the next user action resumes the saved native session.
 
-Agent Host supervision is currently accepted on **macOS from source**, with Node
-24+ on `PATH`. Windows host launch is disabled pending process-tree cleanup;
-Linux and installed-build support require platform verification. See the
-[stabilization evidence and limits](./specs/ops/01-foundation-stabilization/acceptance-evidence.md).
+The base application bundles the editor and host JavaScript, with no Node,
+agent executable or SDK/native helper payload. Opening the editor or software
+settings does not start the Agent Host or download software. Installed execution
+uses authenticated managed components outside the checkout; developer Node/PATH
+fallbacks are limited to debug builds. Source no-account controls pass on macOS
+Apple silicon. Signed installed/account acceptance remains open. Windows/Linux
+agent execution is unsupported pending its own process and distribution evidence.
+See [agent software and recovery](docs/agent-software.md).
 
 ## What is planned
 
@@ -76,13 +81,23 @@ From the `app/` directory, use `npm ci` for a reproducible clean-clone setup:
 
 ```sh
 npm ci
+npm ci --prefix host
 npm run tauri dev
 ```
 
 Use `npm install` instead when intentionally changing dependencies or refreshing
 `app/package-lock.json`.
 
-This starts the Vite dev server and opens the desktop app. Type-check the frontend with:
+This starts the Vite dev server and opens the desktop editor. For source-only
+session controls, explicitly set `SPECOPS_NODE_EXECUTABLE` to the absolute Node 24
+executable before starting `tauri dev`; this debug override does not authorize
+production installation or account access. Example on macOS/Linux:
+
+```sh
+SPECOPS_NODE_EXECUTABLE=/absolute/path/to/node npm run tauri dev
+```
+
+Type-check the frontend with:
 
 ```sh
 npm run check
@@ -129,21 +144,21 @@ Installers and bundles are written to `app/src-tauri/target/release/bundle/`.
 
 | Platform | GitHub release downloads | Test CI | Local source builds |
 | --- | --- | --- | --- |
-| macOS (Apple silicon and Intel) | Yes — universal build | Yes | Supported |
-| Windows (x64) | Yes | Yes | Supported |
-| Linux | No published installers | Yes | Buildable with Tauri's Linux prerequisites, but not a supported release target |
+| macOS Apple silicon | Current optional-agent candidate not published | Yes | Lean candidate buildable; signed installed release acceptance open |
+| macOS Intel / Windows / Linux | Historical downloads do not establish current component support | Frontend/source CI | Source builds require platform prerequisites; agent execution unaccepted |
 
-The test workflow runs Vitest on macOS, Windows, and Linux; on Linux it also runs
-`npm run check`, `cargo test`, and the Markdown link checker. The release
-workflow publishes artifacts only for macOS and Windows; Tauri's `targets: "all"`
-controls bundle formats for the current build host and does not add a Linux release job.
+The current component target is Darwin arm64. No additional component platform is
+advertised until its own signed installed/account/process gates pass. Frontend
+cross-platform CI does not establish agent support.
 
 ### CI releases
 
-Push a **semver** tag such as `v1.0.0` or `v1.0.0-beta.1` (optional `+build`
-metadata is allowed). The [Release](.github/workflows/release.yml) workflow
-rejects non-semver `v*` tags before building, then publishes a universal macOS
-bundle and Windows x64 installers as assets on that GitHub release.
+A **semver** tag triggers the [Release](.github/workflows/release.yml) workflow,
+which builds a Darwin arm64 unsigned/ad-hoc candidate, checks lean inventory and
+numeric package budgets, and saves the app archive plus inventory as Actions
+artifacts. It does not publish a release. Production publication requires a
+reviewed signed/notarized exact artifact, accepted component/catalog identities
+and the [selected release record](specs/ops/08-release-gates/release-2026-10-11-components.md).
 
 Use the release helper from the repository root (Node.js 24+, Git on `PATH`):
 
@@ -156,10 +171,10 @@ node scripts/release.mjs bump minor
 node scripts/release.mjs bump major
 node scripts/release.mjs bump 0.3.0
 
-# Push master and v<current-version> together to start the GitHub release build
+# Push master and a version tag to start the candidate CI build
 node scripts/release.mjs build
 
-# Alternatively, build local bundles with installed dependencies and sidecar
+# Alternatively, build the lean local candidate with build dependencies
 node scripts/release.mjs build --local
 # Optional Tauri arguments
 node scripts/release.mjs build --local --bundles app
@@ -169,7 +184,7 @@ node scripts/release.mjs build --local --bundles app
 and Cargo lockfile. It adds a dated changelog entry and commits the version
 change on `master`; it does not push or start a release build. `build` pushes
 `master` and an annotated version tag atomically to `origin`, which triggers
-the Release workflow. Monitor progress in [GitHub Actions](https://github.com/AlexeyPerov/spec-ops/actions/workflows/release.yml).
+the candidate Release workflow. Monitor progress in [GitHub Actions](https://github.com/AlexeyPerov/spec-ops/actions/workflows/release.yml).
 
 Both release commands require a clean checkout on `master`. `build` refuses an
 already published tag and requires local `master` to include remote `master`.

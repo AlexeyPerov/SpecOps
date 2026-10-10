@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate-tag:
@@ -32,11 +32,8 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
-            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-            args: --target universal-apple-darwin
-          - platform: windows-latest
-            rust-targets: ''
-            args: ''
+            rust-targets: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -63,15 +60,30 @@ jobs:
         working-directory: app
         run: npm ci
 
-      - name: Build and release
-        uses: tauri-apps/tauri-action@v0.6.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install host build dependencies
+        working-directory: app/host
+        run: npm ci
+
+      - name: Validate selected release evidence
+        run: node scripts/release/check-component-record.mjs specs/ops/08-release-gates/release-2026-10-11-components.json
+
+      - name: Build unsigned candidate only
+        working-directory: app
+        run: npm run tauri build -- --target aarch64-apple-darwin --bundles app
+
+      - name: Measure and inspect lean candidate
+        run: python3 scripts/release/measure-base.py --app app/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/SpecOps.app --output "$RUNNER_TEMP/specops-candidate-inventory.json"
+
+      - name: Archive unsigned candidate
+        run: ditto -c -k --keepParent app/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/SpecOps.app "$RUNNER_TEMP/SpecOps-darwin-arm64-candidate.zip"
+
+      - name: Save reviewable candidate and inventory
+        uses: actions/upload-artifact@v4
         with:
-          projectPath: app
-          tagName: ${{ github.ref_name }}
-          releaseName: SpecOps ${{ github.ref_name }}
-          releaseBody: Release ${{ github.ref_name }} for macOS and Windows.
-          releaseDraft: false
-          prerelease: false
-          args: ${{ matrix.args }}
+          name: darwin-arm64-candidate-inventory
+          path: |
+            ${{ runner.temp }}/specops-candidate-inventory.json
+            ${{ runner.temp }}/SpecOps-darwin-arm64-candidate.zip
+
+      # Publishing requires a separately reviewed signed artifact, coherent ready
+      # record and --decision --require-current-source; rebuilding is not acceptance.

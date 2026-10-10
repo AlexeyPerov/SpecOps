@@ -418,7 +418,7 @@ fn resolve_host_script(app: &AppHandle) -> Result<PathBuf, AgentHostError> {
     }
     Err(AgentHostError::HostPathMissing {
         message:
-            "Agent Host bundle was not found. Build it with `node app/host/scripts/build.mjs`."
+            "The Agent Host bundle is missing. Reinstall SpecOps to restore it."
                 .to_string(),
     })
 }

@@ -2691,6 +2691,11 @@ pub(crate) mod tests {
                 GENERATION.fetch_add(1, Ordering::Relaxed)
             ));
             fs::create_dir(&p).unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&p, fs::Permissions::from_mode(0o700)).unwrap();
+            }
             Self(fs::canonicalize(p).unwrap())
         }
     }

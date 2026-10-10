@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10
 
-**Status:** Planned; all tasks open
+**Status:** Source implementation and lean local candidate verified; H-05 source release-gate acceptance passes, H-01–H-04/H-06 installed/account/distribution acceptance open
 
 **Prerequisites:** AS09-A–G source evidence; approved published delivery candidate; selected AS08-A run.
 
@@ -48,7 +48,7 @@ Compare the exact A baseline with the lean signed app and installed subsets. Rec
 
 ### AS09-H-05 — Extend repeatable release records and platform gates
 
-**State:** [TODO]
+**State:** [DONE] — selected version-2 schema/blocked record/source gate acceptance; no release or milestone acceptance inferred
 
 Add a new versioned selected release schema/record for trusted distribution, bootstrap/install security, lean inventory, compatibility/updates, clean installed/account lifecycle, process cleanup, size budgets and notices. Preserve historical AS08 records and validators as historical evidence; require new selected gates for advertised downloadable components/platforms.
 
@@ -69,3 +69,5 @@ Record exact app/host/component/catalog versions and target for the tasks above.
 ## Exit
 
 Update phase evidence, execution index, roadmap and `specs/changelog.md` when work lands. Mark a task `[DONE]` only after its implementation and stated acceptance pass. Do not add persisted-data migrations, compatibility shims or native-history upgrade/downgrade paths.
+
+[H implementation and acceptance evidence](implementation-notes-phase-h.md) records exact local candidate inventory/budgets, fresh source/native controls, new selected release gates and unavailable/not-run acceptance.

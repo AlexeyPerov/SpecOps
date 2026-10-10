@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-10
 
-**Status:** Active acceptance plan; four native adapters, reviewed handoff/extensions/profiles and repeatable release records are source verified. Authenticated, signed installed, distribution and process gates remain open; expanded release is blocked. Stage 09 adds on-demand Node/agent delivery; A/B contracts and artifact security are source verified, while installer/runtime/release acceptance is open.
+**Status:** Active acceptance plan; four native adapters, reviewed handoff/extensions/profiles and repeatable release records are source verified. Authenticated, signed installed, distribution and process gates remain open; expanded release is blocked. Stage 09 implements on-demand Node/agent delivery through A–H source with actual test-trusted native installation and a lean local candidate; production/signed installed/account/release acceptance remains open.
 
 **Source of truth:** This roadmap and the linked milestone scope/execution plans. The [2026-10-04 audit](done/reviews/audit-2026-10-04.md) is historical evidence; its proposed order is adopted here. Active folders and task IDs are numbered in the default delivery order; shared early gates and repeated release acceptance are explicit exceptions. Completed records are in [done](done/README.md).
 
@@ -26,7 +26,7 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 | [06 — Handoff/native extensions](06-handoff-native-extensions/README.md) | A/B/C source verified; 16 ordered handoff pairs/native extensions/simultaneous Codex profiles; live/installed gates open | Actual account handoff/extensions/two-profile and installed acceptance |
 | [07 — Cursor](07-cursor-adapter/README.md) | A–D local SDK/profile/lifecycle/settings/fault/security/16-pair handoff source and copied assets verified; native/authenticated/installed/distribution gates open | External D acceptance and selected 08-A gate |
 | [08 — Release gates](08-release-gates/README.md) | Versioned expanded source record/validator/runner verified; release blocked | External selected-scope gates; repeat for 09 and close after full active scope |
-| [09 — Plugin-based usage](09-plugin-based-usage/README.md) | A/B/C, D-02/D-04 and E-05/E-06 source contracts/security accepted; 32 open tasks incl. release/integration gates | Native installer, shared Node and four optional agent components; lean installed release |
+| [09 — Plugin-based usage](09-plugin-based-usage/README.md) | A–H source implemented; 23 source tasks accepted, 25 full-acceptance tasks open; lean local candidate and blocked version-2 release gate | Native installer, shared Node and four optional agent components; lean installed release |
 
 A completed implementation marker is not a release acceptance record. Implemented source phases retain explicit external acceptance; the dated [expanded AS08-A decision](08-release-gates/release-2026-10-05.md) is blocked. A source marker does not close the roadmap.
 
@@ -198,3 +198,5 @@ Codex finite parity submission: [AS02-G](02-codex-adapter/execution-plan-phase-g
 **AS09-F source evidence (2026-10-10):** [Installation and recovery UX](09-plugin-based-usage/implementation-notes-phase-f.md) adds Software settings/contextual session recovery, exact finite reviewed installation, native monotonic/restored progress and cancellation, explicit retry/continuation, software-only removal/cache controls, retained/update UI and missing-destination handoff guards. F-01–F-03 source/fixture acceptance passes; F-04–F-06 maintenance producer/actual signed installed/account/multi-window accessibility remain open. Production downloads remain unavailable.
 
 **AS09-G source evidence (2026-10-11):** [Maintenance and security](09-plugin-based-usage/implementation-notes-phase-g.md) adds deliberate signed metadata refresh/cache, exact tested update/retained/in-use inventory, allocated disk/retention/owned staging accounting, guarded reviewed group removal, fd-relative nofollow mutations, reviewed key overlap and launch-boundary revocation revalidation without automatic process replacement/replay. G-02/G-04/G-06 source acceptance passes. Actual original native-store update/rollback, clean signed installed, full-disk/reboot/adversarial release gates remain open for G-01/G-03/G-05/H; production hosting/signing/distribution remains unavailable.
+
+**2026-10-11 AS09-H:** [Lean candidate evidence](09-plugin-based-usage/implementation-notes-phase-h.md) and [selected component release](08-release-gates/release-2026-10-11-components.md) add actual local base inventory/size and repeatable source/cost/distribution gates. No signed installed or authenticated acceptance is inferred; the roadmap remains active and production release blocked.

@@ -1,0 +1,100 @@
+{
+  "target": "darwin-arm64",
+  "versions": {
+    "node": "24.15.0",
+    "claudeSdk": "0.3.289",
+    "claudeNative": "2.1.289",
+    "cursor": "1.0.35",
+    "codex": "0.160.0",
+    "opencode": "1.17.4"
+  },
+  "sharedNode": true,
+  "copiedSdkControl": true,
+  "cursorLocalStore": true,
+  "nativeHelpers": true,
+  "developerPathAbsent": true,
+  "accounts": false,
+  "inference": false,
+  "signedInstalledApp": false,
+  "sandboxEnforcement": "not-run",
+  "managed": {
+    "firstPartyFixtureInstallResolveDescriptor": true,
+    "cursorSessionWorkerCreateHistory": true,
+    "managedResolvers": true,
+    "codexPrivateConfig": true,
+    "codexNoAccount": true,
+    "opencodePrivateServer": true,
+    "claudeModels": 5,
+    "cursorCreateResumeDispose": true,
+    "sharedNode": "v24.15.0",
+    "accountIsolation": "fixture-only",
+    "inference": false,
+    "signedInstalled": false
+  },
+  "archives": [
+    {
+      "id": "node",
+      "version": "24.15.0",
+      "sha256": "977221573ed5ddedc6e9d7364549f50626b95623a58b89016e521bf0ac0ee2ee",
+      "compressedBytes": 38642444,
+      "unpackedBytes": 120101534,
+      "fileCount": 2
+    },
+    {
+      "id": "claude",
+      "version": "0.3.289",
+      "sha256": "c5245388c1e1b41d7772772163e7d82e6915d9d6dec6ce8b3417910d6e7b8328",
+      "compressedBytes": 100047672,
+      "unpackedBytes": 234326475,
+      "fileCount": 15
+    },
+    {
+      "id": "cursor",
+      "version": "1.0.35",
+      "sha256": "7120c564913313c693a7769f99f2a875cc08cc7a3c8329a3f5a305e011c3d0b9",
+      "compressedBytes": 9355505,
+      "unpackedBytes": 40660632,
+      "fileCount": 1629
+    },
+    {
+      "id": "codex",
+      "version": "0.160.0",
+      "sha256": "f797273ad19b7099b0d83c9d86667bdf0649ac44366f52ff1eba2a56f7d0925c",
+      "compressedBytes": 129973781,
+      "unpackedBytes": 332979473,
+      "fileCount": 43
+    },
+    {
+      "id": "opencode",
+      "version": "1.17.4",
+      "sha256": "c459eb51f538117638950b77076b1479db31cdfe9d2c04b45edcbe5859bb53fd",
+      "compressedBytes": 39941618,
+      "unpackedBytes": 119502973,
+      "fileCount": 5
+    }
+  ],
+  "nativeInstaller": {
+    "status": "pass",
+    "catalogRevision": 1,
+    "trustKeyId": "fixture-v1",
+    "trustScope": "cfg-test-only",
+    "allFiveActualArchives": true,
+    "realNativeTargetAndPinValidation": true,
+    "receiptsAndManagedInstalledRoots": true,
+    "durationSeconds": 195.74,
+    "probe": {
+      "managedResolvers": true,
+      "codexPrivateConfig": true,
+      "codexNoAccount": true,
+      "opencodePrivateServer": true,
+      "claudeModels": 5,
+      "cursorCreateResumeDispose": true,
+      "sharedNode": "v24.15.0",
+      "accountIsolation": "fixture-only",
+      "inference": false,
+      "signedInstalled": false
+    },
+    "productionCatalog": "unavailable",
+    "cleanSignedInstalledApp": "not-run"
+  }
+}

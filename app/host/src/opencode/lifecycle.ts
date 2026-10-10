@@ -1,9 +1,16 @@
-import { managedEntry } from "../componentRuntime";
+import { requireManagedCompatibility, managedEntry } from "../componentRuntime";
 import { boundedResponse } from "./boundedResponse";
-import {
-  createOpencodeClient,
-  type OpencodeClient,
-} from "@opencode-ai/sdk/v2/client";
+import type { OpencodeClient, createOpencodeClient as ClientFactory } from "@opencode-ai/sdk/v2/client";
+import { pathToFileURL } from "node:url";
+async function sdkFactory(): Promise<typeof ClientFactory> {
+  const sdk = managedEntry("opencode", "sdk");
+  if (sdk) {
+    const module = await import(/* @vite-ignore */ pathToFileURL(sdk).href);
+    if (typeof module.createOpencodeClient !== "function") throw new RuntimeStartupError("incompatible-runtime");
+    return module.createOpencodeClient;
+  }
+  return (await import("@opencode-ai/sdk/v2/client")).createOpencodeClient;
+}
 import {
   spawn,
   execFile,
@@ -24,6 +31,7 @@ export class RuntimeStartupError extends Error {
 export function resolveExecutable(
   env: NodeJS.ProcessEnv = process.env,
 ): string | null {
+  requireManagedCompatibility("opencode", "1.17.4", "as09-opencode-1");
   const managed = managedEntry("opencode"); if (managed) return managed;
   const override = env.SPECOPS_OPENCODE_EXECUTABLE;
   if (override !== undefined)
@@ -147,7 +155,9 @@ export class RuntimeConnection {
       }
       baseUrl = `http://127.0.0.1:${port}`;
     }
-    const client = createOpencodeClient({
+    const createClient = await sdkFactory();
+    if (token !== this.lifecycle) throw new RuntimeStartupError("error");
+    const client = createClient({
       baseUrl,
       throwOnError: true,
       ...(authorization ? { headers: { Authorization: authorization } } : {}),

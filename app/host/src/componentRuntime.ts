@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, openSync, readSync, closeSync } from 'node:fs';
 import { isAbsolute, join, parse } from 'node:path';
-interface Binding { root: string; manifest: { id: string; version: string; target: { os: string; arch: string }; entries: Record<string, string>; files: { path: string; bytes: number; sha256: string }[] } }
+interface Binding { root: string; manifest: { id: string; version: string; target: { os: string; arch: string }; entries: Record<string, string>; compatibility?: { adapterRevision: string; hostVersions: string[] }; files: { path: string; bytes: number; sha256: string }[] } }
 const bindings = new Map<string, Binding>();
 const verificationBuffer = Buffer.alloc(1024 * 1024);
 const failure = () => new Error('Runtime component is missing or altered. Repair it in Software and reconnect the original profile.');
@@ -43,3 +43,14 @@ export function managedEntry(id: string, name = 'main'): string | undefined {
   return join(binding.root, relative);
 }
 export function managedRoot(id: string): string | undefined { managedEntry(id); return bindings.get(id)?.root; }
+
+/** Pins belong to shipped first-party adapter code; remote manifests cannot register code. */
+export function requireManagedCompatibility(id: string, version: string, adapterRevision: string): void {
+  try {
+    const binding = bindings.get(id);
+    if (!binding) return;
+    if (binding.manifest.version !== version || binding.manifest.compatibility?.adapterRevision !== adapterRevision || !binding.manifest.compatibility.hostVersions.includes('0.1.0')) throw failure();
+    // Includes SDK chunks and native helpers, even when the next entry itself is intact.
+    for (const file of binding.manifest.files) verifyFile(binding, file);
+  } catch { throw failure(); }
+}

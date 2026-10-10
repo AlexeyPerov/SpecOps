@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 import stat
+import subprocess
 import tarfile
 import urllib.request
 import zipfile
@@ -57,6 +58,10 @@ def prepare(component, source, output):
   notice=response.read(1024*1024+1)
  if not 0<len(notice)<=1024*1024:raise ValueError('Notice limit')
  (output/'LICENSE.txt').write_bytes(notice)
+ if component=='opencode':
+  subprocess.run(['node',str(REPO/'app/host/scripts/opencode-assets.mjs'),str(output)],check=True,timeout=30)
+  # The pinned SDK is MIT under the same exact upstream repository license.
+  (output/'SDK-LICENSE.txt').write_bytes(notice)
  template=next(m for m in json.loads((REPO/'app/src-tauri/fixtures/components/manifests.json').read_bytes()) if m['id']==component)
  files=[];native=[]
  for path in sorted(output.rglob('*')):
@@ -67,6 +72,7 @@ def prepare(component, source, output):
    files.append(dict(path=relative,bytes=path.stat().st_size,sha256=sha(path.read_bytes()),executable=bool(path.stat().st_mode & 0o111)))
  template['files']=files
  template['entries']={'main':'bin/codex' if component=='codex' else 'opencode'}
+ if component=='opencode':template['entries']['sdk']='sdk.mjs'
  template['approvedExecutables']=native
  template['distribution']=dict(status='unavailable',evidenceId='upstream-candidate-review-pending',noticePaths=[f['path'] for f in files if 'license' in f['path'].lower() or 'notice' in f['path'].lower()])
  template['archive']['url']='https://release-unavailable.invalid/v1/'+component+'-'+row['version']+'-darwin-arm64.tar.gz'

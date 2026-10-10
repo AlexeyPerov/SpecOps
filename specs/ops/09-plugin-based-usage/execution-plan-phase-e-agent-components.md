@@ -2,7 +2,9 @@
 
 **Date:** 2026-10-10
 
-**Status:** Planned; all tasks open
+**Status:** Managed all-four implementation and source controls recorded; E-05/E-06 source acceptance passes, E-01–E-04 account/installed/native gates open.
+
+**Evidence:** [Implementation notes](implementation-notes-phase-e.md) · [Registration contract](first-party-registration.md)
 
 **Prerequisites:** AS09-B/C/D; existing source adapter contracts. Account acceptance remains explicit.
 
@@ -48,7 +50,7 @@ Package the complete platform SDK dependency graph plus workers/parsers/search/s
 
 ### AS09-E-05 — Make shared prerequisites and independent installation explicit
 
-**State:** [TODO]
+**State:** [DONE]
 
 Allow any one agent, any subset or all four, with compatible shared Node reuse and per-component optional dependencies. Define dependency references and prevent removal of a prerequisite while installed/in-use dependents need it; provide an explicit reviewed group removal plan.
 
@@ -56,7 +58,7 @@ Allow any one agent, any subset or all four, with compatible shared Node reuse a
 
 ### AS09-E-06 — Specify registration for additional supported agents
 
-**State:** [TODO]
+**State:** [DONE]
 
 Document the minimum adapter descriptor, manifest/dependency recipe, compatibility checks, official distribution evidence and installed acceptance required for a future first-party agent. Ship new adapter code through a reviewed app release, while heavy assets remain downloadable.
 

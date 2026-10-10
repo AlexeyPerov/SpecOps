@@ -1,4 +1,4 @@
-import { managedEntry } from "../componentRuntime";
+import { requireManagedCompatibility, managedEntry } from "../componentRuntime";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -24,6 +24,7 @@ export interface ClaudeAssets {
   nativeVersion: string;
 }
 export function resolveClaudeAssets(): ClaudeAssets {
+  requireManagedCompatibility("claude", "0.3.289", "as09-claude-1");
   const sdk = managedEntry("claude");
   if (sdk) return { sdk, executable: managedEntry("claude", "native")!, sdkVersion: CLAUDE_SDK_VERSION, nativeVersion: CLAUDE_NATIVE_VERSION };
   try {
@@ -139,6 +140,7 @@ export async function loadClaudeSdk(assets: ClaudeAssets): Promise<{
   }) => Query;
 }> {
   try {
+    requireManagedCompatibility("claude", CLAUDE_SDK_VERSION, "as09-claude-1");
     const sdk = await import(/* @vite-ignore */ pathToFileURL(assets.sdk).href);
     if (typeof sdk.query !== "function") throw new Error();
     return sdk;
@@ -152,6 +154,7 @@ export async function probeClaudeSdk(
   env: NodeJS.ProcessEnv,
   signal?: AbortSignal,
 ): Promise<readonly { value: string; displayName: string }[]> {
+  requireManagedCompatibility("claude", CLAUDE_SDK_VERSION, "as09-claude-1");
   await verifyClaudeAssets(assets, env, signal);
   const sdk = await loadClaudeSdk(assets);
   const abort = new AbortController();

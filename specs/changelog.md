@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-10 23:42 MSK — Integrate optional managed agent payloads
+
+- Added exact managed vendor/adapter/host compatibility and full graph revalidation; packaged the native server SDK graph and notices as a separate lazy managed asset and externalized it from base host assembly. Preserved native private profile/session/worker ownership and heavy packaging until installed release acceptance.
+- Added real copied all-four no-account managed controls, an opt-in separately trusted native candidate installer probe, explicit pinned native configuration testing and finite first-party registration/group-removal contracts. Corrected bounded USTAR record padding for actual candidate archives without weakening inventory/architecture/garbage checks; corrected Darwin fixture socket mode to eliminate early-header disconnect races.
+- Reused verified shared Node across independent agent installs, preserved healthy siblings after failures and made reviewed download/disk estimates reflect missing software with stale-plan rejection for extra downloads. Full native suite (107 tests), host suite (352 tests), explicit pinned native config controls and actual all-five native candidate installs pass; E-05/E-06 source acceptance passes. Authenticated account/native policy/clean signed installed/hosting/signing/redistribution gates remain open under the unavailable production catalog. No migration, compatibility shim or publication.
+
 ## 2026-10-10 23:28 MSK — Resolve optional runtimes lazily from verified components
 
 - Implemented AS09-D managed shared Node host launch, static exact runtime/capability discovery, deferred selected adapter imports, native-only authenticated component root/manifest injection and all-four managed SDK/native/helper entry resolution with bounded complete-tree hashing and path-free errors.

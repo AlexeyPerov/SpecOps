@@ -43,6 +43,8 @@ await build({
     __BUILD_GIT__: JSON.stringify(gitSha),
     __BUILD_TIME__: JSON.stringify(buildTime),
   },
+  // Vendor client code is an optional managed asset. Debug/source fallback stays lazy.
+  external: ["@opencode-ai/sdk/v2/client"],
   logLevel: "info",
 });
 

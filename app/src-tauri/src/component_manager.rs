@@ -523,8 +523,12 @@ impl ComponentManager {
                 version: m.version.clone(),
             })
             .collect::<Vec<_>>();
-        let download_bytes = manifests.iter().map(|m| m.archive.compressed_bytes).sum();
-        let required_disk_bytes = manifests
+        let missing = manifests
+            .iter()
+            .filter(|m| self.ready(catalog, m).is_err())
+            .collect::<Vec<_>>();
+        let download_bytes = missing.iter().map(|m| m.archive.compressed_bytes).sum();
+        let required_disk_bytes = missing
             .iter()
             .try_fold(RESERVE_BYTES, |a, m| {
                 a.checked_add(m.archive.compressed_bytes)?
@@ -637,6 +641,16 @@ impl ComponentManager {
             {
                 return Err(InstallError::Stale);
             }
+        }
+        // A prerequisite removed/altered after review requires a fresh reviewed plan.
+        let current_download_bytes: u64 = pending
+            .manifests
+            .iter()
+            .filter(|m| self.ready(&catalog, m).is_err())
+            .map(|m| m.archive.compressed_bytes)
+            .sum();
+        if current_download_bytes > pending.public.download_bytes {
+            return Err(InstallError::Stale);
         }
         let available =
             fs2::available_space(&self.inner.roots.software).map_err(|_| InstallError::Storage)?;
@@ -855,9 +869,11 @@ impl ComponentManager {
                 );
                 let content = stage.join("content");
                 private_dir(&content)?;
-                extract(&archive, &content, m, cancel, fixture_endpoint.is_some())?;
+                let synthetic_fixture =
+                    cfg!(test) && m.distribution.evidence_id == "local-fixture-only";
+                extract(&archive, &content, m, cancel, synthetic_fixture)?;
                 validate_inventory(&content, m, cancel)?;
-                probe(&content, m, cancel, fixture_endpoint.is_some())?;
+                probe(&content, m, cancel, synthetic_fixture)?;
                 self.checkpoint(2)?;
                 check(cancel)?;
                 let receipt = InstallReceipt {
@@ -1365,7 +1381,8 @@ fn extract(
             break;
         }
         padding += n;
-        if padding > 8192 || tail[..n].iter().any(|b| *b != 0) {
+        // USTAR writers pad to a bounded 20-block (10 KiB) record.
+        if padding > 10240 || tail[..n].iter().any(|b| *b != 0) {
             return Err(InstallError::UnsafeArchive);
         }
     }
@@ -1757,7 +1774,12 @@ pub(crate) mod tests {
             let worker = thread::spawn(move || {
                 while !stopping.load(Ordering::Acquire) {
                     match listener.accept() {
-                        Ok((mut stream, _)) => serve(&mut stream, &fault),
+                        Ok((mut stream, _)) => {
+                            // Accepted sockets may inherit nonblocking mode on Darwin.
+                            // Header reads use the explicit bounded blocking timeout.
+                            stream.set_nonblocking(false).unwrap();
+                            serve(&mut stream, &fault);
+                        }
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                             thread::sleep(Duration::from_millis(5))
                         }
@@ -1868,6 +1890,176 @@ pub(crate) mod tests {
             .unwrap();
         drop(_lock);
         (temp, manager)
+    }
+    #[test]
+    #[ignore = "Requires explicit real finite candidates, test-only catalog server and CI-built managed probe"]
+    fn real_candidate_native_installer_managed_probe() {
+        let source = PathBuf::from(
+            std::env::var("SPECOPS_TEST_CANDIDATE_ROOT")
+                .expect("Explicit test candidates required"),
+        );
+        let origin = std::env::var("SPECOPS_TEST_CANDIDATE_ORIGIN")
+            .expect("Explicit loopback test endpoint required");
+        assert!(origin.starts_with("http://127.0.0.1:"));
+        let probe = fs::canonicalize(
+            std::env::var("SPECOPS_TEST_MANAGED_PROBE").expect("Explicit CI probe required"),
+        )
+        .unwrap();
+        let c = VerifiedCatalog::verify(
+            &fs::read(source.join("catalog.json")).unwrap(),
+            &TrustPolicy::fixture(),
+            now(),
+            VerificationPurpose::NewInstall,
+            None,
+        )
+        .unwrap();
+        let temp = Temp::new();
+        let manager = manager(&temp);
+        let manifests = c
+            .rows()
+            .iter()
+            .map(|r| r.manifest.clone().unwrap())
+            .collect::<Vec<_>>();
+        manager.persist_catalog(&c).unwrap();
+        for m in &manifests {
+            println!("Installing real candidate {}", m.id.as_str());
+            manager
+                .run_install(
+                    "real-vendor-test",
+                    &c,
+                    &[m.clone()],
+                    &AtomicBool::new(false),
+                    None,
+                    Some(&origin),
+                )
+                .unwrap();
+        }
+        let roots = manifests
+            .iter()
+            .map(|m| (m.id.as_str(), manager.ready(&c, m).unwrap()))
+            .collect::<BTreeMap<_, _>>();
+        atomic_json(&temp.0.join("manifest-roots.json"), &roots).unwrap();
+        atomic_json(&temp.0.join("manifests.json"), &manifests).unwrap();
+        let node = roots.get("node").unwrap().join("node");
+        let output = std::process::Command::new(node)
+            .arg(probe)
+            .arg(&temp.0)
+            .current_dir(&temp.0)
+            .env_clear()
+            .env("HOME", &temp.0)
+            .env("PATH", "/usr/bin:/bin")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "Managed source probe failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        println!(
+            "Native test-only authenticated candidate install: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+    }
+    #[test]
+    fn independent_agents_reuse_node_and_failed_sibling_preserves_healthy_software() {
+        let (_temp, manager) = installed_manager(ComponentId::Codex);
+        let c = catalog();
+        let node = c.rows()[0].manifest.as_ref().unwrap();
+        let before = fs::read(manager.ready(&c, node).unwrap().join("receipt.json")).unwrap();
+        let plan = manager
+            .plan_verified("primary", request(ComponentId::Claude), &c)
+            .unwrap();
+        let claude = c
+            .rows()
+            .iter()
+            .find(|r| r.id == ComponentId::Claude)
+            .unwrap()
+            .manifest
+            .as_ref()
+            .unwrap();
+        assert_eq!(plan.download_bytes, claude.archive.compressed_bytes);
+        let fault = Server::new("corrupt");
+        assert!(manager
+            .run_install(
+                "sibling-fault",
+                &c,
+                &[node.clone(), claude.clone()],
+                &AtomicBool::new(false),
+                None,
+                Some(&fault.origin)
+            )
+            .is_err());
+        assert_eq!(
+            fs::read(manager.ready(&c, node).unwrap().join("receipt.json")).unwrap(),
+            before
+        );
+        let codex = c
+            .rows()
+            .iter()
+            .find(|r| r.id == ComponentId::Codex)
+            .unwrap()
+            .manifest
+            .as_ref()
+            .unwrap();
+        assert!(manager.ready(&c, codex).is_ok());
+        assert!(matches!(
+            manager.remove(request(ComponentId::Node)),
+            Err(InstallError::InUse)
+        ));
+        // Remaining components can install independently against the retained prerequisite.
+        let server = Server::new("");
+        for id in [
+            ComponentId::Opencode,
+            ComponentId::Claude,
+            ComponentId::Cursor,
+        ] {
+            let m = c
+                .rows()
+                .iter()
+                .find(|r| r.id == id)
+                .unwrap()
+                .manifest
+                .as_ref()
+                .unwrap();
+            manager
+                .run_install(
+                    "sibling-success",
+                    &c,
+                    &[node.clone(), m.clone()],
+                    &AtomicBool::new(false),
+                    None,
+                    Some(&server.origin),
+                )
+                .unwrap();
+            assert!(manager.ready(&c, m).is_ok());
+            assert_eq!(
+                fs::read(manager.ready(&c, node).unwrap().join("receipt.json")).unwrap(),
+                before
+            );
+        }
+        let reviewed = manager
+            .plan_verified("primary", request(ComponentId::Claude), &c)
+            .unwrap();
+        assert_eq!(reviewed.download_bytes, 0);
+        fs::remove_file(
+            manager
+                .ready(&c, node)
+                .unwrap()
+                .join(node.entries.get("main").unwrap()),
+        )
+        .unwrap();
+        assert!(matches!(
+            manager.install(
+                "primary",
+                Confirmation {
+                    plan_id: reviewed.plan_id,
+                    digest: reviewed.digest,
+                    confirmed: true
+                },
+                None
+            ),
+            Err(InstallError::Stale)
+        ));
     }
     #[test]
     fn all_five_signed_native_installs_receipts_and_atomic_recovery() {
@@ -2183,6 +2375,42 @@ pub(crate) mod tests {
             extract(&archive_path, &stage, &m, &AtomicBool::new(true), true),
             Err(InstallError::Cancelled)
         );
+    }
+    #[test]
+    fn bounded_ustar_record_padding_accepts_real_writer_and_rejects_extra_tail() {
+        let temp = Temp::new();
+        let m = catalog().rows()[0].manifest.clone().unwrap();
+        let mut raw = Vec::new();
+        flate2::read::GzDecoder::new(archive(&m).as_slice())
+            .read_to_end(&mut raw)
+            .unwrap();
+        let end = raw.iter().rposition(|b| *b != 0).unwrap() + 1;
+        raw.truncate((end + 511) / 512 * 512);
+        for (name, padding, garbage, expected) in [
+            ("record", 10240, false, Ok(())),
+            ("oversized", 20480, false, Err(InstallError::UnsafeArchive)),
+            ("garbage", 10240, true, Err(InstallError::UnsafeArchive)),
+        ] {
+            let mut bytes = raw.clone();
+            bytes.resize(bytes.len() + padding, 0);
+            if garbage {
+                *bytes.last_mut().unwrap() = 1;
+            }
+            let mut gzip =
+                flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+            gzip.write_all(&bytes).unwrap();
+            let compressed = gzip.finish().unwrap();
+            let path = temp.0.join(format!("{name}.gz"));
+            fs::write(&path, &compressed).unwrap();
+            let mut manifest = m.clone();
+            manifest.archive.compressed_bytes = compressed.len() as u64;
+            let stage = temp.0.join(name);
+            private_dir(&stage).unwrap();
+            assert_eq!(
+                extract(&path, &stage, &manifest, &AtomicBool::new(false), true),
+                expected
+            );
+        }
     }
     #[test]
     fn immutable_receipts_complete_hashes_and_private_symlink_rejection() {

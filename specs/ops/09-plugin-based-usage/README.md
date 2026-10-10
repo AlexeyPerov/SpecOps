@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-10
 
-**Status:** A contracts, B trusted artifact pipeline, C native installer and D lazy host/resolver implemented (14/24 local tasks accepted); native/copy/process source evidence recorded. Production hosting/signing/installed acceptance, C-01/D-01/D-03/D-05/D-06 and E–H remain open.
+**Status:** A contracts, B trusted artifact pipeline, C native installer D lazy host/resolver and E managed agents implemented (16/30 local tasks accepted); native/copy/process source evidence recorded. Production hosting/signing/installed acceptance, C-01/D-01/D-03/D-05/D-06 and E-01–E-04 and F–H remain open.
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -27,7 +27,7 @@ Here, a plugin is a first-party optional execution component with a tested adapt
 
 ## Current source boundary
 
-Today the host build prepares Claude/Cursor assets, release packaging adds Node and copies native assets, and Tauri includes an OpenCode sidecar. Runtime resolvers generally expect adjacent packaged resources. This milestone replaces that production delivery/resolution assumption while preserving native adapter behavior, account isolation, activity, history, policy and process ownership. Existing pins are inputs for inventory; they are not an indefinite promise that vendor latest works.
+The native supervisor and production runtime resolvers now use authenticated managed roots and generation-owned leases. The host build still prepares Claude/Cursor assets for candidate assembly, and heavy Node/agent resources plus the native sidecar remain packaged until H verifies a functional clean installed replacement. Managed OpenCode loads its separate SDK client graph on demand. Development source fallbacks remain outside installed managed execution. Account isolation, activity, history, policy and process ownership retain their native adapter contracts; real account and installed delivery acceptance remain explicit. Existing exact pins are reviewed component inputs.
 
 The approximate prepared Node/Claude/Cursor payload size previously discussed is planning context, not a measured installer reduction. AS09-A establishes actual package/startup/disk budgets and AS09-H measures the outcome.
 
@@ -70,3 +70,5 @@ No task is complete merely because a plan exists or mocks pass. No persisted-dat
 [Phase C evidence](implementation-notes-phase-c.md) records signed all-five native fixture installs, bounded confirmed jobs, strict archive/hash/target validation, durable receipts/recovery, process/window locks and typed safe APIs. Production install availability remains blocked by the signed unavailable catalog; host bootstrap and installed acceptance remain D/E/H.
 
 [Phase D evidence](implementation-notes-phase-d.md) records native verified shared Node launch, static exact descriptors, deferred selected adapter imports, all-four managed roots/entries, path-free integrity errors, generation-pinned requests and all-five leases retained through real host stop/crash cleanup. Actual trusted production bootstrap and all-four installed vendor/account acceptance remain E/F/G/H.
+
+**AS09-E source evidence (2026-10-10):** [Managed agent notes](implementation-notes-phase-e.md) record all-four real copied managed controls, a separate managed OpenCode SDK recipe, independent shared Node reuse and first-party registration. E-05/E-06 source acceptance passes; account/native-policy/clean signed installed/distribution gates for E-01–E-04 remain open. Historical inventories and heavy bundles are retained until H.

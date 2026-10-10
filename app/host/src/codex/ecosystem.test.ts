@@ -61,10 +61,12 @@ it('CAS version changes in the same native process fail before mutation and cach
  await expect(adapter.actNative({...input,action:'setNativeConfig',target:view.rows[0]!.id,value:'live'})).rejects.toThrow();expect(requests().slice(before.length)).not.toContain('config/value/write');writeFileSync(join(home,'.credentials.json'),'{MALFORMED-PRIVATE-OAUTH-CANARY');expect(()=>adapter.store.mcpCredentialValues(profile.id)).toThrow('Native credential storage is unreadable');
 });
 
-import { CodexTransport, resolveCodexExecutable, object } from './transport';
-it.skipIf(!resolveCodexExecutable())('installed pinned native config honors private file OAuth storage and versioned writes without authentication or inference', async () => {
-  const root=mkdtempSync(join(tmpdir(),'specops-native-configuration-'));cleanup.push(()=>rmSync(root,{recursive:true,force:true}));const adapter=new CodexRuntimeAdapter({profileRoot:join(root,'profiles')});cleanup.push(()=>adapter.close());const profile=adapter.store.create('No account');const home=realpathSync(adapter.store.home(profile.id));
-  const transport=new CodexTransport(resolveCodexExecutable()!,home,{PATH:process.env.PATH,HOME:'/unrelated/desktop',CODEX_HOME:'/unrelated/desktop',OPENAI_API_KEY:'EXCLUDED-PROBE-KEY'},true);cleanup.push(()=>transport.close());await transport.start();
+import { CodexTransport, object } from './transport';
+// Native probes require an explicit finite tested component, never ambient PATH.
+const nativeProbeExecutable = process.env.SPECOPS_TEST_CODEX_EXECUTABLE;
+it.skipIf(!nativeProbeExecutable)('installed pinned native config honors private file OAuth storage and versioned writes without authentication or inference', async () => {
+  const root=mkdtempSync(join(tmpdir(),'specops-native-configuration-'));cleanup.push(()=>rmSync(root,{recursive:true,force:true}));const adapter=new CodexRuntimeAdapter({executable:nativeProbeExecutable,profileRoot:join(root,'profiles')});cleanup.push(()=>adapter.close());const profile=adapter.store.create('No account');const home=realpathSync(adapter.store.home(profile.id));
+  const transport=new CodexTransport(nativeProbeExecutable!,home,{PATH:process.env.PATH,HOME:'/unrelated/desktop',CODEX_HOME:'/unrelated/desktop',OPENAI_API_KEY:'EXCLUDED-PROBE-KEY'},true);cleanup.push(()=>transport.close());await transport.start();
   const raw=await transport.request('config/read',{cwd:home,includeLayers:true});expect(object(raw)&&object(raw.config)&&raw.config.mcp_oauth_credentials_store).toBe('file');
   if(!object(raw)||!Array.isArray(raw.layers))throw new Error('Native layers absent');const layer=raw.layers.find(v=>object(v)&&object(v.name)&&v.name.type==='user');if(!object(layer)||!object(layer.name))throw new Error('Private user layer absent');expect(layer.name.file).toBe(join(home,'config.toml'));
   const write=await transport.request('config/value/write',{keyPath:'web_search',value:'disabled',mergeStrategy:'replace',filePath:join(home,'config.toml'),expectedVersion:layer.version});expect(write).toMatchObject({status:'ok',filePath:join(home,'config.toml')});

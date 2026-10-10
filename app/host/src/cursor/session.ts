@@ -1,4 +1,4 @@
-import { managedEntry } from "../componentRuntime";
+import { requireManagedCompatibility, managedEntry } from "../componentRuntime";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
@@ -24,6 +24,7 @@ export function nativeCursorDriver(assets: CursorAssets, env: NodeJS.ProcessEnv,
   let stopCurrent: (() => Promise<void>) | undefined;
   return { stop: () => stopCurrent?.() ?? Promise.resolve(), async *operation(request, signal) {
     if (signal.aborted) throw new Error("Native operation cancelled");
+    requireManagedCompatibility("cursor", "1.0.35", "as09-cursor-1");
     const owner = new NativeProcessOwner();
     const child = spawn(process.execPath, [managedEntry("cursor") ?? join(dirname(assets.worker), "session-worker.mjs")], { env, stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
     owner.own(child);

@@ -1,4 +1,4 @@
-import { managedEntry } from "../componentRuntime";
+import { requireManagedCompatibility, managedEntry } from "../componentRuntime";
 import { StringDecoder } from 'node:string_decoder';
 import { spawn, execFile, execFileSync } from 'node:child_process';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
@@ -19,6 +19,7 @@ export class NativeRpcError extends Error {
 }
 const LIMIT = 1024 * 1024;
 export function resolveCodexExecutable(env: NodeJS.ProcessEnv = process.env): string | null {
+  requireManagedCompatibility("codex", "0.160.0", "as09-codex-1");
   const managed = managedEntry("codex"); if (managed) return managed;
   if (env.SPECOPS_CODEX_EXECUTABLE) return isAbsolute(env.SPECOPS_CODEX_EXECUTABLE) && existsSync(env.SPECOPS_CODEX_EXECUTABLE) ? env.SPECOPS_CODEX_EXECUTABLE : null;
   for (const directory of (env.PATH ?? '').split(process.platform === 'win32' ? ';' : ':')) {

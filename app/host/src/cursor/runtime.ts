@@ -1,4 +1,4 @@
-import { managedEntry, managedRoot } from "../componentRuntime";
+import { requireManagedCompatibility, managedEntry, managedRoot } from "../componentRuntime";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -98,6 +98,7 @@ export function verifyCursorAssetDirectory(root: string): CursorAssets {
   }
 }
 export function resolveCursorAssets(): CursorAssets {
+  requireManagedCompatibility("cursor", "1.0.35", "as09-cursor-1");
   const main = managedEntry("cursor");
   if (main) return { sdk: managedEntry("cursor", "sdk")!, worker: managedEntry("cursor", "profileWorker")!, root: managedRoot("cursor")!, sdkVersion: CURSOR_SDK_VERSION };
   const base = dirname(fileURLToPath(import.meta.url));
@@ -164,6 +165,7 @@ export function cursorControl(
   key?: string,
   signal?: AbortSignal,
 ): Promise<CursorControlResult> {
+  requireManagedCompatibility("cursor", CURSOR_SDK_VERSION, "as09-cursor-1");
   if (
     assets.sdkVersion !== CURSOR_SDK_VERSION ||
     Number(process.versions.node.split(".")[0]) < 24

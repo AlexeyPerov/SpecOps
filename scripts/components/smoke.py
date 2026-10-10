@@ -13,6 +13,7 @@ def main():
  parser=argparse.ArgumentParser(description=__doc__)
  parser.add_argument('--candidates',type=Path,required=True)
  parser.add_argument('--evidence',type=Path,required=True)
+ parser.add_argument('--managed-probe',type=Path,help='Explicit CI-built managed host probe; never installed code')
  args=parser.parse_args()
  manifests=json.loads((args.candidates/'candidate-inventory.json').read_bytes())['manifests']
  native=args.candidates/'native-candidate-inventory.json'
@@ -40,6 +41,13 @@ def main():
   if result.returncode:
    raise RuntimeError('Isolated probe failed: '+result.stderr[-4096:])
   evidence=json.loads(result.stdout)
+  if args.managed_probe:
+   (root/'manifests.json').write_text(json.dumps(manifests))
+   managed=root/'managed-probe.mjs'
+   managed.write_bytes(args.managed_probe.read_bytes())
+   result=subprocess.run([str(root/'node/node'),str(managed),str(root)],check=False,timeout=60,capture_output=True,text=True,env={'PATH':'/usr/bin:/bin','HOME':str(root/'private-probe')})
+   if result.returncode:raise RuntimeError('Managed probe failed: '+result.stderr[-4096:])
+   evidence['managed']=json.loads(result.stdout)
   evidence['archives']=[dict(id=m['id'],version=m['version'],sha256=m['archive']['sha256'],compressedBytes=m['archive']['compressedBytes'],unpackedBytes=m['archive']['unpackedBytes'],fileCount=len(m['files'])) for m in manifests]
   args.evidence.write_text(json.dumps(evidence,indent=2)+'\n')
   print(json.dumps(evidence))

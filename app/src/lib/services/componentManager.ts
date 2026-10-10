@@ -16,7 +16,10 @@ export interface ComponentJob {
   state: "downloading" | "verifying" | "activating" | "installed" | "failed" | "cancelled";
   id: ComponentId | null; completedBytes: number; totalBytes: number; error: InstallError | null;
 }
-export interface ComponentInventory { id: ComponentId; version: string; state: ComponentState; active: boolean; verified: boolean }
+export interface ComponentInventory { id: ComponentId; version: string; state: ComponentState; active: boolean; verified: boolean;
+  target: { os: string; arch: string }; availabilityReason: string;
+  downloadBytes: number | null; installedBytes: number | null; dependencies: ComponentRequest[];
+}
 export interface ComponentDiagnostics {
   catalogRevision: number; target: { os: string; arch: string };
   components: ComponentInventory[]; jobs: ComponentJob[];

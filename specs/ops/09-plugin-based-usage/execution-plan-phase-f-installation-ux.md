@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10
 
-**Status:** Planned; all tasks open
+**Status:** F-01–F-03 source/fixture acceptance complete; F-04–F-06 UI implemented with maintenance/installed acceptance open. See [evidence](implementation-notes-phase-f.md).
 
 **Prerequisites:** AS09-C APIs; AS09-D discovery; AS09-E descriptors/payload integration.
 
@@ -16,7 +16,7 @@ Deliver agent installation, first use and recovery ux for optional first-party a
 
 ### AS09-F-01 — Build an agent component management surface
 
-**State:** [TODO]
+**State:** [DONE] — source and bounded UI fixtures; actual signed installed distribution/account acceptance remains H.
 
 Expose agent availability, install/update/remove and shared prerequisite status in settings plus contextual Sessions entry points. Show download and required disk sizes, supported versions/platforms and useful failures. Keep account connections separate from software installation.
 
@@ -24,7 +24,7 @@ Expose agent availability, install/update/remove and shared prerequisite status 
 
 ### AS09-F-02 — Implement reviewed first-use installation
 
-**State:** [TODO]
+**State:** [DONE] — source and bounded UI fixtures; actual signed installed distribution/account acceptance remains H.
 
 Before starting a download, show the exact agent, required shared components, version and estimated bytes. An explicit Install action authorizes that finite dependency plan. Retain chosen runtime/profile/workspace intent while installation progresses, then offer connection/session continuation.
 
@@ -32,7 +32,7 @@ Before starting a download, show the exact agent, required shared components, ve
 
 ### AS09-F-03 — Provide progress, cancellation and actionable retry
 
-**State:** [TODO]
+**State:** [DONE] — source and bounded UI fixtures; actual signed installed distribution/account acceptance remains H.
 
 Show download/verify/install/probe stages, known/unknown byte totals and actual cancellation state. Explain offline, insufficient disk, incompatible version, damaged file and blocked distribution failures with scoped retry. Restored jobs appear consistently after reopening another window/app.
 
@@ -40,7 +40,7 @@ Show download/verify/install/probe stages, known/unknown byte totals and actual 
 
 ### AS09-F-04 — Support updates, version selection and component removal
 
-**State:** [TODO]
+**State:** [TODO] — UI source/fixtures implemented; actual maintenance/installed acceptance remains open.
 
 Show tested update offers, pending activation/in-use blockers, retained versions and space reclamation. Present removal impact on agents/dependencies and preserve account/history by default. Offer executable-version rollback only when declared compatible with native data; incompatible state remains explicit.
 
@@ -48,7 +48,7 @@ Show tested update offers, pending activation/in-use blockers, retained versions
 
 ### AS09-F-05 — Integrate missing-component recovery into existing sessions
 
-**State:** [TODO]
+**State:** [TODO] — UI source/fixtures implemented; actual maintenance/installed acceptance remains open.
 
 Display recorded transcript and original profile identity with an install/reinstall action when execution components are missing. Handoff destinations require compatible installed components and valid profile setup; installing a destination does not prematurely create its native session.
 
@@ -56,7 +56,7 @@ Display recorded transcript and original profile identity with an install/reinst
 
 ### AS09-F-06 — Verify accessibility, multi-window and offline behavior
 
-**State:** [TODO]
+**State:** [TODO] — UI source/fixtures implemented; actual maintenance/installed acceptance remains open.
 
 Verify keyboard/focus/live progress announcements, loading states and component/account health wording. Show installed runtimes as usable offline subject to native provider requirements; missing components require connectivity or separately verified import if later explicitly scoped.
 

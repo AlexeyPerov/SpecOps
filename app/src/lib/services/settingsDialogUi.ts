@@ -5,7 +5,8 @@ export type SettingsDialogTab =
   | "appearance"
   | "versionControl"
   | "dev"
-  | "logs";
+  | "logs"
+  | "software";
 
 export interface SettingsTabDefinition {
   id: SettingsDialogTab;
@@ -53,11 +54,14 @@ const LOGS_TAB = {
   panelAriaLabel: "Logging settings",
 } as const satisfies SettingsTabDefinition;
 
+const SOFTWARE_TAB = { id: "software", label: "Software", panelAriaLabel: "Agent software" } as const satisfies SettingsTabDefinition;
+
 const ALL_TABS = [
   EDITOR_TAB,
   SHORTCUTS_TAB,
   APPEARANCE_TAB,
   VERSION_CONTROL_TAB,
+  SOFTWARE_TAB,
   DEV_TAB,
   LOGS_TAB,
 ] as const satisfies readonly SettingsTabDefinition[];
@@ -80,6 +84,7 @@ export function buildSettingsSidebar(
     { kind: "tab", tab: SHORTCUTS_TAB },
     { kind: "tab", tab: APPEARANCE_TAB },
     { kind: "tab", tab: VERSION_CONTROL_TAB },
+    { kind: "tab", tab: SOFTWARE_TAB },
     { kind: "section", label: "Dev", tabs: devTabs },
   ];
   return entries;

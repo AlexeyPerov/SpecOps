@@ -4,12 +4,12 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { tick } from 'svelte';
 import { mountComponent } from './_testComponentMount';
 import ConnectionProfilePanel from './ConnectionProfilePanel.svelte';
-const mocks=vi.hoisted(()=>({auth:vi.fn(),updates:undefined as undefined|((update:unknown)=>void)}));
-vi.mock('../services/agentHostRuntime',()=>({ensureAgentHostStarted:async()=>{},loadSessionCatalogs:async()=>{},getAgentHostClient:()=>({discover:async()=>({runtimes:[{id:'codex',label:'Codex'},{id:'claude',label:'Claude'}]}),authenticate:mocks.auth,getStatus:async()=>({running:true,generation:1,health:'healthy'}),health:async()=>({status:'healthy'}),subscribeProfiles:async(callback:(update:unknown)=>void)=>{mocks.updates=callback;return()=>{};}})}));
+const mocks=vi.hoisted(()=>({auth:vi.fn(),start:vi.fn(),running:true,updates:undefined as undefined|((update:unknown)=>void)}));
+vi.mock('../services/agentHostRuntime',()=>({ensureAgentHostStarted:async()=>{mocks.start();mocks.running=true;},loadSessionCatalogs:async()=>{},getAgentHostClient:()=>({discover:async()=>({runtimes:[{id:'codex',label:'Codex'},{id:'claude',label:'Claude'}]}),authenticate:mocks.auth,getStatus:async()=>({running:mocks.running,generation:1,health:'healthy'}),health:async()=>({status:'healthy'}),subscribeProfiles:async(callback:(update:unknown)=>void)=>{mocks.updates=callback;return()=>{};}})}));
 const profile={id:'stable-profile-id',runtimeId:'codex',label:'First',createdAt:'t',generation:1,state:'authenticated',account:{type:'chatgpt',email:'native@example.test',planType:'plus'},support:{browser:true,device:true,apiKey:true}};
 async function settle(){for(let index=0;index<8;index++){await Promise.resolve();await tick();}}
 function button(host:HTMLElement,text:string){return [...host.querySelectorAll('button')].find(node=>node.textContent===text)!;}
-beforeEach(()=>{software.list.mockResolvedValue(['codex', 'claude', 'cursor', 'opencode'].map(id => ({ id, active: true, verified: true })));let removed=false;mocks.auth.mockReset().mockImplementation(async(request)=>{if(request.options.action==='remove-profile')removed=true;return ({status:'challenge',profiles:removed?[]:[profile],...(request.options.action==='rename-profile'?{profile:{...profile,label:request.options.label}}:request.options.action==='remove-profile'?{profile:{...profile,state:'missing-profile'}}:{})});});});
+beforeEach(()=>{mocks.running=true;mocks.start.mockClear();software.list.mockResolvedValue(['codex', 'claude', 'cursor', 'opencode'].map(id => ({ id, active: true, verified: true })));let removed=false;mocks.auth.mockReset().mockImplementation(async(request)=>{if(request.options.action==='remove-profile')removed=true;return ({status:'challenge',profiles:removed?[]:[profile],...(request.options.action==='rename-profile'?{profile:{...profile,label:request.options.label}}:request.options.action==='remove-profile'?{profile:{...profile,state:'missing-profile'}}:{})});});});
 it('bound session displays native account and stable ID, rename keeps binding and removal leaves explicit missing state',async()=>{
  const onSelect=vi.fn();const {host}=mountComponent(ConnectionProfilePanel,{runtimeId:'codex',connectionProfileId:profile.id,bound:true,onSelect});await settle();
  expect(host.textContent).toContain('native@example.test');expect(host.textContent).toContain(profile.id);expect((host.querySelector('select') as HTMLSelectElement).disabled).toBe(true);
@@ -35,4 +35,8 @@ it('missing selected component shows recovery without loading its adapter or cha
  software.list.mockResolvedValue([]);const onSelect=vi.fn();const {host}=mountComponent(ConnectionProfilePanel,{runtimeId:'codex',connectionProfileId:profile.id,bound:true,onSelect});await settle();
  expect(host.textContent).toContain('Install or repair the selected component in Software');
  expect(mocks.auth).not.toHaveBeenCalled();expect(onSelect).not.toHaveBeenCalled();
+});
+
+it('installed software with stopped host offers explicit connection without passive start or bound profile changes',async()=>{
+ mocks.running=false;const onSelect=vi.fn();const {host}=mountComponent(ConnectionProfilePanel,{runtimeId:'codex',connectionProfileId:profile.id,bound:true,onSelect});await settle();expect(mocks.start).not.toHaveBeenCalled();expect(mocks.auth).not.toHaveBeenCalled();expect(host.textContent).toContain('Software is installed');button(host,'Connect selected software').click();await settle();expect(mocks.start).toHaveBeenCalledOnce();expect(onSelect).not.toHaveBeenCalled();expect(host.textContent).toContain(profile.id);
 });

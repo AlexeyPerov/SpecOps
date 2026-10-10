@@ -3,7 +3,7 @@ import { buildSettingsSidebar, filterSettingsSidebar, openSettingsDialog, regist
 afterEach(() => registerSettingsDialogOpener(null));
 describe("neutral settings navigation", () => {
  it("exposes editor and developer settings without retired runtime controls", () => {
-  expect(SETTINGS_TABS.map(tab => tab.id)).toEqual(["editor", "shortcuts", "appearance", "versionControl", "dev", "logs"]);
+  expect(SETTINGS_TABS.map(tab => tab.id)).toEqual(["editor", "shortcuts", "appearance", "versionControl", "software", "dev", "logs"]);
   expect(buildSettingsSidebar().at(-1)).toMatchObject({ kind: "section", label: "Dev" });
  });
  it("routes unknown deep links to available settings", () => {

@@ -143,6 +143,11 @@ pub struct InventoryRow {
     pub state: ComponentState,
     pub active: bool,
     pub verified: bool,
+    pub target: Target,
+    pub availability_reason: String,
+    pub download_bytes: Option<u64>,
+    pub installed_bytes: Option<u64>,
+    pub dependencies: Vec<Request>,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -473,6 +478,23 @@ impl ComponentManager {
                     state,
                     active: active && verified,
                     verified,
+                    target: r.target.clone(),
+                    availability_reason: r.reason.clone(),
+                    download_bytes: r.manifest.as_ref().map(|m| m.archive.compressed_bytes),
+                    installed_bytes: r.manifest.as_ref().map(|m| m.archive.unpacked_bytes),
+                    dependencies: r
+                        .manifest
+                        .as_ref()
+                        .map(|m| {
+                            m.dependencies
+                                .iter()
+                                .map(|d| Request {
+                                    id: d.id,
+                                    version: d.version.clone(),
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                 }
             })
             .collect()
@@ -2463,7 +2485,24 @@ pub(crate) mod tests {
         assert!(manager
             .exclusive_version(ComponentId::Node, "24.15.0")
             .is_ok());
-        let diagnostic = serde_json::to_string(&manager.diagnostics("primary").unwrap()).unwrap();
+        let snapshot = manager.diagnostics("primary").unwrap();
+        let node = snapshot
+            .components
+            .iter()
+            .find(|row| row.id == ComponentId::Node)
+            .unwrap();
+        assert_eq!(node.target, target());
+        assert!(node.download_bytes.unwrap() > 0);
+        assert!(node.installed_bytes.unwrap() > 0);
+        assert!(node.dependencies.is_empty());
+        let agent = snapshot
+            .components
+            .iter()
+            .find(|row| row.id == ComponentId::Codex)
+            .unwrap();
+        assert_eq!(agent.dependencies.len(), 1);
+        assert_eq!(agent.dependencies[0].id, ComponentId::Node);
+        let diagnostic = serde_json::to_string(&snapshot).unwrap();
         assert!(!diagnostic.contains(temp.0.to_str().unwrap()));
         assert!(!diagnostic.contains("archive.url"));
         assert_eq!(

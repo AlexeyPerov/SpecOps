@@ -40,7 +40,7 @@ The approximate prepared Node/Claude/Cursor payload size previously discussed is
 | AS09-C | [Native bootstrap and durable installer](execution-plan-phase-c-native-install-manager.md) | C-02–C-06 native fixtures accepted; C-01 installed startup remains D/H |
 | AS09-D | [Lazy Agent Host and installed component resolution](execution-plan-phase-d-lazy-host-runtime-resolution.md) | D-02/D-04 source accepted; production bootstrap/vendor/installed gates remain |
 | AS09-E | [All four agent components and future adapter registration](execution-plan-phase-e-agent-components.md) | Planned |
-| AS09-F | [Agent installation, first use and recovery UX](execution-plan-phase-f-installation-ux.md) | Planned |
+| AS09-F | [Agent installation, first use and recovery UX](execution-plan-phase-f-installation-ux.md) | F-01–F-03 source/fixtures pass; F-04–F-06 UI implemented, maintenance/installed acceptance open |
 | AS09-G | [Updates, storage maintenance and security hardening](execution-plan-phase-g-maintenance-security.md) | Planned |
 | AS09-H | [Lean release packaging and installed acceptance](execution-plan-phase-h-release-acceptance.md) | Planned |
 
@@ -72,3 +72,5 @@ No task is complete merely because a plan exists or mocks pass. No persisted-dat
 [Phase D evidence](implementation-notes-phase-d.md) records native verified shared Node launch, static exact descriptors, deferred selected adapter imports, all-four managed roots/entries, path-free integrity errors, generation-pinned requests and all-five leases retained through real host stop/crash cleanup. Actual trusted production bootstrap and all-four installed vendor/account acceptance remain E/F/G/H.
 
 **AS09-E source evidence (2026-10-10):** [Managed agent notes](implementation-notes-phase-e.md) record all-four real copied managed controls, a separate managed OpenCode SDK recipe, independent shared Node reuse and first-party registration. E-05/E-06 source acceptance passes; account/native-policy/clean signed installed/distribution gates for E-01–E-04 remain open. Historical inventories and heavy bundles are retained until H.
+
+F source/fixture evidence: [Installation and recovery UX](implementation-notes-phase-f.md). No production installation/update/rollback availability is inferred from UI fixtures.

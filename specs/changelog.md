@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-10 23:51 MSK — Add reviewed agent software installation and recovery
+
+- Added Software settings and contextual Sessions/handoff management with authenticated version/platform/reason/size/dependency inventory. Exact finite installation reviews require explicit confirmation; unavailable production distribution remains disabled. Selection/settings do not download software or start provider work.
+- Added native stage/live progress, pending cancellation, monotonic/restored jobs, actionable scoped failures, reviewed same-plan/fresh-plan retries and explicit post-install connection review. Added tested-update/retained selection, software-only reviewed removal/cache controls and keyboard/focus/offline states. Missing destination installation preserves saved handoff profile/approval/exact prompt and cannot create/send a session prematurely.
+- Focused frontend fixtures (35 tests), Svelte check/build and native manager tests pass. F-01–F-03 source acceptance passes; G maintenance inventory/rollback policy and actual signed installed/account/multi-window accessibility acceptance remain open. No migration, compatibility shim, publication or account operation.
+
 ## 2026-10-10 23:42 MSK — Integrate optional managed agent payloads
 
 - Added exact managed vendor/adapter/host compatibility and full graph revalidation; packaged the native server SDK graph and notices as a separate lazy managed asset and externalized it from base host assembly. Preserved native private profile/session/worker ownership and heavy packaging until installed release acceptance.

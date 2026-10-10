@@ -44,3 +44,5 @@ When implementation lands, add phase implementation evidence, update this index/
 [D evidence](implementation-notes-phase-d.md) accepts static no-start discovery and all-five process-generation leases, with native/host/frontend source checks and explicit production/installed bootstrap/vendor/reinstall gates.
 
 **AS09-E source evidence (2026-10-10):** [Managed agent notes](implementation-notes-phase-e.md) record all-four real copied managed controls, a separate managed OpenCode SDK recipe, independent shared Node reuse and first-party registration. E-05/E-06 source acceptance passes; account/native-policy/clean signed installed/distribution gates for E-01–E-04 remain open. Historical inventories and heavy bundles are retained until H.
+
+**Phase F source evidence:** [Installation and recovery UX](implementation-notes-phase-f.md): F-01–F-03 source/fixture acceptance passes; F-04–F-06 UI boundaries implemented. G retained/update producers and real installed/account/multi-window accessibility remain open.

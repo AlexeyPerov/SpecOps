@@ -3,13 +3,14 @@ import { tick } from 'svelte';
 import { mountComponent } from './_testComponentMount';
 import SessionHandoffDialog from './SessionHandoffDialog.svelte';
 import { buildHandoffDraft } from '../services/sessionHandoff';
-const mocks = vi.hoisted(() => ({ confirm: vi.fn(), open: vi.fn(), read: vi.fn(), catalog: vi.fn() }));
+const mocks = vi.hoisted(() => ({ confirm: vi.fn(), open: vi.fn(), read: vi.fn(), catalog: vi.fn(), list: vi.fn(), diagnostics: vi.fn(), plan: vi.fn(), install: vi.fn() }));
+vi.mock('../services/componentManager', () => ({ componentManager: { list: mocks.list, diagnostics: mocks.diagnostics, plan: mocks.plan, install: mocks.install }, listenComponentJobs: async () => () => {}, newerComponentJob: () => false }));
 vi.mock('../services/handoffController', () => ({ collectHandoffDraft: async () => buildHandoffDraft({ sourceSessionId:'source',sourceRuntimeId:'codex',workspaceRootPath:'/workspace',messages:[{id:'u',role:'user',content:'Original goal',createdAt:'t'}] }), confirmHandoff: mocks.confirm, openKnownHandoffTarget: mocks.open }));
 vi.mock('../services/handoffPersistence', () => ({ readHandoffJournal: mocks.read }));
-vi.mock('../services/agentHostRuntime', () => ({ EMPTY_SESSION_CATALOG: {status:'idle',models:[],modes:[]}, loadSessionCatalogs:mocks.catalog, ensureAgentHostStarted: async()=>({}), getAgentHostClient:()=>({ discover:async()=>({runtimes:[{id:'opencode',label:'OpenCode'}]}), authenticate:async()=>({profiles:[{id:'target-profile',label:'Later profile',runtimeId:'opencode',state:'authenticated',generation:1,hostGeneration:1,support:{apiKey:true}}]}), getStatus:async()=>({}),health:async()=>({}), subscribeProfiles:async()=>()=>{} }) }));
+vi.mock('../services/agentHostRuntime', () => ({ EMPTY_SESSION_CATALOG: {status:'idle',models:[],modes:[]}, loadSessionCatalogs:mocks.catalog, ensureAgentHostStarted: async()=>({}), getAgentHostClient:()=>({ discover:async()=>({runtimes:[{id:'opencode',label:'OpenCode'}]}), authenticate:async()=>({profiles:[{id:'target-profile',label:'Later profile',runtimeId:'opencode',state:'authenticated',generation:1,hostGeneration:1,support:{apiKey:true}}]}), getStatus:async()=>({running:true}),health:async()=>({}), subscribeProfiles:async()=>()=>{} }) }));
 async function settle() { await Promise.resolve(); await tick(); await Promise.resolve(); await tick(); }
 function button(host: HTMLElement, text: string) { return [...host.querySelectorAll('button')].find(b=>b.textContent?.includes(text))!; }
-beforeEach(()=>{mocks.confirm.mockReset().mockImplementation(async a=>({...a,stage:'settled',outcome:'completed'}));mocks.read.mockReset().mockResolvedValue({attempts:[]});mocks.catalog.mockReset().mockResolvedValue({status:'ready',models:[{id:'model-a'},{id:'model-b'}],modes:[{id:'build'}]});});
+beforeEach(()=>{mocks.list.mockResolvedValue([{id:'opencode',active:true,verified:true}]);mocks.install.mockReset();mocks.confirm.mockReset().mockImplementation(async a=>({...a,stage:'settled',outcome:'completed'}));mocks.read.mockReset().mockResolvedValue({attempts:[]});mocks.catalog.mockReset().mockResolvedValue({status:'ready',models:[{id:'model-a'},{id:'model-b'}],modes:[{id:'build'}]});});
 describe('handoff review UI',()=>{
  it('edits/removes sections, previews the exact prompt and cancel creates/sends nothing',async()=>{
   const close=vi.fn();const {host}=mountComponent(SessionHandoffDialog,{sourceSessionId:'source',workspaceRootPath:'/workspace',onClose:close});await settle();
@@ -33,4 +34,15 @@ describe('handoff review UI',()=>{
   mocks.read.mockResolvedValue({attempts:[saved]});const {host}=mountComponent(SessionHandoffDialog,{sourceSessionId:'source',workspaceRootPath:'/workspace',onClose:vi.fn()});await settle();
   button(host,'Review saved approval').click();await settle();expect(mocks.confirm).not.toHaveBeenCalled();expect((host.querySelector('textarea[aria-label="Exact first prompt"]') as HTMLTextAreaElement).value).toBe('Saved exact packet');
  });
+});
+
+it('missing handoff destination review and dismissal preserve saved approval without native creation or prompt send',async()=>{
+ mocks.list.mockResolvedValue([]);
+ mocks.diagnostics.mockResolvedValue({target:{os:'darwin',arch:'arm64'},components:[{id:'opencode',version:'1.17.4',state:'missing',verified:false,active:false}],jobs:[]});
+ mocks.plan.mockResolvedValue({planId:'review-plan',digest:'finite-digest',catalogRevision:1,expiresAt:Math.ceil(Date.now()/1000)+300,components:[{id:'node',version:'24.15.0'},{id:'opencode',version:'1.17.4'}],downloadBytes:1000,requiredDiskBytes:2000});
+ const saved={version:1,id:'saved',sourceSessionId:'source',targetSessionId:'target',workspaceRootPath:'/workspace',stage:'approved',approvedAt:'2026-10-04T00:00:00Z',approvedPrompt:'Saved exact packet',target:{runtimeId:'opencode',connectionProfileId:'original-profile',modelId:'model-a'}};
+ mocks.read.mockResolvedValue({attempts:[saved]});const {host}=mountComponent(SessionHandoffDialog,{sourceSessionId:'source',workspaceRootPath:'/workspace',onClose:vi.fn()});await settle();button(host,'Review saved approval').click();await settle();
+ await vi.waitFor(()=>expect(button(host,'Confirm and send').disabled).toBe(true));
+ button(host,'Manage selected software').click();await settle();button(host,'Review installation').click();await settle();expect(mocks.install).not.toHaveBeenCalled();
+ button(host,'Dismiss installation review').click();await settle();expect(mocks.confirm).not.toHaveBeenCalled();expect(mocks.install).not.toHaveBeenCalled();expect(host.textContent).toContain('original-profile');expect((host.querySelector('textarea[aria-label="Exact first prompt"]') as HTMLTextAreaElement).value).toBe('Saved exact packet');expect(button(host,'Confirm and send').disabled).toBe(true);
 });

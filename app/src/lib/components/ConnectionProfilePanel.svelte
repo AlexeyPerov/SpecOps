@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SoftwarePanel from './SoftwarePanel.svelte';
   import { componentManager } from '../services/componentManager';
   import { sessionSupportSnapshot } from '../services/sessionSupport';
   import { chatStore } from '../state/chatStore';
@@ -7,10 +8,11 @@
   import { isNewerProfileSnapshot } from '../session/profiles';
   import type { ConnectionProfileSnapshot } from '../session/profiles';
   import type { AgentRuntimeDescriptor, AgentRuntimeId } from '../session/runtime';
-  let { runtimeId, connectionProfileId, bound = false, onSelect, onRefresh = () => {} }: {
+  let { runtimeId, connectionProfileId, bound = false, onSelect, onRefresh = () => {}, onSoftwareAvailability = () => {} }: {
     runtimeId: AgentRuntimeId; connectionProfileId?: string; bound?: boolean;
     onSelect: (runtimeId: AgentRuntimeId, connectionProfileId?: string) => void;
     onRefresh?: () => void;
+    onSoftwareAvailability?: (ready: boolean) => void;
   } = $props();
   let runtimes = $state<readonly AgentRuntimeDescriptor[]>([]);
   let profiles = $state<readonly ConnectionProfileSnapshot[]>([]);
@@ -25,23 +27,30 @@
   let error = $state('');
   let diagnostics = $state('');
   let recovery = $state('');
+  let showSoftware = $state(false);
+  let softwareReady = $state(false);
+  let hostRunning = $state(false);
   const selected = $derived(profiles.find(p => p.id === connectionProfileId));
   function mergeProfiles(incoming: readonly ConnectionProfileSnapshot[]): readonly ConnectionProfileSnapshot[] {
     return incoming.map(profile => { const previous = profiles.find(p => p.id === profile.id); return previous && !isNewerProfileSnapshot(previous, profile) ? previous : profile; });
   }
   async function refresh(probe = false): Promise<void> {
-    recovery = '';
+    recovery = ''; softwareReady = false; onSoftwareAvailability(false);
     const selectedRuntime = runtimeId;
     const selectedProfile = connectionProfileId;
     const epoch = ++refreshEpoch;
+    const installed = await componentManager.list().catch(() => []);
+    if (epoch !== refreshEpoch || selectedRuntime !== runtimeId) return;
+    softwareReady = installed.some(component => component.id === selectedRuntime && component.active && component.verified);
+    onSoftwareAvailability(softwareReady);
     const client = getAgentHostClient();
     const discovered = (await client.discover()).runtimes;
     if (epoch !== refreshEpoch || selectedRuntime !== runtimeId) return;
     runtimes = discovered;
-    if (!(await client.getStatus()).running) { recovery = "Install the selected component in Software, then connect explicitly. Existing session and profile bindings are preserved."; return; }
+    hostRunning = (await client.getStatus()).running;
+    if (!hostRunning) { recovery = softwareReady ? 'Software is installed. Connect explicitly to review the original account profile; saved session and profile bindings are preserved.' : 'Install the selected component in Software, then connect explicitly. Existing session and profile bindings are preserved.'; return; }
     if (selectedRuntime !== 'codex' && selectedRuntime !== 'opencode' && selectedRuntime !== 'claude' && selectedRuntime !== 'cursor') { profiles = []; return; }
-    const installed = await componentManager.list().catch(() => []);
-    if (!installed.some(component => component.id === selectedRuntime && component.active && component.verified)) { recovery = "Install or repair the selected component in Software, then reconnect explicitly."; return; }
+    if (!softwareReady) { recovery = "Install or repair the selected component in Software, then reconnect explicitly."; return; }
     const result = await client.authenticate({ runtimeId: selectedRuntime, workspaceRootPath: '', options: { action: 'list-profiles' } });
     if (epoch !== refreshEpoch || selectedRuntime !== runtimeId) return;
     profiles = mergeProfiles(result.profiles ?? []);
@@ -59,6 +68,7 @@
     }
   }
   async function action(action: string): Promise<void> {
+    if (!softwareReady) { recovery = 'Install or repair the selected component in Software, then reconnect explicitly.'; return; }
     const selectedRuntime = runtimeId;
     const selectedProfile = connectionProfileId;
     busy = true; error = '';
@@ -94,6 +104,11 @@
 </script>
 
 <div class="connection-profiles" aria-label="Session connection">
+  {#if runtimeId !== 'fake'}
+    <button onclick={() => { showSoftware = !showSoftware; }} aria-expanded={showSoftware}>Manage selected software</button>
+    {#if softwareReady && !hostRunning}<button onclick={() => action('list-profiles')} disabled={busy}>Connect selected software</button>{/if}
+    {#if showSoftware}{#key runtimeId}<SoftwarePanel {runtimeId} profileId={connectionProfileId} onReady={() => { showSoftware = false; void refresh(); }} />{/key}{/if}
+  {/if}
   {#if recovery}<p role="status">{recovery}</p>{/if}
   <label>Runtime
     <select value={runtimeId} disabled={bound || busy} onchange={event => onSelect(event.currentTarget.value as AgentRuntimeId)}>
@@ -116,7 +131,7 @@
         <label>Connection<select bind:value={ownership} disabled={busy}><option value="local">Local native runtime</option><option value="external">Owner-managed endpoint</option></select></label>
         {#if ownership === 'external'}<input aria-label="External runtime endpoint" placeholder="Loopback HTTP or HTTPS origin" bind:value={endpoint} disabled={busy} />{/if}
       {/if}
-      <button onclick={() => action('create-profile')} disabled={busy}>Create profile</button>
+      <button onclick={() => action('create-profile')} disabled={busy || !softwareReady}>Create profile</button>
     {/if}
     {#if selected}
       <span role="status">{selected.state}{selected.account?.type === 'chatgpt' ? `: ${selected.account.email ?? 'ChatGPT account'} (${selected.account.planType})` : selected.account?.type === 'apiKey' ? ': API key' : ''}</span>

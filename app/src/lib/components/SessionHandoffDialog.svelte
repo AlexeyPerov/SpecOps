@@ -13,6 +13,7 @@
   let targetSessionId = $state('');
   let catalog = $state<SessionCatalogSnapshot>(EMPTY_SESSION_CATALOG);
   let busy = $state(false);
+  let targetSoftwareReady = $state(false);
   let error = $state('');
   let excerptPaths = $state('');
   let attempts = $state<HandoffAttempt[]>([]);
@@ -51,7 +52,7 @@
     void refreshAttempts().catch(failure => { error = failure instanceof Error ? failure.message : 'Handoff storage unavailable'; });
   });
   async function confirm() {
-    if ((!draft && !approval) || !preview || busy) return;
+    if ((!draft && !approval) || !preview || busy || !targetSoftwareReady) return;
     busy = true; error = '';
     const attempt: HandoffAttempt = approval ?? { version: 1, id: `handoff-${crypto.randomUUID()}`, sourceSessionId, targetSessionId, workspaceRootPath, target: structuredClone($state.snapshot(target)), approvedPrompt: preview, approvedAt: new Date().toISOString(), stage: 'approved' };
     approval = attempt;
@@ -67,9 +68,9 @@
 <dialog open aria-label="Review session handoff">
   <h2>Review handoff</h2>
   <p>Create a fresh target session from the exact prompt below. Source native history stays with its account. Context is bounded and excludes raw tool output, reasoning, private files and common secret shapes by default. Durable confirmation is available on verified Unix storage; other platforms block native creation until a safe writer is supported. Review the content before sharing it with the target account.</p>
-  <ConnectionProfilePanel runtimeId={target.runtimeId} connectionProfileId={target.connectionProfileId} bound={busy || approval !== null} onSelect={(runtimeId: AgentRuntimeId, connectionProfileId?: string) => { target = { runtimeId, connectionProfileId, modelId: '' }; void refreshCatalog(); }} onRefresh={() => void refreshCatalog()} />
+  <ConnectionProfilePanel runtimeId={target.runtimeId} connectionProfileId={target.connectionProfileId} bound={busy || approval !== null} onSelect={(runtimeId: AgentRuntimeId, connectionProfileId?: string) => { target = { runtimeId, connectionProfileId, modelId: '' }; void refreshCatalog(); }} onRefresh={() => void refreshCatalog()} onSoftwareAvailability={ready => { targetSoftwareReady = ready; }} />
   <SessionCatalogPicker runtimeId={target.runtimeId} runtimeLabel={target.runtimeId} {catalog} activeModelId={target.modelId} activeModeId={target.modeId ?? ''} runtimeMetadata={target.runtimeMetadata} disabled={busy || approval !== null} onSelectModel={modelId => { target = { ...target, modelId, runtimeMetadata: {} }; }} onSelectMode={modeId => { target = { ...target, modeId }; }} onSettingsChange={runtimeMetadata => { target = { ...target, runtimeMetadata }; }} />
-  <p>Target profile/model/policy are fixed at native creation. Missing authentication, unavailable native turns and unsupported settings block confirmation. Codex requires explicit experimental profile opt-in. Cursor is unavailable in this handoff source slice.</p>
+  <p>Target profile/model/policy are fixed at native creation. Missing authentication, unavailable native turns and unsupported settings block confirmation. Codex requires explicit experimental profile opt-in. The selected destination requires compatible installed software and valid account setup before confirmation.</p>
   <label>Optional workspace-relative excerpt paths, one per line<textarea bind:value={excerptPaths} disabled={busy || approval !== null} maxlength="8192"></textarea></label>
   <button onclick={() => void loadEvidence()} disabled={busy || approval !== null}>Regenerate evidence (replaces section edits)</button>
   {#if draft && !approval}
@@ -84,7 +85,7 @@
   <label>Exact first prompt<textarea aria-label="Exact first prompt" readonly value={preview}></textarea></label>
   {#if previewError}<p role="alert">{previewError}</p>{/if}
   {#if error}<p role="alert">{error}</p>{/if}
-  <button onclick={() => void confirm()} disabled={busy || !preview || !target.connectionProfileId || !target.modelId || catalog.status !== 'ready' || target.runtimeId === 'fake'}>Confirm and send reviewed prompt</button>
+  <button onclick={() => void confirm()} disabled={busy || !targetSoftwareReady || !preview || !target.connectionProfileId || !target.modelId || catalog.status !== 'ready' || target.runtimeId === 'fake'}>Confirm and send reviewed prompt</button>
   <button onclick={onClose} disabled={busy}>Close / cancel review</button>
   {#if attempts.length}
     <h3>Saved attempts</h3>

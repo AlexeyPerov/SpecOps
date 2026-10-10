@@ -7,6 +7,7 @@
     SETTINGS_TABS,
     type SettingsDialogTab,
   } from "../../services/settingsDialogUi";
+  import SoftwarePanel from "../SoftwarePanel.svelte";
   import KeyboardShortcutsSettings from "../KeyboardShortcutsSettings.svelte";
   import DevSettingsPanel from "./DevSettingsPanel.svelte";
   import EditorSettingsPanel from "./EditorSettingsPanel.svelte";
@@ -76,6 +77,8 @@
     <VersionControlSettingsPanel />
   {:else if tabId === "dev"}
     <DevSettingsPanel dialogOpen={true} />
+  {:else if tabId === "software"}
+    <SoftwarePanel />
   {:else if tabId === "logs"}
     <LogsSettingsPanel />
   {/if}

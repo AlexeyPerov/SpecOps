@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "target": { "os": "darwin", "arch": "arm64" },
+  "decision": "Source acceptance budgets fixed before replacement delivery; measured release acceptance remains AS09-H",
+  "base": { "compressedBytes": 26214400, "unpackedBytes": 83886080, "editorStartupP95Ms": 2000, "editorRssBytes": 268435456, "ownedAgentProcessesAtEditorIdle": 0 },
+  "installer": { "maxManifestBytes": 2097152, "maxFiles": 20000, "maxArchiveBytes": 536870912, "maxUnpackedBytes": 1610612736, "maxFileBytes": 536870912, "maxConcurrentDownloads": 1, "maxRetries": 3, "requestTimeoutMs": 30000, "progressIntervalMs": 100, "maxProgressSilenceMs": 1000 },
+  "storage": { "cacheBytes": 1073741824, "allFourActiveComponentsBytes": 4294967296, "retainedInactiveVersionsPerComponent": 1, "freeDiskReserveBytes": 268435456, "requiredFreeDiskFormula": "compressedBytes + 2 * unpackedBytes + freeDiskReserveBytes" },
+  "agent": { "installedHostReadyP95Ms": 1500, "firstUseNativeReadyP95Ms": 5000, "localRuntimeRssBytes": 805306368, "firstUseLatencyExcludes": ["network transfer", "user authorization", "provider inference"] },
+  "measurement": { "repetitions": 10, "startup": "cold editor opening a fixed local workspace; compare same machine/build/signing", "rss": "sum owned native app and WebView descendants; report host/vendor separately", "firstUse": "explicit installed agent operation through first ready response; no prompt replay", "disk": "regular unpacked bytes and transport archive bytes separately; staging/cache/retained versions included" }
+}

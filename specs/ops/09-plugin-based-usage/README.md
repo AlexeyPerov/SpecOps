@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-10
 
-**Status:** Planned; full scope A–H, no implementation or acceptance claimed
+**Status:** A source contracts/decisions implemented (4/6 tasks accepted); finite native inventory and clean baseline acceptance open. B–H planned.
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -35,7 +35,7 @@ The approximate prepared Node/Claude/Cursor payload size previously discussed is
 
 | Phase | Plan | State |
 | --- | --- | --- |
-| AS09-A | [Component contracts and distribution decisions](execution-plan-phase-a-component-contracts.md) | Planned |
+| AS09-A | [Component contracts and distribution decisions](execution-plan-phase-a-component-contracts.md) | Source contracts/decisions accepted; A-01/A-06 open |
 | AS09-B | [Trusted component artifacts and catalog](execution-plan-phase-b-artifact-pipeline.md) | Planned |
 | AS09-C | [Native bootstrap and durable installer](execution-plan-phase-c-native-install-manager.md) | Planned |
 | AS09-D | [Lazy Agent Host and installed component resolution](execution-plan-phase-d-lazy-host-runtime-resolution.md) | Planned |
@@ -43,6 +43,8 @@ The approximate prepared Node/Claude/Cursor payload size previously discussed is
 | AS09-F | [Agent installation, first use and recovery UX](execution-plan-phase-f-installation-ux.md) | Planned |
 | AS09-G | [Updates, storage maintenance and security hardening](execution-plan-phase-g-maintenance-security.md) | Planned |
 | AS09-H | [Lean release packaging and installed acceptance](execution-plan-phase-h-release-acceptance.md) | Planned |
+
+[Phase A evidence](implementation-notes-phase-a.md) records strict native contracts, measured prepared payload bytes, numeric budgets and truthful unavailable distribution entries. The tracked OpenCode sidecar is a developer PATH wrapper; observed Codex is incompatible with the tested pin. Clean signed installed/process/account acceptance remains open.
 
 ## Dependencies and delivery
 

@@ -26,7 +26,7 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 | [06 — Handoff/native extensions](06-handoff-native-extensions/README.md) | A/B/C source verified; 16 ordered handoff pairs/native extensions/simultaneous Codex profiles; live/installed gates open | Actual account handoff/extensions/two-profile and installed acceptance |
 | [07 — Cursor](07-cursor-adapter/README.md) | A–D local SDK/profile/lifecycle/settings/fault/security/16-pair handoff source and copied assets verified; native/authenticated/installed/distribution gates open | External D acceptance and selected 08-A gate |
 | [08 — Release gates](08-release-gates/README.md) | Versioned expanded source record/validator/runner verified; release blocked | External selected-scope gates; repeat for 09 and close after full active scope |
-| [09 — Plugin-based usage](09-plugin-based-usage/README.md) | A–H planned; 48 open tasks | Native installer, shared Node and four optional agent components; lean installed release |
+| [09 — Plugin-based usage](09-plugin-based-usage/README.md) | A contracts/decisions accepted; 44 open tasks incl. A-01/A-06 | Native installer, shared Node and four optional agent components; lean installed release |
 
 A completed implementation marker is not a release acceptance record. Implemented source phases retain explicit external acceptance; the dated [expanded AS08-A decision](08-release-gates/release-2026-10-05.md) is blocked. A source marker does not close the roadmap.
 
@@ -140,7 +140,7 @@ After two runtimes are accepted, user reviews a bounded packet with goal, decisi
 
 - First usable preview targets macOS and Codex only. Its gates are 01-S, 02-A–D, 03-A/B and a selected-scope 08-A record.
 - Existing 03 delivery bundles Agent Host and a compatible Node runtime; developer PATH is not installed-build evidence. Vendor binary may be bundled/installed where permitted or explicitly user-managed with version/setup diagnostics.
-- Planned [09 delivery](09-plugin-based-usage/README.md) keeps small host/adapter code in the base app and downloads shared Node plus agent SDK/native/helper payloads through a trusted Rust/Tauri installer on explicit request. Installed component identity replaces adjacent-resource resolution only after verification; profile/auth/history remain separate. Current bundled source evidence does not prove this future delivery mode.
+- [09 delivery](09-plugin-based-usage/README.md) keeps small host/adapter code in the base app and downloads shared Node plus agent SDK/native/helper payloads through a trusted Rust/Tauri installer on explicit request. Installed component identity replaces adjacent-resource resolution only after verification; profile/auth/history remain separate. Current bundled source evidence does not prove this future delivery mode.
 - 02-B is a developer slice, not an installed-product readiness claim. Minimal history/cancel/approvals are required there, not deferred to final polish.
 - Neutral Sessions gate replaces provider-shaped settings. Each adapter/profile has independent setup/health state. No beta release is gated on complete legacy feature parity or all four runtimes.
 - API-key and account smokes are explicit opt-in runs. Record selected version, account access category, support scope and unavailable auth methods without inferring model entitlement from catalog listing.
@@ -156,6 +156,7 @@ Each phase records automated checks, pinned contracts and actual smoke/support e
 
 | Date | Change |
 | --- | --- |
+| 2026-10-10 | Implement AS09-A strict native contracts, all-five fixtures, payload inventory/distribution decisions and numeric budgets; finite native reconstruction/clean baseline acceptance remain open |
 | 2026-10-10 | Add full AS09 A–H on-demand Node/four-agent delivery plan, trusted native installation, maintenance UX and fresh installed release gates |
 | 2026-10-04 | Renumber active stages 01–08, split preview/extensions/release plans, move completed evidence to done |
 | 2026-10-04 | Adopt Codex-first order; reopen foundation acceptance as S; isolated account profiles; early activity/packaging; OpenCode core before extensions; subset release gates |

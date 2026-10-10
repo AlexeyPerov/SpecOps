@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-10 22:47 MSK — Define optional execution component contracts
+
+- Implemented AS09-A Node-independent strict native manifests, all-five bounded fixtures, receipt/private software roots, independent component/account/runtime states, exact app/host/adapter/dependency compatibility and lease/native-store rollback guards. Added focused contract fixtures and numeric package/installer/storage/startup/RSS budgets.
+- Recorded finite prepared payload hashes/unpacked and local gzip bytes plus official pinned license/current distribution/signing decisions. Production component availability remains unavailable until exact artifact/permission/signing review; trusted catalog verification is phase B.
+- Exposed baseline gaps: tracked OpenCode sidecar is a developer PATH wrapper, observed Codex differs from the tested pin, and existing installed app is stale/ad-hoc/unsealed. A-01 finite reconstruction and A-06 clean installed/process/first-use measurement acceptance remain open; source checks do not imply account/signed installed acceptance. No migrations or shims.
+
 ## 2026-10-10 22:33 MSK — Plan on-demand agent component delivery
 
 - Added AS09 full-scope execution plans: 48 open tasks across component contracts, trusted artifacts, a Node-independent native installer, lazy host/bootstrap, four agent integrations, installation UX, maintenance/security and lean installed release acceptance.

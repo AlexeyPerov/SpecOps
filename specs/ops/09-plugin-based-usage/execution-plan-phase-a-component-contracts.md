@@ -2,7 +2,9 @@
 
 **Date:** 2026-10-10
 
-**Status:** Planned; all tasks open
+**Status:** Source contracts/decisions implemented; A-01 finite native payload and A-06 clean measured baseline acceptance remain open
+
+**Evidence:** [Implementation notes](implementation-notes-phase-a.md) · [Exact inventory](payload-inventory.json) · [Numeric budgets](delivery-budgets.json)
 
 **Prerequisites:** Existing adapter pins and packaging source; no live account is needed.
 
@@ -16,7 +18,7 @@ Deliver component contracts and distribution decisions for optional first-party 
 
 ### AS09-A-01 — Inventory the complete execution payload
 
-**State:** [TODO]
+**State:** [TODO] — finite prepared inventory implemented; tracked OpenCode sidecar is a PATH wrapper and observed Codex differs from tested pin, so reconstruction acceptance remains open
 
 Inventory Node, Agent Host, Codex executable, OpenCode executable/SDK, Claude SDK/native executable and Cursor SDK/workers/dependency/helper payloads. Record platform/architecture, entry points, lazy assets, size, license/notice sources and current resolver/build ownership. Distinguish build-only dependencies from installed execution requirements.
 
@@ -24,7 +26,7 @@ Inventory Node, Agent Host, Codex executable, OpenCode executable/SDK, Claude SD
 
 ### AS09-A-02 — Define the first-party component manifest
 
-**State:** [TODO]
+**State:** [DONE] — source contract/decision acceptance; production install/signing/account gates remain later phases
 
 Specify a versioned manifest for component ID/version, adapter compatibility, OS/architecture, archive format, compressed/unpacked sizes and limits, file inventory/hashes, executable entries, dependencies, trusted download location and signature metadata. Describe Node as a shared prerequisite and native runtimes as optional components.
 
@@ -32,7 +34,7 @@ Specify a versioned manifest for component ID/version, adapter compatibility, OS
 
 ### AS09-A-03 — Define ownership, state and storage contracts
 
-**State:** [TODO]
+**State:** [DONE] — source contract/decision acceptance; production install/signing/account gates remain later phases
 
 Specify application-scoped immutable version directories and separate staging/cache/install receipts/active selection. Keep credentials, profiles, native history and session metadata in separate private roots. Distinguish component state, account state and runtime health. Define missing/installing/verifying/installed/update-available/in-use/failed/incompatible/unsupported/unavailable states and bounded events.
 
@@ -40,7 +42,7 @@ Specify application-scoped immutable version directories and separate staging/ca
 
 ### AS09-A-04 — Resolve vendor delivery and execution constraints
 
-**State:** [TODO]
+**State:** [DONE] — source contract/decision acceptance; production install/signing/account gates remain later phases
 
 Record official source and current distribution/notice/embedding requirements per exact runtime target. Choose approved hosted payloads or verified official downloads for each component; evaluate downloaded executable signing/quarantine and permitted SDK/native assembly. Unknown permission or absent verification prevents advertising an installable component.
 
@@ -48,7 +50,7 @@ Record official source and current distribution/notice/embedding requirements pe
 
 ### AS09-A-05 — Specify package and adapter compatibility policy
 
-**State:** [TODO]
+**State:** [DONE] — source contract/decision acceptance; production install/signing/account gates remain later phases
 
 Define application/host/adapter/component compatibility independently of vendor latest. The app ships the adapter implementation and a trusted catalog of tested component versions. Component upgrades do not fetch arbitrary adapter code. Define update offers, active leases, component rollback preconditions and explicit native-store incompatibility outcomes.
 
@@ -56,7 +58,7 @@ Define application/host/adapter/component compatibility independently of vendor 
 
 ### AS09-A-06 — Set measurable delivery and performance budgets
 
-**State:** [TODO]
+**State:** [TODO] — exact prepared bytes and numeric budgets recorded; current clean signed installed/startup/process/RSS/first-use/steady-state baseline unavailable or not run
 
 Capture clean current installed-package size, prepared payload sizes, editor-only startup/process/RSS baseline and one-agent first-use/steady-state baseline on the first supported target. Set numeric acceptance budgets for base package, installer limits, disk/cache and progress responsiveness before implementation gates. Treat previous approximate asset totals as planning estimates.
 

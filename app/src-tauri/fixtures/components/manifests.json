@@ -1,0 +1,368 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "node",
+    "version": "24.15.0",
+    "target": {
+      "os": "darwin",
+      "arch": "arm64"
+    },
+    "compatibility": {
+      "appVersions": [
+        "0.3.0"
+      ],
+      "hostVersions": [
+        "0.1.0"
+      ],
+      "adapterRevision": "as09-node-1",
+      "nativeStoreRevision": "native-node-24.15.0"
+    },
+    "archive": {
+      "format": "tar-gz",
+      "url": "https://components.invalid/fixture/node-24.15.0.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "compressedBytes": 128,
+      "unpackedBytes": 2
+    },
+    "files": [
+      {
+        "path": "bin/node",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": true
+      },
+      {
+        "path": "LICENSE.txt",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      }
+    ],
+    "entries": {
+      "main": "bin/node"
+    },
+    "dependencies": [],
+    "distribution": {
+      "status": "unavailable",
+      "evidenceId": "as09-a-fixture-only",
+      "noticePaths": [
+        "LICENSE.txt"
+      ]
+    },
+    "signature": {
+      "algorithm": "ed25519",
+      "keyId": "fixture-only",
+      "value": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "codex",
+    "version": "0.160.0",
+    "target": {
+      "os": "darwin",
+      "arch": "arm64"
+    },
+    "compatibility": {
+      "appVersions": [
+        "0.3.0"
+      ],
+      "hostVersions": [
+        "0.1.0"
+      ],
+      "adapterRevision": "as09-codex-1",
+      "nativeStoreRevision": "native-codex-0.160.0"
+    },
+    "archive": {
+      "format": "tar-gz",
+      "url": "https://components.invalid/fixture/codex-0.160.0.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "compressedBytes": 128,
+      "unpackedBytes": 2
+    },
+    "files": [
+      {
+        "path": "bin/codex",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": true
+      },
+      {
+        "path": "LICENSE.txt",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      }
+    ],
+    "entries": {
+      "main": "bin/codex"
+    },
+    "dependencies": [
+      {
+        "id": "node",
+        "version": "24.15.0"
+      }
+    ],
+    "distribution": {
+      "status": "unavailable",
+      "evidenceId": "as09-a-fixture-only",
+      "noticePaths": [
+        "LICENSE.txt"
+      ]
+    },
+    "signature": {
+      "algorithm": "ed25519",
+      "keyId": "fixture-only",
+      "value": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "opencode",
+    "version": "1.17.4",
+    "target": {
+      "os": "darwin",
+      "arch": "arm64"
+    },
+    "compatibility": {
+      "appVersions": [
+        "0.3.0"
+      ],
+      "hostVersions": [
+        "0.1.0"
+      ],
+      "adapterRevision": "as09-opencode-1",
+      "nativeStoreRevision": "native-opencode-1.17.4"
+    },
+    "archive": {
+      "format": "tar-gz",
+      "url": "https://components.invalid/fixture/opencode-1.17.4.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "compressedBytes": 128,
+      "unpackedBytes": 2
+    },
+    "files": [
+      {
+        "path": "bin/opencode",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": true
+      },
+      {
+        "path": "LICENSE.txt",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      }
+    ],
+    "entries": {
+      "main": "bin/opencode"
+    },
+    "dependencies": [
+      {
+        "id": "node",
+        "version": "24.15.0"
+      }
+    ],
+    "distribution": {
+      "status": "unavailable",
+      "evidenceId": "as09-a-fixture-only",
+      "noticePaths": [
+        "LICENSE.txt"
+      ]
+    },
+    "signature": {
+      "algorithm": "ed25519",
+      "keyId": "fixture-only",
+      "value": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "claude",
+    "version": "0.3.289",
+    "target": {
+      "os": "darwin",
+      "arch": "arm64"
+    },
+    "compatibility": {
+      "appVersions": [
+        "0.3.0"
+      ],
+      "hostVersions": [
+        "0.1.0"
+      ],
+      "adapterRevision": "as09-claude-1",
+      "nativeStoreRevision": "native-claude-0.3.289"
+    },
+    "archive": {
+      "format": "tar-gz",
+      "url": "https://components.invalid/fixture/claude-0.3.289.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "compressedBytes": 128,
+      "unpackedBytes": 6
+    },
+    "files": [
+      {
+        "path": "sdk/sdk.mjs",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      },
+      {
+        "path": "LICENSE.txt",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      },
+      {
+        "path": "sdk/core.mjs",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      },
+      {
+        "path": "sdk/bridge.mjs",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      },
+      {
+        "path": "bin/claude",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": true
+      },
+      {
+        "path": "NATIVE-LICENSE.md",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      }
+    ],
+    "entries": {
+      "main": "sdk/sdk.mjs",
+      "native": "bin/claude"
+    },
+    "dependencies": [
+      {
+        "id": "node",
+        "version": "24.15.0"
+      }
+    ],
+    "distribution": {
+      "status": "unavailable",
+      "evidenceId": "as09-a-fixture-only",
+      "noticePaths": [
+        "LICENSE.txt",
+        "NATIVE-LICENSE.md"
+      ]
+    },
+    "signature": {
+      "algorithm": "ed25519",
+      "keyId": "fixture-only",
+      "value": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "cursor",
+    "version": "1.0.35",
+    "target": {
+      "os": "darwin",
+      "arch": "arm64"
+    },
+    "compatibility": {
+      "appVersions": [
+        "0.3.0"
+      ],
+      "hostVersions": [
+        "0.1.0"
+      ],
+      "adapterRevision": "as09-cursor-1",
+      "nativeStoreRevision": "native-cursor-1.0.35"
+    },
+    "archive": {
+      "format": "tar-gz",
+      "url": "https://components.invalid/fixture/cursor-1.0.35.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "compressedBytes": 128,
+      "unpackedBytes": 8
+    },
+    "files": [
+      {
+        "path": "session-worker.mjs",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      },
+      {
+        "path": "LICENSE.txt",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      },
+      {
+        "path": "worker.mjs",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      },
+      {
+        "path": "node_modules/@cursor/sdk/dist/esm/index.js",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      },
+      {
+        "path": "node_modules/@cursor/sdk/dist/esm/986.js",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      },
+      {
+        "path": "node_modules/@cursor/sdk-darwin-arm64/rg",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": true
+      },
+      {
+        "path": "node_modules/@cursor/sdk-darwin-arm64/sandbox",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": true
+      },
+      {
+        "path": "node_modules/zod/index.js",
+        "bytes": 1,
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "executable": false
+      }
+    ],
+    "entries": {
+      "main": "session-worker.mjs",
+      "profileWorker": "worker.mjs",
+      "sdk": "node_modules/@cursor/sdk/dist/esm/index.js",
+      "search": "node_modules/@cursor/sdk-darwin-arm64/rg",
+      "sandbox": "node_modules/@cursor/sdk-darwin-arm64/sandbox"
+    },
+    "dependencies": [
+      {
+        "id": "node",
+        "version": "24.15.0"
+      }
+    ],
+    "distribution": {
+      "status": "unavailable",
+      "evidenceId": "as09-a-fixture-only",
+      "noticePaths": [
+        "LICENSE.txt"
+      ]
+    },
+    "signature": {
+      "algorithm": "ed25519",
+      "keyId": "fixture-only",
+      "value": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  }
+]

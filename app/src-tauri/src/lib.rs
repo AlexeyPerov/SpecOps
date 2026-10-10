@@ -1,4 +1,5 @@
 mod agent_host;
+mod components;
 mod handoff;
 mod file_watcher;
 mod git;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-10 23:00 MSK — Build trusted optional component artifact pipeline
+
+- Implemented AS09-B native strict Ed25519 catalog/manifest authentication, exact immutable URL/target binding, finite archive identity, expiry/revision/equivocation and authenticated revocation boundaries. Embedded a signed engineering candidate catalog with all five production rows unavailable; fixture keys and endpoint policy are compile gated from installed release trust.
+- Added deterministic CI-only finite Node/SDK/native candidate assembly, complete helper/mode/hash/notice/architecture/credential/budget checks and loopback fault/range fixtures. Obtained exact pinned native official archives without accounts and verified upstream hashes; copied all-five no-account controls use shared Node and isolated homes outside the checkout.
+- Documented retention, reviewed external signing custody, endpoint/privacy policy, revocation/rotation/rollback and remaining publication/redistribution/signed installed/process/helper gates. Preserved bundled execution assets until replacement bootstrap is verified. No uploads, account inference, migrations or compatibility shims.
+
 ## 2026-10-10 22:47 MSK — Define optional execution component contracts
 
 - Implemented AS09-A Node-independent strict native manifests, all-five bounded fixtures, receipt/private software roots, independent component/account/runtime states, exact app/host/adapter/dependency compatibility and lease/native-store rollback guards. Added focused contract fixtures and numeric package/installer/storage/startup/RSS budgets.

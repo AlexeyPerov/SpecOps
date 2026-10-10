@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10
 
-**Status:** Planned; all tasks open
+**Status:** Source artifact/trust pipeline implemented; B-02/B-04/B-05 local acceptance passes; B-01/B-03/B-06 retain release/integration gates. [Evidence](implementation-notes-phase-b.md) · [Release procedure](artifact-release-procedure.md)
 
 **Prerequisites:** AS09-A manifest, compatibility and distribution decisions.
 
@@ -16,7 +16,7 @@ Deliver trusted component artifacts and catalog for optional first-party agent c
 
 ### AS09-B-01 — Build reproducible per-target component payloads
 
-**State:** [TODO]
+**State:** [TODO] — Source implementation/preparation complete; remaining release/integration acceptance is recorded in phase evidence.
 
 Refactor existing asset packaging into separate Node and per-agent component outputs. Preserve required dynamic imports, workers, helper binaries, permissions and legal notices. Keep build dependencies in development/CI while removing native execution payloads from the base release output.
 
@@ -24,7 +24,7 @@ Refactor existing asset packaging into separate Node and per-agent component out
 
 ### AS09-B-02 — Produce signed catalog and artifact metadata
 
-**State:** [TODO]
+**State:** [DONE] — Local source/security acceptance; production publication and signed installed acceptance remain separate.
 
 Generate artifact hashes and sign release metadata with keys kept outside the repository. Embed a trust root in the base app; specify catalog signature verification, supported schema, expiry, monotonic catalog revision and reviewed key rotation. An embedded compatible catalog supports repeatable initial installs.
 
@@ -32,7 +32,7 @@ Generate artifact hashes and sign release metadata with keys kept outside the re
 
 ### AS09-B-03 — Define stable delivery endpoints and release retention
 
-**State:** [TODO]
+**State:** [TODO] — Source implementation/preparation complete; remaining release/integration acceptance is recorded in phase evidence.
 
 Prepare versioned immutable artifact URLs, download headers and platform catalog rows. Document hosting/offical-source choice, retention of supported pinned versions, availability, notices and request privacy. Publishing endpoints/artifacts is a separately authorized release action after local candidate review.
 
@@ -40,7 +40,7 @@ Prepare versioned immutable artifact URLs, download headers and platform catalog
 
 ### AS09-B-04 — Validate transitive payload boundaries
 
-**State:** [TODO]
+**State:** [DONE] — Local source/security acceptance; production publication and signed installed acceptance remain separate.
 
 Add component inventory/size/license checks, verify helper entry points and architecture, and detect accidental credentials, development paths, npm caches and unrelated platform binaries. Do not run npm install or vendor install scripts on the user machine as the component installer.
 
@@ -48,7 +48,7 @@ Add component inventory/size/license checks, verify helper entry points and arch
 
 ### AS09-B-05 — Provide deterministic local distribution fixtures
 
-**State:** [TODO]
+**State:** [DONE] — Local source/security acceptance; production publication and signed installed acceptance remain separate.
 
 Provide a local trusted fixture catalog/server with small executable payloads and controllable network/status/range/corruption behavior. Distinguish fixture signing keys from production trust and ensure overrides cannot activate in normal installed builds.
 
@@ -56,7 +56,7 @@ Provide a local trusted fixture catalog/server with small executable payloads an
 
 ### AS09-B-06 — Document artifact release and revocation procedure
 
-**State:** [TODO]
+**State:** [TODO] — Source implementation/preparation complete; remaining release/integration acceptance is recorded in phase evidence.
 
 Specify reviewed component publication, application compatibility matrix updates, compromised-artifact revocation, trusted key rotation and retention/rollback handling. Revocation requires authenticated metadata and user-visible remediation; never quietly replace a running executable.
 

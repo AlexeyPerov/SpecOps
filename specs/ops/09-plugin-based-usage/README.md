@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-10
 
-**Status:** A source contracts/decisions implemented (4/6 tasks accepted); finite native inventory and clean baseline acceptance open. B–H planned.
+**Status:** A contracts and B trusted artifact pipeline implemented (7/12 local tasks accepted); finite native/copy source evidence recorded. Production hosting/signing/installed acceptance and C–H remain open.
 
 **Source of truth:** [Roadmap](../roadmap.md) · [Execution index](execution-plan.md)
 
@@ -36,7 +36,7 @@ The approximate prepared Node/Claude/Cursor payload size previously discussed is
 | Phase | Plan | State |
 | --- | --- | --- |
 | AS09-A | [Component contracts and distribution decisions](execution-plan-phase-a-component-contracts.md) | Source contracts/decisions accepted; A-01/A-06 open |
-| AS09-B | [Trusted component artifacts and catalog](execution-plan-phase-b-artifact-pipeline.md) | Planned |
+| AS09-B | [Trusted component artifacts and catalog](execution-plan-phase-b-artifact-pipeline.md) | Source pipeline/security verified; B-01/B-03/B-06 release/integration gates open |
 | AS09-C | [Native bootstrap and durable installer](execution-plan-phase-c-native-install-manager.md) | Planned |
 | AS09-D | [Lazy Agent Host and installed component resolution](execution-plan-phase-d-lazy-host-runtime-resolution.md) | Planned |
 | AS09-E | [All four agent components and future adapter registration](execution-plan-phase-e-agent-components.md) | Planned |
@@ -64,3 +64,5 @@ Source implementation may use existing 01–07 source contracts without waiting 
 - [ ] New selected AS08 release evidence and public setup/support docs are accepted; historical records stay intact.
 
 No task is complete merely because a plan exists or mocks pass. No persisted-data migrations or compatibility shims are authorized.
+
+[B artifact evidence](implementation-notes-phase-b.md) records exact five-component finite assembly, copied no-account source controls and native Ed25519 catalog verification. [Release/retention/revocation policy](artifact-release-procedure.md) keeps production unavailable until reviewed release approval; bundled resources remain until the replacement bootstrap is functional.

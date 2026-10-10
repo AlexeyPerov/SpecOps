@@ -1,5 +1,6 @@
 mod agent_host;
 mod components;
+mod component_catalog;
 mod handoff;
 mod file_watcher;
 mod git;

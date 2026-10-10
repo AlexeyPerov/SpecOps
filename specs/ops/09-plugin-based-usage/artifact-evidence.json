@@ -1,0 +1,102 @@
+{
+  "target": "darwin-arm64",
+  "versions": {
+    "node": "24.15.0",
+    "claudeSdk": "0.3.289",
+    "claudeNative": "2.1.289",
+    "cursor": "1.0.35",
+    "codex": "0.160.0",
+    "opencode": "1.17.4"
+  },
+  "sharedNode": true,
+  "copiedSdkControl": true,
+  "cursorLocalStore": true,
+  "developerPathAbsent": true,
+  "accounts": false,
+  "inference": false,
+  "signedInstalledApp": false,
+  "sandboxEnforcement": "not-run",
+  "archives": [
+    {
+      "id": "node",
+      "version": "24.15.0",
+      "sha256": "977221573ed5ddedc6e9d7364549f50626b95623a58b89016e521bf0ac0ee2ee",
+      "compressedBytes": 38642444,
+      "unpackedBytes": 120101534,
+      "fileCount": 2
+    },
+    {
+      "id": "claude",
+      "version": "0.3.289",
+      "sha256": "c5245388c1e1b41d7772772163e7d82e6915d9d6dec6ce8b3417910d6e7b8328",
+      "compressedBytes": 100047672,
+      "unpackedBytes": 234326475,
+      "fileCount": 15
+    },
+    {
+      "id": "cursor",
+      "version": "1.0.35",
+      "sha256": "7120c564913313c693a7769f99f2a875cc08cc7a3c8329a3f5a305e011c3d0b9",
+      "compressedBytes": 9355505,
+      "unpackedBytes": 40660632,
+      "fileCount": 1629
+    },
+    {
+      "id": "codex",
+      "version": "0.160.0",
+      "sha256": "f797273ad19b7099b0d83c9d86667bdf0649ac44366f52ff1eba2a56f7d0925c",
+      "compressedBytes": 129973781,
+      "unpackedBytes": 332979473,
+      "fileCount": 43
+    },
+    {
+      "id": "opencode",
+      "version": "1.17.4",
+      "sha256": "79b3cc6a287975454496b45ff71a680e428591906b566edeb0082e78ac0d0908",
+      "compressedBytes": 39923252,
+      "unpackedBytes": 119373323,
+      "fileCount": 2
+    }
+  ],
+  "recordedAt": "2026-10-10T23:00:00+03:00",
+  "appVersion": "0.3.0",
+  "hostVersion": "0.1.0",
+  "catalogSchema": 1,
+  "candidateCatalogRevision": 1,
+  "fixtureCatalogRevisions": [
+    1,
+    2
+  ],
+  "productionAvailability": "unavailable",
+  "reproducibility": [
+    {
+      "artifact": "claude-0.3.289-darwin-arm64.tar.gz",
+      "archiveIdentical": true,
+      "signedManifestIdentical": true
+    },
+    {
+      "artifact": "codex-0.160.0-darwin-arm64.tar.gz",
+      "archiveIdentical": true,
+      "signedManifestIdentical": true
+    },
+    {
+      "artifact": "cursor-1.0.35-darwin-arm64.tar.gz",
+      "archiveIdentical": true,
+      "signedManifestIdentical": true
+    },
+    {
+      "artifact": "node-24.15.0-darwin-arm64.tar.gz",
+      "archiveIdentical": true,
+      "signedManifestIdentical": true
+    },
+    {
+      "artifact": "opencode-1.17.4-darwin-arm64.tar.gz",
+      "archiveIdentical": true,
+      "signedManifestIdentical": true
+    }
+  ],
+  "cursorNativeHelpers": true,
+  "allFilesRehashed": true,
+  "codexHelperExecution": "not-run",
+  "sandboxSigningGatekeeper": "not-run"
+}

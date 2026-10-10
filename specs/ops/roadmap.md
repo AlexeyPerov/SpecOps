@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-10
 
-**Status:** Active acceptance plan; four native adapters, reviewed handoff/extensions/profiles and repeatable release records are source verified. Authenticated, signed installed, distribution and process gates remain open; expanded release is blocked. Stage 09 adds planned on-demand Node/agent delivery; its implementation and acceptance are open.
+**Status:** Active acceptance plan; four native adapters, reviewed handoff/extensions/profiles and repeatable release records are source verified. Authenticated, signed installed, distribution and process gates remain open; expanded release is blocked. Stage 09 adds on-demand Node/agent delivery; A/B contracts and artifact security are source verified, while installer/runtime/release acceptance is open.
 
 **Source of truth:** This roadmap and the linked milestone scope/execution plans. The [2026-10-04 audit](done/reviews/audit-2026-10-04.md) is historical evidence; its proposed order is adopted here. Active folders and task IDs are numbered in the default delivery order; shared early gates and repeated release acceptance are explicit exceptions. Completed records are in [done](done/README.md).
 
@@ -26,7 +26,7 @@ Notepad remains global and has no AI. Workspace contains editor, tree, version c
 | [06 — Handoff/native extensions](06-handoff-native-extensions/README.md) | A/B/C source verified; 16 ordered handoff pairs/native extensions/simultaneous Codex profiles; live/installed gates open | Actual account handoff/extensions/two-profile and installed acceptance |
 | [07 — Cursor](07-cursor-adapter/README.md) | A–D local SDK/profile/lifecycle/settings/fault/security/16-pair handoff source and copied assets verified; native/authenticated/installed/distribution gates open | External D acceptance and selected 08-A gate |
 | [08 — Release gates](08-release-gates/README.md) | Versioned expanded source record/validator/runner verified; release blocked | External selected-scope gates; repeat for 09 and close after full active scope |
-| [09 — Plugin-based usage](09-plugin-based-usage/README.md) | A contracts/decisions accepted; 44 open tasks incl. A-01/A-06 | Native installer, shared Node and four optional agent components; lean installed release |
+| [09 — Plugin-based usage](09-plugin-based-usage/README.md) | A/B contracts/artifact security accepted; 41 open tasks incl. release/integration gates | Native installer, shared Node and four optional agent components; lean installed release |
 
 A completed implementation marker is not a release acceptance record. Implemented source phases retain explicit external acceptance; the dated [expanded AS08-A decision](08-release-gates/release-2026-10-05.md) is blocked. A source marker does not close the roadmap.
 
@@ -186,3 +186,5 @@ Codex session parity extension: [AS02-E](02-codex-adapter/execution-plan-phase-e
 Codex ecosystem parity extension: [AS02-F](02-codex-adapter/execution-plan-phase-f-ecosystem-config-parity.md) exposes native skills toggles, bounded current-thread MCP inventory, profile-owned existing server enable/disable/reload and allowlisted private native configuration CAS. [Finite ledger](02-codex-adapter/implementation-notes-phase-f.md) keeps OAuth/elicitation and upstream development-only plugins unavailable. Source verification does not close authenticated/installed release gates.
 
 Codex finite parity submission: [AS02-G](02-codex-adapter/execution-plan-phase-g-native-activity-parity.md) completes source E–G with bounded native child/context activity cards and production recovery/security fixtures. [Feature ledger](02-codex-adapter/implementation-notes-phase-g.md) keeps selected unsupported controls explicit; [fresh parity release record](08-release-gates/release-2026-10-05-codex-parity.md) remains blocked pending actual account/installed/native enforcement/distribution/process gates.
+
+**AS09-B source evidence (2026-10-10):** [Trusted artifact notes](09-plugin-based-usage/implementation-notes-phase-b.md) implement native Ed25519 catalog/manifest verification, exact URL/revision/expiry/revocation boundaries, deterministic finite all-five source candidates and bounded trusted loopback fault fixtures. Actual copied no-account SDK/native controls pass; original bundled resources stay until replacement bootstrap acceptance. Production endpoint/publication/signing/redistribution and signed installed/account/process acceptance remain open.

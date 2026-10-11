@@ -355,9 +355,8 @@ export interface AppShellMountDeps {
   confirmWindowClose: () => Promise<boolean>;
   /**
    * Removes this window's `windows[...]` entry from session.json once a close is
-   * confirmed. Only invoked for secondary windows: their labels are unique per
-   * creation, so the entry could never be restored and would otherwise persist
-   * (with full document text) forever. See `sessionManager.removeWindowSessionEntry`.
+   * confirmed. Only explicit secondary-window close removes it; application
+   * quit retains all windows for relaunch. See `sessionManager.removeWindowSessionEntry`.
    */
   removeWindowSessionEntry?: (windowId: string) => Promise<void>;
   cleanup: AppShellMountCleanup;
@@ -457,7 +456,7 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     // Fire-and-forget: pagehide/beforeunload cannot reliably await async work.
     // This is now only a backstop — the awaited flush lives in the
     // `onCloseRequested` handler below, which runs before the webview tears down.
-    void deps.flushSessionBeforeUnload();
+    if (!closeConfirmed) void deps.flushSessionBeforeUnload();
   }
 
   window.addEventListener("pagehide", onPageHide);
@@ -486,17 +485,13 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
       const mayClose = await deps.confirmWindowClose();
       if (mayClose) {
         closeConfirmed = true;
-        // Secondary windows: drop the session entry the confirm flow just
-        // flushed. It can never be restored (labels are unique per creation)
-        // and would otherwise keep a full copy of the closed tabs' text in
-        // session.json forever. `removeWindowSessionEntry` is a no-op for main.
+        // Explicit close removes a secondary window from the next app launch.
         const label = deps.getCurrentWebviewWindowLabel();
         if (label !== "main" && deps.removeWindowSessionEntry) {
           try {
             await deps.removeWindowSessionEntry(label);
           } catch {
-            // Best-effort: a failed prune must not block the close. The
-            // startup prune in appShellRuntime catches leftovers next launch.
+            // Best-effort: preserve recovery data when removal fails.
           }
         }
         // `close()` emits another close-requested event. Re-entering the same
@@ -566,16 +561,6 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     }
     const label = deps.getCurrentWebviewWindowLabel();
     try {
-      // Secondary windows drop their session entry once the confirm flow has
-      // flushed, matching the direct-close path. Best-effort: a failed prune
-      // must not block the ack (the startup prune catches leftovers).
-      if (mayQuit && label !== "main" && deps.removeWindowSessionEntry) {
-        try {
-          await deps.removeWindowSessionEntry(label);
-        } catch {
-          // best-effort
-        }
-      }
       await emitTo(label, WINDOW_EVENT_PREPARE_QUIT_ACK, {
         windowId: label,
         mayQuit,

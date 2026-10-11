@@ -179,6 +179,14 @@ describe("createNewWindowWithTransfer", () => {
     expect(applyWindowBoundsMock).toHaveBeenCalled();
   });
 
+  it("restores a saved label and bounds without taking focus", async () => {
+    installWebviewWindowMock();
+    const bounds = { width: 900, height: 700, x: 120, y: 80, maximized: false };
+    expect(await createNewWindowWithTransfer(snapshotWithBounds(null), null, { label: 'window-saved', bounds, activate: false })).toBe('window-saved');
+    expect(applyWindowBoundsMock).toHaveBeenCalledWith(expect.anything(), bounds);
+    expect(updateLastActiveWindowMock).not.toHaveBeenCalled();
+  });
+
   it("waits for ready handshake before emitting transfer payload", async () => {
     let readyHandler:
       | ((event: { payload: { windowId: string } }) => void | Promise<void>)

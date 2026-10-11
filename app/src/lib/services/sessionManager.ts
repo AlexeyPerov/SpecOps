@@ -25,6 +25,7 @@ import {
   withSessionWriteLock,
 } from "./sessionWriteLock";
 import {
+  listIncrementalWindowIds,
   persistIncrementalWindowSession,
   readIncrementalWindowSession,
   removeIncrementalWindowSession,
@@ -165,15 +166,7 @@ export async function persistSessionSnapshot(
   });
 }
 
-/**
- * Remove one window's snapshot from `session.json`.
- *
- * Called when a secondary window closes for good: window labels are unique per
- * creation (see `windowManager.generateWindowLabel`), so the entry can never be
- * restored and would otherwise sit in `session.json` forever — carrying a full
- * copy of every open document's text. The main window's entry is what an app
- * relaunch restores, so it is never removed.
- */
+/** Explicit secondary-window close removes its restoration checkpoint and buffers. */
 export async function removeWindowSessionEntry(windowId: string): Promise<void> {
   if (windowId === MAIN_WINDOW_ID) {
     return;
@@ -193,13 +186,7 @@ export async function removeWindowSessionEntry(windowId: string): Promise<void> 
   await removeIncrementalWindowSession(windowId);
 }
 
-/**
- * Drop `windows[...]` entries whose label does not correspond to a live window
- * (the main entry is always kept). Runs at startup of the main window: entries
- * left behind by windows that never got a clean close (app quit, crash) are
- * unreachable — labels are never reused — so they only bloat `session.json`
- * with stale document text.
- */
+/** Explicit maintenance helper; startup restores saved windows instead of pruning them. */
 export async function pruneStaleWindowSessionEntries(
   liveWindowIds: Iterable<string>,
 ): Promise<void> {
@@ -389,4 +376,10 @@ export async function updateLastActiveWindow(
     current.updatedAt = new Date().toISOString();
     await writeSessionSnapshot(current, { ...options, backupSourceRaw: primaryRaw });
   });
+}
+
+export async function listRestorableWindowIds(): Promise<string[]> {
+  const { snapshot } = await readSessionSnapshot();
+  const incremental = await listIncrementalWindowIds();
+  return [...new Set([...Object.keys(snapshot.windows), ...incremental])].filter(id => id !== MAIN_WINDOW_ID);
 }

@@ -28,10 +28,12 @@ import {
   type MergeTabPayload,
   type TabTransferPayload,
   markWindowActive,
+  createNewWindowWithTransfer,
 } from "./windowManager";
 import {
   MAIN_WINDOW_ID,
-  pruneStaleWindowSessionEntries,
+  listRestorableWindowIds,
+  getLastActiveWindowId,
   restoreWindowSession,
 } from "./sessionManager";
 import { applyWindowBounds, readWindowBounds } from "./windowBounds";
@@ -176,6 +178,7 @@ async function startAppShellRuntimeInner(
 ): Promise<AppShellRuntimeHandle> {
   const currentWindow = getCurrentWebviewWindow();
   const windowId = currentWindow.label;
+  const restoredFocusWindowId = windowId === MAIN_WINDOW_ID ? await getLastActiveWindowId() : null;
   let runtimeReady = false;
   let lastWatcherSyncKey = "";
   let windowBoundsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -349,7 +352,7 @@ async function startAppShellRuntimeInner(
     ok: true,
   });
 
-  await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
+
 
   const startupStartedAt = nowMs();
 
@@ -449,6 +452,7 @@ async function startAppShellRuntimeInner(
   });
 
   await runSafeStartupPhase("mark-window-active", async () => {
+    if (windowId !== MAIN_WINDOW_ID && !await currentWindow.isFocused()) return;
     // Skip the backup write here: this informational update is immediately
     // followed by restore-session, and the next real session mutation (e.g.
     // a tab change) will re-write both session.json and its backup. Skipping
@@ -460,7 +464,7 @@ async function startAppShellRuntimeInner(
     // Clear crash-stale ownership before deduping the restored tabs. A stale
     // secondary-window owner must not make the main window discard its tab.
     const liveWindows = await getAllWebviewWindows();
-    await pruneOpenFileRegistryWindows(liveWindows.map((entry) => entry.label));
+    if (windowId === MAIN_WINDOW_ID) await pruneOpenFileRegistryWindows(liveWindows.map((entry) => entry.label));
     const restoredSession = await restoreWindowSession(windowId);
     if (!restoredSession) {
       return;
@@ -505,6 +509,7 @@ async function startAppShellRuntimeInner(
   //     the active tab is priority and the user cannot interact yet, so
   //     deferring it briefly is safe (it runs in the background here).
   runtimeReady = true;
+  await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
   await logPerfTiming("app shell runtime ready", {
     metric: "startup.total",
     durationMs: elapsedMs(startupStartedAt),
@@ -524,15 +529,19 @@ async function startAppShellRuntimeInner(
     await options.loadProjectTreeRoot();
   });
 
-  void runSafeStartupPhase("prune-stale-window-sessions", async () => {
-    // Main window only: it is the first window up on a fresh launch, so any
-    // windows[...] entry without a live window is left over from a previous
-    // run and — labels never being reused — can never be restored again.
-    if (windowId !== MAIN_WINDOW_ID) {
-      return;
+  void runSafeStartupPhase("restore-other-windows", async () => {
+    if (windowId !== MAIN_WINDOW_ID) return;
+    const live = new Set((await getAllWebviewWindows()).map(window => window.label));
+    for (const label of await listRestorableWindowIds()) {
+      if (!live.has(label)) {
+        const restored = await restoreWindowSession(label);
+        const snapshot = restored?.snapshot;
+        const context = snapshot?.workspaces.find(workspace => workspace.id === snapshot.activeContextId)?.snapshot ?? snapshot?.notepad;
+        await createNewWindowWithTransfer(appState.getSnapshot(), null, { label, bounds: context?.session.windowBounds, activate: false });
+      }
     }
-    const liveWindows = await getAllWebviewWindows();
-    await pruneStaleWindowSessionEntries(liveWindows.map((w) => w.label));
+    const focused = (await getAllWebviewWindows()).find(window => window.label === restoredFocusWindowId);
+    if (focused) await focused.setFocus();
   });
 
   void runSafeStartupPhase("startup-external-checks", async () => {

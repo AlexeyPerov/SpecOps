@@ -945,3 +945,14 @@ describe("incremental session persistence", () => {
     expect(doc?.isDirty).toBe(false);
   });
 });
+
+
+describe('multi-window recovery discovery', () => {
+  beforeEach(() => { sessionManager.resetSessionManagerForTests(); sessionMock.restoreFsImplementations(); sessionMock.diskFiles.clear(); sessionMock.setSessionStore(null); appState.resetAppState(); });
+  it('discovers incremental-only windows and excludes an explicitly removed window', async () => {
+    await persistIncrementalWindowSession(appState.getSnapshot(), 'window-recovery');
+    expect(await sessionManager.listRestorableWindowIds()).toContain('window-recovery');
+    await sessionManager.removeWindowSessionEntry('window-recovery');
+    expect(await sessionManager.listRestorableWindowIds()).not.toContain('window-recovery');
+  });
+});

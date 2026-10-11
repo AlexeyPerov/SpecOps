@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-11 08:29 MSK — Restore workspace window groups on application relaunch
+
+- Recreate all saved secondary-window labels, workspace groups/order, selected context, geometry and last-focused window. Discover incremental-only crash recovery records as well as full session checkpoints; startup no longer deletes saved secondary windows.
+- Preserve secondary-window snapshots on application quit, remove them only on explicit close, and prevent pagehide from recreating an explicitly removed checkpoint.
+- Register ready-handshake listeners before creating a webview and emit readiness after session/chat restoration. Saved windows reopen without stealing focus during construction.
+- Validation: window creation, incremental recovery discovery, application-quit and explicit-close regressions pass; Svelte/type checking is clean.
+
 ## 2026-10-11 08:08 MSK — Add workspace Tasks and Notes with independent storage
 
 - Added lazy Create/Open Tasks and Notes actions, pinned project-panel links, singleton view tabs, Markdown task checkboxes/text/reordering and source editing, and sanitized Markdown notes preview/source editing with the existing editor surface.

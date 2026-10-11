@@ -544,3 +544,18 @@ export function resetIncrementalSessionPersistenceForTests(): void {
   navigationFingerprintByWindow.clear();
   bufferFingerprintByKey.clear();
 }
+
+/** Discover crash recovery windows from their navigation records. */
+export async function listIncrementalWindowIds(): Promise<string[]> {
+  const dir = await ensureSpecOpsDataDir();
+  const entries = await readDir(dir);
+  const ids: string[] = [];
+  for (const entry of entries) {
+    if (!entry.name.startsWith("session-navigation.") || !entry.name.endsWith(".json")) continue;
+    try {
+      const record = JSON.parse(await readTextFile(await join(dir, entry.name))) as NavigationRecord;
+      if (record.version === NAVIGATION_VERSION && typeof record.windowId === "string" && record.snapshot) ids.push(record.windowId);
+    } catch { /* A damaged record cannot restore a window. */ }
+  }
+  return ids;
+}

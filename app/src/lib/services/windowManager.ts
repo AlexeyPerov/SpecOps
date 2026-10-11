@@ -133,9 +133,10 @@ export async function resolveNewWindowBounds(snapshot: AppDomainState): Promise<
 export async function createNewWindowWithTransfer(
   snapshot: AppDomainState,
   transferPayload?: TabTransferPayload | null,
+  options?: { label?: string; waitForReady?: boolean; bounds?: WindowBounds | null; activate?: boolean },
 ): Promise<string | null> {
-  const label = generateWindowLabel();
-  const bounds = await resolveNewWindowBounds(snapshot);
+  const label = options?.label ?? generateWindowLabel();
+  const bounds = options?.bounds ?? await resolveNewWindowBounds(snapshot);
 
   return new Promise((resolve) => {
     let settled = false;
@@ -154,30 +155,7 @@ export async function createNewWindowWithTransfer(
       resolve(result);
     };
 
-    if (transferPayload) {
-      void listen<{ windowId: string }>(WINDOW_EVENT_WINDOW_READY, async (event) => {
-        if (event.payload.windowId !== label) {
-          return;
-        }
-        try {
-          await emitTo(label, WINDOW_EVENT_TRANSFER_TAB, transferPayload);
-          finish(label);
-        } catch {
-          finish(null);
-        }
-      }).then((unlisten) => {
-        // If the timeout already fired before registration completed, detach the
-        // listener immediately so it does not leak for the process lifetime.
-        if (settled) {
-          void unlisten();
-        } else {
-          readyUnlisten = unlisten;
-        }
-      });
-
-      readyTimeoutId = setTimeout(() => finish(null), WINDOW_READY_TIMEOUT_MS);
-    }
-
+    const launch = () => {
     const windowRef = new WebviewWindow(label, {
       title: "SpecOps",
       url: "/",
@@ -190,16 +168,32 @@ export async function createNewWindowWithTransfer(
     windowRef.once("tauri://created", async () => {
       try {
         await applyWindowBounds(windowRef, bounds);
-        await updateLastActiveWindow(label);
+        if (options?.activate !== false) await updateLastActiveWindow(label);
         await windowRef.show();
-        await windowRef.setFocus();
-        if (!transferPayload) {
+        if (options?.activate !== false) await windowRef.setFocus();
+        if (!transferPayload && !options?.waitForReady) {
           finish(label);
         }
       } catch {
         finish(null);
       }
     });
+    };
+    if (transferPayload || options?.waitForReady) {
+      readyTimeoutId = setTimeout(() => finish(null), WINDOW_READY_TIMEOUT_MS);
+      void listen<{ windowId: string }>(WINDOW_EVENT_WINDOW_READY, async (event) => {
+        if (event.payload.windowId !== label) return;
+        try {
+          if (transferPayload) await emitTo(label, WINDOW_EVENT_TRANSFER_TAB, transferPayload);
+          finish(label);
+        } catch { finish(null); }
+      }).then(unlisten => {
+        if (settled) { unlisten(); return; }
+        readyUnlisten = unlisten;
+        launch();
+      }).catch(() => finish(null));
+    } else launch();
+
   });
 }
 

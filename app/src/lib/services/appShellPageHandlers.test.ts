@@ -1,3 +1,5 @@
+import { listen, emitTo } from "@tauri-apps/api/event";
+import { WINDOW_EVENT_PREPARE_QUIT, WINDOW_EVENT_PREPARE_QUIT_ACK } from "./windowManager";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import { getSessionTabs, isFileTab, type ExternalFilesSettings } from "../domain/contracts";
@@ -30,6 +32,9 @@ vi.mock("@tauri-apps/api/event", () => ({
   emitTo: vi.fn().mockResolvedValue(undefined),
   listen: vi.fn().mockResolvedValue(() => {}),
 }));
+
+const nativeWindow = vi.hoisted(() => ({ close: undefined as ((event: { preventDefault: () => void }) => Promise<void>) | undefined, destroy: vi.fn(async () => {}) }));
+vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ destroy: nativeWindow.destroy, onCloseRequested: async (handler: typeof nativeWindow.close) => { nativeWindow.close = handler; return () => {}; } }) }));
 
 const scheduleTabExternalCheckMock = vi.mocked(scheduleTabExternalCheck);
 const openActivePathMock = vi.mocked(openActivePath);
@@ -97,6 +102,30 @@ function activeFileTabIdByPath(path: string): string {
 describe("setupAppShellMount", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('preserves a secondary window checkpoint when preparing application quit', async () => {
+    const remove = vi.fn(async () => {});
+    const deps = createMountDeps({ getCurrentWebviewWindowLabel: () => 'window-saved', removeWindowSessionEntry: remove });
+    const unmount = setupAppShellMount(deps);
+    const handler = vi.mocked(listen).mock.calls.findLast(([event]) => event === WINDOW_EVENT_PREPARE_QUIT)?.[1];
+    expect(handler).toBeTypeOf('function');
+    await handler!({ payload: { initiatorWindowId: 'main' } } as never);
+    expect(deps.confirmWindowClose).toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(emitTo).toHaveBeenCalledWith('window-saved', WINDOW_EVENT_PREPARE_QUIT_ACK, { windowId: 'window-saved', mayQuit: true });
+    unmount();
+  });
+  it('removes an explicitly closed secondary window and does not resurrect it on pagehide', async () => {
+    const remove = vi.fn(async () => {});
+    const flush = vi.fn();
+    const deps = createMountDeps({ getCurrentWebviewWindowLabel: () => 'window-closed', removeWindowSessionEntry: remove, flushSessionBeforeUnload: flush });
+    const unmount = setupAppShellMount(deps);
+    await nativeWindow.close!({ preventDefault: vi.fn() });
+    expect(remove).toHaveBeenCalledWith('window-closed');
+    window.dispatchEvent(new Event('pagehide'));
+    expect(flush).not.toHaveBeenCalled();
+    unmount();
   });
 
   it("cleans up runtime when unmount races the async start", async () => {

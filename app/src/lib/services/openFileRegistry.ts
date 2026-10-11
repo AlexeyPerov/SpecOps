@@ -493,6 +493,8 @@ export async function renameOpenFileRegistry(
       ...(read.kind === "snapshot" ? read.snapshot.registry : {}),
     };
     if (oldPath) {
+      const owner = registry[normalizePathSync(oldPath)];
+      if (owner && owner.windowId !== windowId) return;
       delete registry[normalizePathSync(oldPath)];
     }
     registry[normalizePathSync(newPath)] = { windowId, documentId };

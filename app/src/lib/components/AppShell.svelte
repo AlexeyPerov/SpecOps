@@ -1,6 +1,7 @@
 <script lang="ts">
   import ConsolePanel from "./ConsolePanel.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
+  import ChoiceDialog from "./ChoiceDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import TagPushPrompt from "./TagPushPrompt.svelte";
   import AskpassPrompt from "./AskpassPrompt.svelte";
@@ -942,6 +943,7 @@
 <PermissionPrompt />
 <QuestionPrompt />
 <ConfirmDialog />
+<ChoiceDialog />
 
 
 

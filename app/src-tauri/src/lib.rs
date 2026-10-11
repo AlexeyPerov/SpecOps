@@ -8,6 +8,7 @@ mod git_askpass;
 mod handoff;
 mod native_assets;
 mod session_fs;
+mod project_move;
 
 #[cfg(target_os = "macos")]
 mod dock_menu;
@@ -123,6 +124,7 @@ pub fn run() {
             handoff::handoff_workspace_excerpts,
             handoff::handoff_write_journal,
             handoff::handoff_read_journal,
+            project_move::project_move_entry,
             take_pending_opened_paths,
             quit_app,
             git::git_available,

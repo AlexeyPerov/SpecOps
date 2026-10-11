@@ -30,6 +30,10 @@
    */
 
   interface Props {
+    selectedPaths?: ReadonlySet<string>;
+    onSelectPath?: (event: MouseEvent, path: string, visiblePaths: string[]) => void;
+    onSelectAll?: (paths: string[]) => void;
+    onClearSelection?: () => void;
     revealPath?: string | null;
     favoritePaths?: ReadonlySet<string>;
     nodes?: ProjectTreeNode[];
@@ -62,6 +66,10 @@
   }
 
   let {
+    selectedPaths = emptySet<string>(),
+    onSelectPath = () => {},
+    onSelectAll = () => {},
+    onClearSelection = () => {},
     revealPath = null,
     favoritePaths = emptySet<string>(),
     nodes = [],
@@ -184,6 +192,7 @@
     // Right-clicks (and other non-primary buttons) bail without setting
     // pointerId; attaching anyway left pointermove dispatching for the panel's
     // lifetime because pointerup early-returns on a null pointerId (M63).
+    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
     if (!dragController.handlePointerDown(event, node)) {
       return;
     }
@@ -216,7 +225,10 @@
     onKeepFile(row.node.path);
   }
 
-  function handleRowClick(row: Extract<ProjectTreeRow, { kind: "node" }>): void {
+  function handleRowClick(event: MouseEvent, row: Extract<ProjectTreeRow, { kind: "node" }>): void {
+    if (ignoreNextActivation) { shouldIgnoreActivation(); return; }
+    onSelectPath(event, row.node.path, rows.flatMap((item) => item.kind === "node" ? [item.node.path] : []));
+    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
     if (row.node.kind === "directory") {
       if (!row.canExpand) {
         return;
@@ -489,7 +501,7 @@
       row.node.kind === "directory" &&
       dragState.dropTargetPath === row.node.path;
     const isDragging = dragState.didDrag === true && dragState.sourcePath === row.node.path;
-    return `project-tree-row ${isActiveFile ? "project-tree-row-active" : ""} ${isDropTarget ? "project-tree-row-drop-target" : ""} ${isDragging ? "project-tree-row-dragging" : ""}`;
+    return `project-tree-row ${isActiveFile ? "project-tree-row-active" : ""} ${selectedPaths.has(row.node.path) ? "project-tree-row-selected" : ""} ${isDropTarget ? "project-tree-row-drop-target" : ""} ${isDragging ? "project-tree-row-dragging" : ""}`;
   }
 </script>
 
@@ -498,6 +510,13 @@
   role="tree"
   tabindex="0"
   aria-label="Project files"
+  aria-multiselectable="true"
+  onkeydown={(event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a" && !(event.target instanceof HTMLInputElement)) {
+      event.preventDefault(); event.stopPropagation();
+      onSelectAll(rows.flatMap((row) => row.kind === "node" ? [row.node.path] : []));
+    } else if (event.key === "Escape") onClearSelection();
+  }}
   data-dragging={dragState.didDrag}
   oncontextmenu={onContextMenuRoot}
 >
@@ -542,7 +561,7 @@
           role="treeitem"
           aria-level={row.depth + 1}
           aria-expanded={row.node.kind === "directory" ? row.expanded : undefined}
-          aria-selected={row.node.kind === "file" && activeFilePath === row.node.path}
+          aria-selected={selectedPaths.has(row.node.path)}
           data-tree-row
         >
           <button
@@ -552,7 +571,7 @@
             type="button"
             title={row.node.path}
             style={`--node-depth:${row.depth}`}
-            onclick={() => handleRowClick(row)}
+            onclick={(event) => handleRowClick(event, row)}
             ondblclick={() => handleRowDoubleClick(row)}
             oncontextmenu={(event) => onContextMenuNode(event, row.node)}
             onpointerdown={(event) => handlePointerDown(event, row.node)}
@@ -586,6 +605,7 @@
 </div>
 
 <style>
+  .project-tree-row-selected { background: var(--color-hover); outline: 1px solid var(--color-border-subtle); outline-offset: -1px; }
   .project-tree-view {
     min-height: 0;
     padding: var(--project-tree-padding);

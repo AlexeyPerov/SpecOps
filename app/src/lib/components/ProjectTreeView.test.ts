@@ -19,6 +19,7 @@ describe("project tree file symbols", () => {
         ["/project/empty", []],
       ]),
       activeFilePath: "/project/src/main.ts",
+      selectedPaths: new Set(["/project/src/main.ts"]),
       onToggleDirectory,
       onOpenFile,
     });

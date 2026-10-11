@@ -74,6 +74,9 @@ import type {
 } from "./openActivePath";
 import { fileDragActive } from "./fileDragOverlay";
 
+import { PROJECT_PATH_RELOCATED, PROJECT_PATH_DELETED, type ProjectRelocation } from "./projectBulkOperations";
+import { syncOpenDocumentsAfterRelocation, markDocumentsMissingUnderPath, closeTabsForDeletedDocumentsUnderPath } from "./relocateWorkspacePaths";
+
 const APP_EVENT_OPENED_PATHS = "spec-ops/app/opened-paths";
 const DOCK_NEW_WINDOW_EVENT = "spec-ops/dock/new-window";
 const DOCK_OPEN_RECENT_EVENT = "spec-ops/dock/open-recent";
@@ -250,6 +253,22 @@ async function startAppShellRuntimeInner(
   // into cleanupCallbacks before the next IPC round-trip. A batch Promise.all
   // dropped already-resolved handles when one listen rejected (C8).
   const registerListenersStartedAt = nowMs();
+  cleanupCallbacks.push(await listen<ProjectRelocation>(PROJECT_PATH_RELOCATED, async ({ payload }) => {
+    if (payload.sourceWindowId !== windowId) await syncOpenDocumentsAfterRelocation(payload.oldPath, payload.newPath, windowId);
+    options.onFilesystemChange?.(payload.oldPath, "remove");
+    options.onFilesystemChange?.(payload.newPath, "create");
+    await options.revalidateProjectTree?.();
+  }));
+  cleanupCallbacks.push(await listen<{ sourceWindowId: string; path: string }>(PROJECT_PATH_DELETED, async ({ payload }) => {
+    if (payload.sourceWindowId !== windowId) {
+      for (const workspace of appState.getSnapshot().contexts.workspaces) {
+        markDocumentsMissingUnderPath(workspace.rootPath, payload.path);
+        closeTabsForDeletedDocumentsUnderPath(workspace.rootPath, payload.path);
+      }
+    }
+    options.onFilesystemChange?.(payload.path, "remove");
+    await options.revalidateProjectTree?.();
+  }));
   cleanupCallbacks.push(
     await listen<TabTransferPayload>(
       WINDOW_EVENT_TRANSFER_TAB,

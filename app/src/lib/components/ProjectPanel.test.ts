@@ -43,3 +43,21 @@ describe("project panel navigation", () => {
     expect(host.querySelector(".project-favorites")).toBeNull();
   });
 });
+
+it("selects a range without activating files and copies all relative paths in tree order", async () => {
+  favorites.entries = [];
+  const open = vi.fn();
+  const clipboard = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: clipboard } });
+  const nodes = ["a", "b", "c"].map((name) => ({ name, path: `/repo/${name}`, kind: "file" as const }));
+  const { host } = mountComponent(ProjectPanel, { workspaceRoot: "/repo", rootNodes: nodes, onOpenFile: open });
+  flushSync();
+  host.querySelector<HTMLButtonElement>('[data-path="/repo/a"]')!.click(); flushSync();
+  host.querySelector<HTMLButtonElement>('[data-path="/repo/c"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })); flushSync();
+  expect(open.mock.calls).toEqual([["/repo/a"]]);
+  expect(host.querySelectorAll('[role="treeitem"][aria-selected="true"]')).toHaveLength(3);
+  host.querySelector<HTMLButtonElement>('[data-path="/repo/b"]')!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); flushSync();
+  [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) => button.textContent?.trim() === "Copy Relative Paths")!.click();
+  await tick();
+  expect(clipboard).toHaveBeenCalledWith("a\nb\nc");
+});

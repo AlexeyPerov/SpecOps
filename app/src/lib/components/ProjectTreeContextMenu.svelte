@@ -11,11 +11,17 @@
   const revealLabel = revealInFileManagerLabel();
 
   export interface ProjectTreeContextTarget {
+    nodes?: readonly ProjectTreeNode[];
     node: ProjectTreeNode | null;
     parentDirPath: string;
   }
 
   interface Props {
+    busy?: boolean;
+    notify?: (message: string) => void;
+    onMoveSelected?: (entries: readonly ProjectTreeNode[]) => void;
+    onDeleteSelected?: (entries: readonly ProjectTreeNode[]) => void;
+    onFavoriteSelected?: (entries: readonly ProjectTreeNode[], favorite: boolean) => void;
     favoritePaths?: ReadonlySet<string>;
     onToggleFavorite?: (node: ProjectTreeNode) => void;
     workspaceRoot?: string;
@@ -31,6 +37,11 @@
   }
 
   let {
+    busy = false,
+    notify = () => {},
+    onMoveSelected = () => {},
+    onDeleteSelected = () => {},
+    onFavoriteSelected = () => {},
     favoritePaths = emptySet<string>(),
     onToggleFavorite = () => {},
     workspaceRoot = "",
@@ -89,6 +100,8 @@
   });
 
   const menuTarget = $derived(contextMenu?.target ?? null);
+  const targets = $derived(menuTarget?.nodes ?? (menuTarget?.node ? [menuTarget.node] : []));
+  const multiple = $derived(targets.length > 1);
   const isFile = $derived(menuTarget?.node?.kind === "file");
   const hasNode = $derived(menuTarget?.node !== null && menuTarget?.node !== undefined);
   const nodePath = $derived(menuTarget?.node?.path ?? null);
@@ -107,9 +120,9 @@
       return;
     }
     try {
-      await navigator.clipboard.writeText(nodePath);
+      await navigator.clipboard.writeText(targets.map((node) => node.path).join("\n"));
     } catch {
-      // clipboard is best-effort from the project tree menu
+      notify("Could not copy paths to clipboard.");
     }
     closeContextMenu();
   }
@@ -120,9 +133,9 @@
       return;
     }
     try {
-      await navigator.clipboard.writeText(relativePath);
+      await navigator.clipboard.writeText(targets.map((node) => workspaceRelativePath(node.path, workspaceRoot)).filter((path) => path !== null).join("\n"));
     } catch {
-      // clipboard is best-effort from the project tree menu
+      notify("Could not copy paths to clipboard.");
     }
     closeContextMenu();
   }
@@ -164,7 +177,7 @@
     tabindex="-1"
     onpointerdown={(event) => event.stopPropagation()}
   >
-    {#if isFile && nodePath}
+    {#if !multiple && isFile && nodePath}
       <button
         class="project-tree-context-item"
         type="button"
@@ -178,6 +191,7 @@
         Open
       </button>
     {/if}
+    {#if !multiple}
     <button
         class="project-tree-context-item"
         type="button"
@@ -207,6 +221,11 @@
         {favoritePaths.has(normalizePathSync(menuTarget.node.path)) ? "Remove from Favorites" : "Add to Favorites"}
       </button>
     {/if}
+    {/if}
+    {#if multiple}
+      <button class="project-tree-context-item" type="button" role="menuitem" onclick={() => { onFavoriteSelected(targets, true); closeContextMenu(); }}>Add to Favorites</button>
+      <button class="project-tree-context-item" type="button" role="menuitem" onclick={() => { onFavoriteSelected(targets, false); closeContextMenu(); }}>Remove from Favorites</button>
+    {/if}
     {#if hasNode && nodePath}
       <div class="ui-rule" role="separator"></div>
       <button
@@ -221,7 +240,7 @@
           void copyPath();
         }}
       >
-        Copy Path
+        {multiple ? "Copy Paths" : "Copy Path"}
       </button>
       {#if workspaceRoot}
         <button
@@ -236,11 +255,11 @@
             void copyRelativePath();
           }}
         >
-          Copy Relative Path
+          {multiple ? "Copy Relative Paths" : "Copy Relative Path"}
         </button>
       {/if}
     {/if}
-    {#if hasNode && nodePath && gitEnabled && onShowGitLog}
+    {#if !multiple && hasNode && nodePath && gitEnabled && onShowGitLog}
       <div class="ui-rule" role="separator"></div>
       <button
         class="project-tree-context-item"
@@ -267,6 +286,9 @@
       </button>
     {/if}
     {#if hasNode && nodePath && nodeKind}
+      <button class="project-tree-context-item" type="button" role="menuitem" disabled={busy} onclick={() => { onMoveSelected(targets); closeContextMenu(); }}>Move To…</button>
+      <button class="project-tree-context-item project-tree-context-item-danger" type="button" role="menuitem" disabled={busy} onclick={() => { onDeleteSelected(targets); closeContextMenu(); }}>Delete{multiple ? ` ${targets.length} items` : ""}</button>
+      {#if !multiple}
       <div class="ui-rule" role="separator"></div>
       <button
         class="project-tree-context-item"
@@ -280,18 +302,6 @@
       >
         Rename…
       </button>
-      <button
-        class="project-tree-context-item project-tree-context-item-danger"
-        type="button"
-        role="menuitem"
-        onpointerdown={(event) => {
-          event.stopPropagation();
-          onDelete(nodePath, nodeKind);
-          closeContextMenu();
-        }}
-      >
-        Delete
-      </button>
       <div class="ui-rule" role="separator"></div>
       <button
         class="project-tree-context-item"
@@ -304,6 +314,7 @@
       >
         {revealLabel}
       </button>
+      {/if}
     {/if}
   </div>
 {/if}

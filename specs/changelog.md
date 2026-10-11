@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-11 08:01 MSK — Add project selection and grouped file operations
+
+- Added independent multi-selection with modifier/range/select-all controls, group context menus, newline-separated absolute/relative paths, grouped favorites, deletion and Move To folder selection.
+- Added async native moves to arbitrary OS destinations, exclusive destination publication, verified cross-volume copies, preserved symlinks/hidden contents and recoverable file replacement. Conflicts offer skip/keep-both/replace with a remaining-conflicts policy; folders are never merged and open destinations cannot be replaced.
+- Kept moved buffers open by updating paths across contexts/windows and removed favorites that leave their project; parent selections suppress duplicate descendant mutations. Partial failures retain source data or report retained copies.
+- Validation: Svelte/type checks and component autofixer pass; 29 focused frontend tests and three native move tests cover selection, clipboard order, existing tree operations, copy/link preservation, refusal to overwrite and replacement rollback.
+
 ## 2026-10-11 00:19 MSK — Package lean application and gate component releases
 
 - Removed mandatory agent sidecar and recursive Node/SDK/native resources from Tauri packaging; lean host build now bundles only shipped control/adapter code. Separate explicit fixture preparation keeps build/test component assets outside the base release payload.

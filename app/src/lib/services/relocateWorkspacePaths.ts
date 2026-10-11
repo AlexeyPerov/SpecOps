@@ -197,3 +197,22 @@ export function findFileTabIdForDocument(documentId: string): string | null {
   }
   return null;
 }
+
+/** Update matching buffers in every context, including files moved outside their project. */
+export async function syncOpenDocumentsAfterRelocation(oldPath: string, newPath: string, windowId: string): Promise<void> {
+  const state = appState.getSnapshot();
+  const contexts = [{ id: "notepad" as ContextId, snapshot: state.contexts.notepad }, ...state.contexts.workspaces];
+  for (const context of contexts) {
+    for (const document of context.snapshot.documents) {
+      if (!document.filePath || !isPathEqualOrUnder(oldPath, document.filePath)) continue;
+      const path = relocatedPath(oldPath, newPath, document.filePath);
+      appState.renameDocumentInContext(context.id, document.id, path, basename(path));
+      await renameOpenFileRegistry(document.filePath, path, windowId, document.id);
+      try {
+        appState.setDocumentDiskStateForContext(context.id, document.id, { diskFingerprint: await statDiskFingerprint(path), fileMissing: false });
+      } catch {
+        appState.setDocumentDiskStateForContext(context.id, document.id, { diskFingerprint: null, fileMissing: true });
+      }
+    }
+  }
+}

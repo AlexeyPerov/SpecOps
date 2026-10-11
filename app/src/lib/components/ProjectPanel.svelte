@@ -24,6 +24,9 @@
   import { projectTreeChangeTones } from "../services/projectTreeDecorations";
   import { fileStatusBadgeLabel } from "../services/fileStatusTracker";
   import { workspaceRelativePath } from "../services/workspacePaths";
+  import { flattenProjectTree } from "../services/projectTreeFlatten";
+  import { selectProjectPaths } from "../services/projectSelection";
+  import { moveProjectEntries, deleteProjectEntries } from "../services/projectBulkOperations";
   import RefreshIcon from "./icons/RefreshIcon.svelte";
   import SearchIcon from "./icons/SearchIcon.svelte";
 
@@ -108,6 +111,34 @@
     onOpenFileInContext,
     onMarkdownFilterEnable = () => {},
   }: Props = $props();
+
+  let selectedPaths = $state<Set<string>>(new Set());
+  let selectionAnchor = $state<string | null>(null);
+  let mutationRunning = $state(false);
+  $effect(() => { void workspaceRoot; selectedPaths = new Set(); selectionAnchor = null; });
+  function selectPath(event: MouseEvent, path: string, visiblePaths: string[]): void {
+    const next = selectProjectPaths(selectedPaths, selectionAnchor, path, visiblePaths, { shift: event.shiftKey, toggle: event.metaKey || event.ctrlKey });
+    selectedPaths = next.paths; selectionAnchor = next.anchor;
+  }
+  async function mutateSelected(kind: "move" | "delete", entries: readonly ProjectTreeNode[]): Promise<void> {
+    if (mutationRunning) return;
+    mutationRunning = true;
+    const root = workspaceRoot;
+    try {
+      if (kind === "move") await moveProjectEntries(root, entries, notify);
+      else await deleteProjectEntries(root, entries, notify);
+      if (workspaceRoot === root) selectedPaths = new Set();
+      onRefresh();
+    } catch (error) { notify(String(error)); }
+    finally { mutationRunning = false; }
+  }
+  async function favoriteSelected(entries: readonly ProjectTreeNode[], favorite: boolean): Promise<void> {
+    const root = workspaceRoot;
+    try {
+      for (const node of entries) await setProjectFavorite(root, node, favorite);
+      if (workspaceRoot === root) await reloadFavorites?.();
+    } catch (error) { notify(String(error)); }
+  }
 
   const changeTones = $derived(projectTreeChangeTones(statusByPath));
   let favoriteRevealPath = $state<string | null>(null);
@@ -244,6 +275,9 @@
     for (const [path, nodes] of childrenByPath) next.set(path, filterNodes(nodes));
     return next;
   });
+
+  const selectedNodes = $derived(flattenProjectTree(visibleRootNodes, expandedPaths, visibleChildrenByPath, loadingPaths)
+    .flatMap((row) => row.kind === "node" && selectedPaths.has(row.node.path) ? [row.node] : []));
 
   function basename(path: string): string {
     const normalized = path.replaceAll("\\", "/");
@@ -412,7 +446,8 @@
   function handleContextMenuNode(event: MouseEvent, node: ProjectTreeNode): void {
     const parentDirPath =
       node.kind === "directory" ? node.path : node.path.replace(/[/\\][^/\\]+$/, "") || workspaceRoot;
-    openContextMenu(event, { node, parentDirPath });
+    if (!selectedPaths.has(node.path)) { selectedPaths = new Set([node.path]); selectionAnchor = node.path; }
+    contextMenuComponent?.openContextMenu(event, { node, parentDirPath, nodes: selectedNodes.some((entry) => entry.path === node.path) ? selectedNodes : [node] });
   }
 
   function startDraft(kind: "file" | "directory", parentDirPath: string): void {
@@ -540,6 +575,10 @@
         </section>
       {/if}
       <ProjectTreeView
+        {selectedPaths}
+        onSelectPath={selectPath}
+        onSelectAll={(paths) => { selectedPaths = new Set(paths); selectionAnchor = paths[0] ?? null; }}
+        onClearSelection={() => { selectedPaths = new Set(); selectionAnchor = null; }}
         coloredFileIcons={$appSettings.coloredProjectFileIcons}
         nodes={visibleRootNodes}
         {workspaceRoot}
@@ -582,6 +621,11 @@
   onNewFolder={(parent) => startDraft("directory", parent)}
   onRename={onRenameEntry}
   onDelete={onDeleteEntry}
+  busy={mutationRunning}
+  onMoveSelected={(entries) => { void mutateSelected("move", entries); }}
+  onDeleteSelected={(entries) => { void mutateSelected("delete", entries); }}
+  onFavoriteSelected={(entries, favorite) => { void favoriteSelected(entries, favorite); }}
+  {notify}
 />
 
 <GitLogPopover bind:this={gitLogPopover} onOpenCommit={openCommitInVersionControl} />

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { workspaceTransferBusy } from "../services/workspaceTransferState";
   import ConsolePanel from "./ConsolePanel.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
   import { loadWorkspaceDocument, workspaceDocumentSnapshot, workspaceDocumentsRevision } from "../services/workspaceDocuments";
@@ -258,6 +259,7 @@
     onMoveUp: () => void;
     onMoveDown: () => void;
     onOpenSettings: (workspaceId: ContextId) => void;
+    onMoveToWindow?: (workspaceId: ContextId, newWindow: boolean) => void;
     onOpenDocument?: (workspaceId: ContextId, kind: "tasks" | "notes") => void | Promise<void>;
     onOpenVersionControl: (workspaceId: ContextId) => void;
     onCopyPath: (workspaceId: ContextId) => void | Promise<void>;
@@ -463,6 +465,13 @@
   // without mutating the overlay-host menu state.
   let workspaceDocumentPreferenceRevision = $state(0);
   $effect(() => untrack(() => subscribeWorkspacePreferences(() => { workspaceDocumentPreferenceRevision++; })));
+  $effect(() => {
+    if (!$workspaceTransferBusy) return;
+    const block = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); };
+    const events = ['keydown', 'beforeinput', 'paste', 'drop'];
+    events.forEach(event => window.addEventListener(event, block, true));
+    return () => events.forEach(event => window.removeEventListener(event, block, true));
+  });
   const workspaceMenuRoot = $derived(editor.workspaceManager?.workspaces.find((entry) => entry.id === workspaceContextMenu.menu?.workspaceId)?.rootPath ?? null);
   $effect(() => {
     const root = workspaceMenuRoot; void workspaceDocumentPreferenceRevision;
@@ -986,6 +995,10 @@
     >
       Settings
     </button>
+    {#if workspaceContextMenu.onMoveToWindow}
+      <button class="workspace-context-item" type="button" role="menuitem" onclick={() => { if (workspaceContextMenu.menu) workspaceContextMenu.onMoveToWindow?.(workspaceContextMenu.menu.workspaceId, true); }}>Open in Separate Window</button>
+      <button class="workspace-context-item" type="button" role="menuitem" onclick={() => { if (workspaceContextMenu.menu) workspaceContextMenu.onMoveToWindow?.(workspaceContextMenu.menu.workspaceId, false); }}>Move to Window…</button>
+    {/if}
     {#if workspaceContextMenu.onOpenDocument}
       {#each ["tasks", "notes"] as kind, index (kind)}
         <button class="workspace-context-item" type="button" role="menuitem" onclick={() => { if (workspaceContextMenu.menu) void workspaceContextMenu.onOpenDocument?.(workspaceContextMenu.menu.workspaceId, kind as "tasks" | "notes"); }}>{workspaceMenuDocuments[index]?.content != null ? "Open" : "Create"} {kind === "tasks" ? "Tasks" : "Notes"}</button>
@@ -1063,3 +1076,11 @@
     </button>
   </div>
 {/if}
+
+{#if $workspaceTransferBusy}
+  <div class="workspace-transfer-overlay" role="status" aria-live="polite"><span>Moving workspace…</span></div>
+{/if}
+<style>
+  .workspace-transfer-overlay { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: color-mix(in srgb, var(--color-bg-root) 85%, transparent); cursor: progress; }
+  .workspace-transfer-overlay span { padding: 16px 24px; color: var(--color-text-primary); background: var(--color-bg-root); border: 1px solid var(--color-border-subtle); border-radius: 8px; }
+</style>

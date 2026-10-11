@@ -1,3 +1,4 @@
+import { listenWorkspaceWindowTransfers } from "./workspaceWindowTransfer";
 import { emit, emitTo, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -508,6 +509,7 @@ async function startAppShellRuntimeInner(
   //   - startup-external-checks: stats open files for external changes; only
   //     the active tab is priority and the user cannot interact yet, so
   //     deferring it briefly is safe (it runs in the background here).
+  cleanupCallbacks.push(await listenWorkspaceWindowTransfers());
   runtimeReady = true;
   await emit(WINDOW_EVENT_WINDOW_READY, { windowId });
   await logPerfTiming("app shell runtime ready", {

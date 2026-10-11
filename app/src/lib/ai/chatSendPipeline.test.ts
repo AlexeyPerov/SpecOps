@@ -28,6 +28,8 @@ import type { SessionEvent } from "../session/events";
 import type { SpecOpsTurnId } from "../session";
 import {
   executeProviderTurn,
+  detachWorkspaceTurns,
+  workspaceTurnDescriptors,
   validateAgentHostSend,
   abortTurn,
 } from "./chatSendPipeline";
@@ -79,6 +81,7 @@ function createFakeHostHarness(): FakeHostHarness {
       inspectNative: vi.fn(),
       actNative: vi.fn(),
       status: null,
+      subscribeSession: vi.fn(async () => () => {}),
       subscribeProfiles: vi.fn(async () => () => {}),
       start,
       stop: vi.fn(),
@@ -190,6 +193,65 @@ describe("chatSendPipeline (host-backed turns)", () => {
     const assistant = messages.find((message) => message.role === "assistant");
     expect(assistant?.content).toBe("pong");
     expect(chatStore.getRuntimeState(sessionId).isGenerating).toBe(false);
+  });
+
+  it("moves a streaming turn and pending permission without resending the prompt or cancelling native work", async () => {
+    const root = '/work/host-pipeline';
+    const sessionId = await seedThreadWithUserMessage();
+    let release!: () => void;
+    const paused = new Promise<void>(resolve => { release = resolve; });
+    const send = vi.spyOn(harness.client, 'sendTurn').mockImplementation(async function* (request) {
+      yield event({ type: 'text.delta', seq: 1, turnId: request.turnId, delta: 'before' });
+      yield event({ type: 'permission.requested', seq: 2, turnId: request.turnId, request: { permissionId: 'permission-1', label: 'Read', payload: {} } });
+      await paused;
+    });
+    registerPermissionPromptRunner(() => new Promise(() => {}));
+    const source = executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'turn-test-1' });
+    await vi.waitFor(() => expect(chatStore.getRuntimeState(sessionId).isWaitingForPermission).toBe(true));
+    expect(workspaceTurnDescriptors(root)[0].fold.content).toBe('before');
+    const [checkpoint] = detachWorkspaceTurns(root);
+    const adopted = structuredClone(chatStore.getWorkspaceSessionsState(root)!);
+    const sourceResult = await source;
+    expect(sourceResult.ok).toBe(false);
+    expect(harness.cancelTurn).not.toHaveBeenCalled();
+    release();
+    chatStore.reset();
+    chatStore.adoptWorkspaceState(root, adopted);
+    chatStore.setActiveWorkspaceRoot(root);
+    registerPermissionPromptRunner(async () => ({ reply: 'once' }));
+    const resumed = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: checkpoint.turnId,
+      continuation: { checkpoint, events: { async *[Symbol.asyncIterator]() {
+        yield* checkpoint.pending;
+        yield event({ type: 'text.delta', seq: 3, turnId: checkpoint.turnId, delta: ' after' });
+        yield event({ type: 'turn.finished', seq: 4, turnId: checkpoint.turnId });
+      } } },
+    });
+    expect(resumed.ok).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(harness.cancelTurn).not.toHaveBeenCalled();
+    expect(harness.replyPermission).toHaveBeenCalledTimes(1);
+    expect(chatStore.getMessages(sessionId).find(message => message.id === checkpoint.assistantMessageId)?.content).toBe('before after');
+    expect(chatStore.getRuntimeState(sessionId).isGenerating).toBe(false);
+  });
+
+  it('does not detach in the middle of an interaction reply already sent to native', async () => {
+    const root = '/work/host-pipeline'; const sessionId = await seedThreadWithUserMessage();
+    let finishReply!: () => void; let finishTurn!: () => void;
+    const pendingReply = new Promise<void>(resolve => { finishReply = resolve; });
+    const pendingTurn = new Promise<void>(resolve => { finishTurn = resolve; });
+    harness.replyPermission.mockImplementation(() => pendingReply);
+    registerPermissionPromptRunner(async () => ({ reply: 'once' }));
+    vi.spyOn(harness.client, 'sendTurn').mockImplementation(async function* (request) {
+      yield event({ type: 'permission.requested', seq: 1, turnId: request.turnId, request: { permissionId: 'permission-reply', label: 'Read', payload: {} } });
+      await pendingTurn;
+      yield event({ type: 'turn.finished', seq: 2, turnId: request.turnId });
+    });
+    const response = executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'turn-test-1' });
+    await vi.waitFor(() => expect(harness.replyPermission).toHaveBeenCalled());
+    expect(() => detachWorkspaceTurns(root)).toThrow('interaction reply');
+    expect(harness.cancelTurn).not.toHaveBeenCalled();
+    finishReply(); finishTurn();
+    expect((await response).ok).toBe(true);
   });
 
   it("resumes the existing native binding instead of creating a session", async () => {

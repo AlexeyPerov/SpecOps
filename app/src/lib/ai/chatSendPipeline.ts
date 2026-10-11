@@ -14,10 +14,10 @@ import {
 } from "../services/agentHostRuntime";
 import type { AgentHostClientError } from "../session/host/agentHostClient";
 import type { NativeSessionRef } from "../session/adapter";
-import type { PermissionReply } from "../session/events";
+import type { SessionEvent, PermissionReply } from "../session/events";
 import { asNativeSessionId, asSpecOpsTurnId, isAgentRuntimeId } from "../session";
 import type { SessionBinding } from "../state/chatStore/sessions";
-import { foldSessionEvent, initialTurnFoldState } from "../session/host/hostTurnReducer";
+import { foldSessionEvent, initialTurnFoldState, type TurnFoldState } from "../session/host/hostTurnReducer";
 import {
   formatRetryFailureNote,
   PROVIDER_REQUEST_FAILURE_RECOVERY,
@@ -283,7 +283,7 @@ export async function validateAgentHostSend(
       message: WORKSPACE_PATH_INACCESSIBLE_MESSAGE,
     };
   }
-  const metadata = chatStore.getMetadata(activeSessionId);
+  const metadata = chatStore.getMetadata(activeSessionId, root);
   const binding = chatStore.getSessionLink(activeSessionId, root);
   const modelId = metadata?.selectedModelId?.trim() || binding?.modelId || "";
   const modeId = metadata?.selectedModeId?.trim() || binding?.modeId || "";
@@ -343,14 +343,14 @@ async function ensureNativeBinding(input: {
     // Resume so a host restart mid-session recovers the native session before
     // the next turn (the fake adapter adopts known ids; real adapters reconnect).
     const native = await client.resumeSession({
-      native: { ...toNativeRef(existing), ...(modelId ? { modelId } : {}), ...(modeId ? { modeId } : {}), runtimeMetadata: chatStore.getMetadata(activeSessionId)?.runtimeMetadata ?? existing.runtimeMetadata },
+      native: { ...toNativeRef(existing), ...(modelId ? { modelId } : {}), ...(modeId ? { modeId } : {}), runtimeMetadata: chatStore.getMetadata(activeSessionId, root)?.runtimeMetadata ?? existing.runtimeMetadata },
       workspaceRootPath: root,
     });
     if (native.runtimeId !== existing.runtimeId || native.nativeSessionId !== existing.nativeSessionId || native.connectionProfileId !== existing.connectionProfileId) {
       throw new Error("Resume returned a different native session. Create a new session explicitly to continue.");
     }
     if (native.history !== undefined) {
-      const current = chatStore.getMessages(activeSessionId);
+      const current = chatStore.getMessages(activeSessionId, root);
       chatStore.setThreadMessages(reconcileNativeHistory(current, native.history, input.pendingMessageIds), activeSessionId, root);
       if (native.history.some(message => message.role === 'user' && message.id === input.pendingMessageIds[0])) throw new Error('This message already exists in native history. Continue with a new message; it was not replayed.');
     }
@@ -369,15 +369,15 @@ async function ensureNativeBinding(input: {
     await flushSessionIndexPersistence(root);
     return binding;
   }
-  const metadataRuntimeId = chatStore.getMetadata(activeSessionId)?.runtimeId?.trim() ?? "";
+  const metadataRuntimeId = chatStore.getMetadata(activeSessionId, root)?.runtimeId?.trim() ?? "";
   const runtimeId = isAgentRuntimeId(metadataRuntimeId)
     ? metadataRuntimeId
     : DEFAULT_SESSION_RUNTIME_ID;
   const native = await client.createSession({
     runtimeId,
-    connectionProfileId: chatStore.getMetadata(activeSessionId)?.connectionProfileId,
+    connectionProfileId: chatStore.getMetadata(activeSessionId, root)?.connectionProfileId,
     workspaceRootPath: root,
-    runtimeMetadata: chatStore.getMetadata(activeSessionId)?.runtimeMetadata,
+    runtimeMetadata: chatStore.getMetadata(activeSessionId, root)?.runtimeMetadata,
     ...(modelId ? { modelId } : {}),
     ...(modeId ? { modeId } : {}),
   });
@@ -394,6 +394,29 @@ async function ensureNativeBinding(input: {
   return binding;
 }
 
+export interface WorkspaceTurnCheckpoint {
+  root: string; activeSessionId: string; turnId: string; native: NativeSessionRef;
+  userMessageId: string; assistantMessageId: string; fold: TurnFoldState; lastSeq: number; pending: SessionEvent[];
+}
+type LiveTurn = { checkpoint: WorkspaceTurnCheckpoint; observed: ReturnType<typeof observeTurnStream>; detached: boolean; replying: boolean };
+const liveTurns = new Map<string, LiveTurn>();
+export function workspaceTurnDescriptors(root: string): WorkspaceTurnCheckpoint[] {
+  const turns = [...liveTurns.values()].filter(turn => turn.checkpoint.root === root && chatStore.isGenerationTurnActive(root, turn.checkpoint.activeSessionId, turn.checkpoint.turnId));
+  if (turns.some(turn => turn.replying)) throw new Error('Wait for the session interaction reply to finish, then move the workspace.');
+  return turns.map(turn => structuredClone(turn.checkpoint));
+}
+export function detachWorkspaceTurns(root: string): WorkspaceTurnCheckpoint[] {
+  workspaceTurnDescriptors(root);
+  return [...liveTurns.values()].filter(turn => turn.checkpoint.root === root && chatStore.isGenerationTurnActive(root, turn.checkpoint.activeSessionId, turn.checkpoint.turnId)).map(turn => {
+    turn.detached = true;
+    const queued = turn.observed.detach();
+    return structuredClone({ ...turn.checkpoint, pending: [...turn.checkpoint.pending, ...queued] });
+  });
+}
+export function resumeWorkspaceTurn(checkpoint: WorkspaceTurnCheckpoint, events: AsyncIterable<SessionEvent>): void {
+  void executeProviderTurn({ ...checkpoint, continuation: { checkpoint, events } });
+}
+
 export async function executeProviderTurn(params: {
   root: string;
   activeSessionId: string;
@@ -403,9 +426,10 @@ export async function executeProviderTurn(params: {
   handoffPermit?: string;
   previousError?: ChatTurnError | null;
   context?: ChatSendContext;
+  continuation?: { checkpoint: WorkspaceTurnCheckpoint; events: AsyncIterable<SessionEvent> };
 }): Promise<SendChatMessageResult> {
   const { root, activeSessionId, turnId, previousError } = params;
-  const thread = chatStore.getActiveThreadSnapshot(activeSessionId);
+  const thread = chatStore.getActiveThreadSnapshot(activeSessionId, root);
   if (!thread) {
     abortTurn(activeSessionId, root);
     return {
@@ -418,11 +442,12 @@ export async function executeProviderTurn(params: {
   if (previousError) {
     chatStore.appendMessage(createRetryFailureNote(turnId, previousError), {
       sessionId: activeSessionId,
+      scopeKey: root,
       skipCompaction: true,
     });
   }
 
-  const userMessage = findLastUserMessage(thread.messages);
+  const userMessage = params.continuation ? thread.messages.find(message => message.id === params.continuation!.checkpoint.userMessageId) : findLastUserMessage(thread.messages);
   if (!userMessage) {
     abortTurn(activeSessionId, root);
     if (previousError) {
@@ -436,16 +461,17 @@ export async function executeProviderTurn(params: {
   }
 
   const handoff = chatStore.getWorkspaceSessionsState(root)?.sessionIndex.find(entry => entry.id === activeSessionId)?.handoff ?? thread.metadata.handoff;
-  if (handoff && userMessage.id === handoff.initialMessageId && !consumeHandoffSendPermit(params.handoffPermit, root, activeSessionId, userMessage.content)) {
+  if (!params.continuation && handoff && userMessage.id === handoff.initialMessageId && !consumeHandoffSendPermit(params.handoffPermit, root, activeSessionId, userMessage.content)) {
     chatStore.completeTurn(activeSessionId, root);
     return { ok: false, reason: "provider_unavailable", message: "The handoff first prompt may already have been accepted. Open the known target and inspect native history; continue with a new message. It was not resubmitted." };
   }
-  const assistantMessage = createAssistantPlaceholder(turnId);
-  chatStore.appendMessage(assistantMessage, { sessionId: activeSessionId, skipCompaction: true });
+  const assistantMessage = params.continuation ? thread.messages.find(message => message.id === params.continuation!.checkpoint.assistantMessageId)! : createAssistantPlaceholder(turnId);
+  if (!params.continuation) chatStore.appendMessage(assistantMessage, { sessionId: activeSessionId, scopeKey: root, skipCompaction: true });
   let hasScheduledStreamingPersistence = false;
 
+  let live: LiveTurn | undefined;
   try {
-    if (!await confirmConcurrentWorkspaceWork(root, activeSessionId)) {
+    if (!params.continuation && !await confirmConcurrentWorkspaceWork(root, activeSessionId)) {
       abortTurn(activeSessionId, root);
       return { ok: false, reason: "provider_unavailable", message: "Send cancelled before native execution." };
     }
@@ -456,10 +482,10 @@ export async function executeProviderTurn(params: {
     await ensureAgentHostStarted();
     assertTurnStillActive(root, activeSessionId, turnId);
 
-    const metadata = chatStore.getMetadata(activeSessionId);
+    const metadata = chatStore.getMetadata(activeSessionId, root);
     const modelId = metadata?.selectedModelId?.trim() || params.modelId || "";
     const modeId = metadata?.selectedModeId?.trim() || params.modeId || "";
-    const binding = await ensureNativeBinding({
+    const binding = params.continuation ? null : await ensureNativeBinding({
       root,
       activeSessionId,
       modelId,
@@ -467,23 +493,27 @@ export async function executeProviderTurn(params: {
       pendingMessageIds: [userMessage.id, assistantMessage.id],
     });
     assertTurnStillActive(root, activeSessionId, turnId);
-    const native = toNativeRef(binding);
+    const native = params.continuation?.checkpoint.native ?? toNativeRef(binding!);
     const client = getAgentHostClient();
 
-    let fold = initialTurnFoldState();
-    const observed = observeTurnStream(client.sendTurn({
+    let fold = params.continuation?.checkpoint.fold ?? initialTurnFoldState();
+    const observed = observeTurnStream(params.continuation?.events ?? client.sendTurn({
       turnId: asSpecOpsTurnId(turnId),
       native,
       workspaceRootPath: root,
       prompt: userMessage.content,
       context: { ...(params.context as unknown as Record<string, unknown> ?? {}), clientUserMessageId: userMessage.id },
     }), () => client.cancelTurn({ native, turnId: asSpecOpsTurnId(turnId), reason: "supervisor" }));
+    live = { detached: false, replying: false, observed, checkpoint: params.continuation?.checkpoint ?? { root, activeSessionId, turnId, native, userMessageId: userMessage.id, assistantMessageId: assistantMessage.id, fold, lastSeq: 0, pending: [] } };
+    liveTurns.set(turnId, live);
     for await (const event of observed.events()) {
+      if (live.detached) throw new Error("Turn moved to another window");
+      live.checkpoint.pending = [event];
       if (!chatStore.isGenerationTurnActive(root, activeSessionId, turnId)) {
         throw new TurnCancelledError();
       }
       if (event.nativeTurnId) {
-        const current = chatStore.getMessages(activeSessionId);
+        const current = chatStore.getMessages(activeSessionId, root);
         const assistant = current.find(m => m.id === assistantMessage.id);
         if (assistant?.nativeTurnId !== event.nativeTurnId || (event.type === 'text.delta' && event.nativeItemId && assistant?.nativeItemId !== event.nativeItemId)) {
           chatStore.setThreadMessages(current.map(m => m.id === assistantMessage.id ? { ...m, nativeTurnId: event.nativeTurnId, ...(event.type === 'text.delta' && event.nativeItemId ? { nativeItemId: event.nativeItemId } : {}) } : m.id === userMessage.id ? { ...m, nativeTurnId: event.nativeTurnId } : m), activeSessionId, root);
@@ -505,14 +535,17 @@ export async function executeProviderTurn(params: {
         }).finally(() => {
           chatStore.setWaitingForPermission(activeSessionId, false, root);
         });
+        if (live.detached) throw new Error("Turn moved to another window");
         assertTurnStillActive(root, activeSessionId, turnId);
         if (observed.signal.aborted) continue;
-        await client.replyPermission({
+        live.replying = true;
+        try { await client.replyPermission({
           native,
           turnId: asSpecOpsTurnId(turnId),
           permissionId: event.request.permissionId,
           reply: result.reply as PermissionReply,
-        });
+        }); } finally { live.replying = false; }
+        live.checkpoint.lastSeq = event.seq; live.checkpoint.pending = [];
         continue;
       }
       if (event.type === "question.requested") {
@@ -532,15 +565,17 @@ export async function executeProviderTurn(params: {
         }).finally(() => {
           chatStore.setWaitingForQuestion(activeSessionId, false, root);
         });
+        if (live.detached) throw new Error("Turn moved to another window");
         assertTurnStillActive(root, activeSessionId, turnId);
         if (observed.signal.aborted) continue;
         if (result.type === "reply") {
-        await client.replyQuestion({
+        live.replying = true;
+        try { await client.replyQuestion({
             native,
             turnId: asSpecOpsTurnId(turnId),
             questionId: event.request.questionId,
             answer: result.answers.map((choice) => choice.join(", ")).join("\n"),
-          });
+          }); } finally { live.replying = false; }
         } else {
           // Question rejected — cancel the turn (the runtime is blocked on us).
           await client.cancelTurn({
@@ -550,6 +585,7 @@ export async function executeProviderTurn(params: {
           });
           throw new TurnCancelledError();
         }
+        live.checkpoint.lastSeq = event.seq; live.checkpoint.pending = [];
         continue;
       }
       if (event.type === "turn.failed") {
@@ -575,8 +611,10 @@ export async function executeProviderTurn(params: {
         chatStore.updateMessageToolCalls(assistantMessage.id, next.toolCalls, activeSessionId, root);
       }
       fold = next;
+      live.checkpoint.fold = fold; live.checkpoint.lastSeq = event.seq; live.checkpoint.pending = [];
     }
 
+    if (live.detached) throw new Error("Turn moved to another window");
     assertTurnStillActive(root, activeSessionId, turnId);
     chatStore.updateMessageContent(assistantMessage.id, fold.content, activeSessionId, root);
     if (fold.parts.length > 0) {
@@ -585,11 +623,12 @@ export async function executeProviderTurn(params: {
     if (fold.toolCalls.length > 0) {
       chatStore.updateMessageToolCalls(assistantMessage.id, fold.toolCalls, activeSessionId, root);
     }
-    chatStore.compactActiveThread(activeSessionId);
+    chatStore.compactActiveThread(activeSessionId, root);
     chatStore.completeTurn(activeSessionId, root);
     persistSessionThreadOnce(root, activeSessionId);
     return { ok: true, turnId, assistantMessageId: assistantMessage.id, sessionId: activeSessionId };
   } catch (error) {
+    if (live?.detached) return { ok: false, reason: "generating", message: "Response continues in another window." };
     if (isTurnCancelledError(error)) {
       // Make sure the native turn is cancelled even when the loop noticed the
       // cancellation through the store rather than a host event.
@@ -616,5 +655,7 @@ export async function executeProviderTurn(params: {
     chatStore.failTurn({ message, code: "provider_error" }, turnId, activeSessionId, root);
     persistSessionThreadOnce(root, activeSessionId);
     return { ok: false, reason: "provider_error", message };
+  } finally {
+    if (liveTurns.get(turnId) === live) liveTurns.delete(turnId);
   }
 }

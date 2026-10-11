@@ -106,6 +106,23 @@ export function evictWorkspaceSessionHydration(normalizedRootPath: string): void
   }
 }
 
+function syncSessionIdCounterFromWorkspace(workspace: WorkspaceSessionsState): void {
+  let maxCounter = sessionIdCounter;
+  for (const entry of workspace.sessionIndex) {
+    const parsed = parseSessionCounterFromId(entry.id);
+    if (parsed !== null && parsed > maxCounter) {
+      maxCounter = parsed;
+    }
+  }
+  sessionIdCounter = maxCounter;
+}
+
+export function prepareAdoptWorkspaceSessions(root: string, workspace: WorkspaceSessionsState): void {
+  evictWorkspaceSessionHydration(root);
+  syncSessionIdCounterFromWorkspace(workspace);
+  loadedIndexSignatureByScope.set(root, indexSignature(workspace.sessionIndex));
+}
+
 export interface LoadWorkspaceSessionsOptions {
   /**
    * Session ids that must be thread-hydrated before `loadWorkspaceSessions` resolves
@@ -305,17 +322,6 @@ export function createSessionsSlice(deps: {
     thread: ChatThreadSnapshot | null,
   ): ChatThreadSnapshot | null {
     return thread;
-  }
-
-  function syncSessionIdCounterFromWorkspace(workspace: WorkspaceSessionsState): void {
-    let maxCounter = sessionIdCounter;
-    for (const entry of workspace.sessionIndex) {
-      const parsed = parseSessionCounterFromId(entry.id);
-      if (parsed !== null && parsed > maxCounter) {
-        maxCounter = parsed;
-      }
-    }
-    sessionIdCounter = maxCounter;
   }
 
   return {

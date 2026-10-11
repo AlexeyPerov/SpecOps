@@ -1,3 +1,4 @@
+import { filterWorkspacePlacement } from "./workspaceWindowPlacement";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
 import { join } from "@tauri-apps/api/path";
@@ -233,7 +234,7 @@ async function restoreWindowSessionFromSnapshot(
   if (!snapshot) {
     return null;
   }
-  const deduped = await dedupeWindowSnapshotAgainstRegistry(windowId, snapshot);
+  const deduped = await dedupeWindowSnapshotAgainstRegistry(windowId, await filterWorkspacePlacement(snapshot, windowId));
   const sanitized = await sanitizeWindowSnapshot(deduped);
   return {
     snapshot: sanitized,
@@ -319,7 +320,7 @@ export async function restoreWindowSession(
     if (!incremental) {
       return null;
     }
-    const deduped = await dedupeWindowSnapshotAgainstRegistry(windowId, incremental);
+    const deduped = await dedupeWindowSnapshotAgainstRegistry(windowId, await filterWorkspacePlacement(incremental, windowId));
     return {
       snapshot: await sanitizeWindowSnapshot(deduped),
       recentFiles: [],

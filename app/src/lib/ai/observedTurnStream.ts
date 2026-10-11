@@ -7,7 +7,7 @@ export function observeTurnStream(source: AsyncIterable<SessionEvent>, onDispose
   const pump = (async () => {
     try {
       while (!disposed) {
-        const next = await iterator.next(); if (next.done) { sourceCompleted = true; break; }
+        const next = await iterator.next(); if (disposed) break; if (next.done) { sourceCompleted = true; break; }
         const event = next.value; const size = sizeOf(event);
         if (queue.length >= 4096 || bytes + size > 4 * 1024 * 1024) throw new Error('Turn event queue exceeded');
         queue.push(event); bytes += size;
@@ -18,8 +18,14 @@ export function observeTurnStream(source: AsyncIterable<SessionEvent>, onDispose
     } catch (e) { error = e; }
     finally { done = true; abort.abort(); wake?.(); wake = undefined; }
   })();
-  return { signal: abort.signal, async *events(): AsyncIterable<SessionEvent> {
+  let detached = false;
+  return { detach(): SessionEvent[] {
+    detached = true; disposed = true; done = true;
+    const pending = queue.splice(0); abort.abort(); wake?.(); wake = undefined;
+    void iterator.return?.().catch(() => {});
+    return pending;
+  }, signal: abort.signal, async *events(): AsyncIterable<SessionEvent> {
     try { while (!done || queue.length) { const event = queue.shift(); if (event) { bytes -= sizeOf(event); yield event; } else await new Promise<void>(resolve => { wake = resolve; }); } if (error) throw error; }
-    finally { disposed = true; abort.abort(); if (!sourceCompleted && !terminalReceived) { await onDispose?.().catch(() => {}); void iterator.return?.().catch(() => {}); } void pump; queue.length = 0; }
+    finally { disposed = true; abort.abort(); if (!detached && !sourceCompleted && !terminalReceived) { await onDispose?.().catch(() => {}); void iterator.return?.().catch(() => {}); } void pump; queue.length = 0; }
   } };
 }

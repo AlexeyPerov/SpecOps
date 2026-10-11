@@ -60,8 +60,9 @@ export function activeSessionId(state: ChatStoreState): string | null {
 export function threadForSession(
   state: ChatStoreState,
   sessionId: string | null,
+  workspaceRoot?: string | null,
 ): ChatThreadSnapshot | null {
-  const scopeKey = state.activeChatScopeKey;
+  const scopeKey = workspaceRoot ?? state.activeChatScopeKey;
   if (!scopeKey || !sessionId) {
     return null;
   }

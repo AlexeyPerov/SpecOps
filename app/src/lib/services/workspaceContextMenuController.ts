@@ -1,3 +1,4 @@
+import { moveWorkspaceToWindow } from "./workspaceWindowTransfer";
 import { createWorkspaceDocument, type WorkspaceDocumentKind } from "./workspaceDocuments";
 import type { ContextId } from "../domain/contracts";
 import { appState } from "../state/appState";
@@ -213,6 +214,7 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
   }
 
   return {
+    moveToWindow(workspaceId: ContextId, newWindow: boolean) { close(); void moveWorkspaceToWindow(workspaceId, newWindow, deps.notify); },
     open,
     close,
     detach,

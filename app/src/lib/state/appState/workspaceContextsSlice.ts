@@ -7,12 +7,14 @@ import type {
   WindowBounds,
   WindowSessionSnapshot,
   WorkspaceLayoutState,
+  WorkspaceEntry,
 } from "../../domain/contracts";
 import {
   totalTabCount,
   createFileTab,
   createSinglePaneLayout,
   ensureUniquePaneIds,
+  nextPaneId,
 } from "../../domain/contracts";
 import { normalizePathForStorage } from "../../services/diskFingerprint";
 import {
@@ -28,6 +30,8 @@ import {
   getActiveDocuments,
   getActiveSession,
   nextDocAndTabIds,
+  nextDocId,
+  nextTabId,
   nextWorkspaceId,
   normalizeWorkspaceEntries,
   NOTEPAD_CONTEXT_ID,
@@ -250,6 +254,26 @@ export function createWorkspaceContextsSlice(deps: {
         };
       });
       return createdId;
+    },
+    adoptWorkspace(entry: WorkspaceEntry, windowId: string): ContextId {
+      const id = nextWorkspaceId();
+      const snapshot = cloneContextSnapshot(entry.snapshot);
+      const docs = new Map(snapshot.documents.map(doc => [doc.id, nextDocId()]));
+      snapshot.documents = snapshot.documents.map(doc => ({ ...doc, id: docs.get(doc.id)! }));
+      const layout = snapshot.session.editorLayout;
+      const panes = new Map(layout.panes.map(pane => [pane.id, nextPaneId()]));
+      const tabs = new Map(layout.panes.flatMap(pane => pane.tabs.map(tab => [tab.id, nextTabId()] as const)));
+      snapshot.session = { ...snapshot.session, lastActiveWindowId: windowId,
+        windowBounds: getActiveSession(getSnapshot()).windowBounds,
+        editorLayout: { ...layout, activePaneId: panes.get(layout.activePaneId)!,
+          panes: layout.panes.map(pane => ({ ...pane, id: panes.get(pane.id)!,
+            selectedTabId: pane.selectedTabId ? tabs.get(pane.selectedTabId)! : null,
+            tabs: pane.tabs.map(tab => tab.kind === "file" ? { ...tab, id: tabs.get(tab.id)!, documentId: docs.get(tab.documentId)! } : { ...tab, id: tabs.get(tab.id)! }),
+          })),
+        },
+      };
+      update(state => ({ ...state, contexts: { ...state.contexts, activeContextId: id, workspaces: [...state.contexts.workspaces, { ...entry, id, snapshot }] } }));
+      return id;
     },
     getWorkspaceDirtyDocuments(workspaceId: ContextId): DocumentState[] {
       const state = getSnapshot();

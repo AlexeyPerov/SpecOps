@@ -5,6 +5,7 @@ import type {
   ChatThreadSnapshot,
   WorkspaceSessionsIndexSnapshot,
 } from "../domain/contracts";
+import type { WorkspaceSessionsState } from "../state/chatStore/types";
 import type { ChatScopeKey } from "../state/chatStore/types";
 import { deriveSessionTitleFromThread } from "./chatSessions";
 import {
@@ -41,6 +42,7 @@ import {
  */
 const PERSIST_DEBOUNCE_MS = 700;
 
+const sessionWrites = new Map<string, Promise<void>>();
 const sessionTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const indexTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -180,7 +182,10 @@ export function scheduleSessionThreadFilePersistence(
   clearTimeout(sessionTimers.get(key));
   sessionTimers.set(key, setTimeout(() => {
     sessionTimers.delete(key);
-    void persistSessionThreadSnapshot(scopeKey, sessionId, snapshot.thread).catch(() => {
+    const pending = persistSessionThreadSnapshot(scopeKey, sessionId, snapshot.thread);
+    sessionWrites.set(key, pending);
+    void pending.finally(() => { if (sessionWrites.get(key) === pending) sessionWrites.delete(key); }).catch(() => {});
+    void pending.catch(() => {
       console.error("Session persistence failed");
     });
   }, PERSIST_DEBOUNCE_MS));
@@ -217,3 +222,15 @@ export {
   upsertSessionIndexEntry,
   workspaceChatPathHashKey,
 };
+
+/** Finish this window's pending writes and checkpoint hydrated chat before handing ownership over. */
+export async function flushWorkspaceChatPersistence(root: string, workspace: WorkspaceSessionsState | null): Promise<void> {
+  const prefix = `${root}\0`;
+  for (const [key, timer] of sessionTimers) if (key.startsWith(prefix)) { clearTimeout(timer); sessionTimers.delete(key); }
+  clearTimeout(indexTimers.get(root)); indexTimers.delete(root);
+  await Promise.all([...sessionWrites].filter(([key]) => key.startsWith(prefix)).map(([, write]) => write));
+  await indexWrites.get(root);
+  if (!workspace) return;
+  for (const [id, thread] of Object.entries(workspace.threadsBySessionId)) if (thread) await writeSessionThreadFileSnapshot(root, id, { version: 1, thread });
+  await writeWorkspaceSessionsIndexSnapshot(root, { version: 1, sessions: workspace.sessionIndex });
+}

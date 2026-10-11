@@ -19,6 +19,34 @@ describe("appState session restore", () => {
     appState.resetAppState();
   });
 
+  it("adopts a workspace with colliding ids while retaining dirty buffers, pane selection, and native session references", () => {
+    const id = appState.addWorkspace('/incoming')!;
+    const incoming = structuredClone(appState.getSnapshot().contexts.workspaces.find(entry => entry.id === id)!);
+    const document = incoming.snapshot.documents[0];
+    document.content = 'unsaved text'; document.savedContent = 'saved text'; document.isDirty = true;
+    document.scrollTop = 432;
+    const layout = incoming.snapshot.session.editorLayout;
+    const fileTab = layout.panes[0].tabs[0];
+    layout.panes.push({ id: 'pane-77', selectedTabId: 'tab-77', tabs: [{ id: 'tab-77', kind: 'session', sessionId: 'session-99', pinned: true }] });
+    layout.kind = 'cols-2'; layout.slots = [[0, 1]]; layout.activePaneId = 'pane-77';
+    appState.resetAppState();
+    appState.addWorkspace('/existing');
+    const existing = structuredClone(appState.getSnapshot().contexts.workspaces[0]);
+    const adoptedId = appState.adoptWorkspace(incoming, 'window-2');
+    const state = appState.getSnapshot();
+    expect(state.contexts.workspaces[0]).toEqual(existing);
+    const adopted = state.contexts.workspaces[1];
+    expect(adoptedId).not.toBe(existing.id);
+    expect(adopted.snapshot.documents[0]).toMatchObject({ content: 'unsaved text', savedContent: 'saved text', isDirty: true, scrollTop: 432 });
+    expect(adopted.snapshot.documents[0].id).not.toBe(existing.snapshot.documents[0].id);
+    const transferredLayout = adopted.snapshot.session.editorLayout;
+    expect(transferredLayout.slots).toEqual([[0, 1]]);
+    expect(transferredLayout.activePaneId).toBe(transferredLayout.panes[1].id);
+    expect(transferredLayout.panes[1].tabs[0]).toMatchObject({ kind: 'session', sessionId: 'session-99', pinned: true });
+    expect(transferredLayout.panes[0].tabs[0].id).not.toBe(fileTab.id);
+    expect(adopted.snapshot.session.lastActiveWindowId).toBe('window-2');
+  });
+
   it("restores active workspace context, order, tabs, and project panel state", () => {
     appState.applyWindowSession(
       {

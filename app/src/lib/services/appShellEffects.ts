@@ -1,3 +1,4 @@
+import { consumeWorkspaceIncoming, workspaceWasMovedOut } from "./workspaceWindowPlacement";
 /**
  * App shell reactive side effects extracted from +page.svelte.
  *
@@ -84,10 +85,7 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
   }
 
   if (!activeWorkspaceRoot) {
-    if (lastChatScopeKey !== null) {
-      chatStore.cancelAllGenerations(lastChatScopeKey);
-      setLastChatScopeKey(null);
-    }
+    setLastChatScopeKey(null);
     chatStore.setActiveWorkspaceRoot(null);
     return;
   }
@@ -98,7 +96,7 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
   // Cancel any stale scope and stop — re-enabling AI re-arms the full path.
   if (!sessionsEnabled) {
     if (lastChatScopeKey !== null) {
-      chatStore.cancelAllGenerations(lastChatScopeKey);
+      if (!workspaceWasMovedOut(lastChatScopeKey)) chatStore.cancelAllGenerations(lastChatScopeKey);
       setLastChatScopeKey(null);
     }
     chatStore.setActiveWorkspaceRoot(null);
@@ -107,13 +105,11 @@ export function syncSessionTabEffect(input: SyncSessionTabEffectInput): void {
 
   const normalizedWorkspaceRoot = normalizePathSync(activeWorkspaceRoot);
   if (lastChatScopeKey !== normalizedWorkspaceRoot) {
-    if (lastChatScopeKey !== null) {
-      chatStore.cancelAllGenerations(lastChatScopeKey);
-    }
     setLastChatScopeKey(normalizedWorkspaceRoot);
     markWorkspaceLifecycleActive();
     void ensureWorkspaceReadAccess(normalizedWorkspaceRoot);
     chatStore.setActiveWorkspaceRoot(normalizedWorkspaceRoot);
+    if (consumeWorkspaceIncoming(normalizedWorkspaceRoot)) return;
     const restoreStartedAt = nowMs();
     void restoreWorkspaceSession(normalizedWorkspaceRoot, {
       preferCachedIndex: !isSessionTabActive,

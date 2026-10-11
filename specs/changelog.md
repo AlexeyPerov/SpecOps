@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-11 08:33 MSK — Move workspaces between window groups without restarting native turns
+
+- Added Open in Separate Window and Move to Window actions to workspace context menus. Move whole workspace state, preserve dirty buffers/pane selections/session references, allocate destination-safe editor ids and update open-file claims.
+- Added prepared destination subscriptions, sequence checkpoints, buffered-event deduplication and transfer of outstanding permissions/questions. Active native turns continue without a second prompt; rejected commits resume the original observer. Wait for native setup/compaction and in-flight interaction replies before detaching.
+- Persist chat state before handing ownership over and record committed root-to-window placement. Resolve timed-out commits against transaction completion and durable ownership; filter stale source recovery records. Opening an already-open workspace focuses its owning live window.
+- Block input/menu mutation and window close during commit. Keep background turns running when switching workspace context, preserve hydration bookkeeping and scope streaming reads/updates to their owning root.
+- Validation: 2,997 frontend tests pass across 292 files, including mounted Tasks/Notes views, pending-permission handoff, rollback/lost acknowledgment, recovery/quit and identifier collision cases. Svelte/type checks have no errors or warnings; production frontend build succeeds. Native suite passes 118 tests, with one existing external-component integration test ignored. Live desktop window handoff was not exercised.
+
 ## 2026-10-11 08:32 MSK — Fix reactive workspace document views
 
 - Register preference subscriptions outside reactive tracking so immediate subscription callbacks cannot cause an effect loop in document views, pinned links, workspace settings or context-menu labels.

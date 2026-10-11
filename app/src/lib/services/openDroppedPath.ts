@@ -1,6 +1,6 @@
+import { addWorkspaceToWindow } from "./addWorkspaceToWindow";
 import { stat } from "@tauri-apps/plugin-fs";
 import { getErrorMessage } from "../commands/commandErrors";
-import { appState } from "../state/appState";
 import { normalizePathForStorage } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
@@ -55,7 +55,7 @@ async function addDroppedWorkspace(
     showErrorToast("Dropped workspace is inaccessible. Check permissions and try again.");
     return;
   }
-  const workspaceId = appState.addWorkspace(storedRoot);
+  const workspaceId = await addWorkspaceToWindow(storedRoot);
   if (!workspaceId) {
     notify("Workspace is already open.");
     return;

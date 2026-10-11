@@ -170,6 +170,7 @@ export interface AgentHostClient {
   restart(): Promise<AgentHostStatus>;
   getStatus(): Promise<AgentHostStatus>;
   discover(): Promise<DiscoverResult>;
+  subscribeSession(native: NativeSessionRef, listener: SessionSubscriber): Promise<() => void>;
   subscribeProfiles(listener: (update: ProfileAuthUpdate) => void): Promise<() => void>;
   authenticate(request: AgentAuthRequest): Promise<AgentAuthResult>;
   inspectNative: NativeExtensions["inspectNative"];
@@ -297,6 +298,10 @@ export function createAgentHostClient(bindings: AgentHostBindings = defaultBindi
       return rememberStatus((await bindings.invoke("agent_host_status")) as AgentHostStatus);
     },
 
+    async subscribeSession(native, listener) {
+      await ensureListener();
+      return subscribe(native.nativeSessionId, listener, native.runtimeId, native.connectionProfileId);
+    },
     async subscribeProfiles(listener) {
       await ensureListener();
       profileSubscribers.add(listener);

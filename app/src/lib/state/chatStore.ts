@@ -6,6 +6,7 @@ import {
   resetSessionIdCounterForTests,
   resetSessionHydrationForTests,
   createSessionId,
+  prepareAdoptWorkspaceSessions,
 } from "./chatStore/sessions";
 import { createRuntimeSlice, activeRuntime } from "./chatStore/runtime";
 import { createThreadsSlice } from "./chatStore/threads";
@@ -100,6 +101,10 @@ function createChatStore() {
 
   const profileGenerations = new Map<string, readonly [number, number]>();
   return {
+    adoptWorkspaceState(root: string, workspace: WorkspaceSessionsState): void {
+      prepareAdoptWorkspaceSessions(root, workspace);
+      update(state => ({ ...state, workspaces: { ...state.workspaces, [root]: workspace } }));
+    },
     subscribe,
     applyConnectionProfileState(profileId: string, generation: number, authRequired: boolean, hostGeneration = 0): void {
       const previous = profileGenerations.get(profileId) ?? [0, 0];

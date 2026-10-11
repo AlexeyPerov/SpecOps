@@ -140,14 +140,15 @@ export function createThreadMetadataSlice(deps: {
       });
       return updatedMetadata;
     },
-    getActiveThreadSnapshot(sessionId?: string): ChatThreadSnapshot | null {
+    getActiveThreadSnapshot(sessionId?: string, workspaceRoot?: string | null): ChatThreadSnapshot | null {
       const targetSessionId = resolveTargetSessionId(getSnapshot(), sessionId);
-      return cloneThread(threadForSession(getSnapshot(), targetSessionId));
+      return cloneThread(threadForSession(getSnapshot(), targetSessionId, workspaceRoot));
     },
-    getMetadata(sessionId?: string): ChatThreadMetadata | null {
+    getMetadata(sessionId?: string, workspaceRoot?: string | null): ChatThreadMetadata | null {
       const thread = threadForSession(
         getSnapshot(),
         resolveTargetSessionId(getSnapshot(), sessionId),
+        workspaceRoot,
       );
       return thread?.metadata ?? null;
     },

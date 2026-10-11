@@ -1,3 +1,4 @@
+import { addWorkspaceToWindow } from "../../services/addWorkspaceToWindow";
 /**
  * Overlay host handler factories.
  *
@@ -445,7 +446,7 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
     let added = 0;
     let blocked = 0;
     for (const path of selectedPaths) {
-      const created = appState.addWorkspace(path);
+      const created = await addWorkspaceToWindow(path);
       if (created) {
         added += 1;
       } else {

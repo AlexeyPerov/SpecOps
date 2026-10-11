@@ -1,3 +1,4 @@
+import { addWorkspaceToWindow } from "../../services/addWorkspaceToWindow";
 import { appState } from "../../state/appState";
 import type { WorkspaceReorderPayload } from "../../domain/contracts";
 import { normalizePathForStorage } from "../../services/diskFingerprint";
@@ -32,7 +33,7 @@ export const workspaceHandlers: CommandHandlerMap = {
       return;
     }
 
-    const workspaceId = appState.addWorkspace(storedRoot);
+    const workspaceId = await addWorkspaceToWindow(storedRoot);
     if (!workspaceId) {
       notify("Workspace is already open.");
       return;

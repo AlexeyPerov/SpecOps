@@ -23,11 +23,11 @@ export function createThreadMessagesSlice(deps: {
   return {
     appendMessage(
       message: ChatMessage,
-      options?: { sessionId?: string; skipCompaction?: boolean },
+      options?: { sessionId?: string; scopeKey?: string; skipCompaction?: boolean },
     ): boolean {
       let appended = false;
       update((state) => {
-        const root = state.activeChatScopeKey;
+        const root = options?.scopeKey ?? state.activeChatScopeKey;
         if (!root) {
           return state;
         }
@@ -196,10 +196,10 @@ export function createThreadMessagesSlice(deps: {
       });
       return removed;
     },
-    compactActiveThread(sessionId?: string): boolean {
+    compactActiveThread(sessionId?: string, workspaceRoot?: string | null): boolean {
       let compacted = false;
       update((state) => {
-        const root = state.activeChatScopeKey;
+        const root = resolveChatScopeKey(state, workspaceRoot);
         const targetSessionId = resolveTargetSessionId(state, sessionId);
         if (!root || !targetSessionId) {
           return state;
@@ -324,9 +324,9 @@ export function createThreadMessagesSlice(deps: {
       });
       return updated;
     },
-    getMessages(sessionId?: string): ChatMessage[] {
+    getMessages(sessionId?: string, workspaceRoot?: string | null): ChatMessage[] {
       const targetSessionId = resolveTargetSessionId(getSnapshot(), sessionId);
-      const thread = threadForSession(getSnapshot(), targetSessionId);
+      const thread = threadForSession(getSnapshot(), targetSessionId, workspaceRoot);
       return thread?.messages ?? [];
     },
     /**

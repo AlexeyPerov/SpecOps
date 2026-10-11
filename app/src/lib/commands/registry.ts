@@ -1,3 +1,4 @@
+import { isWorkspaceTransferBusy } from "../services/workspaceTransferState";
 import { get } from "svelte/store";
 import type { AppCommandId, AppDomainState } from "../domain/contracts";
 import { getSessionActiveTab, tabDocumentId } from "../domain/contracts";
@@ -84,6 +85,7 @@ export function dispatchCommand(
   context: CommandContext,
   payload?: unknown,
 ): void {
+  if (isWorkspaceTransferBusy()) { context.notify("Wait for the workspace move to finish."); return; }
   const handler = handlers[commandId];
   if (!handler) {
     return;

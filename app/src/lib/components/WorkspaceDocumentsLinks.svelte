@@ -5,7 +5,7 @@
   import { loadWorkspaceDocument, workspaceDocumentsRevision, workspaceDocumentSnapshot } from "../services/workspaceDocuments";
   let { root, refreshToken }: { root: string; refreshToken?: unknown } = $props();
   let preferenceRevision = $state(0);
-  $effect(() => subscribeWorkspacePreferences(() => { preferenceRevision++; }));
+  $effect(() => untrack(() => subscribeWorkspacePreferences(() => { preferenceRevision++; })));
   $effect(() => {
     const workspace = root; void refreshToken; void preferenceRevision;
     untrack(() => { for (const kind of ["tasks", "notes"] as const) void loadWorkspaceDocument(workspace, kind, getWorkspaceDocumentStorage(workspace), true).catch(() => {}); });

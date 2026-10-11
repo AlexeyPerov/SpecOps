@@ -462,7 +462,7 @@
   // Local display coords so we can clamp the workspace menu after measure (M72)
   // without mutating the overlay-host menu state.
   let workspaceDocumentPreferenceRevision = $state(0);
-  $effect(() => subscribeWorkspacePreferences(() => { workspaceDocumentPreferenceRevision++; }));
+  $effect(() => untrack(() => subscribeWorkspacePreferences(() => { workspaceDocumentPreferenceRevision++; })));
   const workspaceMenuRoot = $derived(editor.workspaceManager?.workspaces.find((entry) => entry.id === workspaceContextMenu.menu?.workspaceId)?.rootPath ?? null);
   $effect(() => {
     const root = workspaceMenuRoot; void workspaceDocumentPreferenceRevision;

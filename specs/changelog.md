@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-11 08:32 MSK — Fix reactive workspace document views
+
+- Register preference subscriptions outside reactive tracking so immediate subscription callbacks cannot cause an effect loop in document views, pinned links, workspace settings or context-menu labels.
+- Render a fresh view snapshot of mutable document records on every revision. Checkbox/text changes, reorder, save state and external-conflict messages now update together without reusing stale Markdown.
+- Validation: mounted component regressions verify checkbox-then-reorder state retention and removal of executable HTML from Notes preview; component autofixer review confirms the preview uses sanitized HTML.
+
 ## 2026-10-11 08:29 MSK — Restore workspace window groups on application relaunch
 
 - Recreate all saved secondary-window labels, workspace groups/order, selected context, geometry and last-focused window. Discover incremental-only crash recovery records as well as full session checkpoints; startup no longer deletes saved secondary windows.

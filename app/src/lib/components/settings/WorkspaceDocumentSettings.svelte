@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { getWorkspaceDocumentStorage, setWorkspaceDocumentStorage, subscribeWorkspacePreferences, type WorkspaceDocumentStorage } from "../../services/workspacePreferences";
   import { flushWorkspaceDocuments, loadWorkspaceDocument, transferWorkspaceDocuments } from "../../services/workspaceDocuments";
   import { requestConfirm } from "../../services/confirmDialogUi";
@@ -7,7 +8,7 @@
   let busy = $state(false);
   let error = $state("");
   let revision = $state(0);
-  $effect(() => subscribeWorkspacePreferences(() => { revision++; }));
+  $effect(() => untrack(() => subscribeWorkspacePreferences(() => { revision++; })));
   $effect(() => { const workspace = root; void revision; storage = workspace ? getWorkspaceDocumentStorage(workspace) : "app"; });
   async function select(next: WorkspaceDocumentStorage): Promise<void> {
     if (!root || busy) return;

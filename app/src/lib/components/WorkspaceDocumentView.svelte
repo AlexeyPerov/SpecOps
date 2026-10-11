@@ -11,15 +11,17 @@
   let mode = $state<"content" | "source">("content");
   let newTask = $state("");
   let storageRevision = $state(0);
-  $effect(() => subscribeWorkspacePreferences(() => { storageRevision++; }));
+  $effect(() => untrack(() => subscribeWorkspacePreferences(() => { storageRevision++; })));
   $effect(() => {
     const workspace = root; const documentKind = kind; void storageRevision;
     untrack(() => { void loadWorkspaceDocument(workspace, documentKind, getWorkspaceDocumentStorage(workspace), true).catch((error) => notify(String(error))); });
   });
   const record = $derived.by(() => { void $workspaceDocumentsRevision; void storageRevision; return workspaceDocumentSnapshot(root, kind); });
-  const content = $derived(record?.content ?? "");
+  // Service records are mutable; a fresh view snapshot propagates every revision.
+  const recordView = $derived.by(() => { void $workspaceDocumentsRevision; return record ? { ...record } : null; });
+  const content = $derived(recordView?.content ?? "");
   const tasks = $derived(parseWorkspaceTasks(content));
-  const html = $derived(kind === "notes" && mode === "content" ? DOMPurify.sanitize(renderDocumentMarkdown(content, record?.path ?? null)) : "");
+  const html = $derived(kind === "notes" && mode === "content" ? DOMPurify.sanitize(renderDocumentMarkdown(content, recordView?.path ?? null)) : "");
   function edit(next: string): void { if (record) editWorkspaceDocument(record, next); }
   async function resolveConflict(discard: boolean): Promise<void> {
     if (!record) return;
@@ -33,17 +35,17 @@
     <strong>{kind === "tasks" ? "Tasks" : "Notes"}</strong>
     <button class="btn btn-sm btn-ghost" type="button" aria-pressed={mode === "content"} onclick={() => mode = "content"}>{kind === "tasks" ? "Todo list" : "Preview"}</button>
     <button class="btn btn-sm btn-ghost" type="button" aria-pressed={mode === "source"} onclick={() => mode = "source"}>Markdown</button>
-    <small>{record?.saving || record?.content !== record?.saved ? "Saving…" : "Saved"}</small>
+    <small>{recordView?.saving || recordView?.content !== recordView?.saved ? "Saving…" : "Saved"}</small>
     <button class="btn btn-sm btn-ghost" type="button" onclick={() => { if (record) void saveWorkspaceDocument(record).catch((error) => notify(String(error))); }}>Save</button>
   </header>
-  {#if record?.error}
-    <div class="error" role="alert">{record.error}
+  {#if recordView?.error}
+    <div class="error" role="alert">{recordView.error}
       <button class="btn btn-sm" type="button" onclick={() => { void resolveConflict(true); }}>Reload disk contents</button>
       <button class="btn btn-sm" type="button" onclick={() => { void resolveConflict(false); }}>Keep local contents</button>
     </div>
   {/if}
-  {#if !record || record.loading}<p>Loading…</p>
-  {:else if record.content === null}<p>This document does not exist in the selected storage location. Create it from the workspace menu.</p>
+  {#if !recordView || recordView.loading}<p>Loading…</p>
+  {:else if recordView.content === null}<p>This document does not exist in the selected storage location. Create it from the workspace menu.</p>
   {:else if mode === "source"}
     <EditorSurface {content} documentId={`workspace-${kind}`} {paneId} {contextId} language="markdown" wrapLines={true} onDocumentDirty={edit} onStatusMessage={notify} />
   {:else if kind === "tasks"}

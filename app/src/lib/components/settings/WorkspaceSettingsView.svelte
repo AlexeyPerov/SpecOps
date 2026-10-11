@@ -1,4 +1,5 @@
 <script lang="ts">
+  import WorkspaceDocumentSettings from "./WorkspaceDocumentSettings.svelte";
   import LineCounterPanel from "./LineCounterPanel.svelte";
   import { isHiddenFromRail, setHiddenFromRail } from "../../services/workspacePreferences";
 
@@ -102,6 +103,7 @@
           <span>Show in sidebar</span>
         </label>
       </section>
+      <WorkspaceDocumentSettings root={workspaceRootPath} />
       {#key workspaceRootPath}
         <LineCounterPanel workspaceRoot={workspaceRootPath} />
       {/key}

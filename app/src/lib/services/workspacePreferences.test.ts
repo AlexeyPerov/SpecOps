@@ -6,6 +6,7 @@ vi.mock("@tauri-apps/api/path", () => ({
 }));
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
+  rename: vi.fn().mockResolvedValue(undefined),
   mkdir: vi.fn().mockResolvedValue(undefined),
   exists: vi.fn().mockResolvedValue(false),
   readTextFile: vi.fn().mockResolvedValue("{}"),

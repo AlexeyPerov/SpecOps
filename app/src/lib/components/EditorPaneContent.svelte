@@ -6,6 +6,7 @@
   import BinaryFilePane from "./BinaryFilePane.svelte";
   import LargeFileConfirmPane from "./LargeFileConfirmPane.svelte";
   import SettingsView from "./settings/SettingsView.svelte";
+  import WorkspaceDocumentView from "./WorkspaceDocumentView.svelte";
   import WorkspaceSettingsView from "./settings/WorkspaceSettingsView.svelte";
   import WorkspaceManagerView from "./WorkspaceManagerView.svelte";
   import VersionControlView from "./VersionControlView.svelte";
@@ -496,6 +497,10 @@
     <SettingsView />
   {:else if isThemesViewActive}
     <ThemesView />
+  {:else if (activeViewTabKind === "workspace-tasks" || activeViewTabKind === "workspace-notes") && workspaceRootPath}
+    {#key `${workspaceRootPath}:${activeViewTabKind}`}
+      <WorkspaceDocumentView root={workspaceRootPath} kind={activeViewTabKind === "workspace-tasks" ? "tasks" : "notes"} {paneId} {contextId} {notify} />
+    {/key}
   {:else if isWorkspaceSettingsViewActive}
     <WorkspaceSettingsView workspaceRootPath={workspaceRootPath} />
   {:else if isWorkspaceManagerViewActive}

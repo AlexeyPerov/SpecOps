@@ -759,6 +759,7 @@
     onMoveUp: handleWorkspaceContextMenuMoveUp,
     onMoveDown: handleWorkspaceContextMenuMoveDown,
     onOpenSettings: workspaceContextMenuActions.openSettings,
+    onOpenDocument: workspaceContextMenuActions.openDocument,
     onOpenVersionControl: workspaceContextMenuActions.openVersionControl,
     onCopyPath: workspaceContextMenuActions.copyPath,
     onCloseWorkspace: workspaceContextMenuActions.closeWorkspace,

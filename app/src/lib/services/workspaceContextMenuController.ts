@@ -1,3 +1,4 @@
+import { createWorkspaceDocument, type WorkspaceDocumentKind } from "./workspaceDocuments";
 import type { ContextId } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { openVersionControlForWorkspace } from "./versionControlNavigation";
@@ -172,6 +173,18 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     close();
   }
 
+  async function openDocument(workspaceId: ContextId, kind: WorkspaceDocumentKind): Promise<void> {
+    const root = deps.getWorkspaceRootPath(workspaceId);
+    close();
+    if (!root) return;
+    try {
+      await createWorkspaceDocument(root, kind);
+      if (deps.getWorkspaceRootPath(workspaceId) !== root) return;
+      appState.switchContext(workspaceId);
+      appState.openOrFocusViewTab(kind === "tasks" ? "workspace-tasks" : "workspace-notes");
+    } catch (error) { deps.notify(String(error)); }
+  }
+
   async function copyPath(workspaceId: ContextId): Promise<void> {
     const rootPath = deps.getWorkspaceRootPath(workspaceId);
     if (!rootPath) {
@@ -208,6 +221,7 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     closeWorkspace,
     copyPath,
     openSettings,
+    openDocument,
     openVersionControl,
     handleActiveContextSwitch,
     handleSelectContext,

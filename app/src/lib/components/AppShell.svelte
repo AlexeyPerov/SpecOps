@@ -1,6 +1,8 @@
 <script lang="ts">
   import ConsolePanel from "./ConsolePanel.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
+  import { loadWorkspaceDocument, workspaceDocumentSnapshot, workspaceDocumentsRevision } from "../services/workspaceDocuments";
+  import { subscribeWorkspacePreferences } from "../services/workspacePreferences";
   import ChoiceDialog from "./ChoiceDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import TagPushPrompt from "./TagPushPrompt.svelte";
@@ -256,6 +258,7 @@
     onMoveUp: () => void;
     onMoveDown: () => void;
     onOpenSettings: (workspaceId: ContextId) => void;
+    onOpenDocument?: (workspaceId: ContextId, kind: "tasks" | "notes") => void | Promise<void>;
     onOpenVersionControl: (workspaceId: ContextId) => void;
     onCopyPath: (workspaceId: ContextId) => void | Promise<void>;
     onCloseWorkspace: (workspaceId: ContextId) => void;
@@ -458,6 +461,14 @@
 
   // Local display coords so we can clamp the workspace menu after measure (M72)
   // without mutating the overlay-host menu state.
+  let workspaceDocumentPreferenceRevision = $state(0);
+  $effect(() => subscribeWorkspacePreferences(() => { workspaceDocumentPreferenceRevision++; }));
+  const workspaceMenuRoot = $derived(editor.workspaceManager?.workspaces.find((entry) => entry.id === workspaceContextMenu.menu?.workspaceId)?.rootPath ?? null);
+  $effect(() => {
+    const root = workspaceMenuRoot; void workspaceDocumentPreferenceRevision;
+    if (root) for (const kind of ["tasks", "notes"] as const) void loadWorkspaceDocument(root, kind, undefined, true).catch(() => {});
+  });
+  const workspaceMenuDocuments = $derived.by(() => { void $workspaceDocumentsRevision; return workspaceMenuRoot ? [workspaceDocumentSnapshot(workspaceMenuRoot, "tasks"), workspaceDocumentSnapshot(workspaceMenuRoot, "notes")] : []; });
   let workspaceMenuPosition = $state<{ x: number; y: number } | null>(null);
 
   $effect(() => {
@@ -975,6 +986,11 @@
     >
       Settings
     </button>
+    {#if workspaceContextMenu.onOpenDocument}
+      {#each ["tasks", "notes"] as kind, index (kind)}
+        <button class="workspace-context-item" type="button" role="menuitem" onclick={() => { if (workspaceContextMenu.menu) void workspaceContextMenu.onOpenDocument?.(workspaceContextMenu.menu.workspaceId, kind as "tasks" | "notes"); }}>{workspaceMenuDocuments[index]?.content != null ? "Open" : "Create"} {kind === "tasks" ? "Tasks" : "Notes"}</button>
+      {/each}
+    {/if}
     {#if gitIntegrationEnabled}
     <button
       class="workspace-context-item"

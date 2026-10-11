@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, untrack, tick } from "svelte";
+  import WorkspaceDocumentsLinks from "./WorkspaceDocumentsLinks.svelte";
   import ProjectTreeView from "./ProjectTreeView.svelte";
   import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
   import GitLogPopover from "./GitLogPopover.svelte";
@@ -552,6 +553,7 @@
       onscroll={handleBodyScroll}
       oncontextmenu={handleContextMenuRoot}
     >
+      <WorkspaceDocumentsLinks root={workspaceRoot} refreshToken={rootNodes} />
       {#if favorites.length > 0}
         <section class="project-favorites" aria-label="Favorites">
           <button class="favorites-heading" type="button" aria-expanded={!favoritesCollapsed} onclick={() => favoritesCollapsed = !favoritesCollapsed}>

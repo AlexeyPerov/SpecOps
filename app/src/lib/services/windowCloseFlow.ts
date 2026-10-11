@@ -1,3 +1,4 @@
+import { flushWorkspaceDocuments } from "./workspaceDocuments";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppDomainState, ContextId, DocumentState } from "../domain/contracts";
 import { appState } from "../state/appState";
@@ -79,6 +80,8 @@ export type WindowCloseDeps = {
  * So this both asks, and awaits the flush before returning true.
  */
 export async function confirmWindowClose(deps: WindowCloseDeps): Promise<boolean> {
+  try { await flushWorkspaceDocuments(); }
+  catch (error) { deps.notify(`Could not save workspace tasks or notes: ${String(error)}`); return false; }
   const dirtyEntries = collectDirtyDocuments(appState.getSnapshot());
 
   if (dirtyEntries.length > 0) {

@@ -66,7 +66,7 @@ import { normalizePathSync } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { readConsoleHeightPreference } from "./consoleTabPrefs";
 import { externalFileWatcherSyncKey, truncateWatchedPaths, watchedPathsFromState } from "./appShellHelpers";
-import { loadWorkspacePreferences } from "./workspacePreferences";
+import { loadWorkspacePreferences, listenWorkspacePreferenceChanges } from "./workspacePreferences";
 import { openDroppedPath } from "./openDroppedPath";
 import type {
   OpenActivePathResult,
@@ -253,6 +253,7 @@ async function startAppShellRuntimeInner(
   // into cleanupCallbacks before the next IPC round-trip. A batch Promise.all
   // dropped already-resolved handles when one listen rejected (C8).
   const registerListenersStartedAt = nowMs();
+  cleanupCallbacks.push(await listenWorkspacePreferenceChanges());
   cleanupCallbacks.push(await listen<ProjectRelocation>(PROJECT_PATH_RELOCATED, async ({ payload }) => {
     if (payload.sourceWindowId !== windowId) await syncOpenDocumentsAfterRelocation(payload.oldPath, payload.newPath, windowId);
     options.onFilesystemChange?.(payload.oldPath, "remove");

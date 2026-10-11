@@ -112,7 +112,7 @@ export interface SessionTabState {
 export interface ViewTabState {
   id: string;
   kind: "view";
-  view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control";
+  view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control" | "workspace-tasks" | "workspace-notes";
   pinned: boolean;
   subTab?: string;
 }
@@ -154,7 +154,7 @@ export function createSessionTab(id: string, sessionId: string, pinned = false):
 
 export function createViewTab(
   id: string,
-  view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control",
+  view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control" | "workspace-tasks" | "workspace-notes",
   pinned = false,
   subTab?: string,
 ): ViewTabState {
@@ -204,7 +204,7 @@ export function tryNormalizeTabState(
       tab.view === "themes" ||
       tab.view === "workspace-settings" ||
       tab.view === "workspace-manager" ||
-      tab.view === "version-control")
+      tab.view === "version-control" || tab.view === "workspace-tasks" || tab.view === "workspace-notes")
   ) {
     const subTab = typeof tab.subTab === "string" ? tab.subTab : undefined;
     return createViewTab(tab.id, tab.view, tab.pinned ?? false, subTab);

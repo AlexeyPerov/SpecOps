@@ -150,7 +150,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
      * to a freshly created tab.
      */
     openOrFocusViewTab(
-      view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control",
+      view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control" | "workspace-tasks" | "workspace-notes",
       subTab?: string,
     ) {
       update((state) => {

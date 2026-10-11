@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-11 08:08 MSK — Add workspace Tasks and Notes with independent storage
+
+- Added lazy Create/Open Tasks and Notes actions, pinned project-panel links, singleton view tabs, Markdown task checkboxes/text/reordering and source editing, and sanitized Markdown notes preview/source editing with the existing editor surface.
+- Stored content in independent per-project Markdown files under application data by default, or .spec-ops-tasks.md/.spec-ops-notes.md in the project root. Session snapshots retain only view-tab identity. Closing a workspace preserves its documents.
+- Added per-workspace storage selection and a separate explicit transfer command with destination replacement confirmation. Serialized preference updates across windows and added preference refresh events.
+- Added debounced atomic autosave, compare-before-write external conflict detection, explicit reload/local-resolution actions and awaited document flushes before workspace/window close. Transfer rollback preserves sources until destination publication; incomplete source cleanup is reported with destination selected.
+- Validation: Svelte/type checks, component autofixer review, 32 focused frontend tests and a native compare-before-write test pass. Tests cover lazy creation, independent storage, retry after disk failures, external conflicts, Markdown fences/CRLF and existing close flows.
+
 ## 2026-10-11 08:01 MSK — Add project selection and grouped file operations
 
 - Added independent multi-selection with modifier/range/select-all controls, group context menus, newline-separated absolute/relative paths, grouped favorites, deletion and Move To folder selection.

@@ -9,6 +9,7 @@ mod handoff;
 mod native_assets;
 mod session_fs;
 mod project_move;
+mod workspace_documents;
 
 #[cfg(target_os = "macos")]
 mod dock_menu;
@@ -125,6 +126,9 @@ pub fn run() {
             handoff::handoff_write_journal,
             handoff::handoff_read_journal,
             project_move::project_move_entry,
+            workspace_documents::workspace_document_read,
+            workspace_documents::workspace_document_save,
+            workspace_documents::workspace_documents_transfer,
             take_pending_opened_paths,
             quit_app,
             git::git_available,

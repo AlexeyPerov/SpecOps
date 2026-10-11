@@ -485,6 +485,8 @@ const openFileRegistryLock = createCrossProcessWriteLock(
   "open-file registry",
 );
 
+const workspacePreferencesLock = createCrossProcessWriteLock("workspace-preferences.json.lock", "workspace preferences");
+
 const projectFavoritesLock = createCrossProcessWriteLock("project-favorites.json.lock", "project favorites");
 
 /** Run `fn` exclusively against other session.json writers (all windows). */
@@ -515,7 +517,7 @@ export function withOpenFileRegistryLock<T>(fn: () => Promise<T>): Promise<T> {
 
 /** Wait until all queued session, registry and favorite writes have settled. */
 export async function awaitSessionWriteLock(): Promise<void> {
-  await Promise.all([sessionLock.flush(), openFileRegistryLock.flush(), projectFavoritesLock.flush()]);
+  await Promise.all([sessionLock.flush(), openFileRegistryLock.flush(), projectFavoritesLock.flush(), workspacePreferencesLock.flush()]);
 }
 
 /** Clears the write chains between unit tests. */
@@ -523,9 +525,14 @@ export function resetSessionWriteLockForTests(): void {
   sessionLock.reset();
   openFileRegistryLock.reset();
   projectFavoritesLock.reset();
+  workspacePreferencesLock.reset();
   resetSessionNativeFsForTests();
 }
 
 export function withProjectFavoritesLock<T>(fn: () => Promise<T>): Promise<T> {
   return projectFavoritesLock.withLock(fn);
+}
+
+export function withWorkspacePreferencesLock<T>(fn: () => Promise<T>): Promise<T> {
+  return workspacePreferencesLock.withLock(fn);
 }

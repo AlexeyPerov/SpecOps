@@ -164,6 +164,8 @@
       return sessionTitleById.get(tab.sessionId) ?? draftTabTitle;
     }
     if (isViewTab(tab)) {
+      if (tab.view === "workspace-tasks") return "Tasks";
+      if (tab.view === "workspace-notes") return "Notes";
       if (tab.view === "settings") {
         return "Settings";
       }
@@ -191,6 +193,8 @@
       return "Session";
     }
     if (isViewTab(tab)) {
+      if (tab.view === "workspace-tasks") return "Tasks";
+      if (tab.view === "workspace-notes") return "Notes";
       if (tab.view === "settings") {
         return "Settings";
       }

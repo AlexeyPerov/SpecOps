@@ -1,3 +1,5 @@
+import { emit, listen } from "@tauri-apps/api/event";
+import { withWorkspacePreferencesLock } from "./sessionWriteLock";
 import { join } from "@tauri-apps/api/path";
 import { readTextFile, exists } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
@@ -6,7 +8,7 @@ import { normalizePathSync } from "./diskFingerprint";
 
 /**
  * Global workspace preferences, shared across windows and keyed by normalized
- * root path (decision 9). Currently holds only the `hiddenFromRail` flag
+ * root path (decision 9). Holds the `hiddenFromRail` flag and document storage location
  * (decision 3): a soft-hide that omits a workspace from the activity rail while
  * keeping it in the session and the Workspace Manager.
  *
@@ -17,6 +19,7 @@ import { normalizePathSync } from "./diskFingerprint";
 
 interface WorkspacePreferenceEntry {
   hiddenFromRail: boolean;
+  documentStorage?: "app" | "project";
 }
 
 interface WorkspacePreferencesFile {
@@ -46,13 +49,13 @@ function normalizeFile(raw: unknown): WorkspacePreferencesFile {
   const cleaned: WorkspacePreferencesFile["workspaces"] = {};
   for (const [key, value] of Object.entries(workspaces)) {
     if (value && typeof value === "object" && typeof value.hiddenFromRail === "boolean") {
-      cleaned[key] = { hiddenFromRail: value.hiddenFromRail };
+      cleaned[key] = { hiddenFromRail: value.hiddenFromRail, ...(value.documentStorage === "app" || value.documentStorage === "project" ? { documentStorage: value.documentStorage } : {}) };
     }
   }
   return { workspaces: cleaned };
 }
 
-async function readFromDisk(): Promise<WorkspacePreferencesFile> {
+async function readFromDisk(strict = false): Promise<WorkspacePreferencesFile> {
   try {
     const filePath = await preferencesFilePath();
     if (!(await exists(filePath))) {
@@ -60,18 +63,14 @@ async function readFromDisk(): Promise<WorkspacePreferencesFile> {
     }
     const raw = await readTextFile(filePath);
     return normalizeFile(JSON.parse(raw));
-  } catch {
+  } catch (error) {
+    if (strict) throw error;
     return { workspaces: {} };
   }
 }
 
 async function writeToDisk(prefs: WorkspacePreferencesFile): Promise<void> {
-  try {
-    const filePath = await preferencesFilePath();
-      await atomicWriteTextFile(filePath, JSON.stringify(prefs, null, 2));
-  } catch {
-    // Preferences are best-effort; a write failure must not crash the app.
-  }
+  await atomicWriteTextFile(await preferencesFilePath(), JSON.stringify(prefs, null, 2));
 }
 
 function emitChange(): void {
@@ -132,16 +131,7 @@ export function isHiddenFromRail(path: string): boolean {
  * path) and aligned with decision 9 / risk note.
  */
 export async function setHiddenFromRail(path: string, hidden: boolean): Promise<void> {
-  if (!cache) {
-    await loadWorkspacePreferences();
-  }
-  const key = normalizePathSync(path);
-  cache!.set(key, { hiddenFromRail: hidden });
-  const file: WorkspacePreferencesFile = {
-    workspaces: Object.fromEntries(cache!.entries()),
-  };
-  await writeToDisk(file);
-  emitChange();
+  await updatePreference(path, { hiddenFromRail: hidden });
 }
 
 /**
@@ -162,4 +152,27 @@ export function subscribeWorkspacePreferences(
 export function _resetWorkspacePreferencesForTests(): void {
   cache = null;
   listeners.clear();
+}
+
+export type WorkspaceDocumentStorage = "app" | "project";
+export function getWorkspaceDocumentStorage(root: string): WorkspaceDocumentStorage {
+  return cache?.get(normalizePathSync(root))?.documentStorage ?? "app";
+}
+async function updatePreference(root: string, patch: Partial<WorkspacePreferenceEntry>): Promise<void> {
+  await withWorkspacePreferencesLock(async () => {
+    if (!cache) await loadWorkspacePreferences();
+    const disk = await readFromDisk(true);
+    const key = normalizePathSync(root);
+    disk.workspaces[key] = { ...(disk.workspaces[key] ?? { hiddenFromRail: false }), ...patch };
+    await writeToDisk(disk);
+    cache = new Map(Object.entries(disk.workspaces));
+    emitChange();
+    await emit("spec-ops/workspace-preferences-changed").catch(() => {});
+  });
+}
+export function setWorkspaceDocumentStorage(root: string, documentStorage: WorkspaceDocumentStorage): Promise<void> {
+  return updatePreference(root, { documentStorage });
+}
+export function listenWorkspacePreferenceChanges(): Promise<() => void> {
+  return listen("spec-ops/workspace-preferences-changed", () => { void loadWorkspacePreferences(); });
 }

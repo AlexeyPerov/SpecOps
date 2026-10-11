@@ -1,3 +1,4 @@
+import { flushWorkspaceDocuments } from "./workspaceDocuments";
 import type { ContextId, DocumentState } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
@@ -28,6 +29,9 @@ export async function closeWorkspaceWithConfirm(
   notify: (message: string) => void,
   deps: { getWindowId: () => string } = { getWindowId: () => "main" },
 ): Promise<boolean> {
+  const root = appState.getWorkspaceRoot(workspaceId);
+  try { if (root) await flushWorkspaceDocuments(root); }
+  catch (error) { notify(String(error)); return false; }
   const dirtyDocuments = appState.getWorkspaceDirtyDocuments(workspaceId);
 
   if (dirtyDocuments.length > 0) {

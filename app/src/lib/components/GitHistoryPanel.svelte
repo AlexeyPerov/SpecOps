@@ -33,6 +33,7 @@
   interface Props {
     repoRoot: string;
     refreshToken?: number;
+    revision?: string | null;
     selectedSha?: string | null;
     onSelectCommit?: (commit: CommitSummary) => void;
   }
@@ -40,6 +41,7 @@
   let {
     repoRoot,
     refreshToken = 0,
+    revision = null,
     selectedSha = null,
     onSelectCommit = () => {},
   }: Props = $props();
@@ -228,13 +230,14 @@
     limit: number,
     previousSha: string | null,
     signal?: AbortSignal,
+    ref?: string | null,
   ): Promise<void> {
     loadStatus = "loading";
     loadError = null;
     commits = [];
 
     try {
-      const rows = await queryCommits(root, { filterMode: mode, limit });
+      const rows = await queryCommits(root, { filterMode: mode, limit, revision: ref ?? undefined });
       if (signal?.aborted) {
         return;
       }
@@ -271,6 +274,7 @@
     // scope's data.
     const root = repoRoot;
     const mode = filterMode;
+    const ref = revision;
     const skip = commitLimit;
     const controller = new AbortController();
     abortInFlightLoadMore();
@@ -288,6 +292,7 @@
         filterMode: mode,
         limit: COMMIT_LOG_PAGE_SIZE,
         skip,
+        revision: ref ?? undefined,
       });
       if (controller.signal.aborted) {
         return;
@@ -377,6 +382,7 @@
       return;
     }
     const mode = filterMode;
+    const ref = revision;
     const previousSha = untrack(() => selectedSha);
     const controller = new AbortController();
     // A new page-1 load supersedes any in-flight "load more": its result would
@@ -385,7 +391,7 @@
     loadingMore = false;
     commitLimit = DEFAULT_COMMIT_LOG_LIMIT;
     historyExhausted = false;
-    void loadCommits(root, mode, DEFAULT_COMMIT_LOG_LIMIT, previousSha, controller.signal);
+    void loadCommits(root, mode, DEFAULT_COMMIT_LOG_LIMIT, previousSha, controller.signal, ref);
     return () => {
       abortInFlightLoadMore();
       controller.abort();
@@ -442,6 +448,7 @@
 </script>
 
 <div class="git-history-panel" aria-label="Commit history">
+  {#if revision}<p class="git-history-revision" title={revision}>History: {revision}</p>{/if}
   <div class="git-history-toolbar">
     <div
       class="git-history-filter-segmented"
@@ -454,8 +461,8 @@
           class:git-history-filter-active={filterMode === option.value}
           aria-checked={filterMode === option.value}
           role="radio"
-          title={option.title}
-          disabled={loadStatus === "loading"}
+          title={revision ? "Select Workspace History to change the history scope" : option.title}
+          disabled={loadStatus === "loading" || revision !== null}
           onclick={() => void handleFilterModeChange(option.value)}
         >
           {option.label}
@@ -463,7 +470,7 @@
       {/each}
     </div>
     <span class="git-history-filter-caption" title={activeFilterOption.title}>
-      {activeFilterOption.title}
+      {revision ? "Selected reference" : activeFilterOption.title}
     </span>
   </div>
 
@@ -561,6 +568,7 @@
 </div>
 
 <style>
+  .git-history-revision { margin: 0; padding: 4px 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .git-history-panel {
     display: flex;
     flex-direction: column;

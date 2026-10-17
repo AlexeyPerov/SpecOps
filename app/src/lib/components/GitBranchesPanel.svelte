@@ -22,6 +22,8 @@
 
   interface Props {
     repoRoot: string;
+    compact?: boolean;
+    initialSelection?: string | null;
     workspaceRootPath: string;
     preGitSaveDeps?: SaveDocumentDeps | null;
     readOnly?: boolean;
@@ -32,6 +34,8 @@
 
   let {
     repoRoot,
+    compact = false,
+    initialSelection = null,
     workspaceRootPath,
     preGitSaveDeps = null,
     readOnly = false,
@@ -67,7 +71,7 @@
       }
       branches = rows;
       const current = rows.find((branch) => branch.isCurrent);
-      selectedBranch = current?.name ?? rows[0]?.name ?? null;
+      selectedBranch = initialSelection ? rows.find(branch => `refs/heads/${branch.name}` === initialSelection)?.name ?? null : current?.name ?? rows[0]?.name ?? null;
       loadStatus = "ready";
     } catch (error) {
       if (signal?.aborted) {
@@ -80,6 +84,7 @@
 
   $effect(() => {
     const root = repoRoot;
+    void initialSelection;
     const token = refreshToken;
     void token;
     const controller = new AbortController();
@@ -257,6 +262,8 @@
     </button>
   </div>
 
+  {#if compact}<p class="operation-selection">{initialSelection ?? "Create at the current commit"}</p>{/if}
+
   {#if actionError}
     <p class="git-branches-action-error" role="alert">{actionError}</p>
   {/if}
@@ -277,7 +284,7 @@
       <p class="git-branches-state-title">No branches</p>
       <p class="git-branches-state-detail">Create a branch to get started.</p>
     </div>
-  {:else}
+  {:else if !compact}
     <ul class="git-branches-list" role="listbox" aria-label="Local branches">
       {#each branches as branch (branch.name)}
         <li class="git-branches-item">
@@ -316,6 +323,7 @@
 </div>
 
 <style>
+  .operation-selection { padding: 8px 16px; font-size: 12px; overflow-wrap: anywhere; }
   .git-branches-panel {
     display: flex;
     flex-direction: column;

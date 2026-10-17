@@ -14,7 +14,7 @@ and **workspace sessions** for coding-agent runtimes (dev preview). Built with
 - **Markdown** preview and edit
 - **Folders as workspaces** — multi-root activity rail
 - **Project panel** — file tree, drag-and-drop move, context menu (new/rename/delete), live refresh, tabs, show/hide hidden files
-- **Version Control** — per-workspace git tab (history, branches, tags, changes, fetch/pull/push) via system `git`
+- **Version Control** — per-workspace git tab with a persistent branch/tag/remote/stash tree, ref history, changes and fetch/pull/push via system `git`
 - **Themes**, **multi-window**, **image** preview
 - **Console** — resizable bottom panel with logs
 - **Workspace sessions (dev preview)** — coding-agent conversations with tools, permissions, questions, and streaming, driven through a supervised local Agent Host; off by default, enable under **Settings → Dev**

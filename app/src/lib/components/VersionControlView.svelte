@@ -53,6 +53,8 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import GitWorkspaceSplit from "./GitWorkspaceSplit.svelte";
   import GitCommitDetailPanel from "./GitCommitDetailPanel.svelte";
+  import GitNavigationTree from "./GitNavigationTree.svelte";
+  import type { NavigationNode } from "../git/gitNavigationTree";
   import GitBranchesPanel from "./GitBranchesPanel.svelte";
   import GitChangesPanel from "./GitChangesPanel.svelte";
   import GitHistoryPanel from "./GitHistoryPanel.svelte";
@@ -154,6 +156,10 @@
 
   let sidebarCollapsed = $state(false);
   const layoutScope = $derived(`specops.git-layout:${windowId}:${workspaceRootPath ?? ""}`);
+
+  let navigationSelection = $state("history");
+  let historyRevision = $state<string | null>(null);
+  let actionSelection = $state<string | null>(null);
 
   let activeSection = $state<Section>("history");
   let probeStatus = $state<ProbeStatus>("loading");
@@ -699,6 +705,8 @@
             const handedOverSha = takePendingVersionControlCommit(result.repoRoot);
             if (handedOverSha) {
               activeSection = "history";
+              historyRevision = null;
+              navigationSelection = "history";
               selectedCommitSha = handedOverSha;
             }
           }
@@ -744,6 +752,8 @@
         return;
       }
       activeSection = "history";
+      historyRevision = null;
+      navigationSelection = "history";
       selectedCommitSha = handedOverSha;
     });
   });
@@ -762,6 +772,10 @@
     // outcome instead. Explicit refreshes via panelRefreshToken always
     // re-probe. Replaying rather than returning early is what keeps
     // `probeStatus` from being stranded at "loading" on a cache hit.
+    historyRevision = null;
+    navigationSelection = "history";
+    actionSelection = null;
+    activeSection = "history";
     const cachedResult = workspaceRootPath
       ? readCachedVersionControlProbe(workspaceRootPath)
       : null;
@@ -781,7 +795,22 @@
     }
   }
 
-  function selectSection(section: Section): void {
+  function selectNavigation(node: NavigationNode | null): void {
+    if (!node) { historyRevision = null; selectedCommitSha = null; return; }
+    navigationSelection = node.id;
+    actionSelection = null;
+    if (node.revision) {
+      activeSection = "history";
+      historyRevision = node.revision;
+      selectedCommitSha = node.stash?.sha ?? null;
+    } else {
+      activeSection = node.id === "changes" ? "changes" : "history";
+      historyRevision = null;
+      selectedCommitSha = null;
+    }
+  }
+  function openReferenceActions(section: "branches" | "tags" | "stashes", revision: string | null): void {
+    actionSelection = revision;
     activeSection = section;
   }
 
@@ -1336,24 +1365,13 @@
     <div class="version-control-main">
       <GitWorkspaceSplit storageKey={`${layoutScope}:sidebar`} label="Resize navigation" initial={0.2} minFirst={180} minSecond={400} collapsed={sidebarCollapsed}>
       {#snippet first()}
-      <div
-        class="version-control-sidebar"
-        role="tablist"
-        aria-label="Version control sections"
-      >
+      <div class="version-control-sidebar" aria-label="Version control navigation">
         <p class="version-control-title">{workspaceName}</p>
-        {#each SECTIONS as section (section.id)}
-          <button
-            type="button"
-            role="tab"
-            class="version-control-tab"
-            class:version-control-tab-active={activeSection === section.id}
-            aria-selected={activeSection === section.id}
-            onclick={() => selectSection(section.id)}
-          >
-            {section.label}
-          </button>
-        {/each}
+        {#if repoRoot}
+          {#key repoRoot}
+            <GitNavigationTree {repoRoot} refreshToken={panelRefreshToken} selectedId={navigationSelection} onSelect={selectNavigation} onAction={openReferenceActions} />
+          {/key}
+        {/if}
       </div>
 
       {/snippet}
@@ -1370,10 +1388,12 @@
         role="tabpanel"
         aria-label={SECTIONS.find((section) => section.id === activeSection)?.label ?? "Section"}
       >
+        {#key `${repoRoot}:${actionSelection}`}
+        {@const actionRoot = repoRoot}
         {#if activeSection === "history" && repoRoot}
           <GitWorkspaceSplit storageKey={`${layoutScope}:history`} label="Resize history and inspector" vertical initial={0.35} minFirst={140} minSecond={180}>
             {#snippet first()}
-              <GitHistoryPanel repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} />
+              <GitHistoryPanel revision={historyRevision} repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} />
             {/snippet}
             {#snippet second()}
               <GitCommitDetailPanel repoRoot={repoRoot!} sha={selectedCommitSha} refreshToken={panelRefreshToken} {notify} layoutScope={layoutScope} />
@@ -1381,32 +1401,35 @@
           </GitWorkspaceSplit>
         {:else if activeSection === "branches" && repoRoot && workspaceRootPath}
           <GitBranchesPanel
+            compact initialSelection={actionSelection}
             repoRoot={repoRoot}
             workspaceRootPath={workspaceRootPath}
             preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
-            onMutation={refreshAfterMutation}
+            onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
             {notify}
           />
         {:else if activeSection === "tags" && repoRoot}
           <GitTagsPanel
+            compact initialSelection={actionSelection}
             repoRoot={repoRoot}
             readOnly={isReadOnlyRepository}
             remoteOpBusy={toolbarBusy}
             refreshToken={panelRefreshToken}
-            onMutation={refreshAfterMutation}
-            onRemoteCommandChange={registerPanelRemoteCommand}
+            onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
+            onRemoteCommandChange={(command) => { if (actionRoot === repoRoot) registerPanelRemoteCommand(command); }}
             {notify}
           />
         {:else if activeSection === "stashes" && repoRoot && workspaceRootPath}
           <GitStashesPanel
+            compact initialSelection={actionSelection}
             repoRoot={repoRoot}
             workspaceRootPath={workspaceRootPath}
             preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
-            onMutation={refreshAfterMutation}
+            onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
             {notify}
           />
         {:else if activeSection === "changes" && repoRoot && workspaceRootPath}
@@ -1416,13 +1439,14 @@
             preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
-            onMutation={refreshAfterMutation}
-            onRemoteCommandChange={registerPanelRemoteCommand}
+            onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
+            onRemoteCommandChange={(command) => { if (actionRoot === repoRoot) registerPanelRemoteCommand(command); }}
             {notify}
           />
         {:else}
           <p class="version-control-placeholder">{placeholderCopy}</p>
         {/if}
+        {/key}
       </div>
       {/snippet}
       </GitWorkspaceSplit>
@@ -1768,13 +1792,14 @@
   }
 
   .version-control-sidebar {
+    min-height: 0;
+    overflow: hidden;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-8) var(--space-4) var(--space-12);
     border-right: 1px solid var(--color-border-subtle);
-    overflow-y: auto;
     height: 100%;
     box-sizing: border-box;
   }
@@ -1790,26 +1815,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .version-control-tab {
-    text-align: left;
-    padding: var(--space-2) var(--space-4);
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text);
-    cursor: pointer;
-    font-size: 0.85rem;
-  }
-
-  .version-control-tab:hover {
-    background: var(--color-surface-2);
-  }
-
-  .version-control-tab-active {
-    background: var(--color-surface-2);
-    font-weight: 600;
   }
 
   .version-control-body {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-17 18:36 MSK — Add persistent Git repository navigation
+
+- Show Workspace, hierarchical branches and tags, local remote-tracking refs and stable stash entries together in the sidebar. Mark the current branch, symbolic remote HEAD and available upstream tracking; keep full names in tooltips and a filter at the bottom.
+- Add roving keyboard focus and filter expansion that restores user choices when cleared. Preserve valid reference selection on refresh, explain deleted selections and discard late responses from earlier repositories.
+- Reference selection reads history without checkout. Reuse the existing guarded branch, tag and stash operations through compact context action forms; unsupported commit search explains its unavailable state. Add a reusable revision option to history queries and pagination through the existing Git runner.
+- Validation: model and mounted tree/history/refresh tests plus existing Git guard and refresh tests pass; Svelte/type checks have no errors or warnings. Desktop visual acceptance remains scheduled for final verification.
+
 ## 2026-10-17 18:28 MSK — Add adjustable Git workspace layout
 
 - Place history above the commit inspector at every window width. Keep navigation beside the workspace and arrange changed files above commit metadata, with diff in the right column; retain existing data loading and repository states.

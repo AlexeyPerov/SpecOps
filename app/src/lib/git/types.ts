@@ -278,6 +278,8 @@ export interface CommitSummary {
 }
 
 export interface QueryCommitsOptions {
+  /** Fully qualified ref or immutable commit SHA selected in navigation. */
+  revision?: string;
   limit?: number;
   /**
    * Number of leading (newest) commits to skip before reading `limit`.

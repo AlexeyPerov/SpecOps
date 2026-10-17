@@ -21,6 +21,8 @@
 
   interface Props {
     repoRoot: string;
+    compact?: boolean;
+    initialSelection?: string | null;
     workspaceRootPath: string;
     preGitSaveDeps?: SaveDocumentDeps | null;
     readOnly?: boolean;
@@ -31,6 +33,8 @@
 
   let {
     repoRoot,
+    compact = false,
+    initialSelection = null,
     workspaceRootPath,
     preGitSaveDeps = null,
     readOnly = false,
@@ -74,7 +78,7 @@
         return;
       }
       stashes = rows;
-      selectedRef = rows[0]?.ref ?? null;
+      selectedRef = initialSelection ? rows.find(stash => stash.sha === initialSelection)?.ref ?? null : compact ? null : rows[0]?.ref ?? null;
       loadStatus = "ready";
     } catch (error) {
       if (signal?.aborted) {
@@ -87,6 +91,7 @@
 
   $effect(() => {
     const root = repoRoot;
+    void initialSelection;
     const token = refreshToken;
     void token;
     const controller = new AbortController();
@@ -290,6 +295,8 @@
     </p>
   {/if}
 
+  {#if compact}<p class="operation-selection">{initialSelection ?? "Create at the current commit"}</p>{/if}
+
   {#if actionError}
     <p class="git-stashes-action-error" role="alert">{actionError}</p>
   {/if}
@@ -310,7 +317,7 @@
       <p class="git-stashes-state-title">No stashes</p>
       <p class="git-stashes-state-detail">Create a stash from uncommitted changes, or use Stash and continue during checkout.</p>
     </div>
-  {:else}
+  {:else if !compact}
     <ul class="git-stashes-list" role="listbox" aria-label="Stashes">
       {#each stashes as stash (stash.ref)}
         <li class="git-stashes-item">
@@ -339,6 +346,7 @@
 </div>
 
 <style>
+  .operation-selection { padding: 8px 16px; font-size: 12px; overflow-wrap: anywhere; }
   .git-stashes-panel {
     display: flex;
     flex-direction: column;

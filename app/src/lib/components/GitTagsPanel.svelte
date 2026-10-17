@@ -24,6 +24,8 @@
 
   interface Props {
     repoRoot: string;
+    compact?: boolean;
+    initialSelection?: string | null;
     readOnly?: boolean;
     remoteOpBusy?: boolean;
     refreshToken?: number;
@@ -34,6 +36,8 @@
 
   let {
     repoRoot,
+    compact = false,
+    initialSelection = null,
     readOnly = false,
     remoteOpBusy = false,
     refreshToken = 0,
@@ -131,7 +135,7 @@
       // `checkRemoteTagPresence` so a dead remote cannot block the panel load
       // (or the per-repo git queue).
       tags = mergeTagRemotePresence(localTags, []);
-      selectedTag = tags[0]?.name ?? null;
+      selectedTag = initialSelection ? tags.find(tag => `refs/tags/${tag.name}` === initialSelection)?.name ?? null : compact ? null : tags[0]?.name ?? null;
       loadStatus = "ready";
     } catch (error) {
       if (signal?.aborted) {
@@ -171,6 +175,7 @@
 
   $effect(() => {
     const root = repoRoot;
+    void initialSelection;
     const token = refreshToken;
     void token;
     const controller = new AbortController();
@@ -387,6 +392,8 @@
     </button>
   </div>
 
+  {#if compact}<p class="operation-selection">{initialSelection ?? "Create at the current commit"}</p>{/if}
+
   {#if actionError}
     <p class="git-tags-action-error" role="alert">{actionError}</p>
   {/if}
@@ -407,7 +414,7 @@
       <p class="git-tags-state-title">No tags yet</p>
       <p class="git-tags-state-detail">Create a tag at the current commit.</p>
     </div>
-  {:else}
+  {:else if !compact}
     <ul class="git-tags-list" role="listbox" aria-label="Tags">
       {#each tags as tag (tag.name)}
         <li class="git-tags-item">
@@ -437,6 +444,7 @@
 </div>
 
 <style>
+  .operation-selection { padding: 8px 16px; font-size: 12px; overflow-wrap: anywhere; }
   .git-tags-panel {
     display: flex;
     flex-direction: column;

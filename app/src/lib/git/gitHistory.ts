@@ -56,7 +56,10 @@ export function buildQueryCommitsArgs(options: QueryCommitsOptions = {}): string
     `--format=${GIT_LOG_FORMAT}`,
   ];
 
-  switch (filterMode) {
+  if (options.revision && !/^(refs\/(heads|tags|remotes)\/[^\s]+|[a-f0-9]{40,64})$/.test(options.revision)) {
+    throw new Error("Invalid history revision");
+  }
+  if (!options.revision) switch (filterMode) {
     case "all-branches":
       args.push("--branches");
       break;
@@ -73,6 +76,8 @@ export function buildQueryCommitsArgs(options: QueryCommitsOptions = {}): string
     args.push(`--skip=${options.skip}`);
   }
   args.push(`-${limit}`);
+
+  if (options.revision) args.push(options.revision);
 
   const paths = (options.paths ?? []).filter((path) => path.length > 0);
   if (paths.length > 0) {

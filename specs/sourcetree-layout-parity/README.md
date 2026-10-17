@@ -51,7 +51,7 @@ Navigation tree | History filters / search / jump
 | GL-02 | [Дерево навигации](02-navigation-tree.md) | GL-01 | Implemented; visual acceptance pending |
 | GL-03 | [Таблица истории](03-history-table.md) | GL-01, GL-02 | Implemented; visual acceptance pending |
 | GL-04 | [Файлы, метаданные и diff](04-commit-inspector.md) | GL-01, GL-03 | Implemented; visual acceptance pending |
-| GL-05 | [Toolbar и режим Changes](05-toolbar-and-changes.md) | GL-01, GL-02, GL-04 | Planned |
+| GL-05 | [Toolbar и режим Changes](05-toolbar-and-changes.md) | GL-01, GL-02, GL-04 | Implemented toolbar/Changes; full dialogs GL-06/07 pending; visual acceptance pending |
 | GL-06 | [Окно Pull](06-pull-dialog.md) | GL-05; Git-зависимости внутри задачи | Planned |
 | GL-07 | [Окно Push](07-push-dialog.md) | GL-05; Git-зависимости внутри задачи | Planned |
 | GL-08 | [Визуальная и сценарная приёмка](08-acceptance.md) | GL-01…GL-07 | Planned |

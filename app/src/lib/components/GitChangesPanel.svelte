@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { reportGitError } from "../git/gitErrorUi";
   import { formatWorkingTreeDiffSubtitle, formatWorkingTreeDiffSubtitleHelp, formatWorkingTreeStatusCode } from "../git/gitStatusFormat";
   import {
@@ -30,6 +31,9 @@
     preGitSaveDeps?: SaveDocumentDeps | null;
     readOnly?: boolean;
     refreshToken?: number;
+    focusMessageToken?: number;
+    operationBusy?: boolean;
+    onBusyChange?: (busy: boolean) => void;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
     onRemoteCommandChange?: (command: { id: string; label: string } | null) => void;
     notify?: (message: string) => void;
@@ -41,10 +45,18 @@
     preGitSaveDeps = null,
     readOnly = false,
     refreshToken = 0,
+    focusMessageToken = 0,
+    operationBusy = false,
+    onBusyChange = () => {},
     onMutation = () => {},
     onRemoteCommandChange = () => {},
     notify = () => {},
   }: Props = $props();
+
+  let messageElement = $state<HTMLTextAreaElement>();
+  $effect(() => {
+    if (focusMessageToken > 0 && messageElement && !readOnly) messageElement.focus();
+  });
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -57,6 +69,8 @@
   let commitMessage = $state("");
   let commitError = $state<string | null>(null);
   let actionBusy = $state(false);
+  $effect(() => { onBusyChange(actionBusy); });
+  onDestroy(() => onBusyChange(false));
   let actionError = $state<string | null>(null);
   let activeDiffPath = $state<string | null>(null);
   let activeDiffSource = $state<WorkingTreeDiffSource | null>(null);
@@ -93,7 +107,7 @@
     return formatWorkingTreeDiffSubtitleHelp(activeDiffSource, activeDiffEntry);
   });
   const canCommit = $derived(
-    hasStagedChanges && !actionBusy && !readOnly && commitMessage.trim().length > 0,
+    hasStagedChanges && !actionBusy && !operationBusy && !readOnly && commitMessage.trim().length > 0,
   );
   const isClean = $derived(loadStatus === "ready" && staged.length === 0 && unstaged.length === 0);
 
@@ -258,21 +272,23 @@
   }
 
   async function handleStageSelected(): Promise<void> {
-    if (selectedUnstaged.size === 0 || actionBusy || readOnly) {
+    if (selectedUnstaged.size === 0 || actionBusy || operationBusy || readOnly) {
       return;
     }
+    const root = repoRoot;
+    const workspace = workspaceRootPath;
     actionBusy = true;
     actionError = null;
     try {
-      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+      const canProceed = await prepareWorkspaceForGitOperation(workspace, {
         enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
-      if (!canProceed) {
+      if (!canProceed || root !== repoRoot || workspace !== workspaceRootPath) {
         return;
       }
 
-      await stagePaths(repoRoot, [...selectedUnstaged]);
+      await stagePaths(root, [...selectedUnstaged]);
       await refreshAfterAction();
     } catch (error) {
       actionError = reportGitError(error, { operation: "Stage", repoRoot, notify });
@@ -282,21 +298,23 @@
   }
 
   async function handleStageAll(): Promise<void> {
-    if (unstaged.length === 0 || actionBusy || readOnly) {
+    if (unstaged.length === 0 || actionBusy || operationBusy || readOnly) {
       return;
     }
+    const root = repoRoot;
+    const workspace = workspaceRootPath;
     actionBusy = true;
     actionError = null;
     try {
-      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+      const canProceed = await prepareWorkspaceForGitOperation(workspace, {
         enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
-      if (!canProceed) {
+      if (!canProceed || root !== repoRoot || workspace !== workspaceRootPath) {
         return;
       }
 
-      await stageAll(repoRoot);
+      await stageAll(root);
       await refreshAfterAction();
     } catch (error) {
       actionError = reportGitError(error, { operation: "Stage all", repoRoot, notify });
@@ -306,21 +324,23 @@
   }
 
   async function handleUnstageSelected(): Promise<void> {
-    if (selectedStaged.size === 0 || actionBusy || readOnly) {
+    if (selectedStaged.size === 0 || actionBusy || operationBusy || readOnly) {
       return;
     }
+    const root = repoRoot;
+    const workspace = workspaceRootPath;
     actionBusy = true;
     actionError = null;
     try {
-      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+      const canProceed = await prepareWorkspaceForGitOperation(workspace, {
         enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
-      if (!canProceed) {
+      if (!canProceed || root !== repoRoot || workspace !== workspaceRootPath) {
         return;
       }
 
-      await unstagePaths(repoRoot, [...selectedStaged]);
+      await unstagePaths(root, [...selectedStaged]);
       await refreshAfterAction();
     } catch (error) {
       actionError = reportGitError(error, { operation: "Unstage", repoRoot, notify });
@@ -336,25 +356,27 @@
       commitError = "Commit message cannot be empty.";
       return;
     }
-    if (!hasStagedChanges || actionBusy || readOnly) {
+    if (!hasStagedChanges || actionBusy || operationBusy || readOnly) {
       return;
     }
 
+    const root = repoRoot;
+    const workspace = workspaceRootPath;
     actionBusy = true;
     actionError = null;
     const commandId = crypto.randomUUID();
     onRemoteCommandChange({ id: commandId, label: "Commit" });
 
     try {
-      const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+      const canProceed = await prepareWorkspaceForGitOperation(workspace, {
         enabled: shouldRunAutosaveBeforeGitOperations(),
         deps: preGitSaveDeps,
       });
-      if (!canProceed) {
+      if (!canProceed || root !== repoRoot || workspace !== workspaceRootPath) {
         return;
       }
 
-      await createCommit(repoRoot, trimmed, { commandId });
+      await createCommit(root, trimmed, { commandId });
       commitMessage = "";
       commitError = null;
       await refreshAfterAction("commit");
@@ -407,7 +429,7 @@
               <button
                 type="button"
                 class="btn btn-secondary btn-compact"
-                disabled={selectedUnstaged.size === 0 || actionBusy || readOnly}
+                disabled={selectedUnstaged.size === 0 || actionBusy || operationBusy || readOnly}
                 onclick={handleStageSelected}
               >
                 Stage selected
@@ -415,7 +437,7 @@
               <button
                 type="button"
                 class="btn btn-secondary btn-compact"
-                disabled={unstaged.length === 0 || actionBusy || readOnly}
+                disabled={unstaged.length === 0 || actionBusy || operationBusy || readOnly}
                 onclick={handleStageAll}
               >
                 Stage all
@@ -445,8 +467,9 @@
                   >
                     <input
                       type="checkbox"
+                      aria-label={`Select unstaged ${entry.path}`}
                       checked={selectedUnstaged.has(entry.path)}
-                      disabled={actionBusy || readOnly}
+                      disabled={actionBusy || operationBusy || readOnly}
                       onclick={(event) => event.stopPropagation()}
                       onchange={(event) =>
                         toggleUnstaged(
@@ -475,7 +498,7 @@
               <button
                 type="button"
                 class="btn btn-secondary btn-compact"
-                disabled={selectedStaged.size === 0 || actionBusy || readOnly}
+                disabled={selectedStaged.size === 0 || actionBusy || operationBusy || readOnly}
                 onclick={handleUnstageSelected}
               >
                 Unstage selected
@@ -505,8 +528,9 @@
                   >
                     <input
                       type="checkbox"
+                      aria-label={`Select staged ${entry.path}`}
                       checked={selectedStaged.has(entry.path)}
-                      disabled={actionBusy || readOnly}
+                      disabled={actionBusy || operationBusy || readOnly}
                       onclick={(event) => event.stopPropagation()}
                       onchange={(event) =>
                         toggleStaged(entry.path, (event.currentTarget as HTMLInputElement).checked)}
@@ -524,25 +548,6 @@
             </ul>
           {/if}
         </section>
-      </div>
-
-      <div class="git-changes-diff-pane" aria-label="File diff">
-        {#if readOnly}
-          <p class="git-changes-diff-readonly-banner" role="status">
-            Diff preview is unavailable in read-only repositories.
-          </p>
-        {/if}
-        <GitTextDiffView
-          diff={readOnly ? null : fileDiff}
-          title={activeDiffPath ?? undefined}
-          subtitle={readOnly ? undefined : activeDiffSubtitle}
-          subtitleHelp={readOnly ? undefined : activeDiffSubtitleHelp}
-          loading={!readOnly && diffLoading}
-          error={readOnly ? null : diffError}
-        />
-      </div>
-    </div>
-
     <section class="git-changes-commit" aria-labelledby="git-changes-commit-heading">
       <h3 id="git-changes-commit-heading" class="git-changes-section-title">Commit</h3>
       {#if isClean}
@@ -553,8 +558,9 @@
         id="git-changes-message"
         class="git-changes-message"
         class:git-changes-message-invalid={commitError !== null}
+        bind:this={messageElement}
         bind:value={commitMessage}
-        disabled={actionBusy || readOnly}
+        disabled={actionBusy || operationBusy || readOnly}
         rows={4}
         placeholder="Describe your changes…"
         aria-invalid={commitError !== null}
@@ -574,6 +580,26 @@
         {actionBusy ? "Committing…" : "Commit"}
       </button>
     </section>
+      </div>
+
+      <div class="git-changes-diff-pane" aria-label="File diff">
+        {#if readOnly}
+          <p class="git-changes-diff-readonly-banner" role="status">
+            Diff preview is unavailable in read-only repositories.
+          </p>
+        {/if}
+        <GitTextDiffView
+          diff={readOnly ? null : fileDiff}
+          title={activeDiffPath ?? undefined}
+          subtitle={readOnly ? undefined : activeDiffSubtitle}
+          subtitleHelp={readOnly ? undefined : activeDiffSubtitleHelp}
+          loading={!readOnly && diffLoading}
+          error={readOnly ? null : diffError}
+        />
+      </div>
+    </div>
+
+
   {/if}
 </div>
 
@@ -585,7 +611,7 @@
     width: 100%;
     height: 100%;
     min-height: 0;
-    padding: var(--space-6) var(--space-8);
+    padding: var(--space-4);
     box-sizing: border-box;
   }
 
@@ -621,7 +647,7 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(200px, 0.42fr) minmax(300px, 1fr);
+    grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
     gap: var(--space-4);
     align-items: stretch;
   }

@@ -32,10 +32,10 @@ describe("FIX-01 GitChangesPanel pre-git guard call sites", () => {
       const fnStart = panelSource.indexOf(`async function ${handler}`);
       expect(fnStart, `${handler} should exist`).toBeGreaterThan(-1);
 
-      const fnBody = panelSource.slice(fnStart, fnStart + 900);
-      expect(fnBody).toContain("prepareWorkspaceForGitOperation(workspaceRootPath");
+      const fnBody = panelSource.slice(fnStart, fnStart + 1400);
+      expect(fnBody).toContain("prepareWorkspaceForGitOperation(workspace");
       expect(fnBody).toContain("deps: preGitSaveDeps");
-      expect(fnBody).toMatch(/if \(!canProceed\)\s*\{\s*return;\s*\}/);
+      expect(fnBody).toMatch(/if \(!canProceed \|\| root !== repoRoot \|\| workspace !== workspaceRootPath\)\s*\{\s*return;\s*\}/);
     },
   );
 });

@@ -49,6 +49,10 @@
 </script>
 
 <script lang="ts">
+  import { tick } from "svelte";
+  import DialogShell from "./DialogShell.svelte";
+  import { revealItemInDir } from "@tauri-apps/plugin-opener";
+  import { openSettingsDialog } from "../services/settingsDialogUi";
   import { confirm, message } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import GitWorkspaceSplit from "./GitWorkspaceSplit.svelte";
@@ -161,6 +165,34 @@
   let historyRevision = $state<string | null>(null);
   let actionSelection = $state<string | null>(null);
 
+  let focusMessageToken = $state(0);
+  let remoteDialog = $state<"Pull" | "Push" | null>(null);
+  let dialogRoot = $state<string | null>(null);
+
+  function openRemoteDialog(operation: "Pull" | "Push"): void {
+    if (toolbarBusy || !repoRoot) return;
+    dialogRoot = repoRoot;
+    remoteDialog = operation;
+    closeOverflow();
+  }
+  function confirmRemoteDialog(): void {
+    const operation = remoteDialog;
+    remoteDialog = null;
+    if (dialogRoot !== repoRoot || toolbarBusy) return;
+    if (operation === "Pull") void handlePull();
+    if (operation === "Push") void handlePush();
+  }
+  async function openCommit(): Promise<void> {
+    activeSection = "changes";
+    navigationSelection = "changes";
+    await tick();
+    focusMessageToken += 1;
+  }
+  async function revealRepository(): Promise<void> {
+    if (!repoRoot) return;
+    try { await revealItemInDir(repoRoot); } catch (error) { reportGitError(error, { operation: "Show folder", repoRoot, notify }); }
+  }
+
   let activeSection = $state<Section>("history");
   let probeStatus = $state<ProbeStatus>("loading");
   let repoRoot = $state<string | null>(null);
@@ -176,6 +208,7 @@
   let historyPanel = $state<{ jumpTo: (query: string) => Promise<void> }>();
   let selectedCommit = $state<CommitSummary | null>(null);
   let selectedCommitSha = $state<string | null>(null);
+  let changesBusy = $state(false);
   let refreshBusy = $state(false);
   let fetchBusy = $state(false);
   let pullBusy = $state(false);
@@ -196,12 +229,10 @@
   // `refreshProbe` call also receives the generation captured at the start of
   // the refresh, so `refreshProbe`'s own staleness guard drops the result even
   // if the controller is never aborted.
+  let remoteRefreshController: AbortController | null = null;
   let refreshController: AbortController | null = null;
 
-  // Overflow-menu state for the de-densified toolbar (U3.3). Refresh, Fetch,
-  // and the Remote <select> live behind a "…" popover; Pull and Push stay
-  // inline as primary actions. Cancel appears inline only while a remote
-  // operation is active.
+  // Secondary actions stay keyboard-accessible when the toolbar is compact.
   let overflowOpen = $state(false);
   let overflowEl = $state<HTMLDivElement | null>(null);
   let overflowButtonEl = $state<HTMLButtonElement | null>(null);
@@ -217,7 +248,12 @@
     if (overflowFetchEl) {
       buttons.push(overflowFetchEl);
     }
-    return buttons;
+    return overflowEl ? Array.from(overflowEl.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")).filter(button => {
+      for (let element: HTMLElement | null = button; element && element !== overflowEl; element = element.parentElement) {
+        if (getComputedStyle(element).display === "none") return false;
+      }
+      return true;
+    }) : buttons;
   });
 
   function openOverflow(): void {
@@ -357,7 +393,7 @@
 
   const toolbarBusy = $derived(
     isVersionControlToolbarBusy({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading }) ||
-      panelRemoteCommand !== null,
+      panelRemoteCommand !== null || changesBusy,
   );
 
   const remoteOperationBusy = $derived(
@@ -389,6 +425,12 @@
   const selectedRemoteName = $derived(
     reconcileRemoteSelection(remoteSelection, remotes).remoteName,
   );
+
+  const remoteBrowserUrl = $derived.by(() => {
+    const url = remotes.find(remote => remote.name === selectedRemoteName)?.fetchUrl;
+    if (!url) return null;
+    try { const parsed = new URL(url); return ["https:", "http:"].includes(parsed.protocol) ? parsed.href.replace(/\.git$/, "") : null; } catch { return null; }
+  });
 
   const showRemotePicker = $derived(!isReadOnlyRepository && remotes.length > 0);
 
@@ -779,6 +821,7 @@
     navigationSelection = "history";
     actionSelection = null;
     activeSection = "history";
+    remoteDialog = null;
     const cachedResult = workspaceRootPath
       ? readCachedVersionControlProbe(workspaceRootPath)
       : null;
@@ -788,6 +831,7 @@
     });
     return () => {
       controller.abort();
+      remoteRefreshController?.abort();
     };
   });
 
@@ -911,19 +955,19 @@
     }
   }
 
-  function handleRemoteOperationError(operation: string, error: unknown): void {
+  function handleRemoteOperationError(operation: string, error: unknown, root = repoRoot): void {
     if (isGitCancellationError(error)) {
       if (!remoteCancelRequested) {
-        notifyGitCancellation(operation, { repoRoot: repoRoot ?? undefined, notify });
+        notifyGitCancellation(operation, { repoRoot: root ?? undefined, notify });
       }
       return;
     }
-    reportGitError(error, { operation, repoRoot: repoRoot ?? undefined, notify });
+    reportGitError(error, { operation, repoRoot: root ?? undefined, notify });
   }
 
   async function handleFetch(): Promise<void> {
     if (
-      !repoRoot ||
+      !repoRoot || changesBusy ||
       panelRemoteCommand !== null ||
       !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading })
     ) {
@@ -934,17 +978,35 @@
       return;
     }
 
+    const root = repoRoot;
+    const workspace = workspaceRootPath;
+    const generation = probeGeneration;
+    const target = buildRemoteOperationTarget();
+    const current = () => repoRoot === root && workspaceRootPath === workspace && probeGeneration === generation;
+    let started = false;
     const commandId = createGitCommandId();
     activeRemoteCommandId = commandId;
     remoteCancelRequested = false;
     fetchBusy = true;
 
     try {
-      await fetchRemote(repoRoot, buildRemoteOperationTarget(), { commandId });
-      await refreshAfterMutation("fetch");
+      started = true;
+      await fetchRemote(root, target, { commandId });
+
     } catch (error) {
-      handleRemoteOperationError("Fetch", error);
+      handleRemoteOperationError("Fetch", error, root);
     } finally {
+      if (started && workspace) {
+        notifyVersionControlMutation(workspace, "fetch");
+        if (current()) {
+          panelRefreshToken += 1;
+          const controller = new AbortController();
+          remoteRefreshController?.abort();
+          remoteRefreshController = controller;
+          await refreshBranchHeader(root, controller.signal);
+        }
+      }
+
       fetchBusy = false;
       activeRemoteCommandId = null;
       remoteCancelRequested = false;
@@ -953,7 +1015,7 @@
 
   async function handlePull(): Promise<void> {
     if (
-      !repoRoot ||
+      !repoRoot || changesBusy ||
       panelRemoteCommand !== null ||
       !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading })
     ) {
@@ -961,6 +1023,12 @@
       return;
     }
 
+    const root = repoRoot;
+    const workspace = workspaceRootPath;
+    const generation = probeGeneration;
+    const target = buildRemoteOperationTarget();
+    const current = () => repoRoot === root && workspaceRootPath === workspace && probeGeneration === generation;
+    let started = false;
     // Mark the toolbar busy up-front so Pull/Push/Refresh stay disabled while
     // the pre-pull prompts (autosave, dirty-tree choice) are open. The
     // cancellable command id is NOT registered yet: nothing can be cancelled
@@ -977,20 +1045,21 @@
     const commandId = createGitCommandId();
 
     try {
-      if (workspaceRootPath) {
-        const canProceed = await prepareWorkspaceForGitOperation(workspaceRootPath, {
+      if (workspace) {
+        const canProceed = await prepareWorkspaceForGitOperation(workspace, {
           enabled: shouldRunAutosaveBeforeGitOperations(),
           deps: preGitSaveDeps,
         });
-        if (!canProceed) {
+        if (!canProceed || !current()) {
           return;
         }
       }
 
-      const dirty = await isWorkingTreeDirty(repoRoot);
+      const dirty = await isWorkingTreeDirty(root);
+      if (!current()) return;
       if (dirty) {
         const choice = await promptLocalChangesPull();
-        if (!choice || choice.type === "cancel") {
+        if (!current() || !choice || choice.type === "cancel") {
           return;
         }
         if (choice.type === "block") {
@@ -1005,12 +1074,15 @@
         }
 
         try {
-          stashedRef = await createStash(repoRoot, "WIP before pull");
+          started = true;
+          stashedRef = await createStash(root, "WIP before pull");
         } catch (error) {
           reportGitError(error, { operation: "Stash", repoRoot, notify });
           return;
         }
       }
+
+      if (!current()) return;
 
       // All prompts resolved and we're about to spawn the cancellable network
       // operation. Register the command id now — from this point the inline
@@ -1018,20 +1090,21 @@
       activeRemoteCommandId = commandId;
 
       try {
-        await pullRemote(repoRoot, buildRemoteOperationTarget(), { commandId });
+        started = true;
+        await pullRemote(root, target, { commandId });
       } catch (error) {
         if (stashedRef) {
           notify(
             "Pull failed. Your changes were stashed — apply the latest stash to restore them.",
           );
         }
-        handleRemoteOperationError("Pull", error);
+        handleRemoteOperationError("Pull", error, root);
         return;
       }
 
       if (stashedRef) {
         try {
-          await applyStash(repoRoot, stashedRef, true);
+          await applyStash(root, stashedRef, true);
         } catch (error) {
           const detail = formatGitErrorPrimaryMessage(error);
           if (error instanceof GitStashApplyConflictError) {
@@ -1046,10 +1119,21 @@
         }
       }
 
-      await refreshAfterMutation("pull");
+
     } catch (error) {
-      handleRemoteOperationError("Pull", error);
+      handleRemoteOperationError("Pull", error, root);
     } finally {
+      if (started && workspace) {
+        notifyVersionControlMutation(workspace, "pull");
+        if (current()) {
+          panelRefreshToken += 1;
+          const controller = new AbortController();
+          remoteRefreshController?.abort();
+          remoteRefreshController = controller;
+          await refreshBranchHeader(root, controller.signal);
+        }
+      }
+
       pullBusy = false;
       activeRemoteCommandId = null;
       remoteCancelRequested = false;
@@ -1058,7 +1142,7 @@
 
   async function handlePush(): Promise<void> {
     if (
-      !repoRoot ||
+      !repoRoot || changesBusy ||
       panelRemoteCommand !== null ||
       !canStartRemoteGitOperation({ fetchBusy, pullBusy, pushBusy, refreshBusy, remotesLoading })
     ) {
@@ -1066,17 +1150,35 @@
       return;
     }
 
+    const root = repoRoot;
+    const workspace = workspaceRootPath;
+    const generation = probeGeneration;
+    const target = buildRemoteOperationTarget();
+    const current = () => repoRoot === root && workspaceRootPath === workspace && probeGeneration === generation;
+    let started = false;
     const commandId = createGitCommandId();
     activeRemoteCommandId = commandId;
     remoteCancelRequested = false;
     pushBusy = true;
 
     try {
-      await pushRemote(repoRoot, buildRemoteOperationTarget(), { commandId });
-      await refreshAfterMutation("push");
+      started = true;
+      await pushRemote(root, target, { commandId });
+
     } catch (error) {
-      handleRemoteOperationError("Push", error);
+      handleRemoteOperationError("Push", error, root);
     } finally {
+      if (started && workspace) {
+        notifyVersionControlMutation(workspace, "push");
+        if (current()) {
+          panelRefreshToken += 1;
+          const controller = new AbortController();
+          remoteRefreshController?.abort();
+          remoteRefreshController = controller;
+          await refreshBranchHeader(root, controller.signal);
+        }
+      }
+
       pushBusy = false;
       activeRemoteCommandId = null;
       remoteCancelRequested = false;
@@ -1225,6 +1327,7 @@
         {/if}
       </div>
       <div class="version-control-header-actions">
+        <button type="button" class="btn btn-sm" disabled={toolbarBusy || isReadOnlyRepository} title={isReadOnlyRepository ? "Commit is unavailable for bare repositories" : "Open Changes and write a commit message"} onclick={openCommit}>Commit</button>
         <button type="button" class="btn btn-sm" aria-expanded={!sidebarCollapsed} onclick={() => sidebarCollapsed = !sidebarCollapsed}>Navigation</button>
         <span class="version-control-remote-indicator" title={remotePickerTitle}>
           {#if showRemotePicker}
@@ -1243,19 +1346,24 @@
             : remotes.length === 0
               ? "Pull (no remotes configured)"
               : "Pull from selected remote"}
-          onclick={handlePull}
+          onclick={() => openRemoteDialog("Pull")}
         >
           {pullBusy ? "Pulling…" : "Pull"}
         </button>
         <button
           type="button"
           class="btn btn-sm"
-          disabled={remoteActionsDisabled}
-          title={remotes.length === 0 ? "Push (no remotes configured)" : "Push to selected remote"}
-          onclick={handlePush}
+          disabled={remoteActionsDisabled || isReadOnlyRepository}
+          title={isReadOnlyRepository ? "Push is unavailable for bare repositories" : remotes.length === 0 ? "Push (no remotes configured)" : "Push to selected remote"}
+          onclick={() => openRemoteDialog("Push")}
         >
           {pushBusy ? "Pushing…" : "Push"}
         </button>
+        <button type="button" class="btn btn-sm version-control-secondary" disabled={remoteActionsDisabled} title={remotePickerTitle} onclick={handleFetch}>Fetch</button>
+        <button type="button" class="btn btn-sm version-control-secondary" disabled={toolbarBusy || isReadOnlyRepository} onclick={() => openReferenceActions("branches", null)}>Branch</button>
+        <button type="button" class="btn btn-sm version-control-secondary" disabled title="Merge is not yet available">Merge</button>
+        <button type="button" class="btn btn-sm version-control-secondary" disabled={toolbarBusy || isReadOnlyRepository} onclick={() => openReferenceActions("stashes", null)}>Stash</button>
+
         {#if remoteOperationBusy}
           <button
             type="button"
@@ -1289,6 +1397,14 @@
               bind:this={overflowEl}
               onpointerdown={(event) => event.stopPropagation()}
             >
+              <div class="version-control-compact-actions">
+                <button type="button" class="version-control-overflow-item" disabled={toolbarBusy || isReadOnlyRepository} onclick={() => { closeOverflow(); openReferenceActions("branches", null); }}>Branch</button>
+                <button type="button" class="version-control-overflow-item" disabled title="Merge is not yet available">Merge — not yet available</button>
+                <button type="button" class="version-control-overflow-item" disabled={toolbarBusy || isReadOnlyRepository} onclick={() => { closeOverflow(); openReferenceActions("stashes", null); }}>Stash</button>
+              </div>
+              <button type="button" class="version-control-overflow-item" disabled={!remoteBrowserUrl} title={remoteBrowserUrl ? "Open remote in browser" : "Remote has no supported web URL"} onclick={() => { closeOverflow(); if (remoteBrowserUrl) void openUrl(remoteBrowserUrl).catch(error => reportGitError(error, { operation: "Open remote", repoRoot: repoRoot ?? undefined, notify })); }}>Open remote</button>
+              <button type="button" class="version-control-overflow-item" onclick={() => { closeOverflow(); void revealRepository(); }}>Show folder</button>
+              <button type="button" class="version-control-overflow-item" onclick={() => { closeOverflow(); openSettingsDialog("versionControl"); }}>Settings</button>
               {#if showRemotePicker}
                 <label class="version-control-overflow-remote">
                   <span class="version-control-overflow-remote-label">Remote</span>
@@ -1323,7 +1439,7 @@
               </button>
               <button
                 type="button"
-                class="version-control-overflow-item"
+                class="version-control-overflow-item version-control-compact-fetch"
                 role="menuitem"
                 bind:this={overflowFetchEl}
                 disabled={remoteActionsDisabled}
@@ -1391,6 +1507,26 @@
         role="tabpanel"
         aria-label={SECTIONS.find((section) => section.id === activeSection)?.label ?? "Section"}
       >
+        {#if repoRoot && workspaceRootPath}
+          {#key repoRoot}
+          {@const changesRoot = repoRoot}
+          <div class="version-control-changes" hidden={activeSection !== "changes"}>
+          <GitChangesPanel
+            onBusyChange={(busy) => { changesBusy = busy; }}
+            {focusMessageToken}
+            operationBusy={toolbarBusy && !changesBusy}
+            repoRoot={repoRoot}
+            workspaceRootPath={workspaceRootPath}
+            preGitSaveDeps={preGitSaveDeps}
+            readOnly={isReadOnlyRepository}
+            refreshToken={panelRefreshToken}
+            onMutation={(scope) => changesRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
+            onRemoteCommandChange={(command) => { if (changesRoot === repoRoot) registerPanelRemoteCommand(command); }}
+            {notify}
+          />
+          </div>
+          {/key}
+        {/if}
         {#key `${repoRoot}:${actionSelection}`}
         {@const actionRoot = repoRoot}
         {#if activeSection === "history" && repoRoot}
@@ -1408,7 +1544,7 @@
             repoRoot={repoRoot}
             workspaceRootPath={workspaceRootPath}
             preGitSaveDeps={preGitSaveDeps}
-            readOnly={isReadOnlyRepository}
+            readOnly={isReadOnlyRepository || toolbarBusy}
             refreshToken={panelRefreshToken}
             onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
             {notify}
@@ -1430,23 +1566,12 @@
             repoRoot={repoRoot}
             workspaceRootPath={workspaceRootPath}
             preGitSaveDeps={preGitSaveDeps}
-            readOnly={isReadOnlyRepository}
+            readOnly={isReadOnlyRepository || toolbarBusy}
             refreshToken={panelRefreshToken}
             onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
             {notify}
           />
-        {:else if activeSection === "changes" && repoRoot && workspaceRootPath}
-          <GitChangesPanel
-            repoRoot={repoRoot}
-            workspaceRootPath={workspaceRootPath}
-            preGitSaveDeps={preGitSaveDeps}
-            readOnly={isReadOnlyRepository}
-            refreshToken={panelRefreshToken}
-            onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
-            onRemoteCommandChange={(command) => { if (actionRoot === repoRoot) registerPanelRemoteCommand(command); }}
-            {notify}
-          />
-        {:else}
+        {:else if activeSection !== "changes"}
           <p class="version-control-placeholder">{placeholderCopy}</p>
         {/if}
         {/key}
@@ -1457,7 +1582,25 @@
   {/if}
 </div>
 
+<DialogShell open={remoteDialog !== null} title={remoteDialog ?? "Remote operation"} onDismiss={() => remoteDialog = null}>
+  <p>{remoteDialog} using {selectedRemoteName ?? "the configured upstream"}{remoteSelection.remoteBranch ? ` / ${remoteSelection.remoteBranch}` : ""}.</p>
+  <p>Uses the current Git target and default options.</p>
+  {#snippet actions()}
+    <button type="button" class="btn btn-secondary" onclick={() => remoteDialog = null}>Cancel</button>
+    <button type="button" class="btn btn-primary" disabled={remoteActionsDisabled || dialogRoot !== repoRoot} onclick={confirmRemoteDialog}>Confirm {remoteDialog}</button>
+  {/snippet}
+</DialogShell>
+
 <style>
+  .version-control-changes { height: 100%; min-height: 0; }
+  .version-control-changes[hidden] { display: none; }
+  .version-control-compact-actions, .version-control-compact-fetch { display: none; }
+  @container (max-width: 980px) {
+    .version-control-secondary { display: none; }
+    .version-control-compact-actions { display: contents; }
+    .version-control-compact-fetch { display: flex; }
+  }
+
   .version-control-view {
     display: flex;
     flex-direction: column;
@@ -1467,6 +1610,7 @@
     height: 100%;
     min-height: 0;
     background: var(--color-surface-1);
+    container-type: inline-size;
   }
 
   .version-control-empty {

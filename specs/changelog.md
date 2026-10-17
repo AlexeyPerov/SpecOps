@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-17 18:56 MSK — Add Git toolbar and persistent Changes workspace
+
+- Expose Commit, Pull, Push, Fetch, Branch, Merge and Stash with responsive secondary actions, keyboard overflow, supported web remote/folder/settings utilities, and an explanation for unavailable Merge. No platform terminal command is available, so no terminal action is exposed.
+- Commit opens Changes and focuses its message. Keep the draft and valid selected diff mounted across History/Changes navigation; place staging lists and commit form together on the left of the diff.
+- Pull and Push open confirmation shells using existing supported targets and default options. Full target/options dialogs remain dependencies of the next two execution plans; visual acceptance remains pending.
+- Capture repository/workspace identity before remote awaits, reject stale preflight continuations, and refresh actual repository state after started operations succeed, fail or cancel. Retain existing Git queue, save/auth guards, and cancellation; block toolbar operations during staging/commit and Changes mutations during remote operations.
+- Validation: mounted toolbar/navigation/draft/focus, staging/commit guard, duplicate launch, failed-operation refresh, cancellation and workspace-switch tests; existing tree/history/selection/remote/refresh tests and Svelte/type checks pass.
+
 ## 2026-10-17 18:50 MSK — Complete Git commit inspection controls
 
 - Extract reusable changed-file and metadata panes. Add path sorting, flat/tree presentation, rename-aware filtering, full-path tooltips, SHA copy, parent navigation through repository-wide history resolution and refreshed selected-row refs.

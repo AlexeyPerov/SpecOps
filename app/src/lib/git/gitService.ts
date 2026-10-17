@@ -35,6 +35,7 @@ export {
   queryCommitDetail,
   queryCommitFileDiff,
   queryCommits,
+  resolveHistoryCommit,
 } from "./gitHistory";
 
 export {

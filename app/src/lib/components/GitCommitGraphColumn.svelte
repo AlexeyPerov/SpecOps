@@ -33,12 +33,13 @@
   const svgHeight = $derived(resolvedRowCount * rowHeight);
 
   function segmentPolyline(segment: CommitGraphSegment): string {
-    return segment.points.map((point) => `${point.x},${point.y}`).join(" ");
+    return segment.points.map((point) => `${point.x},${point.y * rowHeight / layout.rowHeight}`).join(" ");
   }
 
   function curvePath(curve: CommitGraphCurve): string {
+    const scale = rowHeight / layout.rowHeight;
     const { start, control, end } = curve;
-    return `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`;
+    return `M ${start.x} ${start.y * scale} Q ${control.x} ${control.y * scale} ${end.x} ${end.y * scale}`;
   }
 
   function dotCenterX(dot: CommitGraphDot): number {

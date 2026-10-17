@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import GitCommitGraphColumn from "./GitCommitGraphColumn.svelte";
   import {
     ROW_HEIGHT,
@@ -13,7 +13,7 @@
     formatRelativeCommitDate,
     formatShortSha,
   } from "../git/gitHistoryFormat";
-  import { queryCommits } from "../git/gitService";
+  import { queryCommits, resolveHistoryCommit } from "../git/gitService";
   import {
     COMMIT_LOG_PAGE_SIZE,
     DEFAULT_COMMIT_LOG_LIMIT,
@@ -35,6 +35,8 @@
     refreshToken?: number;
     revision?: string | null;
     selectedSha?: string | null;
+    onClearSelection?: () => void;
+    onOpenChanges?: () => void;
     onSelectCommit?: (commit: CommitSummary) => void;
   }
 
@@ -43,18 +45,63 @@
     refreshToken = 0,
     revision = null,
     selectedSha = null,
+    onClearSelection = () => {},
+    onOpenChanges = () => {},
     onSelectCommit = () => {},
   }: Props = $props();
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
+  let compact = $state(true);
+  const rowHeight = $derived(compact ? 24 : ROW_HEIGHT);
+  let order = $state<"date" | "topological">("topological");
+  let includeRemotes = $state(false);
+  let jumpQuery = $state("");
+  let jumpRevision = $state<string | null>(null);
+  let jumpError = $state<string | null>(null);
+  let jumpBusy = $state(false);
+  let jumpGeneration = 0;
+  let widths = $state([90, 380, 100, 150, 140]);
+  const columns = ["Graph", "Description", "Commit", "Author", "Date"];
+
+  let resize = $state<{ index: number; x: number; width: number } | null>(null);
+  function resizeMove(event: PointerEvent) {
+    if (resize) widths[resize.index] = Math.max(resize.index === 1 ? 180 : 65, resize.width + event.clientX - resize.x);
+  }
+  async function jumpTo(query = jumpQuery) {
+    const generation = ++jumpGeneration;
+    const root = repoRoot;
+    jumpBusy = true; jumpError = null;
+    try {
+      const sha = await resolveHistoryCommit(root, query);
+      if (generation !== jumpGeneration || root !== repoRoot) return;
+      const index = commits.findIndex(c => c.sha === sha);
+      if (index >= 0) { handleSelectCommit(commits[index]); await focusRow(index); }
+      else jumpRevision = sha;
+    } catch (error) {
+      if (generation === jumpGeneration && root === repoRoot) jumpError = error instanceof Error ? error.message : String(error);
+    } finally { if (generation === jumpGeneration) jumpBusy = false; }
+  }
+  async function focusRow(index: number) {
+    if (scrollContainer) {
+      const top = (index + 1) * rowHeight;
+      if (top < scrollContainer.scrollTop || top + rowHeight > scrollContainer.scrollTop + scrollContainer.clientHeight - 28) scrollContainer.scrollTop = top;
+      historyScrollTop = scrollContainer.scrollTop;
+    }
+    await tick();
+    scrollContainer?.querySelector<HTMLButtonElement>(`[data-sha="${commits[index]?.sha}"]`)?.focus({ preventScroll: true });
+  }
+  function changeDensity(next: boolean) {
+    const oldHeight = rowHeight;
+    const top = scrollContainer?.scrollTop ?? 0;
+    compact = next;
+    void tick().then(() => { if (scrollContainer) { scrollContainer.scrollTop = top / oldHeight * rowHeight; historyScrollTop = scrollContainer.scrollTop; } });
+  }
+  let lastScope = "";
   let loadStatus = $state<LoadStatus>("idle");
   let commits = $state<CommitSummary[]>([]);
   let loadError = $state<string | null>(null);
-  // Tracks how many commits have been loaded so far (the offset for the next
-  // "load more" page). Bumped to MAX_COMMIT_LOG_LIMIT when a page returns
-  // fewer rows than requested, which signals end-of-history and disables the
-  // load-more affordance.
+  // Loaded query depth is retained on refresh and used as the next page offset.
   let commitLimit = $state(DEFAULT_COMMIT_LOG_LIMIT);
   // F36 (M4): separately track whether the backend history is exhausted. A
   // short page is the real "no more commits" signal; `commitLimit` can outrun
@@ -90,11 +137,6 @@
       loadMoreController = null;
     }
   }
-
-  const activeFilterOption = $derived(
-    HISTORY_FILTER_MODE_OPTIONS.find((option) => option.value === filterMode) ??
-      HISTORY_FILTER_MODE_OPTIONS[0],
-  );
 
   /*
    * Graph/row alignment: each list row uses fixed ROW_HEIGHT (from commitGraphLayout)
@@ -143,7 +185,8 @@
     void scrollContainerSize;
     return commitGraphColumnWidth(graphLayout.laneCount);
   });
-  const graphHeight = $derived(commits.length * ROW_HEIGHT);
+  const columnTemplate = $derived(`${Math.max(widths[0], graphWidth)}px ${widths.slice(1).map(w => `${w}px`).join(" ")}`);
+  const graphHeight = $derived(commits.length * rowHeight);
 
   // Precompute each commit's rendered date strings once per `commits` change
   // rather than re-running `new Date().toISOString()` + `toLocaleString()`
@@ -173,16 +216,16 @@
     if (viewport <= 0) {
       return { start: 0, end: Math.min(total, HISTORY_VIRTUALIZE_THRESHOLD) };
     }
-    const start = Math.max(0, Math.floor(historyScrollTop / ROW_HEIGHT) - HISTORY_OVERSCAN_ROWS);
+    const start = Math.max(0, Math.floor(Math.max(0, historyScrollTop - rowHeight - 28) / rowHeight) - HISTORY_OVERSCAN_ROWS);
     const end = Math.min(
       total,
-      Math.ceil((historyScrollTop + viewport) / ROW_HEIGHT) + HISTORY_OVERSCAN_ROWS,
+      Math.ceil((historyScrollTop + viewport) / rowHeight) + HISTORY_OVERSCAN_ROWS,
     );
     return { start, end };
   });
-  const historyTopPadPx = $derived(historyVisibleRange.start * ROW_HEIGHT);
+  const historyTopPadPx = $derived(historyVisibleRange.start * rowHeight);
   const historyBottomPadPx = $derived(
-    Math.max(0, (commits.length - historyVisibleRange.end) * ROW_HEIGHT),
+    Math.max(0, (commits.length - historyVisibleRange.end) * rowHeight),
   );
   const canLoadMore = $derived(
     loadStatus === "ready" &&
@@ -216,6 +259,7 @@
 
   function reconcileSelection(rows: CommitSummary[], previousSha: string | null): void {
     if (rows.length === 0) {
+      onClearSelection();
       return;
     }
     if (previousSha && rows.some((commit) => commit.sha === previousSha)) {
@@ -234,15 +278,15 @@
   ): Promise<void> {
     loadStatus = "loading";
     loadError = null;
-    commits = [];
+
 
     try {
-      const rows = await queryCommits(root, { filterMode: mode, limit, revision: ref ?? undefined });
+      const rows = await queryCommits(root, { filterMode: mode, limit, revision: ref ?? undefined, order, includeRemotes });
       if (signal?.aborted) {
         return;
       }
       commits = rows;
-      // F36: a short initial page means the backend history fits in one page;
+      // A short initial page means the backend history fits in one page;
       // mark it exhausted so the "Load more" button does not appear.
       if (rows.length < limit) {
         historyExhausted = true;
@@ -255,6 +299,7 @@
       }
       loadStatus = "error";
       loadError = error instanceof Error ? error.message : String(error);
+      commits = []; onClearSelection();
     }
   }
 
@@ -274,7 +319,7 @@
     // scope's data.
     const root = repoRoot;
     const mode = filterMode;
-    const ref = revision;
+    const ref = jumpRevision ?? revision;
     const skip = commitLimit;
     const controller = new AbortController();
     abortInFlightLoadMore();
@@ -293,6 +338,7 @@
         limit: COMMIT_LOG_PAGE_SIZE,
         skip,
         revision: ref ?? undefined,
+        order, includeRemotes,
       });
       if (controller.signal.aborted) {
         return;
@@ -316,7 +362,7 @@
       // size so `--skip` stays aligned.
       if (rows.length < COMMIT_LOG_PAGE_SIZE) {
         historyExhausted = true;
-        commitLimit = MAX_COMMIT_LOG_LIMIT;
+        commitLimit = skip + rows.length;
       } else {
         commitLimit = nextLimit;
       }
@@ -342,9 +388,16 @@
   }
 
   $effect(() => {
+    void revision;
+    untrack(() => { jumpRevision = null; jumpGeneration++; jumpBusy = false; });
+  });
+
+  $effect(() => {
     const root = repoRoot;
-    const token = refreshToken;
-    void token;
+    commits = []; loadStatus = "loading"; historyScrollTop = 0; lastScope = "";
+    untrack(onClearSelection);
+    jumpGeneration++; jumpBusy = false; jumpQuery = ""; jumpError = null; jumpRevision = null;
+    compact = true; order = "topological"; includeRemotes = false; widths = [90, 380, 100, 150, 140];
     const controller = new AbortController();
     filterModeReady = false;
     filterMode = DEFAULT_HISTORY_FILTER_MODE;
@@ -371,6 +424,7 @@
 
     return () => {
       controller.abort();
+      jumpGeneration++;
     };
   });
 
@@ -382,16 +436,27 @@
       return;
     }
     const mode = filterMode;
-    const ref = revision;
+    const ref = jumpRevision ?? revision;
+    void order; void includeRemotes;
+    const scope = `${root}:${mode}:${ref}:${order}:${includeRemotes}`;
+    const sameScope = scope === lastScope;
+    lastScope = scope;
+    jumpGeneration++; jumpBusy = false;
+    const savedScroll = sameScope ? untrack(() => scrollContainer?.scrollTop ?? historyScrollTop) : 0;
+    const limit = sameScope ? untrack(() => commitLimit) : DEFAULT_COMMIT_LOG_LIMIT;
+    if (!sameScope) { commits = []; historyScrollTop = 0; onClearSelection(); }
     const previousSha = untrack(() => selectedSha);
     const controller = new AbortController();
     // A new page-1 load supersedes any in-flight "load more": its result would
     // be appended to a stale `commits` array otherwise.
     abortInFlightLoadMore();
     loadingMore = false;
-    commitLimit = DEFAULT_COMMIT_LOG_LIMIT;
+    commitLimit = limit;
     historyExhausted = false;
-    void loadCommits(root, mode, DEFAULT_COMMIT_LOG_LIMIT, previousSha, controller.signal, ref);
+    void loadCommits(root, mode, limit, previousSha, controller.signal, ref).then(async () => {
+      await tick();
+      if (!controller.signal.aborted && scrollContainer) { scrollContainer.scrollTop = savedScroll; historyScrollTop = savedScroll; }
+    });
     return () => {
       abortInFlightLoadMore();
       controller.abort();
@@ -417,6 +482,11 @@
   }
 
   function handleRowKeydown(event: KeyboardEvent, commit: CommitSummary): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") { event.preventDefault(); void navigator.clipboard.writeText(commit.sha).catch(() => { jumpError = "Could not copy commit SHA"; }); return; }
+    const index = commits.findIndex(c => c.sha === commit.sha);
+    const target = event.key === "Home" ? 0 : event.key === "End" ? commits.length - 1 : event.key === "ArrowDown" ? Math.min(commits.length - 1, index + 1) : event.key === "ArrowUp" ? Math.max(0, index - 1) : -1;
+    if (target >= 0) { event.preventDefault(); handleSelectCommit(commits[target]); void focusRow(target); return; }
+
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       handleSelectCommit(commit);
@@ -447,371 +517,88 @@
   }
 </script>
 
+<svelte:window onpointermove={resizeMove} onpointerup={() => resize = null} onpointercancel={() => resize = null} />
 <div class="git-history-panel" aria-label="Commit history">
-  {#if revision}<p class="git-history-revision" title={revision}>History: {revision}</p>{/if}
   <div class="git-history-toolbar">
-    <div
-      class="git-history-filter-segmented"
-      role="radiogroup"
-      aria-label="History scope"
-    >
+    <div role="radiogroup" aria-label="History scope">
       {#each HISTORY_FILTER_MODE_OPTIONS as option (option.value)}
-        <button
-          type="button"
-          class:git-history-filter-active={filterMode === option.value}
-          aria-checked={filterMode === option.value}
-          role="radio"
-          title={revision ? "Select Workspace History to change the history scope" : option.title}
-          disabled={loadStatus === "loading" || revision !== null}
-          onclick={() => void handleFilterModeChange(option.value)}
-        >
-          {option.label}
-        </button>
+        <button role="radio" aria-checked={filterMode === option.value} disabled={revision !== null || jumpRevision !== null} onclick={() => void handleFilterModeChange(option.value)} title={option.title}>{option.label}</button>
       {/each}
     </div>
-    <span class="git-history-filter-caption" title={activeFilterOption.title}>
-      {revision ? "Selected reference" : activeFilterOption.title}
-    </span>
+    <label><input type="checkbox" bind:checked={includeRemotes} disabled={revision !== null || jumpRevision !== null} /> Remote refs</label>
+    <select aria-label="History order" bind:value={order}><option value="topological">Topological order</option><option value="date">Date order</option></select>
+    <label><input type="checkbox" checked={compact} onchange={event => changeDensity(event.currentTarget.checked)} /> Compact</label>
+    <form onsubmit={event => { event.preventDefault(); void jumpTo(); }}><input aria-label="Jump to SHA or ref" placeholder="SHA or ref" bind:value={jumpQuery} /><button disabled={jumpBusy || !jumpQuery.trim()}>Jump to</button></form>
+    {#if jumpRevision}<button onclick={() => jumpRevision = null}>Back to scope</button>{/if}
   </div>
-
-  {#if loadStatus === "loading"}
-    <div class="git-history-state" role="status" aria-live="polite">
-      <p class="git-history-state-title">Loading commits…</p>
-    </div>
-  {:else if loadStatus === "error"}
-    <div class="git-history-state" role="alert">
-      <p class="git-history-state-title">Could not load commit history</p>
-      {#if loadError}
-        <p class="git-history-state-detail">{loadError}</p>
-      {/if}
-    </div>
-  {:else if commits.length === 0}
-    <div class="git-history-state" role="status">
-      <p class="git-history-state-title">No commits yet</p>
-      <p class="git-history-state-detail">{emptyStateDetail(filterMode)}</p>
-    </div>
-  {:else}
-    <div class="git-history-scroll" bind:this={scrollContainer}>
-      <div class="git-history-content">
-        <div
-          class="git-history-graph"
-          style="width: {graphWidth}px; min-width: {graphWidth}px; height: {graphHeight}px;"
-        >
-          <GitCommitGraphColumn
-            layout={graphLayout}
-            rowCount={commits.length}
-            {selectedSha}
-          />
-        </div>
-        <ul class="git-history-list" role="listbox" aria-label="Commits in history scope">
-          {#if historyTopPadPx > 0}
-            <li class="git-history-spacer" style="height: {historyTopPadPx}px" aria-hidden="true"></li>
-          {/if}
+  {#if jumpRevision || revision}<div class="git-history-caption">History: {jumpRevision ?? revision}</div>{/if}
+  {#if jumpError}<div role="alert">{jumpError}</div>{/if}
+  {#if loadError}<div role="alert">{loadError}</div>{/if}
+  {#if loadStatus === "loading"}<div role="status">Loading commits…</div>{/if}
+  <div class="git-history-scroll" bind:this={scrollContainer}>
+    <div class="git-history-table" style="--columns: {columnTemplate}; --row-height: {rowHeight}px">
+      <div class="git-history-header">
+        {#each columns as column, index (column)}
+          <div>{column}<button class="column-resize" aria-label="Resize {column} column" onpointerdown={event => { event.preventDefault(); resize = { index, x: event.clientX, width: widths[index] }; }} onkeydown={event => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); widths[index] = Math.max(65, widths[index] + (event.key === "ArrowRight" ? 16 : -16)); } }}>↔</button></div>
+        {/each}
+      </div>
+      <button class="git-history-uncommitted" onclick={onOpenChanges}><span></span><span>Uncommitted changes</span><span>—</span><span></span><span></span></button>
+      <div class="git-history-body" style="height: {graphHeight}px">
+        <div class="git-history-graph" style="width: {Math.max(widths[0], graphWidth)}px"><GitCommitGraphColumn layout={graphLayout} rowCount={commits.length} {rowHeight} {selectedSha} /></div>
+        <div role="listbox" aria-label="Commits in history scope">
+          {#if historyTopPadPx > 0}<div style="height: {historyTopPadPx}px" aria-hidden="true"></div>{/if}
           {#each commits.slice(historyVisibleRange.start, historyVisibleRange.end) as commit, i (commit.sha)}
             {@const meta = commitDateMeta[historyVisibleRange.start + i]}
-            <li class="git-history-item">
-              <button
-                type="button"
-                class="git-history-row"
-                class:git-history-row-selected={selectedSha === commit.sha}
-                style="height: {ROW_HEIGHT}px"
-                role="option"
-                aria-selected={selectedSha === commit.sha}
-                onclick={() => handleSelectCommit(commit)}
-                onkeydown={(event) => handleRowKeydown(event, commit)}
-              >
-                <span class="git-history-subject" title={commit.subject}>{commit.subject}</span>
-                {#if commit.refs.length > 0}
-                  <span class="git-history-refs" aria-label="Refs on this commit">
-                    {#each commit.refs as ref (ref.type + ref.name)}
-                      <span class="git-history-ref {refBadgeClass(ref)}" title={commitRefBadgeTitle(ref)}>
-                        {ref.name}
-                      </span>
-                    {/each}
-                  </span>
-                {/if}
-                <span class="git-history-meta">
-                  <span class="git-history-sha" title={commit.sha}>{formatShortSha(commit.sha)}</span>
-                  <span class="git-history-meta-separator" aria-hidden="true">·</span>
-                  <span class="git-history-author" title={commit.authorEmail}>{commit.authorName}</span>
-                  <span class="git-history-meta-separator" aria-hidden="true">·</span>
-                  <time
-                    class="git-history-date"
-                    datetime={meta?.iso ?? ""}
-                    title={meta?.local ?? ""}
-                  >
-                    {formatRelativeCommitDate(commit.authorTime)}
-                  </time>
+            <div class="git-history-item" class:git-history-row-selected={selectedSha === commit.sha}>
+              <button class="git-history-row" data-sha={commit.sha} role="option" aria-selected={selectedSha === commit.sha} tabindex={selectedSha === commit.sha || (!selectedSha && i === 0) ? 0 : -1} onclick={() => handleSelectCommit(commit)} onkeydown={event => handleRowKeydown(event, commit)}>
+                <span></span><span class="git-history-description" title={commit.subject}>
+                  {#each commit.refs as ref (ref.type + ref.name)}<span class="git-history-ref {refBadgeClass(ref)}" title={commitRefBadgeTitle(ref)}>{ref.name}</span>{/each}
+                  {commit.subject}
                 </span>
+                <span class="git-history-sha" title={commit.sha}>{formatShortSha(commit.sha)}</span>
+                <span title={commit.authorEmail}>{commit.authorName}</span>
+                <time datetime={meta?.iso} title={meta?.local}>{formatRelativeCommitDate(commit.authorTime)}</time>
               </button>
-            </li>
+              {#if selectedSha === commit.sha && commit.refs.length}<select class="ref-jump" aria-label="Jump to reference" onchange={event => { if (event.currentTarget.value) void jumpTo(event.currentTarget.value); event.currentTarget.value = ""; }}><option value="">Ref…</option>{#each commit.refs as ref (ref.type + ref.name)}<option value={ref.name}>{ref.name}</option>{/each}</select>{/if}
+              {#if selectedSha === commit.sha && commit.parents.length}<button class="parent-jump" aria-label="Jump to first parent" title="Jump to first parent" onclick={() => void jumpTo(commit.parents[0])}>↑</button>{/if}
+            </div>
           {/each}
-          {#if historyBottomPadPx > 0}
-            <li class="git-history-spacer" style="height: {historyBottomPadPx}px" aria-hidden="true"></li>
-          {/if}
-        </ul>
-        {#if canLoadMore || loadingMore}
-          <div class="git-history-load-more">
-            <button
-              type="button"
-              class="git-history-load-more-button"
-              disabled={loadingMore}
-              onclick={() => void handleLoadMore()}
-            >
-              {loadingMore ? "Loading more commits…" : "Load more commits"}
-            </button>
-          </div>
-        {/if}
+          {#if historyBottomPadPx > 0}<div style="height: {historyBottomPadPx}px" aria-hidden="true"></div>{/if}
+        </div>
       </div>
     </div>
-  {/if}
+    {#if loadStatus === "ready" && commits.length === 0}<p role="status">No commits yet. {emptyStateDetail(filterMode)}</p>{/if}
+    {#if canLoadMore}<button onclick={() => void handleLoadMore()}>Load more commits</button>{/if}
+    {#if loadingMore}<p role="status">Loading more commits…</p>{/if}
+    {#if !historyExhausted && commitLimit >= MAX_COMMIT_LOG_LIMIT}<p role="status">Showing the first 5000 commits. Jump to a SHA or reference to view older history. The graph covers these loaded commits.</p>{/if}
+  </div>
 </div>
 
 <style>
-  .git-history-revision { margin: 0; padding: 4px 12px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .git-history-panel {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-  }
-
-  .git-history-toolbar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    flex-shrink: 0;
-    padding: var(--space-3) var(--space-4);
-    border-bottom: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
-  }
-
-  .git-history-filter-segmented {
-    display: inline-flex;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
-
-  .git-history-filter-segmented button {
-    border: none;
-    background: transparent;
-    color: var(--color-text-secondary);
-    font-size: 0.6875rem;
-    line-height: 1.2;
-    padding: var(--space-2) var(--space-4);
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .git-history-filter-segmented button:disabled {
-    cursor: wait;
-    opacity: 0.7;
-  }
-
-  .git-history-filter-segmented button.git-history-filter-active {
-    background: var(--color-selection);
-    color: var(--color-text-primary);
-  }
-
-  .git-history-filter-caption {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.6875rem;
-    color: var(--color-text-muted);
-  }
-
-  .git-history-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: var(--space-3);
-    padding: var(--space-10) var(--space-12);
-    color: var(--color-text-secondary);
-  }
-
-  .git-history-state-title {
-    margin: 0;
-    font-size: 0.9375rem;
-    font-weight: 600;
-    color: var(--color-text);
-  }
-
-  .git-history-state-detail {
-    margin: 0;
-    font-size: 0.875rem;
-    line-height: 1.5;
-  }
-
-  .git-history-scroll {
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
-  }
-
-  .git-history-content {
-    display: flex;
-    align-items: flex-start;
-    min-width: min-content;
-  }
-
-  .git-history-graph {
-    position: sticky;
-    left: 0;
-    flex-shrink: 0;
-    z-index: 1;
-    pointer-events: none;
-    background: var(--color-surface-1);
-    overflow: visible;
-  }
-
-  .git-history-list {
-    flex: 1;
-    min-width: 0;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .git-history-item {
-    margin: 0;
-  }
-
-  .git-history-spacer {
-    margin: 0;
-    list-style: none;
-  }
-
-  .git-history-row {
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--space-2);
-    width: 100%;
-    padding: 0 var(--space-12) 0 var(--space-2);
-    border: none;
-    border-left: 2px solid transparent;
-    background: transparent;
-    color: var(--color-text);
-    text-align: left;
-    cursor: pointer;
-    font: inherit;
-    overflow: hidden;
-  }
-
-  .git-history-row:hover {
-    background: var(--color-surface-2);
-  }
-
-  .git-history-row:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: -2px;
-  }
-
-  .git-history-row-selected {
-    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface-1));
-    border-left-color: var(--color-accent);
-  }
-
-  .git-history-subject {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    line-height: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .git-history-meta {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    flex-wrap: nowrap;
-    gap: var(--space-2);
-    font-size: 0.6875rem;
-    line-height: 1;
-    color: var(--color-text-secondary);
-    white-space: nowrap;
-  }
-
-  .git-history-sha {
-    font-family: var(--font-mono, ui-monospace, monospace);
-    color: var(--color-text-muted);
-  }
-
-  .git-history-meta-separator {
-    color: var(--color-text-muted);
-  }
-
-  .git-history-refs {
-    flex: 0 1 auto;
-    display: flex;
-    flex-wrap: nowrap;
-    gap: var(--space-2);
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .git-history-ref {
-    padding: 0 var(--space-2);
-    border-radius: var(--radius-sm);
-    font-size: 0.625rem;
-    font-weight: 600;
-    line-height: 1.4;
-    white-space: nowrap;
-  }
-
-  .git-history-ref-current {
-    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
-    color: var(--color-accent);
-  }
-
-  .git-history-ref-branch {
-    background: color-mix(in srgb, var(--color-text-muted) 14%, transparent);
-    color: var(--color-text-secondary);
-  }
-
-  .git-history-ref-remote {
-    background: color-mix(in srgb, var(--color-text-muted) 10%, transparent);
-    color: var(--color-text-muted);
-  }
-
-  .git-history-ref-tag {
-    background: color-mix(in srgb, #c9a227 18%, transparent);
-    color: color-mix(in srgb, #c9a227 85%, var(--color-text));
-  }
-
-  .git-history-load-more {
-    display: flex;
-    justify-content: center;
-    padding: var(--space-4) var(--space-12);
-  }
-
-  .git-history-load-more-button {
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-2);
-    color: var(--color-text-secondary);
-    font-size: 0.75rem;
-    line-height: 1.2;
-    padding: var(--space-2) var(--space-6);
-    cursor: pointer;
-  }
-
-  .git-history-load-more-button:hover:not(:disabled) {
-    background: var(--color-surface-3, var(--color-surface-2));
-    color: var(--color-text-primary);
-  }
-
-  .git-history-load-more-button:disabled {
-    cursor: wait;
-    opacity: 0.75;
-  }
+.git-history-panel { display:flex; flex-direction:column; min-height:0; height:100%; font-size:12px; }
+.git-history-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:5px 8px; border-bottom:1px solid var(--color-border); }
+.git-history-toolbar label, form { display:flex; align-items:center; gap:4px; }
+.git-history-toolbar input:not([type=checkbox]) { width:130px; }
+.git-history-toolbar button, select, input { font-size:11px; }
+.git-history-caption { padding:3px 8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.git-history-scroll { flex:1; min-height:0; overflow:auto; overflow-anchor:none; }
+.git-history-table { width:max-content; min-width:100%; }
+.git-history-header, .git-history-row, .git-history-uncommitted { display:grid; grid-template-columns:var(--columns); width:100%; box-sizing:border-box; }
+.git-history-header { position:sticky; top:0; z-index:4; height:28px; background:var(--color-surface-1); border-bottom:1px solid var(--color-border); font-weight:600; }
+.git-history-header > div { position:relative; padding:5px 8px; border-right:1px solid var(--color-border); }
+.column-resize { position:absolute; right:0; top:0; height:100%; width:12px; cursor:col-resize; padding:0; background:transparent; border:0; color:var(--color-text-muted); touch-action:none; }
+.git-history-body { position:relative; }
+.git-history-graph { position:absolute; top:0; left:0; pointer-events:none; z-index:2; overflow:hidden; height:100%; }
+.git-history-item { height:var(--row-height); position:relative; }
+.git-history-row, .git-history-uncommitted { height:var(--row-height); border:0; border-radius:0; padding:0; text-align:left; background:transparent; color:inherit; font-size:12px; align-items:center; }
+.git-history-row > span, .git-history-row > time, .git-history-uncommitted > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:0 8px; }
+.git-history-row:hover { background:var(--color-surface-2); }
+.git-history-row-selected { background:color-mix(in srgb,var(--color-accent) 20%, transparent); }
+.git-history-row:focus-visible { outline:1px solid var(--color-accent); outline-offset:-1px; }
+.git-history-sha { font-family:var(--font-mono); }
+.git-history-ref { display:inline-block; padding:1px 4px; margin-right:5px; border-radius:3px; background:var(--color-surface-2); border:1px solid var(--color-border); font-size:10px; vertical-align:middle; }
+.git-history-ref-current { border-color:var(--color-accent); color:var(--color-accent); }
+.git-history-ref-tag { color:#bc8b2e; }.git-history-ref-remote { color:#548dbb; }
+.ref-jump { position:absolute; right:26px; top:0; max-width:90px; height:100%; font-size:10px; }
+.parent-jump { position:absolute; right:0; top:0; height:100%; }
 </style>

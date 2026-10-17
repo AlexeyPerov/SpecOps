@@ -1393,7 +1393,7 @@
         {#if activeSection === "history" && repoRoot}
           <GitWorkspaceSplit storageKey={`${layoutScope}:history`} label="Resize history and inspector" vertical initial={0.35} minFirst={140} minSecond={180}>
             {#snippet first()}
-              <GitHistoryPanel revision={historyRevision} repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} />
+              <GitHistoryPanel revision={historyRevision} repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} onClearSelection={() => selectedCommitSha = null} onOpenChanges={() => { activeSection = "changes"; navigationSelection = "changes"; selectedCommitSha = null; }} />
             {/snippet}
             {#snippet second()}
               <GitCommitDetailPanel repoRoot={repoRoot!} sha={selectedCommitSha} refreshToken={panelRefreshToken} {notify} layoutScope={layoutScope} />

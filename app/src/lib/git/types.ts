@@ -278,6 +278,8 @@ export interface CommitSummary {
 }
 
 export interface QueryCommitsOptions {
+  order?: "date" | "topological";
+  includeRemotes?: boolean;
   /** Fully qualified ref or immutable commit SHA selected in navigation. */
   revision?: string;
   limit?: number;

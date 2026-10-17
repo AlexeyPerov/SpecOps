@@ -106,4 +106,16 @@ describe("GitCommitGraphColumn.svelte", () => {
     expect(host.querySelectorAll(".git-graph-dimmed").length).toBeGreaterThan(0);
     expect(host.querySelector(".git-graph-dot-head.git-graph-dimmed")).toBeNull();
   });
+  it("scales every merge primitive with compact row centers", () => {
+    const layout = buildCommitGraphLayout(readCommitFixture("commit-graph-merge.json"));
+    const rowHeight = 24;
+    const {host} = mountComponent(GitCommitGraphColumn, {layout,rowHeight});
+    const scale=rowHeight/layout.rowHeight;
+    const segment=layout.segments[0];
+    expect(host.querySelector("polyline")?.getAttribute("points")).toBe(segment.points.map(p=>`${p.x},${p.y*scale}`).join(" "));
+    const curve=layout.curves[0];
+    expect(host.querySelector("path")?.getAttribute("d")).toBe(`M ${curve.start.x} ${curve.start.y*scale} Q ${curve.control.x} ${curve.control.y*scale} ${curve.end.x} ${curve.end.y*scale}`);
+    expect(host.querySelector("circle")?.getAttribute("cy")).toBe(String(layout.dots[0].rowIndex*rowHeight+rowHeight/2));
+  });
+
 });

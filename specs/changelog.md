@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-17 18:44 MSK — Add compact Git history table
+
+- Show Graph, Description, Commit, Author and Date in resizable columns with sticky headers, leading ref badges and whole-row selection. Keep one scroll container, fixed-height row virtualization and consistent SVG merge geometry in both density modes.
+- Add explicit backend history order and optional remote refs, repository-wide SHA/ref resolution through the existing Git runner, parent/ref navigation, keyboard selection and SHA copy. Jump can open ancestry outside loaded pages; uncommitted changes opens Changes without a fake SHA.
+- Preserve loaded depth, selection and scroll during refresh; clear missing selections and reject stale repository/ref/page/Jump responses. State the 5000-commit limit and bounded full SVG explicitly.
+- Validation: mounted table and graph tests cover selection, keyboard, resize, density, pagination to 5000, refresh and stale responses; Git service/API tests and Svelte/type checks pass. Desktop visual acceptance remains scheduled for final verification.
+
 ## 2026-10-17 18:36 MSK — Add persistent Git repository navigation
 
 - Show Workspace, hierarchical branches and tags, local remote-tracking refs and stable stash entries together in the sidebar. Mark the current branch, symbolic remote HEAD and available upstream tracking; keep full names in tooltips and a filter at the bottom.

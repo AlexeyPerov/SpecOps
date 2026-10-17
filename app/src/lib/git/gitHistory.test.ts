@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildQueryCommitsArgs, isUnbornRepoLogError, queryCommits } from "./gitHistory";
+import { buildQueryCommitsArgs, isUnbornRepoLogError, queryCommits, resolveHistoryCommit } from "./gitHistory";
 import { resetGitCommandQueueForTests } from "./gitCommandQueue";
 import { runGit } from "./gitRun";
 import type { RunGitResponse } from "./types";
@@ -102,5 +102,26 @@ describe("buildQueryCommitsArgs path filtering", () => {
 
   it("ignores empty path entries", () => {
     expect(buildQueryCommitsArgs({ paths: [""] })).not.toContain("--");
+  });
+});
+
+
+describe("repository-wide history resolution", () => {
+  it("resolves refs and SHA outside any page with option-safe argv", async () => {
+    const sha = "c".repeat(40);
+    runGitMock.mockResolvedValue(okResponse(sha + "\n"));
+    await expect(resolveHistoryCommit("/repo", "feature/old")).resolves.toBe(sha);
+    expect(runGitMock).toHaveBeenLastCalledWith("/repo", ["rev-parse", "--verify", "--end-of-options", "feature/old^{commit}"], "versionControl");
+    await resolveHistoryCommit("/repo", "--output=bad");
+    expect(runGitMock.mock.calls.at(-1)?.[1]).toEqual(["rev-parse", "--verify", "--end-of-options", "--output=bad^{commit}"]);
+  });
+  it("rejects invalid or unresolved commits without inventing a page miss", async () => {
+    runGitMock.mockResolvedValue({ ...okResponse(""), exitCode:128, stderr:"Unknown revision" });
+    await expect(resolveHistoryCommit("/repo", "missing")).rejects.toBeTruthy();
+  });
+  it("supports backend ordering and optional remote scope", () => {
+    expect(buildQueryCommitsArgs({order:"topological",includeRemotes:true})).toContain("--topo-order");
+    expect(buildQueryCommitsArgs({order:"date",includeRemotes:true})).toContain("--date-order");
+    expect(buildQueryCommitsArgs({includeRemotes:true})).toContain("--remotes");
   });
 });

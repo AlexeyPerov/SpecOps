@@ -70,6 +70,9 @@ export function buildQueryCommitsArgs(options: QueryCommitsOptions = {}): string
       break;
   }
 
+  if (options.order) args.push(options.order === "topological" ? "--topo-order" : "--date-order");
+  if (options.includeRemotes && !options.revision && filterMode !== "all-branches-and-remotes") args.push("--remotes");
+
   // `--skip=N` must precede the limit so `git log --skip=N -L` returns the
   // (N+1)..(N+L) window — used for incremental "load more" pagination.
   if (options.skip !== undefined && options.skip > 0) {
@@ -242,4 +245,15 @@ export async function queryCommitFileDiff(
   }
 
   return match;
+}
+
+/** Resolve an arbitrary ref or abbreviated SHA across the repository, independently of loaded pages. */
+export async function resolveHistoryCommit(repoRoot: string, query: string): Promise<string> {
+  const value = query.trim();
+  if (!value || value.includes("\0")) throw new Error("Enter a commit SHA or reference");
+  const response = await runGit(repoRoot, ["rev-parse", "--verify", "--end-of-options", `${value}^{commit}`], "versionControl");
+  if (response.exitCode !== 0) throw createGitCommandError(response);
+  const sha = response.stdout.trim();
+  if (!/^[a-f0-9]{40,64}$/.test(sha)) throw new Error("Could not resolve commit");
+  return sha;
 }

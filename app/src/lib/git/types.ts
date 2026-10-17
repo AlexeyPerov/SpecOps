@@ -43,6 +43,7 @@ export interface CancellableGitOptions {
   onStart?: (commandId: string) => void;
   /** Rechecked inside the mutation queue immediately before spawning (including retries). */
   expectedHead?: { head: string; branch: string };
+  expectedRefs?: { ref: string; sha: string }[];
   commandId?: string;
   /** Enable in-app GIT_ASKPASS for credential prompts during this command. */
   askpass?: boolean;

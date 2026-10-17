@@ -50,6 +50,8 @@
 
 <script lang="ts">
   import { tick } from "svelte";
+  import GitPushDialog from "./GitPushDialog.svelte";
+  import { executePushPlan, type PushPlan, type PushResult } from "../git/gitPush";
   import GitPullDialog from "./GitPullDialog.svelte";
   import { queryGitOperationState, recoverGitOperation, assertPullSnapshot, redactRemoteUrl, type PullOptions, type PullSnapshot, type GitOperationState } from "../git/gitPull";
   import DialogShell from "./DialogShell.svelte";
@@ -77,7 +79,6 @@
     GitStashApplyConflictError,
     isWorkingTreeDirty,
     pullRemote,
-    pushRemote,
     queryAheadBehind,
     queryCurrentBranch,
     type RemoteOperationTarget,
@@ -169,6 +170,9 @@
 
   let focusMessageToken = $state(0);
   let remoteDialog = $state<"Pull" | "Push" | null>(null);
+  let pushController: AbortController | null = null;
+  let pushDialogError = $state<string | null>(null);
+  let pushResult = $state<PushResult | null>(null);
   let pullDialogError = $state<string | null>(null);
   let operationState = $state<GitOperationState | null>(null);
   let operationError = $state<string | null>(null);
@@ -177,16 +181,11 @@
   function openRemoteDialog(operation: "Pull" | "Push"): void {
     if (toolbarBusy || !repoRoot) return;
     pullDialogError = null;
+    pushDialogError = null;
+    pushResult = null;
     dialogRoot = repoRoot;
     remoteDialog = operation;
     closeOverflow();
-  }
-  function confirmRemoteDialog(): void {
-    const operation = remoteDialog;
-    remoteDialog = null;
-    if (dialogRoot !== repoRoot || toolbarBusy) return;
-
-    if (operation === "Push") void handlePush();
   }
   async function openCommit(): Promise<void> {
     activeSection = "changes";
@@ -943,6 +942,7 @@
     }
 
     remoteCancelRequested = true;
+    if (pushBusy) pushController?.abort();
     try {
       const response = await cancelGitCommand(cancellableRemoteCommandId);
       if (response.outcome === "cancelled") {
@@ -1227,7 +1227,7 @@
     }
   }
 
-  async function handlePush(): Promise<void> {
+  async function handlePush(plan: PushPlan): Promise<void> {
     if (
       !repoRoot || changesBusy ||
       panelRemoteCommand !== null ||
@@ -1240,19 +1240,30 @@
     const root = repoRoot;
     const workspace = workspaceRootPath;
     const generation = probeGeneration;
-    const target = buildRemoteOperationTarget();
+    if (dialogRoot !== root) return;
+    pushDialogError = null;
+    pushResult = null;
     const current = () => repoRoot === root && workspaceRootPath === workspace && probeGeneration === generation;
     let started = false;
     const commandId = createGitCommandId();
-    activeRemoteCommandId = commandId;
+    const controller = new AbortController();
+    pushController = controller;
+    activeRemoteCommandId = null;
     remoteCancelRequested = false;
     pushBusy = true;
 
     try {
+      if (workspace && !await prepareWorkspaceForGitOperation(workspace, { enabled: shouldRunAutosaveBeforeGitOperations(), deps: preGitSaveDeps })) return;
+      if (!current()) return;
       started = true;
-      await pushRemote(root, target, { commandId });
-
+      const result = await executePushPlan(root, plan, { commandId, signal: controller.signal, onStart: id => {
+        if (!current()) throw new Error("Repository changed before Push could start.");
+        activeRemoteCommandId = id;
+        remoteCancelRequested = false;
+      } });
+      if (current()) pushResult = result;
     } catch (error) {
+      if (current()) pushDialogError = formatGitErrorPrimaryMessage(error);
       handleRemoteOperationError("Push", error, root);
     } finally {
       if (started && workspace) {
@@ -1266,6 +1277,7 @@
         }
       }
 
+      pushController = null;
       pushBusy = false;
       activeRemoteCommandId = null;
       remoteCancelRequested = false;
@@ -1686,14 +1698,12 @@
     onPull={(target, options, snapshot) => { void handlePull(target, options, snapshot); }}
     onClose={() => remoteDialog = null} onCancel={() => { void handleCancelRemoteOperation(); }} />
 {/if}
-<DialogShell open={remoteDialog === "Push"} title={remoteDialog ?? "Remote operation"} onDismiss={() => remoteDialog = null}>
-  <p>{remoteDialog} using {selectedRemoteName ?? "the configured upstream"}{remoteSelection.remoteBranch ? ` / ${remoteSelection.remoteBranch}` : ""}.</p>
-  <p>Uses the current Git target and default options.</p>
-  {#snippet actions()}
-    <button type="button" class="btn btn-secondary" onclick={() => remoteDialog = null}>Cancel</button>
-    <button type="button" class="btn btn-primary" disabled={remoteActionsDisabled || dialogRoot !== repoRoot} onclick={confirmRemoteDialog}>Confirm {remoteDialog}</button>
-  {/snippet}
-</DialogShell>
+{#if remoteDialog === "Push" && dialogRoot}
+  <GitPushDialog root={dialogRoot} refreshToken={panelRefreshToken} {remotes} initialRemote={selectedRemoteName} busy={pushBusy}
+    canCancel={activeRemoteCommandId !== null && !remoteCancelRequested} error={pushDialogError} result={pushResult}
+    onPush={plan => { void handlePush(plan); }} onClose={() => remoteDialog = null}
+    onCancel={() => { void handleCancelRemoteOperation(); }} />
+{/if}
 
 <style>
   .git-workspace-content { flex: 1; min-height: 0; min-width: 0; overflow: hidden; }

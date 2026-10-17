@@ -161,9 +161,9 @@ export async function queryRemoteTags(
 }
 
 /** Query remote heads using the shared authenticated, cancellable runner. */
-export async function queryRemoteHeads(repoRoot: string, remoteName: string, options?: CancellableGitOptions): Promise<string[]> {
+export async function queryRemoteHeads(repoRoot: string, remoteName: string, options?: CancellableGitOptions & { configuredPushUrl?: string }): Promise<string[]> {
   validateRemoteName(remoteName);
-  const response = await runRemoteGit(repoRoot, ['ls-remote', '--heads', remoteName], 'versionControl', { ...options, operation: 'lsRemote' });
+  const response = await runRemoteGit(repoRoot, ['ls-remote', '--heads', options?.configuredPushUrl || remoteName], 'versionControl', { ...options, operation: 'lsRemote' });
   assertGitCommandCompleted(response);
   if (response.exitCode !== 0) throw createGitCommandError(response);
   return [...new Set(response.stdout.split('\n').flatMap(line => {

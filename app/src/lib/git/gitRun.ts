@@ -242,6 +242,11 @@ async function invokeRunGitOnce(
       throw new Error("HEAD or the target branch changed. Close and reopen Pull to review the new target.");
     }
   }
+  for (const source of options?.expectedRefs ?? []) {
+    const actual = await invokeRunGitOnce(repoRoot, ["rev-parse", "--verify", "--end-of-options", source.ref], undefined);
+    if (actual.exitCode !== 0 || actual.stdout.trim() !== source.sha) throw new Error("A selected source changed. Close and reopen Push to review it.");
+  }
+  if (options?.signal?.aborted) throw new Error("Git operation cancelled before starting.");
   if (options?.commandId) options.onStart?.(options.commandId);
   const response = await invoke<RunGitResponse>(
     "run_git",
@@ -282,7 +287,7 @@ async function invokeRunGit(
     // not a stale, already-failed one.
     let response = await invokeRunGitOnce(repoRoot, args, env, options);
 
-    for (let attempt = 0; attempt < INDEX_LOCK_MAX_RETRIES && isIndexLockResponse(response); attempt += 1) {
+    for (let attempt = 0; attempt < INDEX_LOCK_MAX_RETRIES && args[0] !== "push" && isIndexLockResponse(response); attempt += 1) {
       // On the first index-lock failure, ask the backend to remove a stale lock
       // left by a crash, force-quit, or an external writer (e.g. the OpenCode
       // sidecar). The backend only removes it when no SpecOps git command is

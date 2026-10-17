@@ -917,10 +917,31 @@ fn is_denied_transport_arg(arg: &str) -> bool {
     lowered.starts_with("ext::") || lowered.starts_with("--upload-pack")
 }
 
-/// `config` is allowed only for the two identity keys the app manages, and only against
-/// the repository's own config file.
+fn valid_tracking_ref(name: &str) -> bool {
+    !name.is_empty() && name != "@" && !name.starts_with('-') && !name.ends_with('.')
+        && !name.contains("..") && !name.contains("@{")
+        && !name.chars().any(|c| c.is_control() || c.is_whitespace() || "~^:?*[\\".contains(c))
+        && name.split('/').all(|part| !part.is_empty() && !part.starts_with('.') && !part.ends_with(".lock"))
+}
+
+/// Identity and explicit local branch tracking configuration only.
 fn validate_git_config_args(args: &[String]) -> Result<(), String> {
     let rest: Vec<&str> = args[1..].iter().map(String::as_str).collect();
+    if let ["--local", key, value] = rest.as_slice() {
+        if let Some(branch_key) = key.strip_prefix("branch.") {
+            if let Some(name) = branch_key.strip_suffix(".remote") {
+                if valid_tracking_ref(name) && !value.is_empty() && !value.starts_with('-') && !value.chars().any(|c| c.is_whitespace() || c.is_control()) {
+                    return Ok(());
+                }
+            }
+            if let Some(name) = branch_key.strip_suffix(".merge") {
+                if valid_tracking_ref(name) && value.strip_prefix("refs/heads/").is_some_and(valid_tracking_ref) {
+                    return Ok(());
+                }
+            }
+        }
+        return Err("git tracking config form not allowed".to_string());
+    }
     let key = match rest.as_slice() {
         // Read forms. `--get-all` is accepted because `isWriteGitCommand` on the
         // frontend already treats it as a read; both are harmless.
@@ -2674,6 +2695,96 @@ mod tests {
         run(&local, &["merge", "--continue"]);
         assert!(!local.join(".git/MERGE_HEAD").exists());
         assert_eq!(run(&local, &["rev-list", "--parents", "-1", "HEAD"]).stdout.split_whitespace().count(), 3);
+        fs::remove_dir_all(remote).unwrap();
+        fs::remove_dir_all(local).unwrap();
+    }
+
+    #[test]
+    fn validates_exact_push_and_local_tracking_contract() {
+        let forms = [
+            vec!["push", "--porcelain", "--no-follow-tags", "origin", "0123456789012345678901234567890123456789:refs/heads/review", "abcdefabcdefabcdefabcdefabcdefabcdefabcd:refs/heads/topic"],
+            vec!["config", "--local", "branch.topic/nested.remote", "origin"],
+            vec!["config", "--local", "branch.topic/nested.merge", "refs/heads/review"],
+        ];
+        for form in forms {
+            let args = form.into_iter().map(String::from).collect::<Vec<_>>();
+            assert!(validate_git_args(&args).is_ok(), "{args:?}");
+            assert!(!is_read_only_git_args(&args));
+        }
+        for form in [
+            vec!["config", "branch.main.remote", "origin"],
+            vec!["config", "--global", "branch.main.remote", "origin"],
+            vec!["config", "--local", "branch.main.merge", "refs/tags/v1"],
+            vec!["config", "--local", "branch..hidden.remote", "origin"],
+            vec!["config", "--local", "branch.topic//x.remote", "origin"],
+            vec!["config", "--local", "branch.main.remote", "--global"],
+            vec!["config", "--local", "core.hooksPath", "/tmp/hooks"],
+        ] {
+            assert!(validate_git_args(&form.into_iter().map(String::from).collect::<Vec<_>>()).is_err());
+        }
+    }
+
+    #[test]
+    fn exact_push_and_tracking_run_against_temporary_bare_remote() {
+        if skip_if_git_unavailable() { return; }
+        let remote = create_temp_git_repo();
+        fs::remove_dir_all(remote.join(".git")).unwrap();
+        let local = create_temp_git_repo();
+        let run = |root: &Path, args: &[&str]| {
+            let argv = args.iter().map(|arg| arg.to_string()).collect::<Vec<_>>();
+            let response = execute_git(root, &argv, None);
+            assert_eq!(response.exit_code, 0, "{argv:?}: {}", response.stderr);
+            response
+        };
+        run(&remote, &["init", "--bare"]);
+        run(&local, &["config", "user.email", "test@example.test"]);
+        run(&local, &["config", "user.name", "Test User"]);
+        run(&local, &["checkout", "-B", "main"]);
+        fs::write(local.join("file.txt"), "base").unwrap();
+        run(&local, &["add", "file.txt"]);
+        run(&local, &["commit", "-m", "base"]);
+        let sha = run(&local, &["rev-parse", "HEAD"]).stdout.trim().to_string();
+        let refspec = format!("{sha}:refs/heads/review");
+        let args = vec!["push".into(), "--porcelain".into(), "--no-follow-tags".into(), remote.to_str().unwrap().into(), refspec];
+        assert!(validate_git_args(&args).is_ok());
+        let response = execute_git(&local, &args, None);
+        assert_eq!(response.exit_code, 0, "{}", response.stderr);
+        assert!(response.stdout.contains("refs/heads/review"));
+        assert_eq!(run(&remote, &["rev-parse", "refs/heads/review"]).stdout.trim(), sha);
+        for form in [vec!["config", "--local", "branch.main.remote", "origin"], vec!["config", "--local", "branch.main.merge", "refs/heads/review"]] {
+            assert!(validate_git_args(&form.iter().map(|v| v.to_string()).collect::<Vec<_>>()).is_ok());
+            run(&local, &form);
+        }
+        assert_eq!(run(&local, &["config", "--get", "branch.main.merge"]).stdout.trim(), "refs/heads/review");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _guard = registry_test_mutex().lock().expect("registry test lock");
+            let hook = remote.join("hooks/pre-receive");
+            fs::write(&hook, "#!/bin/sh\ntouch push-started\nsleep 2\n").unwrap();
+            fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+            fs::write(local.join("file.txt"), "next").unwrap();
+            run(&local, &["add", "file.txt"]);
+            run(&local, &["commit", "-m", "next"]);
+            let next_sha = run(&local, &["rev-parse", "HEAD"]).stdout.trim().to_string();
+            let command_id = format!("push-cancel-{}", TEST_COUNTER.fetch_add(1, Ordering::Relaxed));
+            let root = local.clone();
+            let cancel_id = command_id.clone();
+            let args = vec!["push".into(), "--porcelain".into(), remote.to_str().unwrap().into(), format!("{next_sha}:refs/heads/review")];
+            let worker = std::thread::spawn(move || execute_git_with_options(&root, &args, None, Some(&command_id)));
+            for _ in 0..200 {
+                if remote.join("push-started").exists() { break; }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            assert!(remote.join("push-started").exists());
+            assert_eq!(cancel_git_command_by_id(&cancel_id).outcome, CancelGitCommandOutcome::Cancelled);
+            let response = worker.join().unwrap();
+            assert!(response.cancelled);
+            assert_ne!(response.exit_code, 0);
+            // Read actual state after cancellation; the server may have accepted a ref.
+            let actual = run(&remote, &["rev-parse", "refs/heads/review"]).stdout.trim().to_string();
+            assert!(actual == sha || actual == next_sha);
+        }
         fs::remove_dir_all(remote).unwrap();
         fs::remove_dir_all(local).unwrap();
     }

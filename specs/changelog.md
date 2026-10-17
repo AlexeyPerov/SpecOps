@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-17 19:16 MSK — Add explicit multi-branch Push plans
+
+- Replace the Push shell with configured remote and redacted push URL, branch selection/destination/independent Track table, upstream hints, Select all, explicit tags-only/all-tags selection, validation, loading/auth/error states, progress, cancellation and per-ref results.
+- Capture exact branch/tag object IDs, validate source/destination refs and duplicate targets, and recheck sources inside the mutation queue immediately before spawn. Send explicit SHA refspecs with implicit follow-tags disabled; never substitute HEAD, force, delete, or automatically retry a network push.
+- Parse independent per-ref success/rejection/unknown outcomes and retain partial results. Configure only successfully pushed branches with Track selected using narrowly validated local branch tracking config; stop remaining tracking configuration on interruption and expose incomplete tracking. Refresh actual branch/tracking/remote state after failures and cancellation without claiming server rollback or atomicity.
+- Preserve save preflight, authentication, cancellation registration at process start, workspace/generation guards and repository refresh. Read push endpoint hints from configured push URLs, including local paths with spaces.
+- Validation: typed API, mounted dialog/pipeline and local bare-remote integration tests cover branch/tag combinations, renamed targets, Track on/off, stale sources, non-fast-forward, partial results and cancellation. Native contract/runner tests include actual push and process cancellation at a temporary bare remote. Svelte/type checks pass. Real network credentials and desktop visual acceptance remain pending GL-08.
+
 ## 2026-10-17 19:08 MSK — Add Pull options and recoverable Git operations
 
 - Replace the Pull confirmation with a modal for configured remotes, redacted URL, authenticated remote heads and Refresh, immutable local target, explicit merge/rebase options, progress and process cancellation. Custom URLs remain unavailable with an explanation.

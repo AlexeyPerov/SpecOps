@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-17 18:28 MSK — Add adjustable Git workspace layout
+
+- Place history above the commit inspector at every window width. Keep navigation beside the workspace and arrange changed files above commit metadata, with diff in the right column; retain existing data loading and repository states.
+- Add four accessible, keyboard- and pointer-adjustable splitters with minimum sizes, default reset, drag cancellation and focus indicators. Persist proportions per workspace and window, clamp restored sizes to the available area and allow navigation and metadata to collapse.
+- Validation: mounted layout, resize, persistence, keyboard and pointer lifecycle tests plus existing diff tests pass; Svelte/type checks report no errors or warnings. Real desktop viewport screenshots and restart acceptance remain scheduled for the final verification task.
+
 ## 2026-10-17 18:17 MSK — Plan Git workspace layout and remote dialogs
 
 - Added a scoped layout specification with eight ordered tasks, dependencies, acceptance criteria and current-source boundaries for navigation, history, commit inspection, toolbar, Changes, Pull and Push.

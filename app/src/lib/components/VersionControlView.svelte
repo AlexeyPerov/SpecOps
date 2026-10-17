@@ -51,6 +51,7 @@
 <script lang="ts">
   import { confirm, message } from "@tauri-apps/plugin-dialog";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import GitWorkspaceSplit from "./GitWorkspaceSplit.svelte";
   import GitCommitDetailPanel from "./GitCommitDetailPanel.svelte";
   import GitBranchesPanel from "./GitBranchesPanel.svelte";
   import GitChangesPanel from "./GitChangesPanel.svelte";
@@ -150,6 +151,9 @@
   ];
 
   const REFRESH_DEBOUNCE_MS = 500;
+
+  let sidebarCollapsed = $state(false);
+  const layoutScope = $derived(`specops.git-layout:${windowId}:${workspaceRootPath ?? ""}`);
 
   let activeSection = $state<Section>("history");
   let probeStatus = $state<ProbeStatus>("loading");
@@ -1189,6 +1193,7 @@
         {/if}
       </div>
       <div class="version-control-header-actions">
+        <button type="button" class="btn btn-sm" aria-expanded={!sidebarCollapsed} onclick={() => sidebarCollapsed = !sidebarCollapsed}>Navigation</button>
         <span class="version-control-remote-indicator" title={remotePickerTitle}>
           {#if showRemotePicker}
             <span class="version-control-remote-indicator-label">Remote</span>
@@ -1329,6 +1334,8 @@
     {/if}
 
     <div class="version-control-main">
+      <GitWorkspaceSplit storageKey={`${layoutScope}:sidebar`} label="Resize navigation" initial={0.2} minFirst={180} minSecond={400} collapsed={sidebarCollapsed}>
+      {#snippet first()}
       <div
         class="version-control-sidebar"
         role="tablist"
@@ -1349,6 +1356,8 @@
         {/each}
       </div>
 
+      {/snippet}
+      {#snippet second()}
       <div
         class="version-control-body"
         class:version-control-body-flush={
@@ -1362,24 +1371,14 @@
         aria-label={SECTIONS.find((section) => section.id === activeSection)?.label ?? "Section"}
       >
         {#if activeSection === "history" && repoRoot}
-          <div class="version-control-history-layout">
-            <div class="version-control-history-list">
-              <GitHistoryPanel
-                repoRoot={repoRoot}
-                refreshToken={panelRefreshToken}
-                selectedSha={selectedCommitSha}
-                onSelectCommit={handleSelectCommit}
-              />
-            </div>
-            <div class="version-control-history-detail">
-              <GitCommitDetailPanel
-                repoRoot={repoRoot}
-                sha={selectedCommitSha}
-                refreshToken={panelRefreshToken}
-                {notify}
-              />
-            </div>
-          </div>
+          <GitWorkspaceSplit storageKey={`${layoutScope}:history`} label="Resize history and inspector" vertical initial={0.35} minFirst={140} minSecond={180}>
+            {#snippet first()}
+              <GitHistoryPanel repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} />
+            {/snippet}
+            {#snippet second()}
+              <GitCommitDetailPanel repoRoot={repoRoot!} sha={selectedCommitSha} refreshToken={panelRefreshToken} {notify} layoutScope={layoutScope} />
+            {/snippet}
+          </GitWorkspaceSplit>
         {:else if activeSection === "branches" && repoRoot && workspaceRootPath}
           <GitBranchesPanel
             repoRoot={repoRoot}
@@ -1425,6 +1424,8 @@
           <p class="version-control-placeholder">{placeholderCopy}</p>
         {/if}
       </div>
+      {/snippet}
+      </GitWorkspaceSplit>
     </div>
   {/if}
 </div>
@@ -1434,6 +1435,8 @@
     display: flex;
     flex-direction: column;
     width: 100%;
+    min-width: 0;
+    overflow: hidden;
     height: 100%;
     min-height: 0;
     background: var(--color-surface-1);
@@ -1532,6 +1535,7 @@
   }
 
   .version-control-header {
+    flex-wrap: wrap;
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -1756,6 +1760,7 @@
   }
 
   .version-control-main {
+    min-width: 0;
     flex: 1;
     min-height: 0;
     display: flex;
@@ -1770,7 +1775,8 @@
     padding: var(--space-8) var(--space-4) var(--space-12);
     border-right: 1px solid var(--color-border-subtle);
     overflow-y: auto;
-    width: 132px;
+    height: 100%;
+    box-sizing: border-box;
   }
 
   .version-control-title {
@@ -1807,6 +1813,8 @@
   }
 
   .version-control-body {
+    height: 100%;
+    box-sizing: border-box;
     flex: 1;
     min-width: 0;
     min-height: 0;
@@ -1817,45 +1825,6 @@
   .version-control-body-flush {
     overflow: hidden;
     padding: 0;
-  }
-
-  .version-control-history-layout {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-  }
-
-  .version-control-history-list,
-  .version-control-history-detail {
-    min-width: 0;
-    min-height: 0;
-  }
-
-  .version-control-history-list {
-    flex: 1 1 45%;
-    border-bottom: 1px solid var(--color-border-subtle);
-  }
-
-  .version-control-history-detail {
-    flex: 1 1 55%;
-  }
-
-  @media (min-width: 56rem) {
-    .version-control-history-layout {
-      flex-direction: row;
-    }
-
-    .version-control-history-list {
-      flex: 0 0 min(42%, 28rem);
-      border-bottom: none;
-      border-right: 1px solid var(--color-border-subtle);
-    }
-
-    .version-control-history-detail {
-      flex: 1 1 auto;
-    }
   }
 
   .version-control-placeholder {

@@ -11,16 +11,17 @@
   } from "../git/gitService";
   import type { CommitDetail, CommitFileChange, ParsedTextDiff } from "../git/types";
   import GitTextDiffView from "./GitTextDiffView.svelte";
-  import { onDestroy } from "svelte";
+  import GitWorkspaceSplit from "./GitWorkspaceSplit.svelte";
 
   interface Props {
     repoRoot: string;
+    layoutScope?: string;
     sha?: string | null;
     refreshToken?: number;
     notify?: (message: string) => void;
   }
 
-  let { repoRoot, sha = null, refreshToken = 0, notify = () => {} }: Props = $props();
+  let { repoRoot, sha = null, refreshToken = 0, notify = () => {}, layoutScope = repoRoot }: Props = $props();
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
 
@@ -31,11 +32,7 @@
   let fileDiff = $state<ParsedTextDiff | null>(null);
   let diffLoading = $state(false);
   let diffError = $state<string | null>(null);
-  let fileListWidthPx = $state(240);
-  let isResizingFileList = $state(false);
-
-  const MIN_FILE_LIST_WIDTH_PX = 160;
-  const MAX_FILE_LIST_WIDTH_PX = 480;
+  let metadataCollapsed = $state(false);
 
   async function loadDetail(root: string, commitSha: string, signal?: AbortSignal): Promise<void> {
     loadStatus = "loading";
@@ -213,66 +210,6 @@
     }
   }
 
-  function handleFileListResizeStart(event: PointerEvent): void {
-    event.preventDefault();
-    isResizingFileList = true;
-    const pointerId = event.pointerId;
-    const startX = event.clientX;
-    const startWidth = fileListWidthPx;
-    const target = event.currentTarget as HTMLElement | null;
-    target?.setPointerCapture(pointerId);
-
-    function handleMove(moveEvent: PointerEvent): void {
-      if (moveEvent.pointerId !== pointerId) {
-        return;
-      }
-      const delta = moveEvent.clientX - startX;
-      fileListWidthPx = Math.max(
-        MIN_FILE_LIST_WIDTH_PX,
-        Math.min(MAX_FILE_LIST_WIDTH_PX, startWidth + delta),
-      );
-    }
-
-    function handleUp(upEvent: PointerEvent): void {
-      if (upEvent.pointerId !== pointerId) {
-        return;
-      }
-      isResizingFileList = false;
-      target?.releasePointerCapture(pointerId);
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleUp);
-      window.removeEventListener("pointercancel", handleUp);
-      // The drag is finished; clear the active teardown so onDestroy no longer
-      // holds a stale reference to these handlers.
-      activeFileListResizeTeardown = null;
-    }
-
-    window.addEventListener("pointermove", handleMove);
-    window.addEventListener("pointerup", handleUp);
-    window.addEventListener("pointercancel", handleUp);
-
-    // Track the in-flight drag teardown so the panel can detach the window
-    // listeners if it unmounts mid-drag (e.g. a workspace switch destroys the
-    // whole Version Control view while the user is still dragging the divider).
-    // Without this, handleMove keeps firing for the lifetime of the window,
-    // writing to a destroyed panel's state (M12).
-    activeFileListResizeTeardown = () => {
-      isResizingFileList = false;
-      target?.releasePointerCapture(pointerId);
-      window.removeEventListener("pointermove", handleMove);
-      window.removeEventListener("pointerup", handleUp);
-      window.removeEventListener("pointercancel", handleUp);
-    };
-  }
-
-  let activeFileListResizeTeardown: (() => void) | null = null;
-
-  // If the panel unmounts while a file-list divider drag is in flight, detach
-  // the window listeners so they don't outlive the component.
-  onDestroy(() => {
-    activeFileListResizeTeardown?.();
-    activeFileListResizeTeardown = null;
-  });
 </script>
 
 <div class="git-commit-detail" aria-label="Commit detail">
@@ -295,120 +232,119 @@
       {/if}
     </div>
   {:else if detail}
-    <header class="git-commit-detail-header">
-      <p class="git-commit-detail-sha" title={detail.sha}>{formatShortSha(detail.sha, 12)}</p>
-      {#if detail.parents.length > 0}
-        <p class="git-commit-detail-parents">
-          <span class="git-commit-detail-label">Parents</span>
-          {#each detail.parents as parent (parent)}
-            <code class="git-commit-detail-parent" title={parent}>{formatShortSha(parent)}</code>
-          {/each}
-        </p>
-      {/if}
-    </header>
-
-    <section class="git-commit-detail-section git-commit-detail-meta-section" aria-label="Commit message">
-      <pre class="git-commit-detail-message">{detail.message.trim() || "(empty commit message)"}</pre>
-    </section>
-
-    <section class="git-commit-detail-section git-commit-detail-meta-section" aria-label="Author and committer">
-      <dl class="git-commit-detail-meta">
-        <div class="git-commit-detail-meta-row">
-          <dt>Author</dt>
-          <dd>
-            {detail.authorName}
-            {#if detail.authorEmail}
-              <span class="git-commit-detail-email">&lt;{detail.authorEmail}&gt;</span>
-            {/if}
-            <time
-              class="git-commit-detail-time"
-              datetime={new Date(detail.authorTime * 1000).toISOString()}
-            >
-              {formatCommitTimestamp(detail.authorTime)}
-            </time>
-          </dd>
-        </div>
-        <div class="git-commit-detail-meta-row">
-          <dt>Committer</dt>
-          <dd>
-            {detail.committerName}
-            {#if detail.committerEmail}
-              <span class="git-commit-detail-email">&lt;{detail.committerEmail}&gt;</span>
-            {/if}
-            <time
-              class="git-commit-detail-time"
-              datetime={new Date(detail.committerTime * 1000).toISOString()}
-            >
-              {formatCommitTimestamp(detail.committerTime)}
-            </time>
-          </dd>
-        </div>
-      </dl>
-    </section>
-
-    <section
-      class="git-commit-detail-changes"
-      class:git-commit-detail-changes-resizing={isResizingFileList}
-      aria-label="Changed files and diff"
-    >
-      <div
-        class="git-commit-detail-file-pane"
-        style={`width: ${fileListWidthPx}px`}
-      >
-        <h3 class="git-commit-detail-files-title">Changed files</h3>
-        {#if detail.files.length === 0}
-          <p class="git-commit-detail-empty-files">No file changes in this commit.</p>
-        {:else}
-          <ul
-            class="git-commit-detail-file-list"
-            role="listbox"
-            aria-label="Changed files"
-            tabindex="0"
-            onkeydown={handleFileListKeydown}
-          >
-            {#each detail.files as file (`${file.status}:${file.path}:${file.previousPath ?? ""}`)}
-              <li role="presentation">
-                <button
-                  type="button"
-                  role="option"
-                  class="git-commit-detail-file-item"
-                  class:git-commit-detail-file-item-selected={selectedFilePath === file.path}
-                  aria-selected={selectedFilePath === file.path}
-                  onclick={() => selectFile(file.path)}
-                >
-                  <span
-                    class="git-commit-detail-file-status {fileStatusClass(file.status)}"
-                    title={fileStatusLabel(file)}
+    {@const commit = detail}
+    <GitWorkspaceSplit storageKey={`${layoutScope}:files`} label="Resize files and diff" initial={0.38} minFirst={160} minSecond={220}>
+      {#snippet first()}
+        <div class="git-commit-detail-file-column">
+          <button type="button" class="git-metadata-toggle" aria-expanded={!metadataCollapsed} onclick={() => metadataCollapsed = !metadataCollapsed}>Commit metadata</button>
+          <GitWorkspaceSplit storageKey={`${layoutScope}:metadata`} label="Resize files and metadata" vertical initial={0.55} minFirst={90} minSecond={90} collapsed={metadataCollapsed} collapseSecond>
+            {#snippet first()}
+              <div class="git-commit-detail-file-pane">
+                <h3 class="git-commit-detail-files-title">Changed files</h3>
+                {#if commit.files.length === 0}
+                  <p class="git-commit-detail-empty-files">No file changes in this commit.</p>
+                {:else}
+                  <ul
+                    class="git-commit-detail-file-list"
+                    role="listbox"
+                    aria-label="Changed files"
+                    tabindex="0"
+                    onkeydown={handleFileListKeydown}
                   >
-                    {file.status}
-                  </span>
-                  <span class="git-commit-detail-file-path" title={fileDisplayPath(file)}>
-                    {fileDisplayPath(file)}
-                  </span>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      </div>
+                    {#each commit.files as file (`${file.status}:${file.path}:${file.previousPath ?? ""}`)}
+                      <li role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          class="git-commit-detail-file-item"
+                          class:git-commit-detail-file-item-selected={selectedFilePath === file.path}
+                          aria-selected={selectedFilePath === file.path}
+                          onclick={() => selectFile(file.path)}
+                        >
+                          <span
+                            class="git-commit-detail-file-status {fileStatusClass(file.status)}"
+                            title={fileStatusLabel(file)}
+                          >
+                            {file.status}
+                          </span>
+                          <span class="git-commit-detail-file-path" title={fileDisplayPath(file)}>
+                            {fileDisplayPath(file)}
+                          </span>
+                        </button>
+                      </li>
+                    {/each}
+                  </ul>
+                {/if}
+              </div>
+            {/snippet}
+            {#snippet second()}
+              <div class="git-commit-metadata">
+                <header class="git-commit-detail-header">
+                  <p class="git-commit-detail-sha" title={commit.sha}>{formatShortSha(commit.sha, 12)}</p>
+                  {#if commit.parents.length > 0}
+                    <p class="git-commit-detail-parents">
+                      <span class="git-commit-detail-label">Parents</span>
+                      {#each commit.parents as parent (parent)}
+                        <code class="git-commit-detail-parent" title={parent}>{formatShortSha(parent)}</code>
+                      {/each}
+                    </p>
+                  {/if}
+                </header>
 
-      <div
-        class="git-commit-detail-splitter"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize file list"
-        onpointerdown={handleFileListResizeStart}
-      ></div>
+                <section class="git-commit-detail-section git-commit-detail-meta-section" aria-label="Commit message">
+                  <pre class="git-commit-detail-message">{commit.message.trim() || "(empty commit message)"}</pre>
+                </section>
 
-      <div class="git-commit-detail-diff-pane">
-        <GitTextDiffView
-          diff={fileDiff}
-          title={selectedFilePath ?? undefined}
-          loading={diffLoading}
-          error={diffError}
-        />
-      </div>
-    </section>
+                <section class="git-commit-detail-section git-commit-detail-meta-section" aria-label="Author and committer">
+                  <dl class="git-commit-detail-meta">
+                    <div class="git-commit-detail-meta-row">
+                      <dt>Author</dt>
+                      <dd>
+                        {commit.authorName}
+                        {#if commit.authorEmail}
+                          <span class="git-commit-detail-email">&lt;{commit.authorEmail}&gt;</span>
+                        {/if}
+                        <time
+                          class="git-commit-detail-time"
+                          datetime={new Date(commit.authorTime * 1000).toISOString()}
+                        >
+                          {formatCommitTimestamp(commit.authorTime)}
+                        </time>
+                      </dd>
+                    </div>
+                    <div class="git-commit-detail-meta-row">
+                      <dt>Committer</dt>
+                      <dd>
+                        {commit.committerName}
+                        {#if commit.committerEmail}
+                          <span class="git-commit-detail-email">&lt;{commit.committerEmail}&gt;</span>
+                        {/if}
+                        <time
+                          class="git-commit-detail-time"
+                          datetime={new Date(commit.committerTime * 1000).toISOString()}
+                        >
+                          {formatCommitTimestamp(commit.committerTime)}
+                        </time>
+                      </dd>
+                    </div>
+                  </dl>
+                </section>
+              </div>
+            {/snippet}
+          </GitWorkspaceSplit>
+        </div>
+      {/snippet}
+      {#snippet second()}
+        <div class="git-commit-detail-diff-pane">
+          <GitTextDiffView
+            diff={fileDiff}
+            title={selectedFilePath ?? undefined}
+            loading={diffLoading}
+            error={diffError}
+          />
+        </div>
+      {/snippet}
+    </GitWorkspaceSplit>
   {/if}
 </div>
 
@@ -538,19 +474,13 @@
     font-size: 0.75rem;
   }
 
-  .git-commit-detail-changes {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    align-items: stretch;
-    border-top: 1px solid var(--color-border-subtle);
-  }
-
-  .git-commit-detail-changes-resizing {
-    user-select: none;
-  }
-
+  .git-commit-detail-file-column { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  .git-commit-detail-file-column > :global(.workspace-split) { flex: 1; height: auto; }
+  .git-commit-metadata { height: 100%; overflow: auto; }
+  .git-metadata-toggle { flex-shrink: 0; text-align: left; background: var(--color-surface-2); color: var(--color-text); border: 0; padding: 4px 8px; cursor: pointer; }
   .git-commit-detail-file-pane {
+    height: 100%;
+    box-sizing: border-box;
     flex-shrink: 0;
     min-width: 0;
     min-height: 0;
@@ -561,23 +491,8 @@
     padding: var(--space-4) var(--space-4) var(--space-4) var(--space-6);
   }
 
-  .git-commit-detail-splitter {
-    flex-shrink: 0;
-    width: 4px;
-    margin: 0 -2px;
-    cursor: col-resize;
-    touch-action: none;
-    background: transparent;
-    position: relative;
-    z-index: 1;
-  }
-
-  .git-commit-detail-splitter:hover,
-  .git-commit-detail-changes-resizing .git-commit-detail-splitter {
-    background: color-mix(in srgb, var(--color-accent) 35%, transparent);
-  }
-
   .git-commit-detail-diff-pane {
+    height: 100%;
     flex: 1;
     min-width: 0;
     min-height: 0;

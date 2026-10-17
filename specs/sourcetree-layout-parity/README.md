@@ -1,6 +1,6 @@
 # Git workspace — layout parity
 
-**Обновлено:** 2026-10-17. **Статус:** Planned; реализация и приёмка не начаты.
+**Обновлено:** 2026-10-17. **Статус:** In progress; GL-01 реализован и проверен mounted-тестами, визуальная приёмка ожидает GL-08.
 
 ## Цель и границы
 
@@ -47,7 +47,7 @@ Navigation tree | History filters / search / jump
 
 | ID | Задача | Зависимости | Статус |
 | --- | --- | --- | --- |
-| GL-01 | [Каркас и разделители](01-workspace-layout.md) | — | Planned |
+| GL-01 | [Каркас и разделители](01-workspace-layout.md) | — | Implemented; visual acceptance pending |
 | GL-02 | [Дерево навигации](02-navigation-tree.md) | GL-01 | Planned |
 | GL-03 | [Таблица истории](03-history-table.md) | GL-01, GL-02 | Planned |
 | GL-04 | [Файлы, метаданные и diff](04-commit-inspector.md) | GL-01, GL-03 | Planned |

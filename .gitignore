@@ -76,6 +76,8 @@ TODO.md
 !/specs/ops/**
 !/specs/git/
 !/specs/git/**
+!/specs/sourcetree-layout-parity/
+!/specs/sourcetree-layout-parity/**
 !/specs/text-editor/
 !/specs/text-editor/**
 !/specs/text-editor-parity-v3/

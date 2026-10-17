@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-17 18:17 MSK — Plan Git workspace layout and remote dialogs
+
+- Added a scoped layout specification with eight ordered tasks, dependencies, acceptance criteria and current-source boundaries for navigation, history, commit inspection, toolbar, Changes, Pull and Push.
+- Preserved four user-provided original PNG references, allowlisted the specification directory for tracking and documented the required Git API work separately from UI acceptance. Application behavior is unchanged.
+- Validation: checked local Markdown links and byte-for-byte screenshot copies; implementation checks are deferred to the planned tasks.
+
 ## 2026-10-11 08:33 MSK — Move workspaces between window groups without restarting native turns
 
 - Added Open in Separate Window and Move to Window actions to workspace context menus. Move whole workspace state, preserve dirty buffers/pane selections/session references, allocate destination-safe editor ids and update open-file claims.

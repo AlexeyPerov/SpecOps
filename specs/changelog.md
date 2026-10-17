@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-17 19:08 MSK — Add Pull options and recoverable Git operations
+
+- Replace the Pull confirmation with a modal for configured remotes, redacted URL, authenticated remote heads and Refresh, immutable local target, explicit merge/rebase options, progress and process cancellation. Custom URLs remain unavailable with an explanation.
+- Check the HEAD/branch snapshot after editor preflight and again inside the mutation queue immediately before every subprocess attempt. Reject stale workspace continuations; publish cancellation only once the runner starts the command.
+- Recover pending merge/rebase from real Git state, including linked worktrees, after remount and after success/failure/cancellation. Continue/Abort use the existing save guard, queue, runner and refresh pipeline with constrained native recovery argv and no external editor. Preserve autostash while an operation is unfinished and open Changes for resolution.
+- Add native read-only support for the navigation tree remote-ref query. Keep recovery status outside the independently sized content area so it cannot clip the Changes form or inspector.
+- Validation: mounted modal/pipeline tests, temporary local Git remotes covering merge/rebase/fast-forward/no-commit/log/conflicts/recovery/worktrees, queued HEAD-change regression, native runner tests and Svelte/type checks. Real network credentials and desktop visual acceptance remain outside this pass; the latter is scheduled in GL-08.
+
 ## 2026-10-17 18:56 MSK — Add Git toolbar and persistent Changes workspace
 
 - Expose Commit, Pull, Push, Fetch, Branch, Merge and Stash with responsive secondary actions, keyboard overflow, supported web remote/folder/settings utilities, and an explanation for unavailable Merge. No platform terminal command is available, so no terminal action is exposed.

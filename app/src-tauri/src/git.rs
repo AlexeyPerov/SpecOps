@@ -24,10 +24,13 @@ const ALLOWED_GIT_SUBCOMMANDS: &[&str] = &[
     "config",
     "diff",
     "fetch",
+    "for-each-ref",
     "init",
     "log",
     "ls-remote",
     "pull",
+    "merge",
+    "rebase",
     "push",
     "remote",
     "restore",
@@ -981,6 +984,8 @@ fn validate_git_args(args: &[String]) -> Result<(), String> {
     }
 
     match subcommand.as_str() {
+        "merge" | "rebase" if args.len() == 2 && matches!(args[1].as_str(), "--continue" | "--abort") => {},
+        "merge" | "rebase" => return Err("Git recovery form not allowed".to_string()),
         "config" => validate_git_config_args(args)?,
         "remote" => validate_git_remote_args(args)?,
         _ => {}
@@ -1003,6 +1008,8 @@ const WRITE_GIT_SUBCOMMANDS: &[&str] = &[
     "stash",
     "fetch",
     "pull",
+    "merge",
+    "rebase",
     "push",
     "tag",
     "branch",
@@ -1378,6 +1385,10 @@ fn build_git_command(repo_root: &Path, args: &[String], env: &HashMap<String, St
     // localized OS otherwise. `LC_ALL` overrides `LANG`, so setting both covers
     // gettext-aware git as well as libc-respecting code paths. These are set after the
     // caller env so a (sanitized-away) caller value cannot override them.
+    // Recovery uses Git's existing message without opening an external editor.
+    if matches!(args.first().map(String::as_str), Some("merge" | "rebase")) {
+        command.env("GIT_EDITOR", "true");
+    }
     command.env("LC_ALL", "C");
     command.env("LANG", "C");
 
@@ -2629,6 +2640,65 @@ mod tests {
             "ext::sh -c /tmp/x.sh".into()
         ])
         .is_err());
+    }
+
+    #[test]
+    fn pull_without_commit_continues_without_an_editor_in_temp_repositories() {
+        if skip_if_git_unavailable() { return; }
+        let remote = create_temp_git_repo();
+        let local = create_temp_git_repo();
+        let run = |root: &Path, args: &[&str]| {
+            let argv: Vec<String> = args.iter().map(|arg| arg.to_string()).collect();
+            let response = execute_git(root, &argv, None);
+            assert_eq!(response.exit_code, 0, "{argv:?}: {}", response.stderr);
+            response
+        };
+        for repo in [&remote, &local] {
+            run(repo, &["config", "user.email", "test@example.test"]);
+            run(repo, &["config", "user.name", "Test User"]);
+        }
+        run(&remote, &["checkout", "-B", "main"]);
+        fs::write(remote.join("file.txt"), "base").unwrap();
+        run(&remote, &["add", "file.txt"]);
+        // Test fixture creation bypasses IPC forms; app commits use the message API.
+        run(&remote, &["commit", "-m", "base"]);
+        run(&local, &["fetch", remote.to_str().unwrap(), "main"]);
+        run(&local, &["checkout", "-B", "main", "FETCH_HEAD"]);
+        fs::write(remote.join("file.txt"), "remote").unwrap();
+        run(&remote, &["add", "file.txt"]);
+        run(&remote, &["commit", "-m", "remote change"]);
+        let pull = ["pull", "--no-rebase", "--no-commit", "--no-log", "--no-ff", "--no-edit", "--no-autostash", remote.to_str().unwrap(), "main"];
+        assert!(validate_git_args(&pull.iter().map(|arg| arg.to_string()).collect::<Vec<_>>()).is_ok());
+        run(&local, &pull);
+        assert!(local.join(".git/MERGE_HEAD").exists());
+        run(&local, &["merge", "--continue"]);
+        assert!(!local.join(".git/MERGE_HEAD").exists());
+        assert_eq!(run(&local, &["rev-list", "--parents", "-1", "HEAD"]).stdout.split_whitespace().count(), 3);
+        fs::remove_dir_all(remote).unwrap();
+        fs::remove_dir_all(local).unwrap();
+    }
+
+    #[test]
+    fn validates_pull_and_recovery_forms() {
+        for form in [
+            vec!["pull", "--no-rebase", "--commit", "--no-log", "--ff", "--no-edit", "--no-autostash", "origin", "main"],
+            vec!["pull", "--no-rebase", "--no-commit", "--log", "--no-ff", "--no-edit", "--no-autostash", "origin", "topic/nested"],
+            vec!["pull", "--rebase=true", "--no-autostash", "origin", "main"],
+            vec!["merge", "--abort"], vec!["rebase", "--abort"], vec!["rebase", "--continue"], vec!["merge", "--continue"],
+        ] {
+            let args: Vec<String> = form.into_iter().map(String::from).collect();
+            assert!(validate_git_args(&args).is_ok(), "{args:?}");
+            assert!(!is_read_only_git_args(&args), "{args:?}");
+        }
+        for form in [vec!["rebase", "--exec", "evil"], vec!["rebase", "-i", "main"], vec!["merge", "main"], vec!["commit", "--amend"]] {
+            assert!(validate_git_args(&form.into_iter().map(String::from).collect::<Vec<_>>()).is_err());
+        }
+        let heads: Vec<String> = ["ls-remote", "--heads", "origin"].into_iter().map(String::from).collect();
+        assert!(validate_git_args(&heads).is_ok());
+        assert!(is_read_only_git_args(&heads));
+        let navigation: Vec<String> = ["for-each-ref", "--format=%(refname)%09%(objectname)%09%(symref)", "refs/remotes/"].into_iter().map(String::from).collect();
+        assert!(validate_git_args(&navigation).is_ok());
+        assert!(is_read_only_git_args(&navigation));
     }
 
     #[test]

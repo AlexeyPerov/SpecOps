@@ -53,6 +53,7 @@ export {
   pullRemote,
   pushRemote,
   queryRemoteTags,
+  queryRemoteHeads,
   queryRemotes,
   type RemoteOperationTarget,
 } from "./gitRemotes";
@@ -124,3 +125,5 @@ export {
   mapGitInvokeError,
   normalizeGitOutputPath,
 } from "./types";
+
+export { queryPullSnapshot, queryGitOperationState, recoverGitOperation } from "./gitPull";

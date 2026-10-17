@@ -73,6 +73,8 @@ const WRITE_GIT_SUBCOMMANDS = new Set<string>([
   "stash",
   "fetch",
   "pull",
+  "merge",
+  "rebase",
   "push",
   "tag",
   "branch",
@@ -231,6 +233,16 @@ async function invokeRunGitOnce(
   env: Record<string, string> | undefined,
   options?: CancellableGitOptions,
 ): Promise<RunGitResponse> {
+  if (options?.expectedHead) {
+    // This runs inside the mutation lane, after earlier queued branch mutations.
+    // Use the invocation primitive here so the guard cannot deadlock its own queue.
+    const head = await invokeRunGitOnce(repoRoot, ["rev-parse", "--verify", "HEAD"], undefined);
+    const branch = await invokeRunGitOnce(repoRoot, ["branch", "--show-current"], undefined);
+    if (head.exitCode !== 0 || branch.exitCode !== 0 || head.stdout.trim() !== options.expectedHead.head || branch.stdout.trim() !== options.expectedHead.branch) {
+      throw new Error("HEAD or the target branch changed. Close and reopen Pull to review the new target.");
+    }
+  }
+  if (options?.commandId) options.onStart?.(options.commandId);
   const response = await invoke<RunGitResponse>(
     "run_git",
     buildRunGitInvokePayload(repoRoot, args, env, options),

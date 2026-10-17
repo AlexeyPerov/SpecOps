@@ -47,3 +47,21 @@ describe("runGit index.lock retry", () => {
     });
   });
 });
+
+describe('queued Pull snapshot guard', () => {
+  beforeEach(() => { invokeMock.mockReset(); resetGitCommandQueueForTests(); });
+  it('rejects a stale dialog after an earlier queued checkout changes HEAD', async () => {
+    let finish!:(value:unknown)=>void;
+    const ok = (stdout='') => ({exitCode:0,stdout,stderr:'',durationMs:1});
+    invokeMock.mockImplementationOnce(() => new Promise(resolve=>finish=resolve))
+      .mockResolvedValueOnce(ok('new-head\n')).mockResolvedValueOnce(ok('other\n'));
+    const checkout = runGit('/repo', ['checkout','other'], 'versionControl');
+    for(let i=0;i<5;i++) await Promise.resolve();
+    const pull = runGit('/repo',['pull','--no-rebase','origin','main'],'versionControl',undefined,{expectedHead:{head:'old-head',branch:'main'}});
+    for(let i=0;i<5;i++) await Promise.resolve();
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    finish(ok());await checkout;
+    await expect(pull).rejects.toThrow('HEAD or the target branch changed');
+    expect(invokeMock.mock.calls.map(call=>(call[1] as {request:{args:string[]}}).request.args[0])).toEqual(['checkout','rev-parse','branch']);
+  });
+});

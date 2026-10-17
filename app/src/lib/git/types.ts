@@ -39,6 +39,10 @@ export interface RemoveStaleIndexLockResponse {
 
 /** Optional cancellation handle for long-running git subprocesses. */
 export interface CancellableGitOptions {
+  /** Called inside the queue immediately before invoking a registered subprocess. */
+  onStart?: (commandId: string) => void;
+  /** Rechecked inside the mutation queue immediately before spawning (including retries). */
+  expectedHead?: { head: string; branch: string };
   commandId?: string;
   /** Enable in-app GIT_ASKPASS for credential prompts during this command. */
   askpass?: boolean;

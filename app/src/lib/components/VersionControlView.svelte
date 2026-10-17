@@ -50,6 +50,8 @@
 
 <script lang="ts">
   import { tick } from "svelte";
+  import GitPullDialog from "./GitPullDialog.svelte";
+  import { queryGitOperationState, recoverGitOperation, assertPullSnapshot, redactRemoteUrl, type PullOptions, type PullSnapshot, type GitOperationState } from "../git/gitPull";
   import DialogShell from "./DialogShell.svelte";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { openSettingsDialog } from "../services/settingsDialogUi";
@@ -167,10 +169,14 @@
 
   let focusMessageToken = $state(0);
   let remoteDialog = $state<"Pull" | "Push" | null>(null);
+  let pullDialogError = $state<string | null>(null);
+  let operationState = $state<GitOperationState | null>(null);
+  let operationError = $state<string | null>(null);
   let dialogRoot = $state<string | null>(null);
 
   function openRemoteDialog(operation: "Pull" | "Push"): void {
     if (toolbarBusy || !repoRoot) return;
+    pullDialogError = null;
     dialogRoot = repoRoot;
     remoteDialog = operation;
     closeOverflow();
@@ -179,7 +185,7 @@
     const operation = remoteDialog;
     remoteDialog = null;
     if (dialogRoot !== repoRoot || toolbarBusy) return;
-    if (operation === "Pull") void handlePull();
+
     if (operation === "Push") void handlePush();
   }
   async function openCommit(): Promise<void> {
@@ -962,7 +968,7 @@
       }
       return;
     }
-    reportGitError(error, { operation, repoRoot: root ?? undefined, notify });
+    reportGitError(new Error(redactRemoteUrl(formatGitErrorPrimaryMessage(error))), { operation, repoRoot: root ?? undefined, notify });
   }
 
   async function handleFetch(): Promise<void> {
@@ -1013,7 +1019,7 @@
     }
   }
 
-  async function handlePull(): Promise<void> {
+  async function handlePull(target: RemoteOperationTarget, pullOptions: PullOptions, snapshot: PullSnapshot): Promise<void> {
     if (
       !repoRoot || changesBusy ||
       panelRemoteCommand !== null ||
@@ -1026,9 +1032,11 @@
     const root = repoRoot;
     const workspace = workspaceRootPath;
     const generation = probeGeneration;
-    const target = buildRemoteOperationTarget();
+    if (dialogRoot !== root) return;
+    pullDialogError = null;
     const current = () => repoRoot === root && workspaceRootPath === workspace && probeGeneration === generation;
     let started = false;
+    let closePullAfterFinish = false;
     // Mark the toolbar busy up-front so Pull/Push/Refresh stay disabled while
     // the pre-pull prompts (autosave, dirty-tree choice) are open. The
     // cancellable command id is NOT registered yet: nothing can be cancelled
@@ -1055,6 +1063,10 @@
         }
       }
 
+      await assertPullSnapshot(root, snapshot);
+      const existing = await queryGitOperationState(root);
+      if (existing.kind !== "none" || existing.conflicts.length) throw new Error("Finish the current Git operation before pulling.");
+      if (!current()) return;
       const dirty = await isWorkingTreeDirty(root);
       if (!current()) return;
       if (dirty) {
@@ -1084,25 +1096,39 @@
 
       if (!current()) return;
 
-      // All prompts resolved and we're about to spawn the cancellable network
-      // operation. Register the command id now — from this point the inline
-      // Cancel control has a real target.
-      activeRemoteCommandId = commandId;
+      // Publish cancellation only after queued guards complete and the runner invokes Git.
 
       try {
         started = true;
-        await pullRemote(root, target, { commandId });
+        await pullRemote(root, target, { commandId, pull: pullOptions, expected: snapshot, onStart: id => {
+          if (!current()) throw new Error("Repository changed before Pull could start.");
+          activeRemoteCommandId = id;
+          remoteCancelRequested = false;
+        } });
       } catch (error) {
         if (stashedRef) {
           notify(
             "Pull failed. Your changes were stashed — apply the latest stash to restore them.",
           );
         }
+        if (current()) pullDialogError = formatGitErrorPrimaryMessage(error);
         handleRemoteOperationError("Pull", error, root);
         return;
       }
 
-      if (stashedRef) {
+      const resultingState = await queryGitOperationState(root);
+      if (current()) {
+        operationState = resultingState;
+        closePullAfterFinish = true;
+        if (resultingState.kind !== "none" || resultingState.conflicts.length) {
+          activeSection = "changes";
+          navigationSelection = "changes";
+        }
+      }
+      if (stashedRef && resultingState.kind !== "none") {
+        notify("Pull left an unfinished Git operation. Your changes remain in the latest stash; restore them after finishing or aborting the operation.");
+      }
+      if (stashedRef && resultingState.kind === "none") {
         try {
           await applyStash(root, stashedRef, true);
         } catch (error) {
@@ -1121,8 +1147,22 @@
 
 
     } catch (error) {
+      if (current()) pullDialogError = formatGitErrorPrimaryMessage(error);
       handleRemoteOperationError("Pull", error, root);
     } finally {
+      if (started && current()) {
+        try {
+          const state = await queryGitOperationState(root);
+          if (current()) {
+            operationState = state;
+            if (state.kind !== "none" || state.conflicts.length) {
+              closePullAfterFinish = true;
+              activeSection = "changes";
+              navigationSelection = "changes";
+            }
+          }
+        } catch (error) { if (current()) operationError = formatGitErrorPrimaryMessage(error); }
+      }
       if (started && workspace) {
         notifyVersionControlMutation(workspace, "pull");
         if (current()) {
@@ -1134,6 +1174,53 @@
         }
       }
 
+      pullBusy = false;
+      activeRemoteCommandId = null;
+      remoteCancelRequested = false;
+      if (closePullAfterFinish && current()) {
+        await tick();
+        if (current()) remoteDialog = null;
+      }
+    }
+  }
+
+  $effect(() => {
+    const root = repoRoot;
+    panelRefreshToken;
+    let disposed = false;
+    operationState = null;
+    operationError = null;
+    if (root) void queryGitOperationState(root).then(state => { if (!disposed) operationState = state; }).catch(error => { if (!disposed) operationError = formatGitErrorPrimaryMessage(error); });
+    return () => { disposed = true; };
+  });
+
+  async function handleRecovery(action: "continue" | "abort"): Promise<void> {
+    if (!repoRoot || toolbarBusy || !operationState) return;
+    const root = repoRoot, workspace = workspaceRootPath, generation = probeGeneration;
+    const kind = operationState.kind;
+    const current = () => root === repoRoot && workspace === workspaceRootPath && generation === probeGeneration;
+    const commandId = createGitCommandId();
+    pullBusy = true;
+    let started = false;
+    try {
+      if (workspace && !await prepareWorkspaceForGitOperation(workspace, { enabled: shouldRunAutosaveBeforeGitOperations(), deps: preGitSaveDeps })) return;
+      if (!current()) return;
+      started = true;
+      await recoverGitOperation(root, kind, action, { commandId, onStart: id => {
+        if (!current()) throw new Error("Repository changed before recovery could start.");
+        activeRemoteCommandId = id;
+        remoteCancelRequested = false;
+      } });
+    } catch (error) { handleRemoteOperationError("Git recovery", error, root); }
+    finally {
+      if (started && workspace) notifyVersionControlMutation(workspace, "pull");
+      if (current()) {
+        panelRefreshToken += 1;
+        const controller = new AbortController();
+        remoteRefreshController?.abort();
+        remoteRefreshController = controller;
+        await refreshBranchHeader(root, controller.signal);
+      }
       pullBusy = false;
       activeRemoteCommandId = null;
       remoteCancelRequested = false;
@@ -1507,6 +1594,16 @@
         role="tabpanel"
         aria-label={SECTIONS.find((section) => section.id === activeSection)?.label ?? "Section"}
       >
+        {#if operationState && operationState.kind !== "none"}
+          <div class="git-operation-banner" role="status">
+            <strong>{operationState.kind === "unsupported" ? "Git operation requires external recovery" : `${operationState.kind} in progress`}</strong>
+            <p>{operationState.conflicts.length ? "Resolve and stage conflicts in Changes before continuing." : "Continue to finish the operation, or abort to restore its starting point."} Git state is recovered when this view reopens.</p>
+            <button type="button" disabled={toolbarBusy} onclick={() => { activeSection = "changes"; navigationSelection = "changes"; }}>Open Changes</button>
+            <button type="button" disabled={toolbarBusy || operationState.kind === "unsupported" || operationState.conflicts.length > 0} onclick={() => { void handleRecovery("continue"); }}>Continue operation</button>
+            <button type="button" disabled={toolbarBusy || operationState.kind === "unsupported"} onclick={() => { void handleRecovery("abort"); }}>Abort operation</button>
+          </div>
+        {:else if operationError}<p role="alert">Unable to read Git operation state: {operationError}</p>{/if}
+        <div class="git-workspace-content">
         {#if repoRoot && workspaceRootPath}
           {#key repoRoot}
           {@const changesRoot = repoRoot}
@@ -1575,6 +1672,7 @@
           <p class="version-control-placeholder">{placeholderCopy}</p>
         {/if}
         {/key}
+        </div>
       </div>
       {/snippet}
       </GitWorkspaceSplit>
@@ -1582,7 +1680,13 @@
   {/if}
 </div>
 
-<DialogShell open={remoteDialog !== null} title={remoteDialog ?? "Remote operation"} onDismiss={() => remoteDialog = null}>
+{#if remoteDialog === "Pull" && dialogRoot}
+  <GitPullDialog root={dialogRoot} {remotes} initialRemote={selectedRemoteName} initialBranch={remoteSelection.remoteBranch}
+    busy={pullBusy} canCancel={activeRemoteCommandId !== null && !remoteCancelRequested} error={pullDialogError}
+    onPull={(target, options, snapshot) => { void handlePull(target, options, snapshot); }}
+    onClose={() => remoteDialog = null} onCancel={() => { void handleCancelRemoteOperation(); }} />
+{/if}
+<DialogShell open={remoteDialog === "Push"} title={remoteDialog ?? "Remote operation"} onDismiss={() => remoteDialog = null}>
   <p>{remoteDialog} using {selectedRemoteName ?? "the configured upstream"}{remoteSelection.remoteBranch ? ` / ${remoteSelection.remoteBranch}` : ""}.</p>
   <p>Uses the current Git target and default options.</p>
   {#snippet actions()}
@@ -1592,6 +1696,8 @@
 </DialogShell>
 
 <style>
+  .git-workspace-content { flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+  .git-operation-banner { max-height: 35%; overflow-y: auto; padding: var(--space-6); border-bottom: 1px solid var(--color-border-subtle); overflow-wrap: anywhere; flex-shrink: 0; }
   .version-control-changes { height: 100%; min-height: 0; }
   .version-control-changes[hidden] { display: none; }
   .version-control-compact-actions, .version-control-compact-fetch { display: none; }
@@ -1965,6 +2071,8 @@
   }
 
   .version-control-body {
+    display: flex;
+    flex-direction: column;
     height: 100%;
     box-sizing: border-box;
     flex: 1;

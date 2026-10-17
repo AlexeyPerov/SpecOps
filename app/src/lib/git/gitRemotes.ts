@@ -1,3 +1,5 @@
+import { validateGitRefName } from "./gitRefName";
+import { assertPullSnapshot, pullOptionArgs, queryGitOperationState, type PullOptions, type PullSnapshot } from "./gitPull";
 import { parseLsRemoteTags, parseRemoteVvLines } from "./gitParse";
 import { queryCurrentBranch } from "./gitRepo";
 import { runGit, runRemoteGit } from "./gitRun";
@@ -26,13 +28,18 @@ function buildFetchArgs(target?: RemoteOperationTarget): string[] {
   return ["fetch", target.remoteName.trim()];
 }
 
-function buildPullArgs(target?: RemoteOperationTarget): string[] {
+export function buildPullArgs(target?: RemoteOperationTarget, options?: PullOptions): string[] {
+  const flags = options ? pullOptionArgs(options) : [];
+  if (target) {
+    validateRemoteName(target.remoteName);
+    if (target.branchName && !validateGitRefName(target.branchName).ok) throw new GitRefValidationError('Invalid remote branch.');
+  }
   if (!target?.remoteName?.trim()) {
-    return ["pull"];
+    return ["pull", ...flags];
   }
   const remoteName = target.remoteName.trim();
   const branchName = target.branchName?.trim();
-  return branchName ? ["pull", remoteName, branchName] : ["pull", remoteName];
+  return branchName ? ["pull", ...flags, remoteName, branchName] : ["pull", ...flags, remoteName];
 }
 
 function buildPushArgs(target?: RemoteOperationTarget): string[] {
@@ -153,6 +160,18 @@ export async function queryRemoteTags(
   return parseLsRemoteTags(response.stdout);
 }
 
+/** Query remote heads using the shared authenticated, cancellable runner. */
+export async function queryRemoteHeads(repoRoot: string, remoteName: string, options?: CancellableGitOptions): Promise<string[]> {
+  validateRemoteName(remoteName);
+  const response = await runRemoteGit(repoRoot, ['ls-remote', '--heads', remoteName], 'versionControl', { ...options, operation: 'lsRemote' });
+  assertGitCommandCompleted(response);
+  if (response.exitCode !== 0) throw createGitCommandError(response);
+  return [...new Set(response.stdout.split('\n').flatMap(line => {
+    const match = line.match(/^[a-f\d]+\s+refs\/heads\/(.+)$/i);
+    return match ? [match[1]!] : [];
+  }))].sort((a, b) => a.localeCompare(b));
+}
+
 /** Fetch from all remotes, or a single remote when `target` is set. */
 export async function fetchRemote(
   repoRoot: string,
@@ -174,11 +193,17 @@ export async function fetchRemote(
 export async function pullRemote(
   repoRoot: string,
   target?: RemoteOperationTarget,
-  options?: CancellableGitOptions,
+  options?: CancellableGitOptions & { pull?: PullOptions; expected?: PullSnapshot },
   scope: GitCallScope = "versionControl",
 ): Promise<void> {
-  const response = await runRemoteGit(repoRoot, buildPullArgs(target), scope, {
+  if (options?.expected) await assertPullSnapshot(repoRoot, options.expected);
+  if (options?.pull) {
+    const state = await queryGitOperationState(repoRoot);
+    if (state.kind !== 'none' || state.conflicts.length) throw new Error('Finish the current Git operation or resolve conflicts before pulling.');
+  }
+  const response = await runRemoteGit(repoRoot, buildPullArgs(target, options?.pull), scope, {
     ...options,
+    expectedHead: options?.expected,
     operation: "pull",
   });
   assertGitCommandCompleted(response);
@@ -230,7 +255,7 @@ export async function pushRemote(
 
 export function validateRemoteName(remoteName: string): void {
   const trimmed = remoteName.trim();
-  if (!trimmed) {
-    throw new GitRefValidationError("Remote name cannot be empty.");
+  if (!trimmed || trimmed.startsWith("-") || /[\s\x00-\x1f]/.test(trimmed)) {
+    throw new GitRefValidationError("Remote name is invalid.");
   }
 }

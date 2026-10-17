@@ -38,6 +38,7 @@
     onClearSelection?: () => void;
     onOpenChanges?: () => void;
     onSelectCommit?: (commit: CommitSummary) => void;
+    onRefreshSelection?: (commit: CommitSummary) => void;
   }
 
   let {
@@ -48,6 +49,7 @@
     onClearSelection = () => {},
     onOpenChanges = () => {},
     onSelectCommit = () => {},
+    onRefreshSelection = () => {},
   }: Props = $props();
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
@@ -68,7 +70,7 @@
   function resizeMove(event: PointerEvent) {
     if (resize) widths[resize.index] = Math.max(resize.index === 1 ? 180 : 65, resize.width + event.clientX - resize.x);
   }
-  async function jumpTo(query = jumpQuery) {
+  export async function jumpTo(query = jumpQuery) {
     const generation = ++jumpGeneration;
     const root = repoRoot;
     jumpBusy = true; jumpError = null;
@@ -262,7 +264,9 @@
       onClearSelection();
       return;
     }
-    if (previousSha && rows.some((commit) => commit.sha === previousSha)) {
+    const selected = rows.find(commit => commit.sha === previousSha);
+    if (selected) {
+      onRefreshSelection(selected);
       return;
     }
     onSelectCommit(rows[0]!);

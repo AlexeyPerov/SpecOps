@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-17 18:50 MSK — Complete Git commit inspection controls
+
+- Extract reusable changed-file and metadata panes. Add path sorting, flat/tree presentation, rename-aware filtering, full-path tooltips, SHA copy, parent navigation through repository-wide history resolution and refreshed selected-row refs.
+- Add search across the loaded unified diff with match navigation into virtual rows and working copy-path/displayed-diff actions. Label deleted files and merge first-parent comparisons; keep adjacent panes mounted for loading, empty, binary, size-limit and error states.
+- Preserve valid selected files on refresh and reject late commit/file/repository successes and failures. Remove the unavailable external-tool suggestion from the size-limit message; no reverse-hunk or partial-stage mutation is exposed.
+- Validation: 141 targeted mounted, splitter and Git API tests pass, including deferred selection races, refresh metadata, clipboard actions and virtual diff search; Svelte/type checks report no errors or warnings. Desktop visual and long-content scroll acceptance remains scheduled for final verification.
+
 ## 2026-10-17 18:44 MSK — Add compact Git history table
 
 - Show Graph, Description, Commit, Author and Date in resizable columns with sticky headers, leading ref badges and whole-row selection. Keep one scroll container, fixed-height row virtualization and consistent SVG merge geometry in both density modes.

@@ -173,6 +173,8 @@
   let aheadBehind = $state<AheadBehindCounts | null>(null);
   let aheadBehindError = $state<string | null>(null);
   let branchHeaderError = $state<string | null>(null);
+  let historyPanel = $state<{ jumpTo: (query: string) => Promise<void> }>();
+  let selectedCommit = $state<CommitSummary | null>(null);
   let selectedCommitSha = $state<string | null>(null);
   let refreshBusy = $state(false);
   let fetchBusy = $state(false);
@@ -577,6 +579,7 @@
   }
 
   function handleSelectCommit(commit: CommitSummary): void {
+    selectedCommit = commit;
     selectedCommitSha = commit.sha;
   }
 
@@ -1393,10 +1396,10 @@
         {#if activeSection === "history" && repoRoot}
           <GitWorkspaceSplit storageKey={`${layoutScope}:history`} label="Resize history and inspector" vertical initial={0.35} minFirst={140} minSecond={180}>
             {#snippet first()}
-              <GitHistoryPanel revision={historyRevision} repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} onClearSelection={() => selectedCommitSha = null} onOpenChanges={() => { activeSection = "changes"; navigationSelection = "changes"; selectedCommitSha = null; }} />
+              <GitHistoryPanel bind:this={historyPanel} revision={historyRevision} repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} onRefreshSelection={handleSelectCommit} onClearSelection={() => selectedCommitSha = null} onOpenChanges={() => { activeSection = "changes"; navigationSelection = "changes"; selectedCommitSha = null; }} />
             {/snippet}
             {#snippet second()}
-              <GitCommitDetailPanel repoRoot={repoRoot!} sha={selectedCommitSha} refreshToken={panelRefreshToken} {notify} layoutScope={layoutScope} />
+              <GitCommitDetailPanel repoRoot={repoRoot!} sha={selectedCommitSha} refs={selectedCommit?.sha === selectedCommitSha ? selectedCommit.refs : []} onNavigate={sha => { void historyPanel?.jumpTo(sha); }} refreshToken={panelRefreshToken} {notify} layoutScope={layoutScope} />
             {/snippet}
           </GitWorkspaceSplit>
         {:else if activeSection === "branches" && repoRoot && workspaceRootPath}

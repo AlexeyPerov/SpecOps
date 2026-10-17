@@ -76,3 +76,13 @@ describe('mounted history table', () => {
   });
 
 });
+
+
+it('refreshes the selected row metadata without selecting a different commit', async () => {
+  const token=writable(0), state=fromStore(token), onSelectCommit=vi.fn(), onRefreshSelection=vi.fn();
+  const selected=commit(1);
+  const view=mountComponent(GitHistoryPanel,{repoRoot:'/repo',selectedSha:selected.sha,get refreshToken(){return state.current;},onSelectCommit,onRefreshSelection}); await settle();
+  const refreshed={...selected,refs:[{type:'tag' as const,name:'release-next'}]};
+  vi.mocked(queryCommits).mockResolvedValue([refreshed,commit(2)]); token.set(1); await settle();
+  expect(onRefreshSelection).toHaveBeenLastCalledWith(refreshed); expect(onSelectCommit).not.toHaveBeenCalled(); expect(view.host.textContent).toContain('release-next');
+});

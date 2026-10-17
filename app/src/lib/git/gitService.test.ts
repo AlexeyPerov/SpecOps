@@ -700,6 +700,14 @@ describe("queryCommitDetail", () => {
     ]);
   });
 
+  it("keeps both merge parents while listing files relative to the first parent", async () => {
+    invokeMock.mockResolvedValue({exitCode:0,stdout:"merge\x00first second\x00Author\x00author@example.test\x001700000000\x00Author\x00author@example.test\x001700000000\x00Merge topic\n\nD\tremoved.txt\nR100\told/file.txt\tnew/file.txt\n",stderr:"",durationMs:1});
+    const detail=await queryCommitDetail("/tmp/repo","merge");
+    expect(detail.parents).toEqual(["first","second"]);
+    expect(detail.files).toEqual([{status:"D",path:"removed.txt"},{status:"R",previousPath:"old/file.txt",path:"new/file.txt"}]);
+    expect(invokeMock).toHaveBeenCalledWith("run_git",expectRunGitPayload({repoRoot:"/tmp/repo",args:["show","--no-show-signature","--first-parent","--name-status",`--format=${GIT_SHOW_FORMAT}`,"merge"]}));
+  });
+
   it("throws GitCommandError when git show fails", async () => {
     invokeMock.mockResolvedValue({
       exitCode: 128,

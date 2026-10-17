@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import type { DiffLine, ParsedTextDiff } from "../git/types";
 
   /**
@@ -29,12 +30,48 @@
     displayTitle ? `Diff for ${displayTitle}` : "File diff",
   );
 
+  let search = $state("");
+  let matchIndex = $state(0);
+  let actionError = $state<string | null>(null);
+
+
+  function moveMatch(direction: number) {
+    if (!matches.length || !diffScrollEl) return;
+    matchIndex = (matchIndex + direction + matches.length) % matches.length;
+    diffScrollTop = matches[matchIndex] * DIFF_ROW_PITCH;
+    diffScrollEl.scrollTop = diffScrollTop;
+  }
+  function changeSearch(value: string) {
+    search = value;
+    matchIndex = 0;
+    moveMatch(0);
+  }
+  async function copy(value: string) {
+    actionError = null;
+    try { await navigator.clipboard.writeText(value); }
+    catch { actionError = "Could not copy to clipboard"; }
+  }
+  $effect(() => {
+    const current = diff;
+    const path = title;
+    untrack(() => {
+      search = "";
+      matchIndex = 0;
+      actionError = null;
+      diffScrollTop = 0;
+      if (diffScrollEl) diffScrollEl.scrollTop = 0;
+    });
+  });
+
   const allLines = $derived.by(() => {
     if (!diff) {
       return [] as DiffLine[];
     }
     return diff.hunks.flatMap((hunk) => hunk.lines);
   });
+
+  const matches = $derived(search.trim() ? allLines.flatMap((line, index) =>
+    line.content.toLowerCase().includes(search.toLowerCase()) ? [index] : []) : []);
 
   // Windowing for large diffs. Each row is a single unwrapped line
   // (`white-space: pre`, `line-height: 1.5` at 12px → 18px), so the pitch is
@@ -139,7 +176,26 @@
         <span class="git-text-diff-deleted">−{deletedCount}</span>
       </p>
     {/if}
+    <details class="diff-actions">
+      <summary aria-label="Diff actions">Actions</summary>
+      <div class="diff-action-menu">
+        <button type="button" disabled={!displayTitle} onclick={() => void copy(displayTitle)}>Copy path</button>
+        <button type="button" disabled={!diff || loading || !!error || isBinary || hasNoHunks}
+          onclick={() => void copy(allLines.map(line => linePrefix(line.kind) + line.content).join("\n"))}>Copy displayed diff</button>
+      </div>
+    </details>
   </header>
+  {#if diff && !loading && !error && !isBinary && !hasNoHunks}
+    <div class="diff-search">
+      <input aria-label="Search displayed diff" placeholder="Search diff" value={search}
+        oninput={event => changeSearch(event.currentTarget.value)}
+        onkeydown={event => { if (event.key === "Enter") { event.preventDefault(); moveMatch(event.shiftKey ? -1 : 1); } }} />
+      <span role="status">{matches.length ? matchIndex + 1 : 0}/{matches.length}</span>
+      <button type="button" aria-label="Previous diff match" disabled={!matches.length} onclick={() => moveMatch(-1)}>↑</button>
+      <button type="button" aria-label="Next diff match" disabled={!matches.length} onclick={() => moveMatch(1)}>↓</button>
+    </div>
+  {/if}
+  {#if actionError}<p role="alert">{actionError}</p>{/if}
 
   <div
     class="git-text-diff-body"
@@ -175,7 +231,7 @@
             <div class="git-text-diff-spacer" style="height: {diffTopPadPx}px" aria-hidden="true"></div>
           {/if}
           {#each allLines.slice(diffVisibleRange.start, diffVisibleRange.end) as line, i (diffVisibleRange.start + i)}
-            <div class={`git-text-diff-row ${lineClass(line.kind)}`}>
+            <div class={`git-text-diff-row ${lineClass(line.kind)}`} class:diff-search-match={matches.includes(diffVisibleRange.start + i)} class:diff-search-current={matches[matchIndex] === diffVisibleRange.start + i}>
               <span class="git-text-diff-gutter git-text-diff-gutter-old">
                 {formatLineNo(line.oldLineNo)}
               </span>
@@ -196,11 +252,21 @@
 </div>
 
 <style>
+  .diff-search { display: flex; flex-shrink: 0; align-items: center; gap: 4px; padding: 4px 8px; font-size: 12px; }
+  .diff-search input { min-width: 50px; flex: 1; }
+  .diff-search input, button { background: var(--color-surface-2); border: 1px solid var(--color-border-subtle); color: var(--color-text); font: inherit; }
+  .diff-actions { position: relative; font-size: 12px; }
+  .diff-actions summary { cursor: pointer; }
+  .diff-action-menu { position: absolute; right: 0; z-index: 2; display: flex; flex-direction: column; background: var(--color-surface-2); min-width: 150px; padding: 4px; }
+  .diff-search-match .git-text-diff-content { text-decoration: underline; text-decoration-color: var(--color-accent); }
+  .diff-search-current { outline: 1px solid var(--color-accent); outline-offset: -1px; }
+
   .git-text-diff {
     display: flex;
     flex-direction: column;
     width: 100%;
     height: 100%;
+    flex: 1;
     min-height: 0;
     background: var(--color-surface-1);
   }

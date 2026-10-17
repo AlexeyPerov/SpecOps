@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
   import GitCommitGraphColumn from "./GitCommitGraphColumn.svelte";
   import {
     ROW_HEIGHT,
@@ -30,7 +30,10 @@
     writePersistedHistoryFilterMode,
   } from "../git/versionControlHistoryFilter";
 
+  import { readGitWorkspaceViewState, saveGitWorkspaceViewState } from "../git/gitWorkspaceViewState";
+
   interface Props {
+    stateKey?: string;
     repoRoot: string;
     refreshToken?: number;
     revision?: string | null;
@@ -43,6 +46,7 @@
 
   let {
     repoRoot,
+    stateKey,
     refreshToken = 0,
     revision = null,
     selectedSha = null,
@@ -100,6 +104,7 @@
     void tick().then(() => { if (scrollContainer) { scrollContainer.scrollTop = top / oldHeight * rowHeight; historyScrollTop = scrollContainer.scrollTop; } });
   }
   let lastScope = "";
+  let restorePending = true;
   let loadStatus = $state<LoadStatus>("idle");
   let commits = $state<CommitSummary[]>([]);
   let loadError = $state<string | null>(null);
@@ -391,6 +396,11 @@
     }
   }
 
+  const ownedStateKey = untrack(() => stateKey);
+  onDestroy(() => {
+    saveGitWorkspaceViewState(ownedStateKey, { history: { limit: commitLimit, scroll: scrollContainer?.scrollTop ?? historyScrollTop, compact, order, includeRemotes, widths: [...widths], filter: filterMode, jump: jumpRevision } });
+  });
+
   $effect(() => {
     void revision;
     untrack(() => { jumpRevision = null; jumpGeneration++; jumpBusy = false; });
@@ -398,10 +408,12 @@
 
   $effect(() => {
     const root = repoRoot;
-    commits = []; loadStatus = "loading"; historyScrollTop = 0; lastScope = "";
-    untrack(onClearSelection);
+    commits = []; loadStatus = "loading"; historyScrollTop = 0; lastScope = ""; restorePending = true;
+    const saved = untrack(() => readGitWorkspaceViewState(stateKey)?.history);
+    if (!saved) untrack(onClearSelection);
     jumpGeneration++; jumpBusy = false; jumpQuery = ""; jumpError = null; jumpRevision = null;
-    compact = true; order = "topological"; includeRemotes = false; widths = [90, 380, 100, 150, 140];
+    compact = saved?.compact ?? true; order = saved?.order ?? "topological"; includeRemotes = saved?.includeRemotes ?? false; widths = saved?.widths ?? [90, 380, 100, 150, 140];
+    jumpRevision = saved?.jump ?? null;
     const controller = new AbortController();
     filterModeReady = false;
     filterMode = DEFAULT_HISTORY_FILTER_MODE;
@@ -422,7 +434,7 @@
       if (controller.signal.aborted) {
         return;
       }
-      filterMode = reconcileHistoryFilterMode(persisted);
+      filterMode = saved?.filter ?? reconcileHistoryFilterMode(persisted);
       filterModeReady = true;
     })();
 
@@ -446,9 +458,11 @@
     const sameScope = scope === lastScope;
     lastScope = scope;
     jumpGeneration++; jumpBusy = false;
-    const savedScroll = sameScope ? untrack(() => scrollContainer?.scrollTop ?? historyScrollTop) : 0;
-    const limit = sameScope ? untrack(() => commitLimit) : DEFAULT_COMMIT_LOG_LIMIT;
-    if (!sameScope) { commits = []; historyScrollTop = 0; onClearSelection(); }
+    const restored = restorePending ? untrack(() => readGitWorkspaceViewState(stateKey)?.history) : undefined;
+    restorePending = false;
+    const savedScroll = sameScope ? untrack(() => scrollContainer?.scrollTop ?? historyScrollTop) : restored?.scroll ?? 0;
+    const limit = sameScope ? untrack(() => commitLimit) : restored?.limit ?? DEFAULT_COMMIT_LOG_LIMIT;
+    if (!sameScope) { commits = []; historyScrollTop = 0; if (!restored) onClearSelection(); }
     const previousSha = untrack(() => selectedSha);
     const controller = new AbortController();
     // A new page-1 load supersedes any in-flight "load more": its result would
@@ -580,7 +594,7 @@
 
 <style>
 .git-history-panel { display:flex; flex-direction:column; min-height:0; height:100%; font-size:12px; }
-.git-history-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:5px 8px; border-bottom:1px solid var(--color-border); }
+.git-history-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:5px 8px; border-bottom:1px solid var(--color-border-subtle); }
 .git-history-toolbar label, form { display:flex; align-items:center; gap:4px; }
 .git-history-toolbar input:not([type=checkbox]) { width:130px; }
 .git-history-toolbar button, select, input { font-size:11px; }
@@ -588,8 +602,8 @@
 .git-history-scroll { flex:1; min-height:0; overflow:auto; overflow-anchor:none; }
 .git-history-table { width:max-content; min-width:100%; }
 .git-history-header, .git-history-row, .git-history-uncommitted { display:grid; grid-template-columns:var(--columns); width:100%; box-sizing:border-box; }
-.git-history-header { position:sticky; top:0; z-index:4; height:28px; background:var(--color-surface-1); border-bottom:1px solid var(--color-border); font-weight:600; }
-.git-history-header > div { position:relative; padding:5px 8px; border-right:1px solid var(--color-border); }
+.git-history-header { position:sticky; top:0; z-index:4; height:28px; background:var(--color-surface-1); border-bottom:1px solid var(--color-border-subtle); font-weight:600; }
+.git-history-header > div { position:relative; padding:5px 8px; border-right:1px solid var(--color-border-subtle); }
 .column-resize { position:absolute; right:0; top:0; height:100%; width:12px; cursor:col-resize; padding:0; background:transparent; border:0; color:var(--color-text-muted); touch-action:none; }
 .git-history-body { position:relative; }
 .git-history-graph { position:absolute; top:0; left:0; pointer-events:none; z-index:2; overflow:hidden; height:100%; }
@@ -600,7 +614,7 @@
 .git-history-row-selected { background:color-mix(in srgb,var(--color-accent) 20%, transparent); }
 .git-history-row:focus-visible { outline:1px solid var(--color-accent); outline-offset:-1px; }
 .git-history-sha { font-family:var(--font-mono); }
-.git-history-ref { display:inline-block; padding:1px 4px; margin-right:5px; border-radius:3px; background:var(--color-surface-2); border:1px solid var(--color-border); font-size:10px; vertical-align:middle; }
+.git-history-ref { display:inline-block; padding:1px 4px; margin-right:5px; border-radius:3px; background:var(--color-surface-2); border:1px solid var(--color-border-subtle); font-size:10px; vertical-align:middle; }
 .git-history-ref-current { border-color:var(--color-accent); color:var(--color-accent); }
 .git-history-ref-tag { color:#bc8b2e; }.git-history-ref-remote { color:#548dbb; }
 .ref-jump { position:absolute; right:26px; top:0; max-width:90px; height:100%; font-size:10px; }

@@ -76,3 +76,127 @@ describe('mounted version control toolbar',()=>{
  });
 
 });
+
+
+it('auto-selects a ready scope and keeps metadata for commits without changed files', async () => {
+ const main = { sha:'1'.repeat(40),parents:[],refs:[],subject:'Main history',authorName:'Test Author',authorEmail:'test@example.invalid',authorTime:1700000000,committerName:'Test Author',committerEmail:'test@example.invalid',committerTime:1700000000 };
+ const branch = { ...main,sha:'2'.repeat(40),subject:'Branch history' };
+ vi.mocked(git.queryCommits).mockImplementation(async (_root, options) => options?.filterMode === 'all-branches' ? [branch,main] : [main]);
+ const detailSpy = vi.spyOn(git,'queryCommitDetail').mockImplementation(async (_root,sha) => ({ ...main,sha,message:sha === branch.sha ? 'Branch metadata survives empty files' : 'Main metadata',files:[] }));
+ const view=mountComponent(VersionControlView,{workspaceRootPath:'/scope-repo'});await settle();
+ expect(view.host.querySelector('[role=option][aria-selected=true]')?.getAttribute('data-sha')).toBe(main.sha);
+ button(view.host,'All branches').click();await settle();
+ expect(view.host.querySelector('[role=option][aria-selected=true]')?.getAttribute('data-sha')).toBe(branch.sha);
+ expect(view.host.textContent).toContain('Branch metadata survives empty files');
+ expect(view.host.textContent).not.toContain('Commit metadata unavailable');
+ expect(detailSpy).toHaveBeenLastCalledWith('/scope-repo',branch.sha);
+});
+
+it('does not mount worktree Changes or query recovery state for bare repositories', async () => {
+ const {probeVersionControlContext}=await import('../git/versionControlProbe');
+ vi.mocked(probeVersionControlContext).mockResolvedValueOnce({kind:'ready',workspaceRootPath:'/bare.git',repoRoot:'/bare.git',isBareRepository:true});
+ const view=mountComponent(VersionControlView,{workspaceRootPath:'/bare.git'});await settle();
+ expect(view.host.textContent).toContain('This is a bare repository');
+ expect(git.queryWorkingTreeStatus).not.toHaveBeenCalled();
+ expect(pullState.queryGitOperationState).not.toHaveBeenCalled();
+ expect(view.host.querySelector('[aria-label="Commit history"]')).not.toBeNull();
+});
+
+it('restores history selection, query depth and scroll on remount, isolated by workspace and window', async () => {
+ const all=Array.from({length:1000},(_,i)=>({sha:(i+1).toString(16).padStart(40,'0'),parents:[],refs:[],subject:`History ${i}`,authorName:'Test Author',authorEmail:'test@example.invalid',authorTime:1700000000,committerName:'Test Author',committerEmail:'test@example.invalid',committerTime:1700000000}));
+ vi.mocked(git.queryCommits).mockImplementation(async (_root,options)=>all.slice(options?.skip ?? 0,(options?.skip ?? 0)+(options?.limit ?? 500)));
+ let view=mountComponent(VersionControlView,{workspaceRootPath:'/runtime-history',windowId:'first'});await settle();
+ button(view.host,'Load more commits').click();await settle();
+ view.host.querySelectorAll<HTMLButtonElement>('.git-history-row')[2]!.click();await settle();
+ const {readGitWorkspaceViewState}=await import('../git/gitWorkspaceViewState');
+ expect(readGitWorkspaceViewState('specops.git-layout:first:/runtime-history')?.view?.selected?.sha).toBe(all[2].sha);
+ const scroll=view.host.querySelector<HTMLElement>('.git-history-scroll')!;scroll.scrollTop=72;scroll.dispatchEvent(new Event('scroll'));flushSync();
+ view.unmount();await settle();
+ const other=mountComponent(VersionControlView,{workspaceRootPath:'/runtime-history',windowId:'second'});await settle();
+ expect(other.host.querySelector('[role=option][aria-selected=true]')?.getAttribute('data-sha')).toBe(all[0].sha);other.unmount();await settle();
+ view=mountComponent(VersionControlView,{workspaceRootPath:'/runtime-history',windowId:'first'});await settle();
+ expect(git.queryCommits).toHaveBeenLastCalledWith('/runtime-history',expect.objectContaining({limit:1000}));
+ expect(view.host.querySelector('[role=option][aria-selected=true]')?.getAttribute('data-sha')).toBe(all[2].sha);
+ expect(view.host.querySelector<HTMLElement>('.git-history-scroll')!.scrollTop).toBe(72);
+});
+
+it('preserves Changes draft and valid diff across remount without leaking to another workspace', async () => {
+ const make=()=>mountComponent(VersionControlView,{workspaceRootPath:'/runtime-changes',windowId:'first'});
+ let view=make();await settle();button(view.host,'Commit').click();await settle();
+ const input=view.host.querySelector<HTMLTextAreaElement>('textarea')!;input.value='Keep this draft';input.dispatchEvent(new Event('input',{bubbles:true}));flushSync();
+ view.host.querySelector<HTMLElement>('.git-changes-row')!.click();await settle();view.unmount();await settle();
+ const other=mountComponent(VersionControlView,{workspaceRootPath:'/other-runtime',windowId:'first'});await settle();button(other.host,'Commit').click();await settle();expect(other.host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('');other.unmount();await settle();
+ view=make();await settle();expect(view.host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('Keep this draft');
+ expect(git.queryWorkingTreeFileDiff).toHaveBeenLastCalledWith('/runtime-changes','file.ts','unstaged');
+ expect(view.host.querySelector('.git-changes-row')?.closest('li')?.classList.contains('git-changes-item-active')).toBe(true);
+});
+
+it('clears a committed cached draft when an in-flight commit finishes after unmount', async () => {
+ vi.mocked(git.queryWorkingTreeStatus).mockResolvedValue({staged:[{path:'file.ts',statusCode:'M '}],unstaged:[]} as never);
+ let finish!:()=>void;vi.mocked(git.createCommit).mockImplementationOnce(()=>new Promise<void>(resolve=>finish=resolve));
+ const make=()=>mountComponent(VersionControlView,{workspaceRootPath:'/runtime-commit',windowId:'first'});
+ let view=make();await settle();button(view.host,'Commit').click();await settle();
+ const input=view.host.querySelector<HTMLTextAreaElement>('textarea')!;input.value='Commit once';input.dispatchEvent(new Event('input',{bubbles:true}));flushSync();
+ view.host.querySelector<HTMLButtonElement>('.git-changes-commit-button')!.click();await settle();view.unmount();await settle();
+ view=make();await settle();expect(view.host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('Commit once');
+ vi.mocked(git.queryWorkingTreeStatus).mockResolvedValue({staged:[],unstaged:[]} as never);finish();await settle();
+ expect(view.host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('');
+ view.unmount();await settle();view=make();await settle();expect(view.host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('');
+});
+
+it('keeps runtime selection and drafts isolated on reactive workspace switches inside the same repository', async () => {
+ const {probeVersionControlContext}=await import('../git/versionControlProbe');
+ vi.mocked(probeVersionControlContext).mockImplementation(async root=>({kind:'ready',workspaceRootPath:root!,repoRoot:'/shared-repo',isBareRepository:false}));
+ const all=Array.from({length:4},(_,i)=>({sha:(i+1).toString(16).padStart(40,'0'),parents:[],refs:[],subject:`Shared history ${i}`,authorName:'Test Author',authorEmail:'test@example.invalid',authorTime:1700000000,committerName:'Test Author',committerEmail:'test@example.invalid',committerTime:1700000000}));
+ vi.mocked(git.queryCommits).mockResolvedValue(all);
+ const root=writable('/shared-repo/folder-a'),state=fromStore(root);
+ const view=mountComponent(VersionControlView,{get workspaceRootPath(){return state.current;},windowId:'reactive'});await settle();
+ view.host.querySelectorAll<HTMLButtonElement>('.git-history-row')[2]!.click();await settle();
+ root.set('/shared-repo/folder-b');await settle();expect(view.host.querySelector('[role=option][aria-selected=true]')?.getAttribute('data-sha')).toBe(all[0].sha);
+ root.set('/shared-repo/folder-a');await settle();expect(view.host.querySelector('[role=option][aria-selected=true]')?.getAttribute('data-sha')).toBe(all[2].sha);
+ button(view.host,'Commit').click();await settle();let input=view.host.querySelector<HTMLTextAreaElement>('textarea')!;input.value='Draft for folder A';input.dispatchEvent(new Event('input',{bubbles:true}));flushSync();
+ root.set('/shared-repo/folder-b');await settle();button(view.host,'Commit').click();await settle();input=view.host.querySelector<HTMLTextAreaElement>('textarea')!;expect(input.value).toBe('');input.value='Draft for folder B';input.dispatchEvent(new Event('input',{bubbles:true}));flushSync();
+ root.set('/shared-repo/folder-a');await settle();expect(view.host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('Draft for folder A');
+ root.set('/shared-repo/folder-b');await settle();expect(view.host.querySelector<HTMLTextAreaElement>('textarea')!.value).toBe('Draft for folder B');
+});
+
+it('ignores late panel mutation and busy callbacks after switching workspaces in one repository', async () => {
+ const {probeVersionControlContext}=await import('../git/versionControlProbe');
+ vi.mocked(probeVersionControlContext).mockImplementation(async root=>({kind:'ready',workspaceRootPath:root!,repoRoot:'/shared-repo',isBareRepository:false}));
+ let finishOld!:()=>void,finishNew!:()=>void;
+ vi.mocked(git.stageAll).mockImplementationOnce(()=>new Promise<void>(resolve=>finishOld=resolve)).mockImplementationOnce(()=>new Promise<void>(resolve=>finishNew=resolve));
+ const root=writable('/shared-repo/late-a'),state=fromStore(root);
+ const view=mountComponent(VersionControlView,{get workspaceRootPath(){return state.current;},windowId:'late'});await settle();button(view.host,'Commit').click();await settle();button(view.host,'Stage all').click();await settle();
+ root.set('/shared-repo/late-b');await settle();button(view.host,'Commit').click();await settle();button(view.host,'Stage all').click();await settle();
+ const reads=vi.mocked(git.queryCurrentBranch).mock.calls.length;finishOld();await settle();
+ expect(vi.mocked(git.queryCurrentBranch).mock.calls.length).toBe(reads);
+ expect(button(view.host,'Pull').disabled).toBe(true);
+ finishNew();await settle();expect(button(view.host,'Pull').disabled).toBe(false);
+});
+
+it.each(['bare','notARepository'] as const)('clears old Changes busy state when switching to %s without a Changes panel', async kind => {
+ const {probeVersionControlContext}=await import('../git/versionControlProbe');
+ vi.mocked(probeVersionControlContext).mockImplementation(async root=>root==='/busy-old'
+   ? {kind:'ready',workspaceRootPath:root,repoRoot:root,isBareRepository:false}
+   : kind==='bare' ? {kind:'ready',workspaceRootPath:root!,repoRoot:root!,isBareRepository:true} : {kind:'notARepository',workspaceRootPath:root!});
+ let finish!:()=>void;vi.mocked(git.stageAll).mockImplementationOnce(()=>new Promise<void>(resolve=>finish=resolve));
+ const root=writable('/busy-old'),state=fromStore(root);
+ const view=mountComponent(VersionControlView,{get workspaceRootPath(){return state.current;},windowId:`busy-${kind}`});await settle();
+ button(view.host,'Commit').click();await settle();button(view.host,'Stage all').click();await settle();
+ root.set('/readonly-new');await settle();
+ if(kind==='notARepository'){vi.mocked(probeVersionControlContext).mockResolvedValueOnce({kind:'ready',workspaceRootPath:'/bare-after-nonrepo',repoRoot:'/bare-after-nonrepo',isBareRepository:true});root.set('/bare-after-nonrepo');await settle();}
+ const more=view.host.querySelector<HTMLButtonElement>('[aria-label="More version control actions"]')!;more.click();await settle();
+ const refresh=view.host.querySelector<HTMLButtonElement>('[title="Refresh repository state"]')!;expect(refresh.disabled).toBe(false);
+ finish();await settle();expect(refresh.disabled).toBe(false);
+});
+
+it('keeps the selected commit when reselecting History or returning from Changes', async () => {
+ const {probeVersionControlContext}=await import('../git/versionControlProbe');vi.mocked(probeVersionControlContext).mockImplementation(async root=>({kind:'ready',workspaceRootPath:root!,repoRoot:root!,isBareRepository:false}));
+ vi.mocked(git.queryBranches).mockResolvedValue([{name:'feature/one',head:'a'.repeat(40),isCurrent:false,upstream:null,upstreamTrack:null,subject:''}]);
+ const commits=Array.from({length:3},(_,i)=>({sha:(i+1).toString(16).padStart(40,'0'),parents:[],refs:[],subject:`Selection ${i}`,authorName:'Test',authorEmail:'test@example.invalid',authorTime:1700000000,committerName:'Test',committerEmail:'test@example.invalid',committerTime:1700000000}));
+ vi.mocked(git.queryCommits).mockResolvedValue(commits);const view=mountComponent(VersionControlView,{workspaceRootPath:'/idempotent'});await settle();view.host.querySelectorAll<HTMLButtonElement>('.git-history-row')[2]!.click();await settle();
+ const node=(id:string)=>view.host.querySelector<HTMLButtonElement>(`[role=treeitem][title="${id}"]`)!;
+ node('history').click();await settle();expect(view.host.querySelector('[aria-selected=true][role=option]')?.getAttribute('data-sha')).toBe(commits[2].sha);
+ node('changes').click();await settle();node('history').click();await settle();expect(view.host.querySelector('[aria-selected=true][role=option]')?.getAttribute('data-sha')).toBe(commits[2].sha);
+ node('refs/heads/feature/one').click();await settle();view.host.querySelectorAll<HTMLButtonElement>('.git-history-row')[2]!.click();await settle();node('refs/heads/feature/one').click();await settle();expect(view.host.querySelector('[aria-selected=true][role=option]')?.getAttribute('data-sha')).toBe(commits[2].sha);
+});

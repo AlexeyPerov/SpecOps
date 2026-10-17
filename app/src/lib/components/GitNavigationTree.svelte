@@ -1,14 +1,19 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
+  import { readGitWorkspaceViewState, saveGitWorkspaceViewState } from '../git/gitWorkspaceViewState';
   import { formatGitErrorPrimaryMessage } from '../git/gitErrorUi';
   import { queryBranches, queryTags, queryStashes } from '../git/gitService';
   import { loadRemotes } from '../git/versionControlRemotesCache';
   import { buildNavigationTree, visibleNavigationRows, findNavigationNode, queryRemoteTrackingRefs, type NavigationNode, type NavigationRow } from '../git/gitNavigationTree';
-  let { repoRoot, refreshToken = 0, selectedId = 'history', onSelect, onAction }: {
-    repoRoot: string; refreshToken?: number; selectedId?: string;
+  let { repoRoot, stateKey, bare = false, refreshToken = 0, selectedId = 'history', onSelect, onAction }: {
+    repoRoot: string; stateKey?: string; bare?: boolean; refreshToken?: number; selectedId?: string;
     onSelect: (node: NavigationNode | null) => void;
     onAction: (section: 'branches' | 'tags' | 'stashes', selected: string | null) => void;
   } = $props();
+  const ownedStateKey = untrack(() => stateKey);
+  const restored = readGitWorkspaceViewState(ownedStateKey)?.navigation;
+  let restorePending = true;
+  onDestroy(() => saveGitWorkspaceViewState(ownedStateKey, { navigation: { filter, collapsed: [...collapsed], focus: focusId } }));
   let activeRoot = '';
   let nodes = $state<NavigationNode[]>([]);
   let collapsed = $state<string[]>([]);
@@ -25,16 +30,21 @@
   $effect(() => {
     const root = repoRoot;
     if (activeRoot !== root) {
-      activeRoot = root; nodes = []; collapsed = []; filter = ''; focusId = 'history'; missing = false;
+      activeRoot = root; nodes = []; collapsed = restorePending ? [...(restored?.collapsed ?? [])] : []; filter = restorePending ? restored?.filter ?? '' : ''; focusId = restorePending ? restored?.focus ?? 'history' : 'history'; restorePending = false; missing = false;
     }
     void refreshToken;
     const controller = new AbortController();
     status = 'loading'; error = ''; menu = null;
     void (async () => {
       try {
-        const results = await Promise.all([queryBranches(root, 'versionControl'), queryTags(root), loadRemotes(root), queryRemoteTrackingRefs(root), queryStashes(root)]);
+        const results = await Promise.all([queryBranches(root, 'versionControl'), queryTags(root), loadRemotes(root), queryRemoteTrackingRefs(root), bare ? Promise.resolve([]) : queryStashes(root)]);
         if (controller.signal.aborted) return;
         nodes = buildNavigationTree(...results);
+        if (bare) {
+          nodes = nodes.filter(node => node.id !== "stashes");
+          const workspace = nodes.find(node => node.id === "workspace");
+          if (workspace?.children) workspace.children = workspace.children.filter(node => node.id !== "changes");
+        }
         status = 'ready';
         const id = untrack(() => selectedId);
         const selected = findNavigationNode(nodes, id);

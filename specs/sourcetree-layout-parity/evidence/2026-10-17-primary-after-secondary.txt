@@ -1,0 +1,142 @@
+Window: "SpecOps", App: SpecOps Acceptance.
+0 standard window SpecOps, Secondary Actions: Raise
+	1 scroll area
+		2 HTML content Description: SpecOps, URL: tauri://localhost
+			3 container
+				4 container Activity rail
+					5 button Notepad
+					6 button Workspace workspace
+					7 button Add Workspace
+					8 button Workspace Manager
+					9 splitter Resize workspaces sidebar
+				10 container Sessions sidebar
+					11 button ⟫, Help: Expand sessions sidebar
+				12 button Version Control
+				13 button Description: Close Version Control, Help: Close tab
+				14 container Version control — workspace
+					15 container Version control toolbar
+						16 text BRANCH main Up to date
+						17 button Commit, Help: Open Changes and write a commit message
+						18 button (expanded) Navigation, Secondary Actions: Collapse
+						19 text REMOTE origin
+						20 button Pull, Help: Pull from selected remote
+						21 button Push, Help: Push to selected remote
+						22 button Fetch, Help: Remote for fetch, pull, and push
+						23 button Branch
+						24 button (disabled) Merge, Help: Merge is not yet available
+						25 button Stash
+						26 pop up button Description: More version control actions, Help: Refresh, fetch, and remote selection
+					27 container Version control navigation
+						28 text WORKSPACE
+						29 outline (selectable) Repository navigation
+							30 row (selectable, expanded) Description: Branches 3, Help: branches, Secondary Actions: Collapse, Value: Branches
+3
+							31 row (selectable, expanded) Description: feature 4, Help: branches/group/feature, Secondary Actions: Collapse, Value: feature
+4
+							32 row (selectable) Description: divergent-history, Help: refs/heads/feature/divergent-history
+							33 row (selectable) Description: layout, Help: refs/heads/feature/layout
+							34 row (selectable) Description: long-nested-reference-for-layout-validation-and-ellipsis, Help: refs/heads/feature/long-nested-reference-for-layout-validation-and-ellipsis
+							35 row (selectable) Description: navigation, Help: refs/heads/feature/navigation
+							36 row (selectable, expanded) Description: Remotes 1, Help: remotes, Secondary Actions: Collapse, Value: Remotes
+1
+							37 row (selectable, expanded) Description: origin 3, Help: remote/origin, Secondary Actions: Collapse, Value: origin
+3
+							38 row (selectable, expanded) Description: feature 2, Help: remote/origin/group/feature, Secondary Actions: Collapse, Value: feature
+2
+							39 row (selectable) Description: layout, Help: refs/remotes/origin/feature/layout
+							40 row (selectable) Description: navigation, Help: refs/remotes/origin/feature/navigation
+						41 text Search unavailable — commit search is not implemented.
+						42 text field (settable) Description: Filter repository navigation, Value: feature, Placeholder: Filter navigation
+					43 splitter Description: Resize navigation, Help: Resize navigation. Arrow keys resize; Home or Enter resets; double-click resets., Value: 523
+					44 container History
+						45 container Commit history
+							46 (settable, unknown) History scope
+								47 radio button Branch, Help: Commits reachable from the current branch, Value: 0
+								48 radio button All branches, Help: Commits on all local branches, Value: 1
+								49 radio button All + remotes, Help: All local branches and remote-tracking refs, Value: 0
+							50 container
+								51 checkbox Remote refs, Value: 0
+								52 text Remote refs
+							53 pop up button Description: History order, Value: Topological order
+							54 container
+								55 checkbox Compact, Value: 1
+								56 text Compact
+							57 text field (settable) Description: Jump to SHA or ref, Placeholder: SHA or ref
+							58 button (disabled) Jump to
+							59 container
+								60 text Graph
+								61 button Resize Graph column
+							62 container
+								63 text Description
+								64 button Resize Description column
+							65 container
+								66 text Commit
+								67 button Resize Commit column
+							68 container
+								69 text Author
+								70 button Resize Author column
+							71 container
+								72 text Date
+								73 button Resize Date column
+							74 button Uncommitted changes —
+							75 list (settable) Commits in history scope
+								76 text feature/divergent-history feature/long-nested-reference-for-layout-validation-and-ellipsis Divergent workspace update 9 97f4374 Workspace Tester 39 minutes ago
+								77 pop up button Description: Jump to reference, Value: Ref…
+								78 button Jump to first parent
+								79 text Workspace update 5201 4ded2d7 Workspace Tester 3 years ago
+							80 text Showing the first 5000 commits. Jump to a SHA or reference to view older history. The graph covers these loaded commits.
+						81 splitter Description: Resize history and inspector, Help: Resize history and inspector. Arrow keys resize; Home or Enter resets; double-click resets., Value: 326
+						82 container Commit detail
+							83 button (expanded) Commit metadata, Secondary Actions: Collapse
+							84 heading CHANGED FILES (2), Value: 3
+								85 text CHANGED FILES (2)
+							86 text field (settable) Description: Filter changed files, Placeholder: Filter files
+							87 button Sort files by path
+							88 toggle button Description: Tree view, Value: off
+							89 list (settable) Changed files
+								90 text (selected) A notes.txt
+								91 text M README.md
+							92 splitter Description: Resize files and metadata, Help: Resize files and metadata. Arrow keys resize; Home or Enter resets; double-click resets., Value: 317
+							93 button Copy SHA eb8a76ff6cff, Help: eb8a76ff6cff99f03d4b6352a1ed6ccdefe21be3
+							94 text PARENTS
+							95 button 4ded2d7, Help: 4ded2d752f1076d527b0513d7aa276ca453eeb1f
+							96 container Commit references
+								97 text main origin/main
+							98 container Commit message
+								99 text Acceptance workflow check
+							100 container Author and committer
+								101 description list
+									102 text Author
+									103 container
+										104 text Workspace Tester  <tester@example.invalid> 10/17/2026, 7:23:59 PM
+									105 text Committer
+									106 container
+										107 text Workspace Tester  <tester@example.invalid> 10/17/2026, 7:23:59 PM
+							108 splitter Description: Resize files and diff, Help: Resize files and diff. Arrow keys resize; Home or Enter resets; double-click resets., Value: 468
+							109 container notes.txt
+								110 text notes.txt
+							111 container Line change summary
+								112 text +1 −0
+							113 summary Description: Diff actions, Value: off
+								114 text Actions
+							115 text field (settable) Description: Search displayed diff, Placeholder: Search diff
+							116 text 0/0
+							117 button (disabled) Previous diff match
+							118 button (disabled) Next diff match
+							119 container Diff for notes.txt
+								120 text @@ -0,0 +1 @@
+								121 text 1 +
+								122 text New acceptance note
+				123 container Project panel
+					124 button ⟪, Help: Expand panel
+				125 button Workspace moved. Untitled, Help: Show console
+	126 close button
+	127 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	128 minimize button
+129 menu bar
+	130 SpecOps Acceptance
+	131 File
+	132 Edit
+	133 View
+
+The focused UI element is 2 HTML content Description: SpecOps, URL: tauri://localhost

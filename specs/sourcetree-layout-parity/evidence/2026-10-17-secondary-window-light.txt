@@ -1,0 +1,124 @@
+Window: "SpecOps", App: SpecOps Acceptance.
+0 standard window SpecOps, Secondary Actions: Raise
+	1 scroll area
+		2 HTML content Description: SpecOps, URL: tauri://localhost/
+			3 container
+				4 container Activity rail
+					5 button Notepad
+					6 button Workspace empty
+					7 button Add Workspace
+					8 button Workspace Manager
+					9 splitter Resize workspaces sidebar
+				10 container Sessions sidebar
+					11 splitter Resize sessions sidebar
+					12 button ⟪, Help: Collapse sessions sidebar
+					13 button New session
+					14 container
+						15 text Search sessions
+						16 search text field (settable) Search sessions Search sessions… cancel, Placeholder: Search sessions…
+							17 text Search sessions…
+					18 text No sessions yet.
+				19 button Version Control
+				20 button Description: Close Version Control, Help: Close tab
+				21 container Version control — empty
+					22 container Version control toolbar
+						23 text BRANCH main No upstream
+						24 button Commit, Help: Open Changes and write a commit message
+						25 button (expanded) Navigation, Secondary Actions: Collapse
+						26 text No remotes
+						27 button (disabled) Pull, Help: Pull (no remotes configured)
+						28 button (disabled) Push, Help: Push (no remotes configured)
+						29 button (disabled) Fetch, Help: No remotes configured
+						30 button Branch
+						31 button (disabled) Merge, Help: Merge is not yet available
+						32 button Stash
+						33 pop up button Description: More version control actions, Help: Refresh, fetch, and remote selection
+					34 container Version control navigation
+						35 text EMPTY
+						36 container Repository navigation
+							37 button (expanded) Workspace 3, Help: workspace, Secondary Actions: Collapse
+							38 button Changes, Help: changes
+							39 button (selected) History, Help: history
+							40 button (disabled) Search, Help: search
+Commit search is not available yet
+							41 button (expanded) Branches 0, Help: branches, Secondary Actions: Collapse
+							42 text No branches
+							43 button (expanded) Tags 0, Help: tags, Secondary Actions: Collapse
+							44 text No tags
+							45 button (expanded) Remotes 0, Help: remotes, Secondary Actions: Collapse
+							46 text No remotes
+							47 button (expanded) Stashes 0, Help: stashes, Secondary Actions: Collapse
+							48 text No stashes
+						49 text Search unavailable — commit search is not implemented.
+						50 text field (settable) Description: Filter repository navigation, Placeholder: Filter navigation
+					51 splitter Description: Resize navigation, Help: Resize navigation. Arrow keys resize; Home or Enter resets; double-click resets., Value: 421
+					52 container History
+						53 container Commit history
+							54 (settable, unknown) History scope
+								55 radio button Branch, Help: Commits reachable from the current branch, Value: 1
+								56 radio button All branches, Help: Commits on all local branches, Value: 0
+								57 radio button All + remotes, Help: All local branches and remote-tracking refs, Value: 0
+							58 container
+								59 checkbox Remote refs, Value: 0
+								60 text Remote refs
+							61 pop up button Description: History order, Value: Topological order
+							62 container
+								63 checkbox Compact, Value: 1
+								64 text Compact
+							65 text field (settable) Description: Jump to SHA or ref, Placeholder: SHA or ref
+							66 button (disabled) Jump to
+							67 container
+								68 text Graph
+								69 button Resize Graph column
+							70 container
+								71 text Description
+								72 button Resize Description column
+							73 container
+								74 text Commit
+								75 button Resize Commit column
+							76 container
+								77 text Author
+								78 button Resize Author column
+							79 container
+								80 text Date
+								81 button Resize Date column
+							82 button Uncommitted changes —
+							83 list (settable) Commits in history scope
+							84 text No commits yet. This repository has no commits on the current branch.
+						85 splitter Description: Resize history and inspector, Help: Resize history and inspector. Arrow keys resize; Home or Enter resets; double-click resets., Value: 381
+						86 container Commit detail
+							87 button (expanded) Commit metadata, Secondary Actions: Collapse
+							88 text Select a commit
+							89 splitter Description: Resize files and metadata, Help: Resize files and metadata. Arrow keys resize; Home or Enter resets; double-click resets., Value: 373
+							90 text Commit metadata unavailable
+							91 splitter Description: Resize files and diff, Help: Resize files and diff. Arrow keys resize; Home or Enter resets; double-click resets., Value: 581
+							92 text Diff
+							93 summary Description: Diff actions, Value: off
+								94 text Actions
+							95 container File diff
+								96 text Select a file to view changes
+				97 container Project panel
+					98 splitter Resize project panel
+					99 text empty
+					100 button Find in project (Cmd+Shift+F)
+					101 button Description: Create file or folder, Help: Create in project root
+					102 summary Description: Tree actions, Value: off
+						103 text ⋯
+					104 button Refresh tree
+					105 toggle button .md, Help: Show Markdown files only, Value: off
+					106 button Hidden: On, Help: Hide hidden files
+					107 button ⟫, Help: Collapse panel
+					108 container Project files
+						109 outline (selectable) Project files
+				110 button Could not load project favorites. Untitled, Help: Show console
+	111 close button
+	112 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	113 minimize button
+	114 text SpecOps
+115 menu bar
+	116 SpecOps Acceptance
+	117 File
+	118 Edit
+	119 View
+
+The focused UI element is 2 HTML content Description: SpecOps, URL: tauri://localhost/

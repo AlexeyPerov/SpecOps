@@ -273,6 +273,7 @@
 
   .git-text-diff-header {
     flex-shrink: 0;
+    flex-wrap: wrap;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -283,6 +284,7 @@
   }
 
   .git-text-diff-heading {
+    flex: 1 1 8rem;
     min-width: 0;
     display: flex;
     flex-direction: column;

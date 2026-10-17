@@ -73,3 +73,22 @@ describe('mounted repository navigation', () => {
     expect(fresh.host.textContent).not.toContain('private'); expect(staleSelect).not.toHaveBeenCalled();
   });
 });
+
+it('keeps bare refs available without requesting working-tree-only stash data', async () => {
+  const view=mountComponent(GitNavigationTree,{repoRoot:'/bare.git',bare:true,onSelect:vi.fn(),onAction:vi.fn()});
+  await settle();
+  expect(queryStashes).not.toHaveBeenCalled();
+  expect(view.host.querySelector('[title="refs/heads/feature/one"]')).not.toBeNull();
+  expect(view.host.querySelector('[title="changes"]')).toBeNull();
+  expect(view.host.querySelector('[title="stashes"]')).toBeNull();
+});
+
+it('restores scoped navigation filter, collapse and keyboard focus after remount', async () => {
+ const {clearGitWorkspaceViewStateForTests}=await import('../git/gitWorkspaceViewState');clearGitWorkspaceViewStateForTests();
+ const props={repoRoot:'/repo',stateKey:'window-a:workspace-a',onSelect:vi.fn(),onAction:vi.fn()};
+ const first=mountComponent(GitNavigationTree,props);await settle();row(first.host,'branches').click();flushSync();
+ const input=first.host.querySelector<HTMLInputElement>('input')!;input.value='feature/one';input.dispatchEvent(new Event('input',{bubbles:true}));flushSync();row(first.host,'refs/heads/feature/one').focus();flushSync();
+ first.unmount();const second=mountComponent(GitNavigationTree,props);await settle();expect(second.host.querySelector<HTMLInputElement>('input')!.value).toBe('feature/one');expect(row(second.host,'refs/heads/feature/one').tabIndex).toBe(0);
+ const other=mountComponent(GitNavigationTree,{...props,stateKey:'window-b:workspace-a'});await settle();expect(other.host.querySelector<HTMLInputElement>('input')!.value).toBe('');
+ const restored=second.host.querySelector<HTMLInputElement>('input')!;restored.value='';restored.dispatchEvent(new Event('input',{bubbles:true}));flushSync();expect(row(second.host,'refs/heads/feature/one')).toBeNull();
+});

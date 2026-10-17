@@ -88,6 +88,7 @@
   p { margin: 0; overflow-wrap: anywhere; }
   .url, .hint, small { font-size: var(--font-size-caption); color: var(--color-text-secondary); }
   fieldset { display: grid; gap: var(--space-5); min-width: 0; border: 1px solid var(--color-border-subtle); }
+  legend { width: max-content; max-width: 100%; white-space: nowrap; }
   .branch-actions { display: flex; justify-content: space-between; }
   .table-scroll { max-height: 320px; overflow: auto; }
   table { width: 100%; border-collapse: collapse; }

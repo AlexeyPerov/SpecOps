@@ -371,6 +371,15 @@ describe("parseBranchVvLine", () => {
 });
 
 describe("parseBranchVvLines", () => {
+  it("omits detached and rebase display rows without inventing local refs", () => {
+    for (const label of ["(HEAD detached at abc1234)", "(HEAD detached from v1)", "(no branch)", "(no branch, rebasing main)"]) {
+      expect(parseBranchVvLines(`* ${label} abc1234 Example\n  main abc1234 Example\n`)).toEqual([
+        { isCurrent: false, name: "main", head: "abc1234", upstream: null, upstreamTrack: null, subject: "Example" },
+      ]);
+    }
+    expect(parseBranchVvLine("* (release) abc1234 Example")?.name).toBe("(release)");
+  });
+
   it("parses all fixture branches and flags the current branch", () => {
     const branches = parseBranchVvLines(readFixture("git-branch-vv.txt"));
 

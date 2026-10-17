@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import { reportGitError } from "../git/gitErrorUi";
   import { formatWorkingTreeDiffSubtitle, formatWorkingTreeDiffSubtitleHelp, formatWorkingTreeStatusCode } from "../git/gitStatusFormat";
   import {
@@ -25,7 +25,10 @@
   import { shouldRunAutosaveBeforeGitOperations } from "../git/gitIntegrationGating";
   import GitTextDiffView from "./GitTextDiffView.svelte";
 
+  import { clearCommittedGitDraft, readGitWorkspaceViewState, saveGitWorkspaceViewState, subscribeCommittedGitDraft } from "../git/gitWorkspaceViewState";
+
   interface Props {
+    stateKey?: string;
     repoRoot: string;
     workspaceRootPath: string;
     preGitSaveDeps?: SaveDocumentDeps | null;
@@ -41,6 +44,7 @@
 
   let {
     repoRoot,
+    stateKey,
     workspaceRootPath,
     preGitSaveDeps = null,
     readOnly = false,
@@ -86,6 +90,13 @@
   // (M17). A plain variable is read at effect-creation time and mutated without
   // scheduling a re-run.
   let lastLoadedRepoRoot: string | null = null;
+  const ownedStateKey = untrack(() => stateKey);
+  untrack(() => {
+    const restored = readGitWorkspaceViewState(ownedStateKey)?.changes;
+    if (restored) { commitMessage = restored.draft; activeDiffPath = restored.path; activeDiffSource = restored.source; lastLoadedRepoRoot = repoRoot; }
+  });
+  onDestroy(() => saveGitWorkspaceViewState(ownedStateKey, { changes: { draft: commitMessage, path: activeDiffPath, source: activeDiffSource } }));
+  onMount(() => subscribeCommittedGitDraft((key, draft) => { if (key === ownedStateKey && commitMessage === draft) commitMessage = ''; }));
 
   const hasStagedChanges = $derived(staged.length > 0);
   const activeDiffEntry = $derived.by(() => {
@@ -362,6 +373,7 @@
 
     const root = repoRoot;
     const workspace = workspaceRootPath;
+    const committedDraft = commitMessage, committedStateKey = ownedStateKey;
     actionBusy = true;
     actionError = null;
     const commandId = crypto.randomUUID();
@@ -377,6 +389,7 @@
       }
 
       await createCommit(root, trimmed, { commandId });
+      clearCommittedGitDraft(committedStateKey, committedDraft);
       commitMessage = "";
       commitError = null;
       await refreshAfterAction("commit");

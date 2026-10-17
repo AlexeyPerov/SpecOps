@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { formatShortSha } from "../git/gitHistoryFormat";
   import { reportGitError } from "../git/gitErrorUi";
   import { GitDiffTooLargeError, queryCommitDetail, queryCommitFileDiff } from "../git/gitService";
@@ -8,6 +8,8 @@
   import GitCommitMetadata from "./GitCommitMetadata.svelte";
   import GitTextDiffView from "./GitTextDiffView.svelte";
   import GitWorkspaceSplit from "./GitWorkspaceSplit.svelte";
+
+  import { readGitWorkspaceViewState, saveGitWorkspaceViewState } from "../git/gitWorkspaceViewState";
 
   interface Props {
     repoRoot: string;
@@ -31,6 +33,12 @@
   let diffError = $state<string | null>(null);
   let metadataCollapsed = $state(false);
   let loadedIdentity: string | null = null;
+  const ownedLayoutScope = untrack(() => layoutScope);
+  untrack(() => {
+    const restored = readGitWorkspaceViewState(ownedLayoutScope)?.inspector;
+    if (restored) { loadedIdentity = `${repoRoot}\0${restored.sha}`; selectedFilePath = restored.path; metadataCollapsed = restored.metadataCollapsed; }
+  });
+  onDestroy(() => saveGitWorkspaceViewState(ownedLayoutScope, { inspector: { sha, path: selectedFilePath, metadataCollapsed } }));
   const selectedFile = $derived(detail?.files.find(file => file.path === selectedFilePath));
 
   async function loadDetail(root: string, commitSha: string, signal: AbortSignal) {

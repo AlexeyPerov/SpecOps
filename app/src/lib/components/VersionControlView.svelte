@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { clearGitWorkspaceViewStateForTests } from "../git/gitWorkspaceViewState";
   import type { VersionControlProbeResult } from "../git/versionControlProbe";
 
   // Cross-mount probe cache: remembers the last probe *outcome* for each
@@ -45,11 +46,13 @@
   /** Drops any cached probe outcome for `root` (used by tests). */
   export function clearVersionControlProbeCache(): void {
     probeCacheByRoot.clear();
+    clearGitWorkspaceViewStateForTests();
   }
 </script>
 
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onDestroy, tick, untrack } from "svelte";
+  import { readGitWorkspaceViewState, saveGitWorkspaceViewState } from "../git/gitWorkspaceViewState";
   import GitPushDialog from "./GitPushDialog.svelte";
   import { executePushPlan, type PushPlan, type PushResult } from "../git/gitPush";
   import GitPullDialog from "./GitPullDialog.svelte";
@@ -625,6 +628,33 @@
     }
   }
 
+  let ownedViewScope: string | null = null;
+  let viewStateReadyScope = $state<string | null>(null);
+  function saveOwnedView(): void {
+    if (ownedViewScope && probeStatus === "ready") saveGitWorkspaceViewState(ownedViewScope, { view: { sidebarCollapsed, section: activeSection, navigation: navigationSelection, revision: historyRevision, action: actionSelection, selected: selectedCommitSha === selectedCommit?.sha ? $state.snapshot(selectedCommit) : null } });
+  }
+  onDestroy(saveOwnedView);
+  $effect.pre(() => {
+    const nextScope = layoutScope;
+    untrack(() => {
+      if (ownedViewScope !== nextScope) {
+        saveOwnedView();
+        viewStateReadyScope = null;
+        changesBusy = false;
+        panelRemoteCommand = null;
+      }
+      ownedViewScope = nextScope;
+    });
+  });
+
+  $effect(() => {
+    void selectedCommitSha; void selectedCommit; void activeSection; void navigationSelection;
+    void historyRevision; void actionSelection; void sidebarCollapsed; void probeStatus;
+    const readyScope = viewStateReadyScope;
+    const scope = layoutScope;
+    untrack(() => { if (scope === ownedViewScope && scope === readyScope) saveOwnedView(); });
+  });
+
   function handleSelectCommit(commit: CommitSummary): void {
     selectedCommit = commit;
     selectedCommitSha = commit.sha;
@@ -749,6 +779,15 @@
           probeStatus = "ready";
           repoRoot = result.repoRoot;
           isBareRepository = result.isBareRepository;
+          if (!options?.silent) untrack(() => {
+            const saved = readGitWorkspaceViewState(layoutScope)?.view;
+            if (saved) {
+              sidebarCollapsed = saved.sidebarCollapsed; activeSection = saved.section; navigationSelection = saved.navigation;
+              historyRevision = saved.revision; actionSelection = saved.action;
+              selectedCommit = saved.selected; selectedCommitSha = saved.selected?.sha ?? null;
+            }
+          });
+          viewStateReadyScope = layoutScope;
           // A commit handed over by the project-tree / tab "Git Log" popup:
           // land on it in History instead of the default view.
           {
@@ -849,8 +888,14 @@
 
   function selectNavigation(node: NavigationNode | null): void {
     if (!node) { historyRevision = null; selectedCommitSha = null; return; }
+    const sameHistorySelection = activeSection === "history" && navigationSelection === node.id && historyRevision === (node.revision ?? null);
+    const returningToHistory = node.id === "history" && (activeSection === "changes" || (activeSection === "history" && historyRevision === null));
     navigationSelection = node.id;
     actionSelection = null;
+    if (node.id === "changes" || returningToHistory || sameHistorySelection) {
+      activeSection = node.id === "changes" ? "changes" : "history";
+      return;
+    }
     if (node.revision) {
       activeSection = "history";
       historyRevision = node.revision;
@@ -921,7 +966,11 @@
     if (workspaceRootPath) {
       notifyVersionControlMutation(workspaceRootPath, scope);
     }
-    await refreshBranchHeader(repoRoot);
+    const root = repoRoot;
+    const controller = new AbortController();
+    remoteRefreshController?.abort();
+    remoteRefreshController = controller;
+    await refreshBranchHeader(root, controller.signal);
   }
 
   function formatRepoRoot(path: string): string {
@@ -1190,7 +1239,7 @@
     let disposed = false;
     operationState = null;
     operationError = null;
-    if (root) void queryGitOperationState(root).then(state => { if (!disposed) operationState = state; }).catch(error => { if (!disposed) operationError = formatGitErrorPrimaryMessage(error); });
+    if (root && !isBareRepository) void queryGitOperationState(root).then(state => { if (!disposed) operationState = state; }).catch(error => { if (!disposed) operationError = formatGitErrorPrimaryMessage(error); });
     return () => { disposed = true; };
   });
 
@@ -1586,8 +1635,8 @@
       <div class="version-control-sidebar" aria-label="Version control navigation">
         <p class="version-control-title">{workspaceName}</p>
         {#if repoRoot}
-          {#key repoRoot}
-            <GitNavigationTree {repoRoot} refreshToken={panelRefreshToken} selectedId={navigationSelection} onSelect={selectNavigation} onAction={openReferenceActions} />
+          {#key `${layoutScope}:${repoRoot}`}
+            <GitNavigationTree stateKey={layoutScope} {repoRoot} bare={isBareRepository} refreshToken={panelRefreshToken} selectedId={navigationSelection} onSelect={selectNavigation} onAction={openReferenceActions} />
           {/key}
         {/if}
       </div>
@@ -1616,12 +1665,15 @@
           </div>
         {:else if operationError}<p role="alert">Unable to read Git operation state: {operationError}</p>{/if}
         <div class="git-workspace-content">
-        {#if repoRoot && workspaceRootPath}
-          {#key repoRoot}
+        {#if isBareRepository && activeSection === "changes"}<p class="version-control-note">Working tree changes are unavailable in a bare repository.</p>{/if}
+        {#if repoRoot && workspaceRootPath && !isBareRepository}
+          {#key `${layoutScope}:${repoRoot}`}
           {@const changesRoot = repoRoot}
+          {@const changesScope = layoutScope}
           <div class="version-control-changes" hidden={activeSection !== "changes"}>
           <GitChangesPanel
-            onBusyChange={(busy) => { changesBusy = busy; }}
+            stateKey={layoutScope}
+            onBusyChange={(busy) => { if (changesRoot === repoRoot && changesScope === layoutScope) changesBusy = busy; }}
             {focusMessageToken}
             operationBusy={toolbarBusy && !changesBusy}
             repoRoot={repoRoot}
@@ -1629,19 +1681,20 @@
             preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository}
             refreshToken={panelRefreshToken}
-            onMutation={(scope) => changesRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
-            onRemoteCommandChange={(command) => { if (changesRoot === repoRoot) registerPanelRemoteCommand(command); }}
+            onMutation={(scope) => changesRoot === repoRoot && changesScope === layoutScope ? refreshAfterMutation(scope) : undefined}
+            onRemoteCommandChange={(command) => { if (changesRoot === repoRoot && changesScope === layoutScope) registerPanelRemoteCommand(command); }}
             {notify}
           />
           </div>
           {/key}
         {/if}
-        {#key `${repoRoot}:${actionSelection}`}
+        {#key `${layoutScope}:${repoRoot}:${actionSelection}`}
         {@const actionRoot = repoRoot}
+        {@const actionScope = layoutScope}
         {#if activeSection === "history" && repoRoot}
           <GitWorkspaceSplit storageKey={`${layoutScope}:history`} label="Resize history and inspector" vertical initial={0.35} minFirst={140} minSecond={180}>
             {#snippet first()}
-              <GitHistoryPanel bind:this={historyPanel} revision={historyRevision} repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} onRefreshSelection={handleSelectCommit} onClearSelection={() => selectedCommitSha = null} onOpenChanges={() => { activeSection = "changes"; navigationSelection = "changes"; selectedCommitSha = null; }} />
+              <GitHistoryPanel stateKey={layoutScope} bind:this={historyPanel} revision={historyRevision} repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} onRefreshSelection={handleSelectCommit} onClearSelection={() => selectedCommitSha = null} onOpenChanges={() => { activeSection = "changes"; navigationSelection = "changes"; }} />
             {/snippet}
             {#snippet second()}
               <GitCommitDetailPanel repoRoot={repoRoot!} sha={selectedCommitSha} refs={selectedCommit?.sha === selectedCommitSha ? selectedCommit.refs : []} onNavigate={sha => { void historyPanel?.jumpTo(sha); }} refreshToken={panelRefreshToken} {notify} layoutScope={layoutScope} />
@@ -1655,7 +1708,7 @@
             preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository || toolbarBusy}
             refreshToken={panelRefreshToken}
-            onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
+            onMutation={(scope) => actionRoot === repoRoot && actionScope === layoutScope ? refreshAfterMutation(scope) : undefined}
             {notify}
           />
         {:else if activeSection === "tags" && repoRoot}
@@ -1665,8 +1718,8 @@
             readOnly={isReadOnlyRepository}
             remoteOpBusy={toolbarBusy}
             refreshToken={panelRefreshToken}
-            onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
-            onRemoteCommandChange={(command) => { if (actionRoot === repoRoot) registerPanelRemoteCommand(command); }}
+            onMutation={(scope) => actionRoot === repoRoot && actionScope === layoutScope ? refreshAfterMutation(scope) : undefined}
+            onRemoteCommandChange={(command) => { if (actionRoot === repoRoot && actionScope === layoutScope) registerPanelRemoteCommand(command); }}
             {notify}
           />
         {:else if activeSection === "stashes" && repoRoot && workspaceRootPath}
@@ -1677,7 +1730,7 @@
             preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository || toolbarBusy}
             refreshToken={panelRefreshToken}
-            onMutation={(scope) => actionRoot === repoRoot ? refreshAfterMutation(scope) : undefined}
+            onMutation={(scope) => actionRoot === repoRoot && actionScope === layoutScope ? refreshAfterMutation(scope) : undefined}
             {notify}
           />
         {:else if activeSection !== "changes"}
@@ -1837,7 +1890,8 @@
     align-items: center;
     gap: var(--space-4);
     min-width: 0;
-    flex: 1;
+    flex: 1 1 12rem;
+    flex-wrap: wrap;
   }
 
   .version-control-branch {
@@ -2065,6 +2119,11 @@
     border-right: 1px solid var(--color-border-subtle);
     height: 100%;
     box-sizing: border-box;
+  }
+
+  .version-control-sidebar > :global(.navigation) {
+    flex: 1;
+    height: auto;
   }
 
   .version-control-title {

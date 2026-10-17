@@ -492,6 +492,12 @@ export function parseBranchVvLine(line: string): ParsedBranchLine | null {
     return null;
   }
 
+  // Git prints a synthetic current row for detached HEAD and in-progress rebase.
+  // It is not a local branch and must never become an actionable ref.
+  if (markerMatch[1] === "*" && /^\((?:HEAD detached (?:at|from) .+|no branch(?:, .+)?)\)$/.test(name)) {
+    return null;
+  }
+
   const head = hashMatch[1];
   let tail = body.slice(hashMatch.index + hashMatch[0].length).trimStart();
 

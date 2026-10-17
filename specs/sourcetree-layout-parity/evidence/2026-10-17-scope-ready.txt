@@ -1,0 +1,145 @@
+Window: "SpecOps", App: SpecOps Acceptance.
+0 standard window SpecOps, Secondary Actions: Raise
+	1 scroll area
+		2 HTML content Description: SpecOps, URL: tauri://localhost
+			3 container
+				4 container Activity rail
+					5 button Notepad
+					6 button Workspace workspace
+					7 button Workspace empty
+					8 button Workspace remote.git
+					9 button Add Workspace
+					10 button Workspace Manager
+					11 splitter Resize workspaces sidebar
+				12 container Sessions sidebar
+					13 button ⟫, Help: Expand sessions sidebar
+				14 button Version Control
+				15 button Description: Close Version Control, Help: Close tab
+				16 container Version control — workspace
+					17 container Version control toolbar
+						18 text HEAD eb8a76f DETACHED
+						19 button Commit, Help: Open Changes and write a commit message
+						20 button (expanded) Navigation, Secondary Actions: Collapse
+						21 text REMOTE origin
+						22 button Pull, Help: Pull from selected remote
+						23 button Push, Help: Push to selected remote
+						24 button Fetch, Help: Remote for fetch, pull, and push
+						25 button Branch
+						26 button (disabled) Merge, Help: Merge is not yet available
+						27 button Stash
+						28 pop up button Description: More version control actions, Help: Refresh, fetch, and remote selection
+					29 container
+						30 text You are in a detached HEAD state at  eb8a76f . You can browse history and check out a branch when the working tree is clean.
+					31 container Version control navigation
+						32 text WORKSPACE
+						33 container Repository navigation
+							34 button (expanded) Workspace 3, Help: workspace, Secondary Actions: Collapse
+							35 button Changes, Help: changes
+							36 button (selected) History, Help: history
+							37 button (disabled) Search, Help: search
+Commit search is not available yet
+							38 button (expanded) Branches 3, Help: branches, Secondary Actions: Collapse
+							39 button (expanded) feature 4, Help: branches/group/feature, Secondary Actions: Collapse
+							40 button divergent-history, Help: refs/heads/feature/divergent-history
+							41 button layout, Help: refs/heads/feature/layout
+							42 button long-nested-reference-for-layout-validation-and-ellipsis, Help: refs/heads/feature/long-nested-reference-for-layout-validation-and-ellipsis
+							43 button navigation, Help: refs/heads/feature/navigation
+							44 button main, Help: refs/heads/main
+							45 button (expanded) review 1, Help: branches/group/review, Secondary Actions: Collapse
+							46 button inspector, Help: refs/heads/review/inspector
+							47 button (expanded) Tags 1, Help: tags, Secondary Actions: Collapse
+							48 button v0.1-preview, Help: refs/tags/v0.1-preview
+							49 button (expanded) Remotes 1, Help: remotes, Secondary Actions: Collapse
+							50 button (expanded) origin 3, Help: remote/origin, Secondary Actions: Collapse
+							51 button (expanded) feature 2, Help: remote/origin/group/feature, Secondary Actions: Collapse
+							52 button layout, Help: refs/remotes/origin/feature/layout
+							53 button navigation, Help: refs/remotes/origin/feature/navigation
+							54 button main, Help: refs/remotes/origin/main
+							55 button (expanded) review 1, Help: remote/origin/group/review, Secondary Actions: Collapse
+							56 button inspector, Help: refs/remotes/origin/review/inspector
+							57 button (expanded) Stashes 0, Help: stashes, Secondary Actions: Collapse
+							58 text No stashes
+						59 text Search unavailable — commit search is not implemented.
+						60 text field (settable) Description: Filter repository navigation, Placeholder: Filter navigation
+					61 splitter Description: Resize navigation, Help: Resize navigation. Arrow keys resize; Home or Enter resets; double-click resets., Value: 380
+					62 container History
+						63 container Commit history
+							64 (settable, unknown) History scope
+								65 radio button Branch, Help: Commits reachable from the current branch, Value: 0
+								66 radio button All branches, Help: Commits on all local branches, Value: 1
+								67 radio button All + remotes, Help: All local branches and remote-tracking refs, Value: 0
+							68 container
+								69 checkbox Remote refs, Value: 0
+								70 text Remote refs
+							71 pop up button Description: History order, Value: Topological order
+							72 container
+								73 checkbox Compact, Value: 1
+								74 text Compact
+							75 text field (settable) Description: Jump to SHA or ref, Placeholder: SHA or ref
+							76 button (disabled) Jump to
+							77 container
+								78 text Graph
+								79 button Resize Graph column
+							80 container
+								81 text Description
+								82 button Resize Description column
+							83 container
+								84 text Commit
+								85 button Resize Commit column
+							86 container
+								87 text Author
+								88 button Resize Author column
+							89 container
+								90 text Date
+								91 button Resize Date column
+							92 button Uncommitted changes —
+							93 list (settable) Commits in history scope
+								94 text (selected) feature/divergent-history feature/long-nested-reference-for-layout-validation-and-ellipsis Divergent workspace update 9 97f4374 Workspace Tester 10 minutes ago
+								95 pop up button Description: Jump to reference, Value: Ref…
+								96 button Jump to first parent
+								97 text Divergent workspace update 8 874df29 Workspace Tester 10 minutes ago
+							98 button Load more commits
+						99 splitter Description: Resize history and inspector, Help: Resize history and inspector. Arrow keys resize; Home or Enter resets; double-click resets., Value: 252
+						100 container Commit detail
+							101 button (expanded) Commit metadata, Secondary Actions: Collapse
+							102 heading CHANGED FILES (0), Value: 3
+								103 text CHANGED FILES (0)
+							104 text field (settable) Description: Filter changed files, Placeholder: Filter files
+							105 button Sort files by path
+							106 toggle button Description: Tree view, Value: off
+							107 text No file changes in this commit.
+							108 splitter Description: Resize files and metadata, Help: Resize files and metadata. Arrow keys resize; Home or Enter resets; double-click resets., Value: 241
+							109 button Copy SHA 97f437460207, Help: 97f4374602072697d6f58717d8c4972dc9c16cf3
+							110 text PARENTS
+							111 button 874df29, Help: 874df29affcaa9501d19f3634d5af5d8c2fefb04
+							112 container Commit references
+								113 text feature/divergent-history feature/long-nested-reference-for-layout-validation-and-ellipsis
+							114 container Commit message
+								115 text Divergent workspace update 9
+							116 container Author and committer
+								117 description list
+									118 text Author
+									119 container
+										120 text Workspace Tester <tester@example.invalid> 10/17/2026, 7:25:53 PM
+									121 text Committer
+									122 container
+										123 text Workspace Tester <tester@example.invalid> 10/17/2026, 7:25:53 PM
+							124 splitter Description: Resize files and diff, Help: Resize files and diff. Arrow keys resize; Home or Enter resets; double-click resets., Value: 340
+							125 text Diff
+							126 summary Description: Diff actions, Value: off
+								127 text Actions
+							128 container File diff
+								129 text Select a file to view changes
+				130 container Project panel
+					131 button ⟪, Help: Expand panel
+				132 button Could not load project favorites. Untitled, Help: Show console
+	133 close button
+	134 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	135 minimize button
+136 menu bar
+	137 SpecOps Acceptance
+	138 File
+	139 Edit
+	140 View
+
+The focused UI element is 2 HTML content Description: SpecOps, URL: tauri://localhost

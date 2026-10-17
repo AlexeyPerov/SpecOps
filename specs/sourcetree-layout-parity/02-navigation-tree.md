@@ -1,6 +1,6 @@
 # GL-02 — Постоянное дерево навигации
 
-**Статус:** Implemented; functional source/mounted checks pass, visual acceptance pending GL-08. **Зависимости:** GL-01.
+**Статус:** Accepted — реализация, mounted/API/Git tests и desktop-приёмка завершены; [доказательства и ограничения](evidence/README.md). **Зависимости:** GL-01.
 
 ## Работы
 

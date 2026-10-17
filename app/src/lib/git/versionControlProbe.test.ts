@@ -62,7 +62,7 @@ describe("probeVersionControlContext", () => {
       stderr: "fatal: not a git repository (or any of the parent directories): .git\n",
       durationMs: 4,
     };
-    invokeMock.mockResolvedValueOnce(gitResponse).mockResolvedValueOnce(revParseResponse);
+    invokeMock.mockResolvedValueOnce(gitResponse).mockResolvedValueOnce(revParseResponse).mockResolvedValueOnce(revParseResponse);
 
     const result = await probeVersionControlContext("/tmp/empty-workspace");
 

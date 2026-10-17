@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-17 20:09 MSK — Accept Git workspace layout and remote dialogs
+
+- Complete native desktop acceptance at four CSS viewport sizes, light/dark palettes and increased interface size; record dated History, Changes, Pull, Push, empty/detached/bare/offline and secondary-window evidence with honest runner-only authentication coverage.
+- Correct narrow toolbar/sidebar/diff sizing, history border tokens and Push group legend wrapping. Resolve real bare repositories without issuing worktree-only stash/recovery/Changes queries, and remove synthetic detached-head branch rows.
+- Retain runtime Git view state by workspace and window across shell remounts: selected commit, loaded depth/scroll, inspector file, Changes draft/diff, navigation collapse/filter/focus and sidebar visibility. Bound the cache, reread Git data, reconcile stale selection, guard late callbacks and successful commits after unmount, and make repeated history/ref navigation idempotent. No persisted-data migration.
+- Validate 306 frontend test files / 3114 tests, Svelte check with zero diagnostics, production frontend/host build and native app bundle. Full serial native suite passes 122 tests with 1 ignored; initial parallel unrelated filesystem Busy failure documented. Compare actual pre-layout/current native performance with 5000 commits, including full SVG limits and small-sample caveats, in the acceptance evidence.
+
 ## 2026-10-17 19:16 MSK — Add explicit multi-branch Push plans
 
 - Replace the Push shell with configured remote and redacted push URL, branch selection/destination/independent Track table, upstream hints, Select all, explicit tags-only/all-tags selection, validation, loading/auth/error states, progress, cancellation and per-ref results.

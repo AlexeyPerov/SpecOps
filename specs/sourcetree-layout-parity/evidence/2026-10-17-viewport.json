@@ -1,0 +1,18 @@
+{
+  "measuredAt": "2026-10-17T20:08:00+03:00",
+  "source": "Native Web Inspector, delayed capture with inspector closed; final isolated build",
+  "width": 1920,
+  "height": 1080,
+  "devicePixelRatio": 2,
+  "rootCssZoom": "1",
+  "theme": "Blue light",
+  "interfaceSize": "100%",
+  "editorSize": "100%",
+  "appliesTo": [
+    "primary-after-secondary",
+    "changes-remount-light",
+    "pull-offline-light",
+    "history-final-1920-light"
+  ],
+  "secondaryWindowCssViewport": "not measured; OS zoom used"
+}

@@ -1,0 +1,114 @@
+Window: "SpecOps", App: SpecOps Acceptance.
+0 standard window SpecOps, Secondary Actions: Raise
+	1 scroll area
+		2 HTML content Description: SpecOps, URL: tauri://localhost
+			3 container
+				4 container Activity rail
+					5 button Notepad
+					6 button Workspace workspace
+					7 button Workspace empty
+					8 button Add Workspace
+					9 button Workspace Manager
+					10 splitter Resize workspaces sidebar
+				11 container Sessions sidebar
+					12 button ⟫, Help: Expand sessions sidebar
+				13 button Version Control
+				14 button Description: Close Version Control, Help: Close tab
+				15 container Version control — workspace
+					16 container Version control toolbar
+						17 text BRANCH main Up to date
+						18 button Commit, Help: Open Changes and write a commit message
+						19 button (expanded) Navigation, Secondary Actions: Collapse
+						20 text REMOTE origin
+						21 button Pull, Help: Pull from selected remote
+						22 button Push, Help: Push to selected remote
+						23 button Fetch, Help: Remote for fetch, pull, and push
+						24 button Branch
+						25 button (disabled) Merge, Help: Merge is not yet available
+						26 button Stash
+						27 pop up button Description: More version control actions, Help: Refresh, fetch, and remote selection
+					28 container Version control navigation
+						29 text WORKSPACE
+						30 container Repository navigation
+							31 button (expanded) Workspace 3, Help: workspace, Secondary Actions: Collapse
+							32 button (selected) Changes, Help: changes
+							33 button History, Help: history
+							34 button (disabled) Search, Help: search
+Commit search is not available yet
+							35 button (expanded) Branches 3, Help: branches, Secondary Actions: Collapse
+							36 button (expanded) feature 4, Help: branches/group/feature, Secondary Actions: Collapse
+							37 button divergent-history, Help: refs/heads/feature/divergent-history
+							38 button layout, Help: refs/heads/feature/layout
+							39 button long-nested-reference-for-layout-validation-and-ellipsis, Help: refs/heads/feature/long-nested-reference-for-layout-validation-and-ellipsis
+							40 button navigation, Help: refs/heads/feature/navigation
+							41 button main, Help: refs/heads/main
+							42 button (expanded) review 1, Help: branches/group/review, Secondary Actions: Collapse
+							43 button inspector, Help: refs/heads/review/inspector
+							44 button (expanded) Tags 1, Help: tags, Secondary Actions: Collapse
+							45 button v0.1-preview, Help: refs/tags/v0.1-preview
+							46 button (expanded) Remotes 1, Help: remotes, Secondary Actions: Collapse
+							47 button (expanded) origin 3, Help: remote/origin, Secondary Actions: Collapse
+							48 button (expanded) feature 2, Help: remote/origin/group/feature, Secondary Actions: Collapse
+							49 button layout, Help: refs/remotes/origin/feature/layout
+							50 button navigation, Help: refs/remotes/origin/feature/navigation
+							51 button main, Help: refs/remotes/origin/main
+							52 button (expanded) review 1, Help: remote/origin/group/review, Secondary Actions: Collapse
+							53 button inspector, Help: refs/remotes/origin/review/inspector
+							54 button (expanded) Stashes 0, Help: stashes, Secondary Actions: Collapse
+							55 text No stashes
+						56 text Search unavailable — commit search is not implemented.
+						57 text field (settable) Description: Filter repository navigation, Placeholder: Filter navigation
+					58 splitter Description: Resize navigation, Help: Resize navigation. Arrow keys resize; Home or Enter resets; double-click resets., Value: 523
+					59 container Changes
+						60 container Working tree changes
+							61 container Unstaged
+								62 heading UNSTAGED, Help: Unstaged diffs compare the working tree to the last commit (HEAD), not the staging index., Value: 3
+									63 text UNSTAGED
+								64 button (disabled) Stage selected
+								65 button Stage all
+								66 content list
+									67 button Select unstaged notes.txt M notes.txt
+							68 container Staged
+								69 heading STAGED, Value: 3
+									70 text STAGED
+								71 button (disabled) Unstage selected
+								72 text No staged changes.
+							73 container Commit
+								74 heading COMMIT, Value: 3
+									75 text COMMIT
+								76 text Message
+								77 text entry area (settable) Message Message, Value: [text entry area], Placeholder: Describe your changes…
+									78 text (settable) Native remount acceptance draft
+								79 button (disabled) Commit
+							80 container File diff
+								81 container notes.txt
+									82 text notes.txt
+								83 container Shows all working-tree changes compared to the last commit (HEAD), not the staging index. If you staged part of a file and edited it again, the diff includes both unstaged and previously staged edits.
+									84 text Unstaged changes (vs last commit)
+								85 container Line change summary
+									86 text +1 −1
+								87 summary Description: Diff actions, Value: off
+									88 text Actions
+								89 text field (settable) Description: Search displayed diff, Placeholder: Search diff
+								90 text 0/0
+								91 button (disabled) Previous diff match
+								92 button (disabled) Next diff match
+								93 container Diff for notes.txt
+									94 text @@ -1 +1 @@
+									95 text 1 -
+									96 text New acceptance note
+									97 text 1 +
+									98 text Pending second native acceptance change
+				99 container Project panel
+					100 button ⟪, Help: Expand panel
+				101 button Could not load project favorites. Untitled, Help: Show console
+	102 close button
+	103 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	104 minimize button
+105 menu bar
+	106 SpecOps Acceptance
+	107 File
+	108 Edit
+	109 View
+
+The focused UI element is 77 text entry area (settable) Message Message, Value: [text entry area], Placeholder: Describe your changes…

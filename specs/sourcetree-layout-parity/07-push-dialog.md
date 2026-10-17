@@ -1,6 +1,6 @@
 # GL-07 — Окно Push
 
-**Статус:** Implemented UI + exact multi-ref Git plan; desktop visual acceptance pending GL-08. **Зависимости:** GL-05; расширение push API и native contract для нескольких refspec и tracking.
+**Статус:** Accepted — реализация, mounted/API/Git tests и desktop-приёмка завершены; [доказательства и ограничения](evidence/README.md). **Зависимости:** GL-05; расширение push API и native contract для нескольких refspec и tracking.
 
 ![Референс окна Push](references/push-dialog.png)
 
@@ -25,7 +25,7 @@
 
 ## Приёмка
 
-- [ ] Desktop visual acceptance: таблица и группы, длинные имена и реальные размеры окна проверяются в GL-08. Tab order, выбор и возврат фокуса проверены mounted-тестами.
+- [x] Desktop visual acceptance: таблица и группы, длинные имена и реальные размеры окна проверяются в GL-08. Tab order, выбор и возврат фокуса проверены mounted-тестами.
 - [x] На временном локальном bare remote проверены одна/несколько веток, новое имя назначения, track on/off, tags-only и branches+tags.
 - [x] Проверены отказ non-fast-forward, частичный успех и отмена; диалог не сообщает общий успех при отклонённом ref.
 - [x] До закрытия Git-зависимостей layout можно принять отдельно, но задачу целиком нельзя отметить Done.

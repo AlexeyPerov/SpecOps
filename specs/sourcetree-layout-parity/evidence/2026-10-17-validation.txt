@@ -1,0 +1,181 @@
+Full frontend tests
+
+> spec-ops@0.3.0 test
+> vitest run
+
+
+ RUN  v4.1.9 /Users/alexeyperov/Projects/spec-ops/app
+
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+
+ Test Files  306 passed (306)
+      Tests  3114 passed (3114)
+   Start at  20:06:31
+   Duration  34.20s (transform 13.84s, setup 4.21s, import 59.81s, tests 62.81s, environment 208.53s)
+
+
+
+Final affected toolbar tests
+
+> spec-ops@0.3.0 test
+> vitest run VersionControlToolbar.test.ts
+
+
+ RUN  v4.1.9 /Users/alexeyperov/Projects/spec-ops/app
+
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  20:09:19
+   Duration  2.86s (transform 1.02s, setup 23ms, import 1.17s, tests 1.16s, environment 421ms)
+
+
+
+Svelte check
+
+> spec-ops@0.3.0 check
+> svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+
+Loading svelte-check in workspace: /Users/alexeyperov/Projects/spec-ops/app
+Getting Svelte diagnostics...
+
+svelte-check found 0 errors and 0 warnings
+
+
+Production/native app build
+     0.37 kB
+.svelte-kit/output/server/chunks/server.js                                                                 0.62 kB
+.svelte-kit/output/server/chunks/utils2.js                                                                 1.09 kB
+.svelte-kit/output/server/entries/fallbacks/error.svelte.js                                                1.41 kB
+.svelte-kit/output/server/chunks/index2.js                                                                 2.77 kB
+.svelte-kit/output/server/chunks/internal.js                                                               3.31 kB
+.svelte-kit/output/server/chunks/highlightSegments.js                                                      3.76 kB
+.svelte-kit/output/server/chunks/BookmarkListPicker.js                                                     4.50 kB
+.svelte-kit/output/server/chunks/HeadingJumpPicker.js                                                      4.79 kB
+.svelte-kit/output/server/chunks/SnippetInsertPicker.js                                                    5.17 kB
+.svelte-kit/output/server/chunks/CommandPalettePicker.js                                                   5.23 kB
+.svelte-kit/output/server/chunks/exports.js                                                                5.54 kB
+.svelte-kit/output/server/chunks/QuickOpenPicker.js                                                        6.08 kB
+.svelte-kit/output/server/chunks/root.js                                                                  28.15 kB
+.svelte-kit/output/server/chunks/utils.js                                                                 34.22 kB
+.svelte-kit/output/server/remote-entry.js                                                                 36.86 kB
+.svelte-kit/output/server/chunks/index.js                                                                 99.62 kB
+.svelte-kit/output/server/index.js                                                                       130.94 kB
+.svelte-kit/output/server/chunks/_page.js                                                              1,213.26 kB
+✓ built in 19.52s
+
+Run npm run preview to preview your production build locally.
+
+> Using @sveltejs/adapter-static
+  Wrote site to "build"
+  ✔ done
+
+> @specops/agent-host@0.1.0 build
+> node scripts/build.mjs
+
+
+  dist/index.js  424.3kb
+
+⚡ Done in 24ms
+agent-host 0.1.0 (git ed1c00f) built at 2026-10-17T19:17:27+03:00
+   Compiling spec-ops v0.3.0 (/Users/alexeyperov/Projects/spec-ops/app/src-tauri)
+warning: function `installed_candidates` is never used
+ --> src/native_assets.rs:5:4
+  |
+5 | fn installed_candidates(resources: Option<&Path>, executable: Option<&Path>) -> Vec<PathBuf> {
+  |    ^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `resolve_opencode_binary` is never used
+  --> src/native_assets.rs:22:15
+   |
+22 | pub(crate) fn resolve_opencode_binary(app: &AppHandle) -> Result<PathBuf, String> {
+   |               ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `spec-ops` (lib) generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.97s
+       Built application at: /Users/alexeyperov/Projects/spec-ops/app/src-tauri/target/debug/spec-ops
+    Bundling SpecOps Acceptance.app (/Users/alexeyperov/Projects/spec-ops/app/src-tauri/target/debug/bundle/macos/SpecOps Acceptance.app)
+    Finished 1 bundle at:
+        /Users/alexeyperov/Projects/spec-ops/app/src-tauri/target/debug/bundle/macos/SpecOps Acceptance.app
+
+
+
+Native serial suite
+_stream_flags_non_utf8_without_polluting_content ... ok
+test git::tests::read_limited_stream_never_splits_multibyte_char ... ok
+test git::tests::read_limited_stream_truncates_oversize_and_drains_to_eof ... ok
+test git::tests::registered_command_drains_large_output_without_deadlock ... ok
+test git::tests::remove_stale_index_lock_refuses_when_a_command_is_active_for_the_repo ... ok
+test git::tests::remove_stale_index_lock_removes_an_orphaned_lock ... ok
+test git::tests::remove_stale_index_lock_reports_absent_when_no_lock_exists ... ok
+test git::tests::resolve_git_binary_uses_path_git_when_available ... ok
+test git::tests::run_git_add_paths_with_spaces_and_non_ascii_as_single_argv ... ok
+test git::tests::run_git_non_zero_exit_returns_stderr_without_panicking ... ok
+test git::tests::run_git_not_a_repository_returns_exit_code_128 ... ok
+test git::tests::run_git_preserves_args_with_spaces_as_single_argv ... ok
+test git::tests::run_git_rejects_disallowed_subcommand ... ok
+test git::tests::run_git_rejects_duplicate_command_ids ... ok
+test git::tests::run_git_rejects_empty_repo_root ... ok
+test git::tests::run_git_rejects_nonexistent_repo_root ... ok
+test git::tests::run_git_rejects_relative_repo_root ... ok
+test git::tests::run_git_rev_parse_nested_subdirectory_resolves_repo_root ... ok
+test git::tests::run_git_status_succeeds_in_temp_repo ... ok
+test git::tests::run_git_strips_env_vars_outside_the_allowlist ... ok
+test git::tests::run_git_timeout_terminates_in_flight_process ... ok
+test git::tests::sanitize_git_env_accepts_the_ssh_commands_the_app_builds ... ok
+test git::tests::sanitize_git_env_keeps_only_allowlisted_keys_and_values ... ok
+test git::tests::sanitize_git_env_rejects_weaponized_ssh_command ... ok
+test git::tests::truncate_bytes_to_utf8_boundary_keeps_complete_chars ... ok
+test git::tests::validate_git_args_allows_ordinary_commands ... ok
+test git::tests::validate_git_args_rejects_option_level_exec_vectors ... ok
+test git::tests::validate_git_args_restricts_config_to_identity_keys ... ok
+test git::tests::validate_git_args_restricts_remote_to_listing ... ok
+test git::tests::validates_exact_push_and_local_tracking_contract ... ok
+test git::tests::validates_pull_and_recovery_forms ... ok
+test git_askpass::tests::parse_host_hint_extracts_https_host ... ok
+test git_askpass::tests::parse_input_kind_detects_username_and_password ... ok
+test git_askpass::tests::wait_for_prompt_continues_when_response_file_already_consumed ... ok
+test handoff::tests::excludes_private_traversal_binary_and_bounds ... ok
+test native_assets::tests::installed_candidates_never_search_checkout_or_path ... ok
+test project_move::tests::rename_never_overwrites ... ok
+test project_move::tests::replacement_failure_restores_destination ... ok
+test project_move::tests::verified_cross_volume_folder_copy_preserves_hidden_files_and_links ... ok
+test session_fs::tests::atomic_write_creates_and_replaces ... ok
+test session_fs::tests::validate_rejects_traversal_components ... ok
+test workspace_documents::tests::compare_before_write_and_lazy_creation ... ok
+
+test result: ok. 122 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 24.52s
+
+     Running unittests src/main.rs (target/debug/deps/spec_ops-aaf99e0dab65038b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests app_lib
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

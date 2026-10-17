@@ -1,0 +1,185 @@
+Window: "SpecOps", App: SpecOps Acceptance.
+0 standard window SpecOps, Secondary Actions: Raise
+	1 scroll area
+		2 HTML content Description: SpecOps, URL: tauri://localhost
+			3 container
+				4 container Activity rail
+					5 button Notepad
+					6 button Workspace workspace
+					7 button Add Workspace
+					8 button Workspace Manager
+					9 splitter Resize workspaces sidebar
+				10 container Sessions sidebar
+					11 button ⟫, Help: Expand sessions sidebar
+				12 button Version Control
+				13 button Description: Close Version Control, Help: Close tab
+				14 container Version control — workspace
+					15 container Version control toolbar
+						16 text BRANCH main Up to date
+						17 button Commit, Help: Open Changes and write a commit message
+						18 button (expanded) Navigation, Secondary Actions: Collapse
+						19 text REMOTE origin
+						20 button Pull, Help: Pull from selected remote
+						21 button Push, Help: Push to selected remote
+						22 button Fetch, Help: Remote for fetch, pull, and push
+						23 button Branch
+						24 button (disabled) Merge, Help: Merge is not yet available
+						25 button Stash
+						26 pop up button Description: More version control actions, Help: Refresh, fetch, and remote selection
+					27 container Version control navigation
+						28 text WORKSPACE
+						29 outline (selectable) Repository navigation
+							30 row (selectable, expanded) Description: Workspace 3, Help: workspace, Secondary Actions: Collapse, Value: Workspace
+3
+							31 row (selectable) Description: Changes, Help: changes
+							32 row (selected) Description: History, Help: history
+							33 row (disabled) Description: Search, Help: search
+Commit search is not available yet
+								34 text Search
+							35 row (selectable, collapsed) Description: Branches 3, Help: branches, Secondary Actions: Expand, Value: Branches
+3
+							36 row (selectable, expanded) Description: Tags 1, Help: tags, Secondary Actions: Collapse, Value: Tags
+1
+							37 row (selectable) Description: v0.1-preview, Help: refs/tags/v0.1-preview
+							38 row (selectable, expanded) Description: Remotes 1, Help: remotes, Secondary Actions: Collapse, Value: Remotes
+1
+							39 row (selectable, expanded) Description: origin 3, Help: remote/origin, Secondary Actions: Collapse, Value: origin
+3
+							40 row (selectable, expanded) Description: feature 2, Help: remote/origin/group/feature, Secondary Actions: Collapse, Value: feature
+2
+							41 row (selectable) Description: layout, Help: refs/remotes/origin/feature/layout
+							42 row (selectable) Description: navigation, Help: refs/remotes/origin/feature/navigation
+							43 row (selectable) Description: main, Help: refs/remotes/origin/main
+							44 row (selectable, expanded) Description: review 1, Help: remote/origin/group/review, Secondary Actions: Collapse, Value: review
+1
+							45 row (selectable) Description: inspector, Help: refs/remotes/origin/review/inspector
+							46 row (selectable, expanded) Description: Stashes 0, Help: stashes, Secondary Actions: Collapse, Value: Stashes
+0
+						47 text Search unavailable — commit search is not implemented.
+						48 text field (settable) Description: Filter repository navigation, Placeholder: Filter navigation
+					49 splitter Description: Resize navigation, Help: Resize navigation. Arrow keys resize; Home or Enter resets; double-click resets., Value: 523
+					50 container History
+						51 container Commit history
+							52 (settable, unknown) History scope
+								53 radio button Branch, Help: Commits reachable from the current branch, Value: 0
+								54 radio button All branches, Help: Commits on all local branches, Value: 1
+								55 radio button All + remotes, Help: All local branches and remote-tracking refs, Value: 0
+							56 container
+								57 checkbox Remote refs, Value: 0
+								58 text Remote refs
+							59 pop up button Description: History order, Value: Topological order
+							60 container
+								61 checkbox Compact, Value: 1
+								62 text Compact
+							63 text field (settable) Description: Jump to SHA or ref, Placeholder: SHA or ref
+							64 button (disabled) Jump to
+							65 container
+								66 text Graph
+								67 button Resize Graph column
+							68 container
+								69 text Description
+								70 button Resize Description column
+							71 container
+								72 text Commit
+								73 button Resize Commit column
+							74 container
+								75 text Author
+								76 button Resize Author column
+							77 container
+								78 text Date
+								79 button Resize Date column
+							80 button Uncommitted changes —
+							81 list (settable) Commits in history scope
+								82 text feature/divergent-history feature/long-nested-reference-for-layout-validation-and-ellipsis Divergent workspace update 9 97f4374 Workspace Tester 40 minutes ago
+								83 pop up button Description: Jump to reference, Value: Ref…
+								84 button Jump to first parent
+								85 text Workspace update 5201 4ded2d7 Workspace Tester 3 years ago
+							86 text Showing the first 5000 commits. Jump to a SHA or reference to view older history. The graph covers these loaded commits.
+						87 splitter Description: Resize history and inspector, Help: Resize history and inspector. Arrow keys resize; Home or Enter resets; double-click resets., Value: 326
+						88 container Commit detail
+							89 button (expanded) Commit metadata, Secondary Actions: Collapse
+							90 heading CHANGED FILES (2), Value: 3
+								91 text CHANGED FILES (2)
+							92 text field (settable) Description: Filter changed files, Placeholder: Filter files
+							93 button Sort files by path
+							94 toggle button Description: Tree view, Value: off
+							95 list (settable) Changed files
+								96 text (selected) A notes.txt
+								97 text M README.md
+							98 splitter Description: Resize files and metadata, Help: Resize files and metadata. Arrow keys resize; Home or Enter resets; double-click resets., Value: 317
+							99 button Copy SHA eb8a76ff6cff, Help: eb8a76ff6cff99f03d4b6352a1ed6ccdefe21be3
+							100 text PARENTS
+							101 button 4ded2d7, Help: 4ded2d752f1076d527b0513d7aa276ca453eeb1f
+							102 container Commit references
+								103 text main origin/main
+							104 container Commit message
+								105 text Acceptance workflow check
+							106 container Author and committer
+								107 description list
+									108 text Author
+									109 container
+										110 text Workspace Tester  <tester@example.invalid> 10/17/2026, 7:23:59 PM
+									111 text Committer
+									112 container
+										113 text Workspace Tester  <tester@example.invalid> 10/17/2026, 7:23:59 PM
+							114 splitter Description: Resize files and diff, Help: Resize files and diff. Arrow keys resize; Home or Enter resets; double-click resets., Value: 468
+							115 container notes.txt
+								116 text notes.txt
+							117 container Line change summary
+								118 text +1 −0
+							119 summary Description: Diff actions, Value: off
+								120 text Actions
+							121 text field (settable) Description: Search displayed diff, Placeholder: Search diff
+							122 text 0/0
+							123 button (disabled) Previous diff match
+							124 button (disabled) Next diff match
+							125 container Diff for notes.txt
+								126 text @@ -0,0 +1 @@
+								127 text 1 +
+								128 text New acceptance note
+				129 container Pull
+					130 heading Pull, Value: 2
+						131 text Pull
+					132 container
+						133 text Repository
+						134 pop up button Repository origin, Value: origin
+					135 container http://127.0.0.1:1/unavailable.git
+						136 text http://127.0.0.1:1/unavailable.git
+					137 container
+						138 text Remote branch
+						139 pop up button (disabled) Remote branch Refresh, Value:
+
+						140 button Remote branch Refresh
+					141 text fatal: unable to access 'http://127.0.0.1:1/unavailable.git/': Failed to connect to 127.0.0.1 port 1 after 0 ms: Couldn't connect to server
+					142 container
+						143 text Pull into local branch:  main
+					144 container Options
+						145 text Options
+						146 container
+							147 checkbox Commit merge immediately, Value: 1
+							148 text Commit merge immediately
+						149 container
+							150 checkbox Include messages from merged commits, Value: 0
+							151 text Include messages from merged commits
+						152 container
+							153 checkbox Create a merge commit even when fast-forward is possible, Value: 0
+							154 text Create a merge commit even when fast-forward is possible
+						155 container
+							156 checkbox Rebase instead of merge, Value: 0
+							157 text Rebase instead of merge
+					158 text Strategy: merge. Fast-forward does not create a merge commit, even with Commit merge immediately unchecked.
+					159 button Cancel
+					160 button (disabled) Pull
+				161 container Project panel
+					162 button ⟪, Help: Expand panel
+				163 button Workspace moved. Untitled, Help: Show console
+	164 close button
+	165 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	166 minimize button
+167 menu bar
+	168 SpecOps Acceptance
+	169 File
+	170 Edit
+	171 View
+
+The focused UI element is 134 pop up button Repository origin, Value: origin

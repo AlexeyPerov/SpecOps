@@ -70,6 +70,13 @@ export async function probeVersionControlContext(
 
   const repoResult = await resolveRepoRoot(workspaceRootPath, scope);
   if (!repoResult.ok) {
+    // Bare repositories have no worktree, so --show-toplevel cannot resolve them.
+    const bare = await runGit(workspaceRootPath, ["rev-parse", "--is-bare-repository"], scope);
+    if (bare.exitCode === 0 && bare.stdout.trim() === "true") {
+      const directory = await runGit(workspaceRootPath, ["rev-parse", "--absolute-git-dir"], scope);
+      const repoRoot = normalizeGitOutputPath(directory.stdout);
+      if (directory.exitCode === 0 && repoRoot) return { kind: "ready", workspaceRootPath, repoRoot, isBareRepository: true };
+    }
     return { kind: "notARepository", workspaceRootPath };
   }
 

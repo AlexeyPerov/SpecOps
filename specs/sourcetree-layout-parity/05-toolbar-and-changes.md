@@ -1,6 +1,6 @@
 # GL-05 — Общий toolbar и режим Changes
 
-**Статус:** Implemented toolbar/Changes; full remote dialogs pending GL-06/07; visual acceptance pending GL-08. **Зависимости:** GL-01, GL-02, GL-04.
+**Статус:** Accepted — реализация, mounted/API/Git tests и desktop-приёмка завершены; [доказательства и ограничения](evidence/README.md). **Зависимости:** GL-01, GL-02, GL-04.
 
 ## Работы
 

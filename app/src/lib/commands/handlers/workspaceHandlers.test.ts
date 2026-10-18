@@ -3,6 +3,17 @@ import type { DiskFingerprint } from "../../domain/contracts";
 import { appState } from "../../state/appState";
 import { keyboardEvent } from "../../test/helpers";
 
+vi.mock("../../services/workspaceCatalog", () => ({
+  registerCatalogProjects: vi.fn().mockResolvedValue(undefined),
+  listenProjectCatalogChanges: vi.fn().mockResolvedValue(() => {}),
+  subscribeProjectCatalog: vi.fn(() => () => {}),
+  _resetProjectCatalogForTests: vi.fn(),
+  updateCatalogProject: vi.fn().mockResolvedValue(undefined),
+  getProjectCatalog: () => ({ projects: {} }),
+  loadProjectCatalog: vi.fn().mockResolvedValue(undefined),
+  projectIdentity: (root: string) => root,
+}));
+
 vi.mock("@tauri-apps/api/menu", () => ({
   Menu: { new: vi.fn() },
   MenuItem: { new: vi.fn() },

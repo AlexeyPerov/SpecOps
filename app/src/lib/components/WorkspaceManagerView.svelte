@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import type { ContextId, WorkspaceEntry } from "../domain/contracts";
   import {
     loadWorkspaceGitColumnCell,
@@ -9,19 +9,12 @@
   import { shouldLoadWorkspaceManagerGitColumn } from "../git/gitIntegrationGating";
   import { mapWithConcurrency } from "../services/mapWithConcurrency";
   import { emptySet } from "../collections/emptyCollections";
+  import { getProjectCatalog, loadProjectCatalog, projectIdentity, subscribeProjectCatalog } from '../services/workspaceCatalog';
+  import { addWorkspaceToWindow } from '../services/addWorkspaceToWindow';
   import EmptyState from "./EmptyState.svelte";
 
-  /**
-   * Workspace Manager — a chrome-less editor-pane view tab (kind
-   * "workspace-manager"). Lists every workspace in the current window session
-   * (name + path), lets the user switch to one by clicking a row, open
-   * per-workspace settings, add a single workspace, or bulk-add the immediate
-   * subfolders of a parent directory.
-   *
-   * The list source is the same `contexts.workspaces` the activity rail uses
-   * (decision 1). Hidden-from-rail workspaces (decision 3) are still listed
-   * here with a subtle hint.
-   */
+  /** The catalog owns membership; open entries retain their window context actions. */
+  type ManagerRow = { id: string; rootPath: string; name: string; contextId?: ContextId; openError?: string };
   let {
     workspaces = [],
     activeContextId = "notepad",
@@ -43,6 +36,36 @@
     onOpenVersionControl?: (workspaceId: ContextId) => void;
   } = $props();
 
+  let catalog = $state(getProjectCatalog());
+  let catalogError = $state('');
+  const rows: ManagerRow[] = $derived.by(() => {
+    const projects = new Map<string, ManagerRow>(Object.values(catalog.projects)
+      .sort((a, b) => a.order - b.order)
+      .map(project => [project.id, { ...project }]));
+    for (const workspace of workspaces) {
+      const id = projectIdentity(workspace.rootPath);
+      projects.set(id, { ...projects.get(id), id, rootPath: workspace.rootPath,
+        name: projects.get(id)?.name ?? workspace.rootPath.replaceAll('\\', '/').split('/').filter(Boolean).at(-1) ?? workspace.rootPath,
+        contextId: workspace.id });
+    }
+    return [...projects.values()];
+  });
+  onMount(() => {
+    const unsubscribe = subscribeProjectCatalog(next => { catalog = next; });
+    void loadProjectCatalog().catch(error => { catalogError = String(error); });
+    return unsubscribe;
+  });
+  async function selectProject(workspace: ManagerRow): Promise<void> {
+    if (workspace.contextId) { onSelectWorkspace(workspace.contextId); return; }
+    try {
+      const id = await addWorkspaceToWindow(workspace.rootPath);
+      if (id) onSelectWorkspace(id);
+      catalogError = '';
+    } catch (error) { catalogError = String(error); }
+  }
+
+  const gitRootsKey = $derived(JSON.stringify(rows.map(row => row.rootPath)));
+
   let gitCellsByPath = $state<Map<string, WorkspaceGitColumnCell>>(new Map());
   let gitRefreshBusy = $state(false);
   /** Bumped on each batch load start / effect cleanup so stale writes are dropped. */
@@ -54,17 +77,11 @@
     return { status: "error", text: "Git error", message };
   }
 
-  function workspaceName(workspace: WorkspaceEntry): string {
-    const normalized = workspace.rootPath.replaceAll("\\", "/");
-    const parts = normalized.split("/").filter(Boolean);
-    return parts[parts.length - 1] || workspace.rootPath;
+  function isHidden(workspace: ManagerRow): boolean {
+    return hiddenRootPaths.has(projectIdentity(workspace.rootPath));
   }
 
-  function isHidden(workspace: WorkspaceEntry): boolean {
-    return hiddenRootPaths.has(workspace.rootPath);
-  }
-
-  function gitCellForWorkspace(workspace: WorkspaceEntry): WorkspaceGitColumnCell {
+  function gitCellForWorkspace(workspace: ManagerRow): WorkspaceGitColumnCell {
     return gitCellsByPath.get(workspace.rootPath) ?? { status: "loading" };
   }
 
@@ -102,7 +119,7 @@
   }
 
   async function loadGitCellsForWorkspaces(
-    rows: WorkspaceEntry[],
+    rows: Pick<ManagerRow, 'rootPath'>[],
     options?: { force?: boolean },
   ): Promise<void> {
     const generation = ++gitLoadGeneration;
@@ -178,13 +195,13 @@
   }
 
   async function handleRefreshGitColumn(): Promise<void> {
-    if (gitRefreshBusy || workspaces.length === 0) {
+    if (gitRefreshBusy || rows.length === 0) {
       return;
     }
 
     gitRefreshBusy = true;
     try {
-      await loadGitCellsForWorkspaces(workspaces, { force: true });
+      await loadGitCellsForWorkspaces(rows, { force: true });
     } finally {
       gitRefreshBusy = false;
     }
@@ -208,7 +225,7 @@
   }
 
   $effect(() => {
-    const paths = new Set(workspaces.map((workspace) => workspace.rootPath));
+    const paths = new Set<string>(JSON.parse(gitRootsKey));
     return subscribeWorkspaceGitColumnAutoRefresh((workspaceRootPath) => {
       if (!paths.has(workspaceRootPath)) {
         return;
@@ -218,8 +235,8 @@
   });
 
   $effect(() => {
-    const rows = workspaces;
-    void loadGitCellsForWorkspaces(rows);
+    const roots: string[] = JSON.parse(gitRootsKey);
+    void loadGitCellsForWorkspaces(roots.map(rootPath => ({ rootPath })));
     return () => {
       gitLoadGeneration += 1;
     };
@@ -231,7 +248,7 @@
     <div class="workspace-manager-heading">
       <h2>Workspaces</h2>
       <p class="workspace-manager-subtitle">
-        All workspaces open in this window. Click a row to switch.
+        All registered projects. Click a row to open or switch.
       </p>
     </div>
     <div class="workspace-manager-actions">
@@ -239,7 +256,7 @@
       <button
         type="button"
         class="btn btn-secondary"
-        disabled={gitRefreshBusy || workspaces.length === 0}
+        disabled={gitRefreshBusy || rows.length === 0}
         title="Refresh git status column"
         onclick={handleRefreshGitColumn}
       >
@@ -251,11 +268,12 @@
     </div>
   </header>
 
-  {#if workspaces.length === 0}
+  {#if catalogError}<p role="alert">{catalogError}</p>{/if}
+  {#if rows.length === 0}
     <EmptyState
       class="workspace-manager-empty"
-      title="No workspaces open"
-      description="No workspaces open in this window yet."
+      title="No projects registered"
+      description="Add a project to your catalog."
     >
       {#snippet actions()}
         <div class="workspace-manager-actions">
@@ -277,25 +295,27 @@
         </tr>
       </thead>
       <tbody>
-        {#each workspaces as workspace (workspace.id)}
+        {#each rows as workspace (workspace.id)}
           {@const hidden = isHidden(workspace)}
           {@const gitCell = gitCellForWorkspace(workspace)}
           <tr
             class="wm-row"
-            class:wm-row-active={activeContextId === workspace.id}
+            class:wm-row-active={activeContextId === workspace.contextId}
             class:wm-row-hidden={hidden}
-            onclick={() => onSelectWorkspace(workspace.id)}
+            onclick={() => void selectProject(workspace)}
             onkeydown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                onSelectWorkspace(workspace.id);
+                void selectProject(workspace);
               }
             }}
             tabindex="0"
           >
-            <td class="wm-name">{workspaceName(workspace)}</td>
+            <td class="wm-name">{workspace.name}</td>
             <td class="wm-path">
               <span class="wm-path-text" title={workspace.rootPath}>{workspace.rootPath}</span>
+              {#if !workspace.contextId}<span class="wm-hidden-hint">(closed or in another window)</span>{/if}
+              {#if workspace.openError}<span class="wm-hidden-hint" title={workspace.openError}>Unavailable: {workspace.openError}</span>{/if}
               {#if hidden}
                 <span class="wm-hidden-hint">(hidden from sidebar)</span>
               {/if}
@@ -318,10 +338,11 @@
                   <button
                     type="button"
                     class="btn btn-secondary btn-compact"
+                    disabled={!workspace.contextId}
                     title="Version Control"
                     onclick={(event) => {
                       event.stopPropagation();
-                      onOpenVersionControl(workspace.id);
+                      if (workspace.contextId) onOpenVersionControl(workspace.contextId);
                     }}
                   >
                     Version Control
@@ -330,10 +351,11 @@
                 <button
                   type="button"
                   class="btn btn-secondary btn-compact"
+                  disabled={!workspace.contextId}
                   title="Workspace settings"
                   onclick={(event) => {
                     event.stopPropagation();
-                    onOpenWorkspaceSettings(workspace.id);
+                    if (workspace.contextId) onOpenWorkspaceSettings(workspace.contextId);
                   }}
                 >
                   ⚙ Settings

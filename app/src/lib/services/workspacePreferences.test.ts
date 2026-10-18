@@ -1,132 +1,63 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("@tauri-apps/api/path", () => ({
-  join: async (...segments: string[]) => segments.join("/"),
-  appDataDir: async () => "/app-data",
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
+vi.mock('./diskFingerprint', () => ({
+  normalizePathSync: (root: string) => root.replaceAll('\\', '/').replace(/\/$/, '').toLowerCase(),
+  normalizePathForStorage: (root: string) => root.replaceAll('\\', '/').replace(/\/$/, ''),
 }));
-
-vi.mock("@tauri-apps/plugin-fs", () => ({
-  rename: vi.fn().mockResolvedValue(undefined),
-  mkdir: vi.fn().mockResolvedValue(undefined),
-  exists: vi.fn().mockResolvedValue(false),
-  readTextFile: vi.fn().mockResolvedValue("{}"),
-  writeTextFile: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock("./diskFingerprint", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./diskFingerprint")>();
-  return {
-    ...actual,
-    // Force macOS-style lowercasing so the round-trip test is deterministic
-    // regardless of the host platform running the suite.
-    normalizePathSync: (path: string) => {
-      let normalized = path.replaceAll("\\", "/");
-      while (normalized.length > 1 && normalized.endsWith("/")) {
-        normalized = normalized.slice(0, -1);
-      }
-      return normalized.toLowerCase();
-    },
-  };
-});
-
-import {
-  _resetWorkspacePreferencesForTests,
-  getHiddenRootPaths,
-  isHiddenFromRail,
-  loadWorkspacePreferences,
-  setHiddenFromRail,
-  subscribeWorkspacePreferences,
-} from "./workspacePreferences";
-import { writeTextFile, readTextFile, exists } from "@tauri-apps/plugin-fs";
-
-const readTextFileMock = vi.mocked(readTextFile);
-const writeTextFileMock = vi.mocked(writeTextFile);
-const existsMock = vi.mocked(exists);
-
-beforeEach(() => {
-  _resetWorkspacePreferencesForTests();
-  readTextFileMock.mockReset();
-  writeTextFileMock.mockReset();
-  existsMock.mockReset();
-  existsMock.mockResolvedValue(false);
-  readTextFileMock.mockResolvedValue("{}");
-  writeTextFileMock.mockResolvedValue(undefined);
-});
-
-afterEach(() => {
-  _resetWorkspacePreferencesForTests();
-});
-
-describe("workspacePreferences", () => {
-  it("reports no hidden paths before load", () => {
-    expect(getHiddenRootPaths()).toEqual(new Set());
-    expect(isHiddenFromRail("/projects/foo")).toBe(false);
+import { invoke } from '@tauri-apps/api/core';
+import { _resetWorkspacePreferencesForTests, getHiddenRootPaths, getWorkspaceDocumentStorage,
+  isHiddenFromRail, loadWorkspacePreferences, setHiddenFromRail, setWorkspaceDocumentStorage,
+  subscribeWorkspacePreferences } from './workspacePreferences';
+import { catalogProjectForRoot } from './workspaceCatalog';
+const invokeMock = vi.mocked(invoke);
+function catalog(hidden = false, revision = 1) {
+  return { version: 1, revision, projects: { '/projects/foo': { ...catalogProjectForRoot('/Projects/Foo'), hiddenFromRail: hidden, documentStorage: 'project' } }, folders: {}, savedContexts: {} };
+}
+beforeEach(() => { _resetWorkspacePreferencesForTests(); invokeMock.mockReset(); });
+describe('catalog workspace preferences', () => {
+  it('defaults to visible and application document storage before loading', () => {
+    expect(getHiddenRootPaths().size).toBe(0);
+    expect(isHiddenFromRail('/projects/foo')).toBe(false);
+    expect(getWorkspaceDocumentStorage('/projects/foo')).toBe('app');
   });
-
-  it("loads persisted hidden flags from disk", async () => {
-    existsMock.mockResolvedValue(true);
-    readTextFileMock.mockResolvedValue(
-      JSON.stringify({
-        workspaces: {
-          "/projects/foo": { hiddenFromRail: true },
-          "/projects/bar": { hiddenFromRail: false },
-        },
-      }),
-    );
-    const hidden = await loadWorkspacePreferences();
-    expect(hidden).toEqual(new Set(["/projects/foo"]));
-    expect(isHiddenFromRail("/projects/foo")).toBe(true);
-    expect(isHiddenFromRail("/projects/bar")).toBe(false);
+  it('loads shared preferences from the catalog by normalized project identity', async () => {
+    invokeMock.mockResolvedValue(catalog(true));
+    expect(await loadWorkspacePreferences()).toEqual(new Set(['/projects/foo']));
+    expect(isHiddenFromRail('/Projects/Foo/')).toBe(true);
+    expect(getWorkspaceDocumentStorage('/projects/foo')).toBe('project');
   });
-
-  it("is resilient to malformed files", async () => {
-    existsMock.mockResolvedValue(true);
-    readTextFileMock.mockResolvedValue("{not json");
-    const hidden = await loadWorkspacePreferences();
-    expect(hidden).toEqual(new Set());
+  it('registers and updates preferences in one transaction then notifies', async () => {
+    invokeMock.mockResolvedValue(catalog(true));
+    const seen = vi.fn();
+    const off = subscribeWorkspacePreferences(seen);
+    await setHiddenFromRail('/Projects/Foo', true);
+    expect(invokeMock).toHaveBeenCalledWith('project_catalog_transaction', { mutations: [
+      { type: 'register', project: catalogProjectForRoot('/Projects/Foo') },
+      { type: 'updateProject', id: '/projects/foo', patch: { hiddenFromRail: true } },
+    ] });
+    expect(seen).toHaveBeenCalledWith(new Set(['/projects/foo']));
+    off();
+    await setHiddenFromRail('/projects/foo', true);
+    expect(seen).toHaveBeenCalledTimes(1);
   });
-
-  it("sets and persists a hidden flag, normalizing the path key", async () => {
-    await setHiddenFromRail("/Projects/Foo", true);
-    expect(isHiddenFromRail("/projects/foo")).toBe(true);
-    expect(getHiddenRootPaths()).toEqual(new Set(["/projects/foo"]));
-    expect(writeTextFileMock).toHaveBeenCalledTimes(1);
-    const [, contents] = writeTextFileMock.mock.calls[0];
-    const parsed = JSON.parse(contents as string) as { workspaces: Record<string, { hiddenFromRail: boolean }> };
-    expect(parsed.workspaces["/projects/foo"]).toEqual({ hiddenFromRail: true });
+  it('does not publish failed preference writes', async () => {
+    invokeMock.mockResolvedValueOnce(catalog(false));
+    await loadWorkspacePreferences();
+    const seen = vi.fn(); subscribeWorkspacePreferences(seen);
+    invokeMock.mockRejectedValueOnce(new Error('disk full'));
+    await expect(setHiddenFromRail('/projects/foo', true)).rejects.toThrow('disk full');
+    expect(isHiddenFromRail('/projects/foo')).toBe(false);
+    expect(seen).not.toHaveBeenCalled();
   });
-
-  it("can unhide a previously hidden path", async () => {
-    await setHiddenFromRail("/projects/foo", true);
-    expect(isHiddenFromRail("/projects/foo")).toBe(true);
-    await setHiddenFromRail("/projects/foo", false);
-    expect(isHiddenFromRail("/projects/foo")).toBe(false);
-    expect(getHiddenRootPaths()).toEqual(new Set());
+  it('uses the same catalog transaction for document storage', async () => {
+    invokeMock.mockResolvedValue(catalog());
+    await setWorkspaceDocumentStorage('/projects/foo', 'project');
+    expect(invokeMock.mock.calls[0][1]).toMatchObject({ mutations: [
+      { type: 'register' }, { type: 'updateProject', patch: { documentStorage: 'project' } },
+    ] });
   });
-
-  it("notifies subscribers on load and on every set", async () => {
-    const seen: Set<string>[] = [];
-    const unsubscribe = subscribeWorkspacePreferences((hidden) => {
-      seen.push(new Set(hidden));
-    });
-    try {
-      await loadWorkspacePreferences();
-      await setHiddenFromRail("/projects/foo", true);
-      await setHiddenFromRail("/projects/foo", false);
-      // First emission (load) is empty; the two sets flip foo in then out.
-      expect(seen.map((set) => set.has("/projects/foo"))).toEqual([false, true, false]);
-    } finally {
-      unsubscribe();
-    }
-  });
-
-  it("unsubscribe stops further notifications", async () => {
-    const seen: Set<string>[] = [];
-    const unsubscribe = subscribeWorkspacePreferences((hidden) => {
-      seen.push(new Set(hidden));
-    });
-    unsubscribe();
-    await setHiddenFromRail("/projects/foo", true);
-    expect(seen).toEqual([]);
+  it('surfaces invalid/unrecoverable catalog reads instead of silently resetting', async () => {
+    invokeMock.mockRejectedValue(new Error('Invalid project catalog'));
+    await expect(loadWorkspacePreferences()).rejects.toThrow('Invalid project catalog');
   });
 });

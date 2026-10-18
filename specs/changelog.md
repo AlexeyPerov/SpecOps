@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-18 17:25 MSK — Persist the shared project catalog (WS-01)
+
+- Add project/folder identities separate from window context ids, shared order/pinning/visibility/document-storage/appearance preferences, and a saved-context model/API. Persist the current format directly; previous preference files are not migrated.
+- Serialize native read/modify/write transactions with an OS advisory lock, fsync and atomic replacement, preserve a validated backup, and recover it with a newer revision and cross-window notification. Lock/write errors never fall back to unlocked or truncating writes; subscribers observe committed snapshots and ignore stale replies.
+- Register single/bulk workspace additions through the existing open path, retain unavailable registered projects with explanatory errors, roll back failed context claims, and focus the winning owner on concurrent opens. Manager lists the catalog alongside live contexts and opens closed entries by root.
+- Validation: all 309 frontend test files / 3139 tests pass; 8 native catalog tests cover concurrent writers, normalized duplicates, lock/write failures, invalid transactions, backup recovery and preference/context round trips. Svelte/type checks report zero errors and warnings; production build passes. Full saved-context restoration and catalog controls remain in WS-07.
+
 ## 2026-10-18 17:11 MSK — Plan workspace organization and navigation
 
 - Added an eight-stage plan for a persistent project catalog, compact workspace rows, folders, pinning, search and quick switching, shared Git summaries, catalog management and releasing closed-context resources. Agent activity indicators are outside the scope.

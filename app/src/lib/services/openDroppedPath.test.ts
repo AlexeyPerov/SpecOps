@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { appState } from "../state/appState";
 
+vi.mock('./workspaceCatalog', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./workspaceCatalog')>(),
+  registerCatalogProjects: vi.fn().mockResolvedValue(undefined),
+  updateCatalogProject: vi.fn().mockResolvedValue(undefined),
+}));
+
 const statMock = vi.fn();
 const ensureWorkspaceReadAccessMock = vi.fn();
 const markWorkspaceLifecycleActiveMock = vi.fn();

@@ -9,6 +9,7 @@ mod handoff;
 mod native_assets;
 mod session_fs;
 mod project_move;
+mod project_catalog;
 mod workspace_documents;
 
 #[cfg(target_os = "macos")]
@@ -147,6 +148,7 @@ pub fn run() {
             session_fs::session_fs_write_text,
             session_fs::session_fs_read_text,
             session_fs::session_fs_atomic_write_text,
+            project_catalog::project_catalog_transaction,
             agent_host::agent_host_start,
             agent_host::agent_host_stop,
             agent_host::agent_host_restart,

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-18 17:31 MSK — Compact workspace rows and project appearance (WS-02)
+
+- Replace expanded workspace cards with 46px rows containing a name, a short distinguishing parent path for matching names, and a Git placeholder that starts no queries. Keep full paths and optional Sessions/Tabs counts in tooltips; retain scrolling, width resizing, narrow mode, file-drop targets, context actions and pointer reordering.
+- Store optional project colors and symbols in the shared catalog, expose them in workspace settings, and render them in both sidebar widths while preserving textual accessible names. Failed writes display an error and retain saved appearance.
+- Restore native keyboard activation with multiple projects, add explicit focus, keyboard context actions, Alt+Arrow ordering and keyboard width adjustment. Validate 30-row rendering, appearance persistence/errors, pointer selection/reordering and layout preferences: 34 focused tests pass; Svelte/type checks report zero diagnostics; production build passes. Native visual acceptance and interface-scale screenshots remain scheduled for WS-08.
+
 ## 2026-10-18 17:25 MSK — Persist the shared project catalog (WS-01)
 
 - Add project/folder identities separate from window context ids, shared order/pinning/visibility/document-storage/appearance preferences, and a saved-context model/API. Persist the current format directly; previous preference files are not migrated.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import HoverTooltip from "./HoverTooltip.svelte";
   import {
     allTabs,
@@ -14,6 +14,8 @@
   } from "./workspaceRailDragController";
   import {
     DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
+    MIN_ACTIVITY_RAIL_WIDTH_PX,
+    MAX_ACTIVITY_RAIL_WIDTH_PX,
     isActivityRailExpanded,
     normalizeActivityRailWidthPx,
   } from "../services/panelLayout";
@@ -21,6 +23,8 @@
   import NotepadIcon from "./icons/NotepadIcon.svelte";
   import AddIcon from "./icons/AddIcon.svelte";
   import ListIcon from "./icons/ListIcon.svelte";
+  import { getProjectCatalog, projectIdentity, subscribeProjectCatalog } from "../services/workspaceCatalog";
+  import { distinguishingProjectPaths, projectName, projectColor, projectIcon } from "./workspaceRailPresentation";
 
   /** A notepad tab shown in the expanded notepad card's "last opened" list. */
   export interface NotepadRailTab {
@@ -31,13 +35,9 @@
   interface Props {
     workspaces?: WorkspaceEntry[];
     activeContextId?: ContextId;
-    /**
-     * Whether the OpenCode workspace-sessions beta is enabled. When false the
-     * per-workspace "Sessions" count is hidden from expanded rail cards (the
-     * sessions backend is inactive).
-     */
+    /** Whether session counts are included in workspace tooltips. */
     sessionsEnabled?: boolean;
-    /** Resizable rail width (compact 48px → expanded cards). */
+    /** Resizable rail width (compact 48px → expanded rows). */
     panelWidthPx?: number;
     /** Number of currently-open tabs in the notepad context. */
     notepadOpenTabCount?: number;
@@ -186,19 +186,44 @@
     return map;
   });
 
+  let catalog = $state.raw(getProjectCatalog());
+  $effect(() => untrack(() => subscribeProjectCatalog((next) => { catalog = next; })));
   function workspaceName(workspace: WorkspaceEntry): string {
-    const normalized = workspace.rootPath.replaceAll("\\", "/");
-    const parts = normalized.split("/");
-    return parts[parts.length - 1] || workspace.rootPath;
+    return catalog.projects[projectIdentity(workspace.rootPath)]?.name ?? projectName(workspace.rootPath);
   }
-
   function workspaceInitial(workspace: WorkspaceEntry): string {
-    const name = workspaceName(workspace).trim();
-    return (name[0] ?? "?").toUpperCase();
+    const project = catalog.projects[projectIdentity(workspace.rootPath)];
+    return projectIcon(project?.icon) ?? (workspaceName(workspace).trim()[0] ?? "?").toUpperCase();
   }
-
-  function workspacePath(workspace: WorkspaceEntry): string {
-    return workspace.rootPath;
+  function workspaceColor(workspace: WorkspaceEntry): string | undefined {
+    return projectColor(catalog.projects[projectIdentity(workspace.rootPath)]?.color);
+  }
+  const shortPaths = $derived(distinguishingProjectPaths(workspaces.map((workspace) => ({
+    id: workspace.id, rootPath: workspace.rootPath, name: workspaceName(workspace),
+  }))));
+  function workspaceDetail(workspace: WorkspaceEntry): string {
+    const sessions = sessionsEnabled ? ` · Sessions: ${sessionCountsByRoot.get(workspace.rootPath) ?? 0}` : "";
+    return `${workspace.rootPath} · Git status not checked${sessions} · Tabs: ${tabCountsByRoot.get(workspace.rootPath) ?? 0}`;
+  }
+  function workspaceKeydown(event: KeyboardEvent, workspace: WorkspaceEntry): void {
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+      event.preventDefault();
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      onRequestCloseWorkspace(workspace.id, rect.right, rect.top);
+    } else if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      const from = workspaces.findIndex((entry) => entry.id === workspace.id);
+      const to = from + (event.key === "ArrowUp" ? -1 : 1);
+      if (to >= 0 && to < workspaces.length) onReorderWorkspaces(from, to);
+    }
+  }
+  function resizeKeydown(event: KeyboardEvent): void {
+    const widths: Record<string, number> = { ArrowLeft: displayWidth - 16, ArrowRight: displayWidth + 16,
+      Home: MIN_ACTIVITY_RAIL_WIDTH_PX, End: MAX_ACTIVITY_RAIL_WIDTH_PX };
+    if (!(event.key in widths)) return;
+    event.preventDefault();
+    displayWidth = normalizeActivityRailWidthPx(widths[event.key]);
+    onPanelWidthChange(displayWidth);
   }
 
   let activeResizeTeardown: (() => void) | null = null;
@@ -307,95 +332,57 @@
 
   <div class={`rail-workspaces${expanded ? " rail-workspaces-expanded" : ""}`} bind:this={railWorkspacesEl}>
     {#each workspacesForRender as workspace (workspace.id)}
-      {@const counts = {
-        sessions: sessionCountsByRoot.get(workspace.rootPath) ?? 0,
-        tabs: tabCountsByRoot.get(workspace.rootPath) ?? 0,
-      }}
       {#if dragState.didDrag && workspace.id === dragState.dragWorkspaceId}
         <span
           class="rail-workspace-placeholder"
           style={`width:${dragState.dragWorkspaceRect?.width ?? 32}px; height:${dragState.dragWorkspaceRect?.height ?? 32}px;`}
         ></span>
-      {:else if expanded}
-        <HoverTooltip
-          label={workspaceName(workspace)}
-          detail={workspace.rootPath}
-          delayMs={WORKSPACE_TOOLTIP_DELAY_MS}
-          suppress={workspaceTooltipSuppressed}
-        >
-          <button
-            class={`rail-workspace-card ${activeContextId === workspace.id ? "rail-workspace-card-active" : ""}`}
-            data-file-drop-context={workspace.id}
-            data-workspace-id={workspace.id}
-            type="button"
-            aria-label={`Workspace ${workspaceName(workspace)}`}
-            oncontextmenu={(event) => {
-              event.preventDefault();
-              onRequestCloseWorkspace(workspace.id, event.clientX, event.clientY);
-            }}
-            onpointerdown={(event) => {
-              if (!dragEnabled) {
-                return;
-              }
-              dragController.pointerDown(
-                event,
-                workspace,
-                workspaces.findIndex((entry) => entry.id === workspace.id),
-              );
-            }}
-            onclick={() => {
-              if (!dragEnabled) {
-                onSelectContext(workspace.id);
-              }
-            }}
-          >
-            <span class="rail-workspace-avatar">{workspaceInitial(workspace)}</span>
-            <span class="rail-workspace-info">
-              <span class="rail-workspace-name" title={workspacePath(workspace)}>{workspaceName(workspace)}</span>
-              <span class="rail-workspace-path" title={workspacePath(workspace)}>{workspacePath(workspace)}</span>
-              <span class="rail-workspace-stats">
-                {#if sessionsEnabled}
-                  <span class="rail-workspace-stat">Sessions: {counts.sessions}</span>
-                {/if}
-                <span class="rail-workspace-stat">Tabs: {counts.tabs}</span>
-              </span>
-            </span>
-          </button>
-        </HoverTooltip>
       {:else}
         <HoverTooltip
           label={workspaceName(workspace)}
-          detail={workspace.rootPath}
+          detail={workspaceDetail(workspace)}
           delayMs={WORKSPACE_TOOLTIP_DELAY_MS}
           suppress={workspaceTooltipSuppressed}
         >
           <button
-            class={`rail-button rail-button-workspace ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
+            class={expanded
+              ? `rail-workspace-card rail-workspace-row ${activeContextId === workspace.id ? "rail-workspace-card-active" : ""}`
+              : `rail-button rail-button-workspace ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
+            style:--project-color={workspaceColor(workspace) ?? "var(--color-accent)"}
             data-file-drop-context={workspace.id}
             data-workspace-id={workspace.id}
             type="button"
-            aria-label={`Workspace ${workspaceName(workspace)}`}
+            aria-label={`Workspace ${workspaceName(workspace)}, ${workspace.rootPath}, Git status not checked`}
+            aria-current={activeContextId === workspace.id ? "true" : undefined}
             oncontextmenu={(event) => {
               event.preventDefault();
               onRequestCloseWorkspace(workspace.id, event.clientX, event.clientY);
             }}
+            onkeydown={(event) => workspaceKeydown(event, workspace)}
             onpointerdown={(event) => {
-              if (!dragEnabled) {
-                return;
-              }
-              dragController.pointerDown(
-                event,
-                workspace,
-                workspaces.findIndex((entry) => entry.id === workspace.id),
-              );
+              if (dragEnabled) dragController.pointerDown(event, workspace,
+                workspaces.findIndex((entry) => entry.id === workspace.id));
             }}
-            onclick={() => {
-              if (!dragEnabled) {
-                onSelectContext(workspace.id);
-              }
+            onclick={(event) => {
+              // Pointer selection is committed by the drag controller; native
+              // keyboard and assistive clicks have no pointer sequence.
+              if (!dragEnabled || event.detail === 0) onSelectContext(workspace.id);
             }}
           >
-            <span class="rail-workspace-initial">{workspaceInitial(workspace)}</span>
+            <span class={expanded ? "rail-workspace-avatar" : "rail-workspace-initial"} aria-hidden="true">{workspaceInitial(workspace)}</span>
+            {#if expanded}
+              <span class="rail-workspace-info">
+                <span class="rail-workspace-heading">
+                  <span class="rail-workspace-name">{workspaceName(workspace)}</span>
+                  {#if shortPaths.has(workspace.id)}
+                    <span class="rail-workspace-distinction" title={workspace.rootPath}>{shortPaths.get(workspace.id)}</span>
+                  {/if}
+                </span>
+                <span class="rail-workspace-git" aria-hidden="true">⎇ <span>Git not checked</span></span>
+              </span>
+            {:else}
+              <span class="rail-workspace-git-mark" aria-hidden="true">·</span>
+            {/if}
           </button>
         </HoverTooltip>
       {/if}
@@ -408,6 +395,7 @@
       type="button"
       aria-hidden="true"
       tabindex="-1"
+      style:--project-color={workspaceColor(draggedWorkspace) ?? "var(--color-accent)"}
       style={`left:${ghostLeft}px; top:${ghostTop}px; width:${dragState.dragWorkspaceRect?.width ?? 32}px; height:${dragState.dragWorkspaceRect?.height ?? 32}px;`}
     >
       <span class="rail-workspace-initial">{workspaceInitial(draggedWorkspace)}</span>
@@ -441,9 +429,15 @@
 
   <div
     class="activity-rail-resize-handle"
-    role="separator"
-    aria-orientation="vertical"
+    role="slider"
+    aria-orientation="horizontal"
     aria-label="Resize workspaces sidebar"
+    tabindex="0"
+    aria-valuemin={MIN_ACTIVITY_RAIL_WIDTH_PX}
+    aria-valuemax={MAX_ACTIVITY_RAIL_WIDTH_PX}
+    aria-valuenow={displayWidth}
+    aria-valuetext={`${displayWidth} pixels`}
+    onkeydown={resizeKeydown}
     onpointerdown={handleResizeStart}
   ></div>
 </aside>
@@ -483,7 +477,7 @@
   .activity-rail-expanded {
     align-items: stretch;
     gap: var(--space-2);
-    padding: var(--space-2) var(--space-6);
+    padding: var(--space-2) var(--space-2);
   }
 
   .rail-workspaces {
@@ -500,7 +494,7 @@
 
   .rail-workspaces-expanded {
     align-items: stretch;
-    gap: var(--space-2);
+    gap: 2px;
   }
 
   .rail-workspace-placeholder {
@@ -549,15 +543,9 @@
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 30%, transparent);
   }
 
-  .rail-button-chat {
-    padding: 0;
-  }
-
-  .rail-chat-icon {
-    display: block;
-  }
-
   .rail-button-workspace {
+    position: relative;
+    color: var(--project-color, var(--color-accent));
     font-weight: 600;
   }
 
@@ -683,10 +671,60 @@
     gap: var(--space-4);
   }
 
-  .rail-workspace-stat {
-    font-size: 11px;
-    line-height: 1.3;
+  /* Fixed row height keeps a large catalog easy to scan and scroll. */
+  .rail-workspace-row {
+    height: 46px;
+    min-height: 46px;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+  }
+  .rail-workspace-row:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
+  }
+  .rail-workspace-row .rail-workspace-avatar {
+    width: 26px;
+    height: 26px;
+    align-self: center;
+    color: var(--project-color);
+    background: color-mix(in srgb, var(--project-color) 16%, transparent);
+  }
+  .rail-workspaces :global(.hover-tooltip-anchor) {
+    flex-shrink: 0;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .rail-workspaces-expanded :global(.hover-tooltip-anchor) { width: 100%; }
+  .rail-workspace-heading { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .rail-workspace-heading .rail-workspace-name { min-width: 0; font-size: 12px; }
+  .rail-workspace-distinction {
+    min-width: 0;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--color-text-secondary);
+    font-size: 10px;
+    flex-shrink: 1;
+  }
+  .rail-workspace-git {
+    display: flex;
+    gap: 4px;
+    min-width: 0;
+    color: var(--color-text-muted);
+    font-size: 10px;
+    line-height: 13px;
+  }
+  .rail-workspace-git span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rail-workspace-git-mark {
+    position: absolute;
+    right: 1px;
+    bottom: 0;
+    font-size: 16px;
+    color: var(--color-text-muted);
   }
 
   /* ---- Expanded notepad card (reuses .rail-workspace-card layout; only the
@@ -749,7 +787,15 @@
     outline-offset: 1px;
   }
 
+  .activity-rail-resize-handle:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: -2px;
+  }
+
   .activity-rail-resize-handle {
+    padding: 0;
+    border: 0;
+    background: transparent;
     position: absolute;
     right: -3px;
     top: 0;

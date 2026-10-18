@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onDestroy, untrack, tick } from "svelte";
+  import { subscribeWorkspaceGitSummary, refreshWorkspaceGitSummaries, type WorkspaceGitSummarySnapshot, type WorkspaceGitSummaryDemand } from "../git/workspaceGitSummary";
+  import { workspaceGitSummaryPresentation } from "../git/workspaceGitSummaryPresentation";
   import HoverTooltip from "./HoverTooltip.svelte";
   import {
     allTabs,
@@ -59,6 +61,7 @@
      */
     contextMenuWorkspaceId?: ContextId | null;
     onSelectContext?: (contextId: ContextId) => void;
+    onOpenVersionControl?: (workspaceId: ContextId) => void;
     onAddWorkspace?: () => void;
     onOpenWorkspaceManager?: () => void;
     onPanelWidthChange?: (width: number) => void;
@@ -81,6 +84,7 @@
     notepadRecentTabs = [],
     contextMenuWorkspaceId = null,
     onSelectContext = () => {},
+    onOpenVersionControl = () => {},
     onAddWorkspace = () => {},
     onOpenWorkspaceManager = () => {},
     onPanelWidthChange = () => {},
@@ -136,6 +140,67 @@
     isFinishingDrag: false,
   });
 
+  let gitCells = $state.raw(new Map<string, WorkspaceGitSummarySnapshot>());
+  let visibleGitPaths = $state.raw(new Set<string>());
+  let gitRefreshBusy = $state(false);
+  const gitConsumerCounts = new Map<string, number>();
+  function subscribeRailGit(path: string, demand: WorkspaceGitSummaryDemand) {
+    gitConsumerCounts.set(path, (gitConsumerCounts.get(path) ?? 0) + 1);
+    const subscription = subscribeWorkspaceGitSummary(path, snapshot => receiveGit(path, snapshot), demand);
+    return { ...subscription, unsubscribe() {
+      subscription.unsubscribe();
+      const remaining = (gitConsumerCounts.get(path) ?? 1) - 1;
+      if (remaining > 0) gitConsumerCounts.set(path, remaining);
+      else {
+        gitConsumerCounts.delete(path);
+        const next = new Map(gitCells); next.delete(path); gitCells = next;
+      }
+    } };
+  }
+  function receiveGit(path: string, snapshot: WorkspaceGitSummarySnapshot): void {
+    gitCells = new Map(gitCells).set(path, snapshot);
+  }
+  function gitFor(path: string) {
+    return workspaceGitSummaryPresentation(gitCells.get(path) ?? { status: 'unknown', refreshing: false, summary: null, checkedAt: null, error: null });
+  }
+  // The active root remains demanded even when its section is collapsed or hidden.
+  const activeGitRoot = $derived(workspaces.find(workspace => workspace.id === activeContextId)?.rootPath);
+  $effect(() => {
+    const path = activeGitRoot;
+    if (!path) return;
+    const subscription = untrack(() => subscribeRailGit(path, { priority: 'active' }));
+    return () => subscription.unsubscribe();
+  });
+  function observeGitRow(node: HTMLElement, path: string) {
+    let stopped = false;
+    const subscription = subscribeRailGit(path, { priority: 'visible', enabled: false });
+    const observer = new IntersectionObserver(entries => {
+      if (stopped) return;
+      const visible = entries.some(entry => entry.target === node && entry.isIntersecting);
+      subscription.setDemand({ priority: 'visible', enabled: visible });
+      const next = new Set(visibleGitPaths);
+      if (visible) next.add(path); else next.delete(path);
+      visibleGitPaths = next;
+    }, { root: node.closest('.rail-workspaces'), threshold: 0 });
+    observer.observe(node);
+    return { destroy() {
+      stopped = true; observer.disconnect(); subscription.unsubscribe();
+      const next = new Set(visibleGitPaths); next.delete(path); visibleGitPaths = next;
+    } };
+  }
+  async function refreshVisibleGit(): Promise<void> {
+    gitRefreshBusy = true;
+    try { await refreshWorkspaceGitSummaries([...visibleGitPaths]); }
+    catch (error) { onError(String(error)); }
+    finally { gitRefreshBusy = false; }
+  }
+  async function openProjectVersionControl(project: RailProject): Promise<void> {
+    closeMenu();
+    try {
+      const id = project.contextId ?? await addWorkspaceToWindow(project.rootPath);
+      if (id) onOpenVersionControl(id);
+    } catch (error) { onError(String(error)); }
+  }
   let catalog = $state.raw(getProjectCatalog());
   $effect(() => untrack(() => subscribeProjectCatalog((next) => { catalog = next; })));
   let owners = $state.raw<WorkspaceWindowOwners>({});
@@ -323,7 +388,7 @@
   }))));
   function workspaceDetail(workspace: RailProject): string {
     const sessions = sessionsEnabled ? ` · Sessions: ${sessionCountsByRoot.get(workspace.rootPath) ?? 0}` : "";
-    return `${workspace.rootPath} · Git status not checked${sessions} · Tabs: ${tabCountsByRoot.get(workspace.rootPath) ?? 0}`;
+    return `${workspace.rootPath} · ${gitFor(workspace.rootPath).detail}${sessions} · Tabs: ${tabCountsByRoot.get(workspace.rootPath) ?? 0}`;
   }
   function workspaceKeydown(event: KeyboardEvent, workspace: RailProject): void {
     if (event.key === 'Escape' && searchQuery) { event.preventDefault(); event.stopPropagation(); searchQuery = ''; return; }
@@ -494,6 +559,7 @@
           style={`width:${dragState.dragWorkspaceRect?.width ?? 32}px; height:${dragState.dragWorkspaceRect?.height ?? 32}px;`}
         ></span>
       {:else}
+        <div class="rail-project-entry" use:observeGitRow={workspace.rootPath}>
         <HoverTooltip
           label={workspaceName(workspace)}
           detail={workspaceDetail(workspace)}
@@ -508,7 +574,7 @@
             data-file-drop-context={workspace.contextId}
             data-workspace-id={workspace.id}
             type="button"
-            aria-label={`Workspace ${workspaceName(workspace)}, ${workspace.rootPath}, Git status not checked`}
+            aria-label={`Workspace ${workspaceName(workspace)}, ${workspace.rootPath}, ${gitFor(workspace.rootPath).detail}`}
             aria-current={activeContextId === workspace.contextId ? "true" : undefined}
             oncontextmenu={(event) => {
               event.preventDefault();
@@ -534,13 +600,16 @@
                     <span class="rail-workspace-distinction" title={workspace.rootPath}>{shortPaths.get(workspace.id)}</span>
                   {/if}
                 </span>
-                <span class="rail-workspace-git" aria-hidden="true">⎇ <span>Git not checked</span></span>
+                <span class="rail-workspace-git" class:rail-git-conflict={gitCells.get(workspace.rootPath)?.summary?.hasConflicts} aria-hidden="true">⎇ <span>{gitFor(workspace.rootPath).text}</span></span>
               </span>
             {:else}
-              <span class="rail-workspace-git-mark" aria-hidden="true">·</span>
+              <span class="rail-workspace-git-mark" class:rail-git-conflict={gitCells.get(workspace.rootPath)?.summary?.hasConflicts} aria-hidden="true">{gitFor(workspace.rootPath).mark}</span>
             {/if}
           </button>
         </HoverTooltip>
+        <button class="rail-git-action" type="button" aria-label={`Version Control for ${workspaceName(workspace)}`}
+          title={`Version Control — ${gitFor(workspace.rootPath).detail}`} onclick={() => void openProjectVersionControl(workspace)}>⎇</button>
+        </div>
       {/if}
     {/each}
         {/if}
@@ -563,6 +632,8 @@
   {/if}
 
   <div class="rail-footer-stack">
+    <HoverTooltip label="Refresh visible Git summaries"><button class="rail-button" type="button" aria-label="Refresh visible Git summaries"
+      disabled={gitRefreshBusy || visibleGitPaths.size === 0} onclick={() => void refreshVisibleGit()}>↻</button></HoverTooltip>
     <HoverTooltip label="Create folder"><button class="rail-button" type="button" aria-label="Create folder" onclick={() => editFolder(null)}>▣+</button></HoverTooltip>
     <HoverTooltip label="Add Workspace">
       <button
@@ -609,6 +680,8 @@
     {#if menu.project}
       {@const project = menu.project}
       <button type="button" role="menuitem" onclick={() => selectProject(project)}>Open workspace</button>
+      <button type="button" role="menuitem" onclick={() => void openProjectVersionControl(project)}>Version Control</button>
+      <button type="button" role="menuitem" onclick={() => { const path = project.rootPath; closeMenu(); void refreshWorkspaceGitSummaries([path]).catch(error => onError(String(error))); }}>Refresh Git status</button>
       <button type="button" role="menuitem" onclick={() => { commit([{ type: 'moveProject', id: project.id, pinned: !project.pinned }]); closeMenu(); }}>{project.pinned ? 'Unpin' : 'Pin'}</button>
       <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderProject(project, -1)}>Move up</button>
       <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderProject(project, 1)}>Move down</button>
@@ -639,6 +712,13 @@
 {/if}
 
 <style>
+  .rail-project-entry { position: relative; width: 100%; flex-shrink: 0; }
+  .rail-git-action { position: absolute; right: 0; top: 0; padding: 0; width: 16px; height: 16px; font-size: 11px; border: 0; border-radius: 3px; background: var(--color-surface-1); color: var(--color-text-secondary); cursor: pointer; }
+  .rail-git-action:focus-visible { outline: 2px solid var(--color-focus-ring); }
+  .rail-git-action:hover { background: var(--color-hover); }
+  .rail-workspace-git.rail-git-conflict, .rail-workspace-git-mark.rail-git-conflict { color: var(--color-danger, #ee7755); font-weight: bold; }
+  .activity-rail-expanded .rail-project-entry .rail-workspace-info { padding-right: 12px; }
+
   .rail-search { width: calc(100% - 12px); margin: 6px; min-width: 0; padding: 5px; background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); }
   .rail-search-compact { width: 220px; position: absolute; z-index: 20; left: 44px; top: 45px; }
   .rail-empty { padding: 8px; font-size: 12px; color: var(--color-text-secondary); }

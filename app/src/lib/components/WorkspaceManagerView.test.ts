@@ -1,8 +1,8 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { mount, unmount } from "svelte";
+import { mount, unmount, tick } from "svelte";
 import WorkspaceManagerView from "./WorkspaceManagerView.svelte";
 import type { ContextId, WorkspaceEntry } from "../domain/contracts";
-import { subscribeWorkspaceGitSummary } from "../git/workspaceGitSummary";
+import { refreshWorkspaceGitSummaries, subscribeWorkspaceGitSummary } from "../git/workspaceGitSummary";
 
 vi.mock("../git/gitIntegrationGating", () => ({ shouldLoadWorkspaceManagerGitColumn: vi.fn(() => true) }));
 vi.mock("../git/workspaceGitSummary", () => ({
@@ -192,6 +192,20 @@ describe("WorkspaceManagerView", () => {
     expect(addWorkspaceToWindow).toHaveBeenCalledWith('/tmp/closed');
     expect(onSelectWorkspace).not.toHaveBeenCalled();
     await unmount(instance); host.remove();
+  });
+
+  it('explicit refresh uses only the filtered roots in the shared queue without selecting a project', async () => {
+    vi.mocked(invoke).mockResolvedValue({version:1,revision:2,projects:{
+      '/alpha':catalogProjectForRoot('/alpha'),'/beta':catalogProjectForRoot('/beta'),
+    },folders:{},savedContexts:{}});
+    const host=document.createElement('div');document.body.appendChild(host);const onSelectWorkspace=vi.fn();
+    const instance=mount(WorkspaceManagerView,{target:host,props:{onSelectWorkspace}});
+    await vi.waitFor(()=>expect(host.querySelectorAll('tbody tr')).toHaveLength(2));
+    const search=host.querySelector<HTMLInputElement>('.wm-search')!;search.value='alpha';search.dispatchEvent(new Event('input',{bubbles:true}));await tick();
+    expect(host.querySelectorAll('tbody tr')).toHaveLength(1);
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent?.trim()==='Refresh git')!.click();await tick();
+    expect(refreshWorkspaceGitSummaries).toHaveBeenLastCalledWith(['/alpha']);expect(onSelectWorkspace).not.toHaveBeenCalled();
+    await unmount(instance);host.remove();
   });
 
 });

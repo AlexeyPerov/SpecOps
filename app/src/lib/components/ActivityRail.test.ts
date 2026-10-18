@@ -12,6 +12,15 @@ vi.mock("../state/chatStore", () => ({ chatSessionCountsByRoot: writable(new Map
 vi.mock("../services/workspaceWindowPlacement", () => ({ readLiveWorkspaceWindowOwners: vi.fn().mockResolvedValue({}), WORKSPACE_PLACEMENT_CHANGED:"fixture:placement" }));
 vi.mock("../services/addWorkspaceToWindow", () => ({ addWorkspaceToWindow: vi.fn().mockResolvedValue(null) }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("../git/workspaceGitSummary", () => ({
+  subscribeWorkspaceGitSummary: vi.fn((_path, listener) => {
+    listener({ status: "unknown", refreshing: false, summary: null, checkedAt: null, error: null });
+    return { setDemand: vi.fn(), unsubscribe: vi.fn(), refresh: vi.fn() };
+  }),
+  refreshWorkspaceGitSummaries: vi.fn(async () => {}),
+}));
+class TestIntersectionObserver { observe() {} disconnect() {} }
+vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
 function workspace(index: number, rootPath: string): WorkspaceEntry {
   return { id: `ws-${index}`, rootPath, snapshot: { documents: [], session: {
     editorLayout: createSinglePaneLayout([], null), lastActiveWindowId: "main", windowBounds: null, lastActiveSessionId: null,

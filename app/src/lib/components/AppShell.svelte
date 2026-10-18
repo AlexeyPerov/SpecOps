@@ -652,6 +652,7 @@
         notepadRecentTabs={activityRail.notepadRecentTabs}
         contextMenuWorkspaceId={activityRail.contextMenuWorkspaceId ?? null}
         onSelectContext={activityRail.onSelectContext}
+        onOpenVersionControl={workspaceContextMenu.onOpenVersionControl}
         onAddWorkspace={activityRail.onAddWorkspace}
         onOpenWorkspaceManager={activityRail.onOpenWorkspaceManager}
         onPanelWidthChange={activityRail.onPanelWidthChange}

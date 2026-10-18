@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import type { ContextId, WorkspaceEntry } from "../domain/contracts";
-  import { formatGitColumnDisplayText } from "../git/workspaceManagerGitColumn";
+  import { workspaceGitSummaryPresentation } from "../git/workspaceGitSummaryPresentation";
   import { subscribeWorkspaceGitSummary, refreshWorkspaceGitSummaries, type WorkspaceGitSummarySnapshot } from "../git/workspaceGitSummary";
   import { shouldLoadWorkspaceManagerGitColumn } from "../git/gitIntegrationGating";
   import { emptySet } from "../collections/emptyCollections";
@@ -70,25 +70,21 @@
   function gitCellForWorkspace(workspace: ManagerRow): WorkspaceGitSummarySnapshot {
     return gitCellsByPath.get(workspace.rootPath) ?? { status: "unknown", refreshing: false, summary: null, checkedAt: null, error: null };
   }
-  function gitCellDisplayText(cell: WorkspaceGitSummarySnapshot): string {
-    if (cell.summary) return formatGitColumnDisplayText(cell.summary);
-    if (cell.status === "loading") return "…";
-    return cell.status === "error" ? "Git error" : "—";
-  }
-  function gitCellTitle(cell: WorkspaceGitSummarySnapshot): string {
-    const details = cell.summary ? `${formatGitColumnDisplayText(cell.summary)}. Ahead/behind uses locally known upstream refs; no fetch is performed.` : cell.status === "notGit" ? "Not a Git repository" : "Git status unknown";
-    const state = cell.refreshing ? "Checking…" : cell.status === "stale" ? "Stale" : cell.status === "error" ? cell.error : "";
-    return [details, state, cell.checkedAt ? `Last checked ${new Date(cell.checkedAt).toLocaleTimeString()}` : ""].filter(Boolean).join(" · ");
-  }
+  function gitCellDisplayText(cell: WorkspaceGitSummarySnapshot): string { return workspaceGitSummaryPresentation(cell).text; }
+  function gitCellTitle(cell: WorkspaceGitSummarySnapshot): string { return workspaceGitSummaryPresentation(cell).detail; }
   function observeGitRow(node: HTMLElement, input: { path: string; enabled: boolean; active: boolean }) {
     let visible = false;
+    let stopped = false;
     const subscription = subscribeWorkspaceGitSummary(input.path, snapshot => {
       gitCellsByPath = new Map(gitCellsByPath).set(input.path, snapshot);
     }, { priority: input.active ? "active" : "visible", enabled: false });
     const update = () => subscription.setDemand({ priority: input.active ? "active" : "visible", enabled: input.enabled && visible });
-    const observer = new IntersectionObserver(entries => { visible = entries.some(entry => entry.isIntersecting); update(); });
+    const observer = new IntersectionObserver(entries => { if (stopped) return; visible = entries.some(entry => entry.isIntersecting); update(); });
     observer.observe(node);
-    return { update(next: typeof input) { input = next; update(); }, destroy() { observer.disconnect(); subscription.unsubscribe(); } };
+    return { update(next: typeof input) { input = next; update(); }, destroy() {
+      stopped = true; observer.disconnect(); subscription.unsubscribe();
+      const next = new Map(gitCellsByPath); next.delete(input.path); gitCellsByPath = next;
+    } };
   }
   async function handleRefreshGitColumn(): Promise<void> {
     if (gitRefreshBusy || !rows.length) return;
@@ -191,6 +187,7 @@
             <td class="wm-git">
               <span
                 class="wm-git-text"
+                class:wm-git-conflict={gitCell.summary?.hasConflicts === true}
                 class:wm-git-dirty={gitCell.summary?.isDirty === true}
                 class:wm-git-clean={gitCell.summary !== null && !gitCell.summary.isDirty}
                 title={gitCellTitle(gitCell)}
@@ -237,6 +234,7 @@
 </div>
 
 <style>
+  .wm-git-text.wm-git-conflict { color: var(--color-danger, #ee7755); font-weight: bold; }
   .wm-search { width: min(480px, 100%); padding: 6px 8px; margin-bottom: var(--space-6); background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); }
   .workspace-manager-view {
     width: 100%;

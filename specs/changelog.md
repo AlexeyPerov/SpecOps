@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-18 18:13 MSK — Show demand-driven Git summaries in the workspace rail (WS-06)
+
+- Observe actual row intersections inside the sidebar scroll viewport and retain a separate active-root subscription, including hidden or collapsed projects. Collapse/filter/removal release row demand and local snapshots; width changes preserve subscriptions and shared TTL/coalescing. The existing service owns focus, background-settings, invalidation and app-wide queue gates.
+- Render branch, nonzero local ahead/behind, dirty/conflict markers and explicit unknown/loading/fresh/stale/not-Git/error states in expanded rows and narrow accessible icons. Preserve previous summaries during checks and failures; explain locally known upstream refs, no fetch, tracking errors and successful-check time in tooltips. Share presentation with the Manager.
+- Add separate Version Control actions, single-row refresh and visible-row refresh without ordinary row activation. Verify explicit Manager refresh includes only its filtered roots in the same queue. Clean up unused view snapshots and ignore late observer callbacks after teardown.
+- Validation: 319 frontend files / 3194 tests, including 30-row cold demand, scroll/collapse/filter, hidden active roots, resize stability, both widths and independent Git actions; zero Svelte/type diagnostics and a successful production build. Fourteen native service tests also pass, covering TTL, invalidation, deduplication and process lifetime; service tests verify focus/settings gates. Real desktop screenshots and performance measurements remain in WS-08.
+
 ## 2026-10-18 18:06 MSK — Share workspace Git summaries across windows (WS-05)
 
 - Replace the Manager's batch/cache with demand subscriptions and publish each row independently. Share 60-second snapshots with explicit unknown/loading/fresh/stale/not-Git/error states, successful-check timestamps, conflict markers, force single-flight and preserved previous data after failures.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-18 17:50 MSK — Search and switch workspaces (WS-04)
+
+- Share catalog-only fuzzy name/path search across the sidebar, Manager and a lazy workspace switcher. Sidebar filtering temporarily reveals collapsed folders, disables ambiguous reorder, supports both widths and restores saved collapse on Escape. Search itself performs no filesystem traversal or Git requests; Manager filtering retains its stable existing Git membership until the shared Git service stage.
+- Include hidden, closed and other-window projects in the switcher with folder and opening state. Rank by relevance before last use, preserve keyboard navigation/Enter/Escape and restore focus through the existing picker shell. Reuse the established opening and owner-focus flow, retaining inaccessible projects with errors and clearing recovered path errors.
+- Track successful window-local project activations and persist catalog recency. Defer new/received context history until ownership commit, restore prior activation after failed claims, record real close successors, and exclude the Manager's Notepad transition. Previous Workspace skips closed, moved and inaccessible contexts; navigation activates the existing workspace lifecycle gate.
+- Register Switch Workspace (Cmd/Ctrl+Alt+P) and Previous Workspace (Cmd/Ctrl+Alt+Left) in the registry, native menu and palette after checking default conflicts on both platforms. Validate focused navigation/search/overlay/access/rollback cases and the full frontend suite (316 files / 3176 tests), zero Svelte/type diagnostics and a successful production build. Svelte autofixer reports no issues; real desktop multiwindow acceptance remains in WS-08.
+
 ## 2026-10-18 17:41 MSK — Organize workspace folders and pinned projects (WS-03)
 
 - Build sidebar sections from the shared catalog: pinned first without duplicates, hidden entries override pinning, current-window contexts and available closed projects are visible, and projects owned by another live window remain outside the sidebar. Refresh ownership in bulk after committed changes and window lifecycle/focus events; ignore stale crash placements.

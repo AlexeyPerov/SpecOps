@@ -11,6 +11,7 @@ vi.mock('./workspaceCatalog', async importOriginal => ({
   updateCatalogProject: vi.fn().mockResolvedValue(undefined),
   getProjectCatalog: vi.fn(() => ({ projects: {} })),
 }));
+import { isWorkspaceLifecycleActive, resetWorkspaceLifecycleForTests } from './workspaceLifecycle';
 import { addWorkspaceToWindow } from './addWorkspaceToWindow';
 import { appState } from '../state/appState';
 import { registerCatalogProjects, updateCatalogProject, getProjectCatalog, catalogProjectForRoot } from './workspaceCatalog';
@@ -19,7 +20,7 @@ import { setWorkspaceWindowOwner } from './workspaceWindowPlacement';
 import { ensureWorkspaceReadAccess } from './fileSystem';
 import { stat } from '@tauri-apps/plugin-fs';
 beforeEach(() => {
-  vi.clearAllMocks(); appState.resetAppState();
+  vi.clearAllMocks(); appState.resetAppState(); resetWorkspaceLifecycleForTests();
   vi.stubGlobal('window', { __TAURI_INTERNALS__: {} });
   vi.mocked(focusExistingWorkspaceWindow).mockResolvedValue(false);
   vi.mocked(setWorkspaceWindowOwner).mockResolvedValue(undefined);
@@ -34,6 +35,7 @@ describe('catalog workspace opening', () => {
     const id = await addWorkspaceToWindow('/project');
     expect(id).toMatch(/^ws-/);
     expect(registerCatalogProjects).toHaveBeenCalledWith(['/project']);
+    expect(isWorkspaceLifecycleActive()).toBe(true);
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
   });
   it('focuses an occupied window without creating a competing context', async () => {
@@ -52,6 +54,22 @@ describe('catalog workspace opening', () => {
     await expect(addWorkspaceToWindow('/project')).rejects.toThrow('claim failed');
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(0);
     expect(updateCatalogProject).toHaveBeenCalledWith('/project', { openError: 'Error: claim failed' });
+  });
+  it('preserves the last successful activation after a provisional claim rolls back', async () => {
+    const first = appState.addWorkspace('/first')!, current = appState.addWorkspace('/current')!;
+    vi.mocked(setWorkspaceWindowOwner).mockRejectedValueOnce(new Error('claim failed'));
+    await expect(addWorkspaceToWindow('/failed')).rejects.toThrow('claim failed');
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(current);
+    expect(appState.getWorkspaceActivationHistory()).toEqual([current, first]);
+    expect(isWorkspaceLifecycleActive()).toBe(false);
+    expect(vi.mocked(updateCatalogProject).mock.calls.some(([,patch]) => 'lastUsedAt' in patch)).toBe(false);
+  });
+  it('refuses to activate an inaccessible existing local context', async () => {
+    const id = appState.addWorkspace('/project')!; appState.switchContext('notepad');
+    vi.mocked(stat).mockRejectedValueOnce(new Error('missing'));
+    await expect(addWorkspaceToWindow('/project')).rejects.toThrow('missing');
+    expect(appState.getSnapshot().contexts.activeContextId).toBe('notepad');
+    expect(appState.getWorkspaceActivationHistory()).toEqual([id]);
   });
   it('keeps previously registered unavailable projects with an explanatory error', async () => {
     const project = catalogProjectForRoot('/project');
@@ -74,6 +92,15 @@ describe('catalog workspace opening', () => {
     expect(await addWorkspaceToWindow('/project')).toBeNull();
     expect(appState.getSnapshot().contexts.activeContextId).toBe(id);
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
+  });
+  it('clears a recovered local path error before successfully activating it', async () => {
+    const id = appState.addWorkspace('/project')!; appState.switchContext('notepad');
+    const project = { ...catalogProjectForRoot('/project'), openError: 'missing' };
+    vi.mocked(getProjectCatalog).mockReturnValue({ projects: { [project.id]: project } } as never);
+    await addWorkspaceToWindow('/project');
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(id);
+    expect(updateCatalogProject).toHaveBeenCalledWith('/project', { openError: null });
+    expect(updateCatalogProject).toHaveBeenCalledWith('/project', { lastUsedAt: expect.any(String) });
   });
   it('focuses the concurrent winner after a claim race', async () => {
     vi.mocked(focusExistingWorkspaceWindow).mockResolvedValueOnce(false).mockResolvedValueOnce(true);

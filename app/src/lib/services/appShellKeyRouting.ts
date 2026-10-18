@@ -111,6 +111,8 @@ export function resolveAppShellKeyRouting(
 /** Find/replace and project-search chords bypass the ordinary-input guard. */
 export function isAlwaysRunShellCommand(commandId: AppCommandId): boolean {
   return (
+    commandId === "workspace.switch" ||
+    commandId === "workspace.previous" ||
     commandId === "app.toggleFindReplace" ||
     commandId === "app.findInProject" ||
     commandId === "app.replaceInProject"

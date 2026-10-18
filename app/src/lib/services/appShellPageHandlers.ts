@@ -51,6 +51,7 @@ export interface AppShellCommandHandlersDeps {
   openHeadingJump?: () => void;
   openBookmarkList?: () => void;
   openSnippetInsert?: () => void;
+  openWorkspaceSwitcher?: () => void;
   openCommandPalette: () => void;
   setConsoleOpen: (open: boolean) => void;
 }
@@ -69,6 +70,7 @@ export function createAppShellCommandHandlers(deps: AppShellCommandHandlersDeps)
       openHeadingJump: deps.openHeadingJump,
       openBookmarkList: deps.openBookmarkList,
       openSnippetInsert: deps.openSnippetInsert,
+      openWorkspaceSwitcher: deps.openWorkspaceSwitcher,
       openCommandPalette: deps.openCommandPalette,
       setConsoleOpen: deps.setConsoleOpen,
     });

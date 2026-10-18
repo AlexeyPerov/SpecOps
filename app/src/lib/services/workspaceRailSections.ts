@@ -1,6 +1,7 @@
 import type { CatalogProject, ProjectCatalog } from '../domain/projectCatalog';
 import type { ContextId, WorkspaceEntry } from '../domain/contracts';
 import { catalogProjectForRoot, projectIdentity } from './workspaceCatalog';
+import { workspaceMatchesQuery } from './workspaceSearch';
 import type { WorkspaceWindowOwners } from './workspaceWindowPlacement';
 
 export interface RailProject extends CatalogProject { contextId?: ContextId }
@@ -17,10 +18,9 @@ export function workspaceRailSections(catalog: ProjectCatalog, workspaces: Works
   for (const workspace of workspaces) if (!projects[projectIdentity(workspace.rootPath)]) {
     const project = catalogProjectForRoot(workspace.rootPath); projects[project.id] = project;
   }
-  const needle = query.trim().toLocaleLowerCase();
   const visible = Object.values(projects).filter(project => !project.hiddenFromRail &&
     (!owners[project.id] || owners[project.id] === windowId || open.has(project.id)) &&
-    (!needle || `${project.name}\n${project.rootPath}`.toLocaleLowerCase().includes(needle)))
+    workspaceMatchesQuery(project, query))
     .map(project => ({ ...project, contextId: open.get(project.id)?.id }));
   const ordered = (projects: RailProject[], pinned = false) => projects.sort((a, b) =>
     (pinned ? a.pinnedOrder - b.pinnedOrder : a.order - b.order) || a.id.localeCompare(b.id));

@@ -378,6 +378,7 @@
     openHeadingJump: () => overlayHost?.api.openOverlay("headingJump"),
     openBookmarkList: () => overlayHost?.api.openOverlay("bookmarkList"),
     openSnippetInsert: () => overlayHost?.api.openOverlay("snippetInsert"),
+    openWorkspaceSwitcher: () => overlayHost?.api.openOverlay("workspaceSwitcher"),
     openCommandPalette: () => overlayHost?.api.openOverlay("commandPalette"),
     setConsoleOpen: (open) => {
       consoleOpen = open;

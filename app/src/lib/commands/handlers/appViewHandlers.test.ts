@@ -898,6 +898,8 @@ describe("command dispatch coverage", () => {
       "file.openRecent",
       "file.clearRecentFiles",
       "file.openAllInFolder",
+      "workspace.switch",
+      "workspace.previous",
       "workspace.add",
       "workspace.close",
       "workspace.reorder",

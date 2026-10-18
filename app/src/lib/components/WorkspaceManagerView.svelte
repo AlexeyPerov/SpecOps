@@ -11,6 +11,7 @@
   import { emptySet } from "../collections/emptyCollections";
   import { getProjectCatalog, loadProjectCatalog, projectIdentity, subscribeProjectCatalog } from '../services/workspaceCatalog';
   import { addWorkspaceToWindow } from '../services/addWorkspaceToWindow';
+  import { workspaceMatchesQuery } from '../services/workspaceSearch';
   import EmptyState from "./EmptyState.svelte";
 
   /** The catalog owns membership; open entries retain their window context actions. */
@@ -38,7 +39,8 @@
 
   let catalog = $state(getProjectCatalog());
   let catalogError = $state('');
-  const rows: ManagerRow[] = $derived.by(() => {
+  let searchQuery = $state('');
+  const allRows: ManagerRow[] = $derived.by(() => {
     const projects = new Map<string, ManagerRow>(Object.values(catalog.projects)
       .sort((a, b) => a.order - b.order)
       .map(project => [project.id, { ...project }]));
@@ -50,6 +52,7 @@
     }
     return [...projects.values()];
   });
+  const rows = $derived(allRows.filter(project => workspaceMatchesQuery(project, searchQuery)));
   onMount(() => {
     const unsubscribe = subscribeProjectCatalog(next => { catalog = next; });
     void loadProjectCatalog().catch(error => { catalogError = String(error); });
@@ -64,7 +67,7 @@
     } catch (error) { catalogError = String(error); }
   }
 
-  const gitRootsKey = $derived(JSON.stringify(rows.map(row => row.rootPath)));
+  const gitRootsKey = $derived(JSON.stringify(allRows.map(row => row.rootPath)));
 
   let gitCellsByPath = $state<Map<string, WorkspaceGitColumnCell>>(new Map());
   let gitRefreshBusy = $state(false);
@@ -268,8 +271,14 @@
     </div>
   </header>
 
+  <input class="wm-search" aria-label="Search all workspaces" placeholder="Search name or path…" bind:value={searchQuery}
+    onkeydown={(event) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); searchQuery = ''; }
+      if (event.key === 'ArrowDown' || event.key === 'Enter') { event.preventDefault(); (event.currentTarget as HTMLElement).closest('.workspace-manager-view')?.querySelector<HTMLElement>('.wm-row')?.focus(); }
+    }} />
+  {#if searchQuery.trim() && rows.length === 0}<p role="status">No matching projects.</p>{/if}
   {#if catalogError}<p role="alert">{catalogError}</p>{/if}
-  {#if rows.length === 0}
+  {#if allRows.length === 0}
     <EmptyState
       class="workspace-manager-empty"
       title="No projects registered"
@@ -304,6 +313,12 @@
             class:wm-row-hidden={hidden}
             onclick={() => void selectProject(workspace)}
             onkeydown={(event) => {
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault(); const current = event.currentTarget as HTMLElement;
+                const sibling = event.key === 'ArrowDown' ? current.nextElementSibling : current.previousElementSibling;
+                (sibling as HTMLElement | null)?.focus();
+              }
+              if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); searchQuery = ''; }
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 void selectProject(workspace);
@@ -370,6 +385,7 @@
 </div>
 
 <style>
+  .wm-search { width: min(480px, 100%); padding: 6px 8px; margin-bottom: var(--space-6); background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); }
   .workspace-manager-view {
     width: 100%;
     height: 100%;

@@ -1,9 +1,9 @@
+import { activatePreviousWorkspace } from '../../services/workspaceNavigation';
 import { addWorkspaceToWindow } from "../../services/addWorkspaceToWindow";
 import { appState } from "../../state/appState";
 import type { WorkspaceReorderPayload } from "../../domain/contracts";
 import { normalizePathForStorage } from "../../services/diskFingerprint";
 import { ensureWorkspaceReadAccess, openFolderDialog } from "../../services/fileSystem";
-import { markWorkspaceLifecycleActive } from "../../services/workspaceLifecycle";
 import { closeWorkspaceWithConfirm } from "../../services/workspaceCloseFlow";
 import type { CommandHandlerMap } from "./types";
 
@@ -21,6 +21,8 @@ function isWorkspaceReorderPayload(payload: unknown): payload is WorkspaceReorde
 }
 
 export const workspaceHandlers: CommandHandlerMap = {
+  'workspace.switch': ({ openWorkspaceSwitcher }) => { openWorkspaceSwitcher?.(); },
+  'workspace.previous': async ({ notify }) => { await activatePreviousWorkspace(notify); },
   "workspace.add": async ({ notify }) => {
     const selected = await openFolderDialog();
     if (!selected) {
@@ -38,7 +40,6 @@ export const workspaceHandlers: CommandHandlerMap = {
       notify("Workspace is already open.");
       return;
     }
-    markWorkspaceLifecycleActive();
     notify("Workspace added.");
   },
   "workspace.close": async ({ notify }) => {

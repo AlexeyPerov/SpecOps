@@ -169,6 +169,8 @@ function keyboardEventFromBinding(binding: string, platform: "mac" | "windows"):
 
   const keyByToken: Record<string, string> = {
     Up: "ArrowUp",
+    Left: "ArrowLeft",
+    Right: "ArrowRight",
     Down: "ArrowDown",
     Tab: "Tab",
   };

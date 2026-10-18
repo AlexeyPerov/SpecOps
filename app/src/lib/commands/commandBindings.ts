@@ -10,6 +10,8 @@ export type { CommandBindingOverrides };
 
 const BINDING_KEY_TO_KEYMAP_TOKEN: Record<string, string> = {
   Up: "arrowup",
+  Left: "arrowleft",
+  Right: "arrowright",
   Down: "arrowdown",
   Tab: "tab",
   Space: " ",
@@ -17,6 +19,8 @@ const BINDING_KEY_TO_KEYMAP_TOKEN: Record<string, string> = {
 
 const KEYMAP_TOKEN_TO_BINDING_KEY: Record<string, string> = {
   arrowup: "Up",
+  arrowleft: "Left",
+  arrowright: "Right",
   arrowdown: "Down",
   tab: "Tab",
   " ": "Space",
@@ -159,6 +163,8 @@ function formatBindingKeyFromKeyboard(key: string): string | null {
   if (key === " ") {
     return "Space";
   }
+  if (key === "ArrowLeft") return "Left";
+  if (key === "ArrowRight") return "Right";
   if (key === "ArrowUp") {
     return "Up";
   }

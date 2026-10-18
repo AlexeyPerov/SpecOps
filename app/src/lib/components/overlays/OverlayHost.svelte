@@ -104,6 +104,8 @@
   let quickOpenQuery = $state("");
   let quickOpenOpenerPaneId = $state<string | null>(null);
 
+  let workspaceSwitcherOpen = $state(false);
+  let workspaceSwitcherComponent = $state<ReturnType<typeof loadLazyPicker> | null>(null);
   let commandPaletteOpen = $state(false);
   let commandPaletteQuery = $state("");
 
@@ -386,6 +388,7 @@
     getState: () => ({
       quickOpenOpen,
       commandPaletteOpen,
+      workspaceSwitcherOpen,
       headingJumpOpen,
       bookmarkListOpen,
       snippetInsertOpen,
@@ -396,6 +399,7 @@
     }),
     patch: (p) => {
       if (p.quickOpenOpen !== undefined) quickOpenOpen = p.quickOpenOpen;
+      if (p.workspaceSwitcherOpen !== undefined) workspaceSwitcherOpen = p.workspaceSwitcherOpen;
       if (p.commandPaletteOpen !== undefined) commandPaletteOpen = p.commandPaletteOpen;
       if (p.headingJumpOpen !== undefined) headingJumpOpen = p.headingJumpOpen;
       if (p.bookmarkListOpen !== undefined) bookmarkListOpen = p.bookmarkListOpen;
@@ -459,6 +463,7 @@
       timelineOpen ||
       quickOpenOpen ||
       commandPaletteOpen ||
+      workspaceSwitcherOpen ||
       headingJumpOpen ||
       bookmarkListOpen ||
       snippetInsertOpen ||
@@ -467,6 +472,12 @@
 
   function openOverlay(kind: OverlayKind, options?: { focusReplace?: boolean }): void {
     switch (kind) {
+      case "workspaceSwitcher":
+        coordinator.closeOtherPickers('workspaceSwitcher');
+        maybeCloseEditorTools('workspaceSwitcher');
+        workspaceSwitcherComponent ??= loadLazyPicker('workspace-switcher', () => import('../WorkspaceSwitcherPicker.svelte'));
+        workspaceSwitcherOpen = true;
+        break;
       case "quickOpen":
         coordinator.closeOtherPickers("quickOpen");
         quickOpenOpenerPaneId = editorLayoutActivePaneId;
@@ -522,6 +533,9 @@
 
   function closeOverlay(kind: OverlayKind): void {
     switch (kind) {
+      case "workspaceSwitcher":
+        workspaceSwitcherOpen = false;
+        break;
       case "quickOpen":
         quickOpenOpen = false;
         break;
@@ -804,3 +818,9 @@
     timelineSearch = query;
   }}
 />
+
+{#if workspaceSwitcherComponent}
+  {#await workspaceSwitcherComponent then Picker}
+    <Picker.default open={workspaceSwitcherOpen} {currentWindowId} onClose={() => { workspaceSwitcherOpen = false; }} />
+  {/await}
+{/if}

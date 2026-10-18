@@ -39,6 +39,7 @@ import {
   reindexIdCountersFromContexts,
 } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
+import { getProjectCatalog, projectIdentity, updateCatalogProject } from '../../services/workspaceCatalog';
 import { moveArrayItem } from "./tabHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
@@ -96,7 +97,23 @@ export function createWorkspaceContextsSlice(deps: {
     };
   }
 
+  let activationHistory: ContextId[] = [];
+  function confirmActivation(contextId: ContextId): void {
+    const state = getSnapshot();
+    const workspace = state.contexts.workspaces.find(entry => entry.id === contextId);
+    if (!workspace || state.contexts.activeContextId !== contextId) return;
+    activationHistory = [contextId, ...activationHistory.filter(id => id !== contextId && state.contexts.workspaces.some(entry => entry.id === id))];
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window && getProjectCatalog().projects[projectIdentity(workspace.rootPath)]) {
+      void updateCatalogProject(workspace.rootPath, { lastUsedAt: new Date().toISOString() }).catch(console.error);
+    }
+  }
   const slice = {
+    clearWorkspaceActivationHistory(): void { activationHistory = []; },
+    confirmWorkspaceActivation(contextId: ContextId): void { confirmActivation(contextId); },
+    getWorkspaceActivationHistory(): ContextId[] {
+      const ids = new Set(getSnapshot().contexts.workspaces.map(entry => entry.id));
+      return activationHistory.filter(id => ids.has(id));
+    },
     applyWindowSession(snapshot: WindowSessionSnapshot, recentFiles: string[] = []) {
       const preservedSettings = getSnapshot().settings;
       const normalizedNotepad = ensureContextSnapshotHasTab(cloneContextSnapshot(snapshot.notepad));
@@ -132,6 +149,7 @@ export function createWorkspaceContextsSlice(deps: {
         },
         activityRailWidthPx: railWidth,
       });
+      activationHistory = activeContextId === NOTEPAD_CONTEXT_ID ? [] : [activeContextId];
       applyTheme(preservedTheme);
     },
     getWindowSessionSnapshot(): WindowSessionSnapshot {
@@ -219,9 +237,10 @@ export function createWorkspaceContextsSlice(deps: {
           },
         };
       });
+      if (switched) confirmActivation(contextId);
       return switched;
     },
-    addWorkspace(rootPath: string): ContextId | null {
+    addWorkspace(rootPath: string, options: { deferActivation?: boolean } = {}): ContextId | null {
       let createdId: ContextId | null = null;
       update((state) => {
         // Persist the real casing; only the duplicate check folds case.
@@ -253,9 +272,10 @@ export function createWorkspaceContextsSlice(deps: {
           },
         };
       });
+      if (createdId && !options.deferActivation) confirmActivation(createdId);
       return createdId;
     },
-    adoptWorkspace(entry: WorkspaceEntry, windowId: string): ContextId {
+    adoptWorkspace(entry: WorkspaceEntry, windowId: string, options: { deferActivation?: boolean } = {}): ContextId {
       const id = nextWorkspaceId();
       const snapshot = cloneContextSnapshot(entry.snapshot);
       const docs = new Map(snapshot.documents.map(doc => [doc.id, nextDocId()]));
@@ -273,6 +293,7 @@ export function createWorkspaceContextsSlice(deps: {
         },
       };
       update(state => ({ ...state, contexts: { ...state.contexts, activeContextId: id, workspaces: [...state.contexts.workspaces, { ...entry, id, snapshot }] } }));
+      if (!options.deferActivation) confirmActivation(id);
       return id;
     },
     getWorkspaceDirtyDocuments(workspaceId: ContextId): DocumentState[] {
@@ -286,10 +307,11 @@ export function createWorkspaceContextsSlice(deps: {
     /**
      * Remove a workspace from the app state. Confirmation and save-all
      * persistence are the caller's responsibility — this is a pure state
-     * transition (no side-effecting callbacks). Returns `true` when the
-     * workspace existed and was removed.
+     * transition. A real successor activation updates navigation recency;
+     * provisional-open rollback can defer it. Returns true after removal.
      */
-    closeWorkspace(workspaceId: ContextId): boolean {
+    closeWorkspace(workspaceId: ContextId, options: { deferActivation?: boolean } = {}): boolean {
+      const wasActive = getSnapshot().contexts.activeContextId === workspaceId;
       let closed = false;
       update((state) => {
         const targetWorkspace = state.contexts.workspaces.find((workspace) => workspace.id === workspaceId);
@@ -317,6 +339,10 @@ export function createWorkspaceContextsSlice(deps: {
           },
         };
       });
+      if (closed) {
+        activationHistory = activationHistory.filter(id => id !== workspaceId);
+        if (wasActive && !options.deferActivation) confirmActivation(getSnapshot().contexts.activeContextId);
+      }
       return closed;
     },
     setLastActiveSessionId(sessionId: string | null) {

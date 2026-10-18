@@ -3,7 +3,6 @@ import { stat } from "@tauri-apps/plugin-fs";
 import { getErrorMessage } from "../commands/commandErrors";
 import { normalizePathForStorage } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
-import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 import { showErrorToast } from "./toastBus";
 import type { OpenActivePathResult, OpenPathActivationOptions } from "./openActivePath";
 
@@ -60,6 +59,5 @@ async function addDroppedWorkspace(
     notify("Workspace is already open.");
     return;
   }
-  markWorkspaceLifecycleActive();
   notify("Workspace added.");
 }

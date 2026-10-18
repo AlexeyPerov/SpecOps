@@ -381,6 +381,7 @@ function createStateStore() {
       applyThemeState(getSnapshot().theme);
     },
     resetAppState() {
+      workspaceContextsSlice.clearWorkspaceActivationHistory();
       resetIdCounters();
       set(initialState);
       applyThemeState(initialState.theme);

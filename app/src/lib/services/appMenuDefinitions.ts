@@ -554,6 +554,8 @@ export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => v
       themesItem,
       settingsItem,
       workspaceManagerItem,
+      await commandItem({ id: 'cmd.workspace.switch', text: 'Switch Workspace', accelerator: 'CmdOrCtrl+Alt+P', commandId: 'workspace.switch', runCommand }),
+      await commandItem({ id: 'cmd.workspace.previous', text: 'Previous Workspace', accelerator: 'CmdOrCtrl+Alt+Left', commandId: 'workspace.previous', runCommand }),
       versionControlItem,
       await PredefinedMenuItem.new({ item: "Separator" }),
       quitItem,
@@ -563,6 +565,8 @@ export async function buildAppSubmenu(runCommand: (commandId: AppCommandId) => v
 
 /** Static native menu command ids (dynamic Open Recent paths excluded). */
 export const NATIVE_MENU_COMMAND_IDS: readonly AppCommandId[] = [
+  'workspace.switch',
+  'workspace.previous',
   "file.new",
   "file.open",
   "app.quickOpenFile",

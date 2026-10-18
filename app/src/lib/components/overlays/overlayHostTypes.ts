@@ -23,6 +23,7 @@ import type { ProjectSearchResult } from "../../services/projectSearch";
 export type OverlayKind =
   | "quickOpen"
   | "commandPalette"
+  | "workspaceSwitcher"
   | "headingJump"
   | "bookmarkList"
   | "snippetInsert"

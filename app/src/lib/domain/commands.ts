@@ -69,6 +69,8 @@ export type AppCommandId =
   | "view.focusPane3"
   | "view.focusPane4"
   | "view.focusEditor"
+  | "workspace.switch"
+  | "workspace.previous"
   | "workspace.add"
   | "workspace.close"
   | "workspace.reorder";

@@ -43,7 +43,6 @@ import {
 import { collectImmediateSubfolders } from "../../services/workspaceSubfolders";
 import { normalizePathSync } from "../../services/diskFingerprint";
 import { openFolderDialog } from "../../services/fileSystem";
-import { markWorkspaceLifecycleActive } from "../../services/workspaceLifecycle";
 import { appState } from "../../state/appState";
 
 /** Inputs shared by every project-search handler. */
@@ -454,7 +453,6 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       }
     }
     if (added > 0) {
-      markWorkspaceLifecycleActive();
     }
     const parts: string[] = [];
     if (added > 0) {

@@ -279,3 +279,18 @@ describe("createOverlayCoordinator.isPicker", () => {
     expect(coordinator.isPicker("workspaceContextMenu")).toBe(false);
   });
 });
+
+
+describe('workspace switcher coordination', () => {
+  it('owns modal routing, closes other pickers and closes after actual context switch', () => {
+    const { state, coordinator } = setup({ workspaceSwitcherOpen: true, commandPaletteOpen: true });
+    coordinator.closeOtherPickers('workspaceSwitcher');
+    expect(state.workspaceSwitcherOpen).toBe(true); expect(state.commandPaletteOpen).toBe(false);
+    expect(coordinator.isModalOverlayOpen()).toBe(true); expect(coordinator.isAnyOverlayOpen()).toBe(true);
+    coordinator.closeAllOnWorkspaceSwitch(); expect(state.workspaceSwitcherOpen).toBe(false);
+  });
+  it('closes the switcher when another picker opens', () => {
+    const { state, coordinator } = setup({ workspaceSwitcherOpen: true });
+    coordinator.closeOtherPickers('commandPalette'); expect(state.workspaceSwitcherOpen).toBe(false);
+  });
+});

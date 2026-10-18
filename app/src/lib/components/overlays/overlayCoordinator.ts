@@ -26,6 +26,7 @@ import type { OverlayKind } from "./overlayHostTypes";
 export interface OverlayState {
   quickOpenOpen: boolean;
   commandPaletteOpen: boolean;
+  workspaceSwitcherOpen?: boolean;
   headingJumpOpen: boolean;
   bookmarkListOpen: boolean;
   snippetInsertOpen: boolean;
@@ -49,6 +50,7 @@ export interface OverlayCoordinatorDeps {
 const CLOSE_OTHERS_PICKERS: ReadonlySet<OverlayKind> = new Set([
   "quickOpen",
   "commandPalette",
+  "workspaceSwitcher",
   "headingJump",
   "bookmarkList",
   "snippetInsert",
@@ -62,6 +64,7 @@ const CLOSE_OTHERS_PICKERS: ReadonlySet<OverlayKind> = new Set([
  */
 const EDITOR_TOOLS_CLOSING_PICKERS: ReadonlySet<OverlayKind> = new Set([
   "commandPalette",
+  "workspaceSwitcher",
   "headingJump",
   "bookmarkList",
   "snippetInsert",
@@ -76,6 +79,7 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
     const patch: Partial<OverlayState> = {};
     if (except !== "quickOpen") patch.quickOpenOpen = false;
     if (except !== "commandPalette") patch.commandPaletteOpen = false;
+    if (except !== "workspaceSwitcher" && deps.getState().workspaceSwitcherOpen) patch.workspaceSwitcherOpen = false;
     if (except !== "headingJump") patch.headingJumpOpen = false;
     if (except !== "bookmarkList") patch.bookmarkListOpen = false;
     if (except !== "snippetInsert") {
@@ -104,6 +108,7 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
       s.timelineOpen ||
       s.quickOpenOpen ||
       s.commandPaletteOpen ||
+      s.workspaceSwitcherOpen ||
       s.headingJumpOpen ||
       s.bookmarkListOpen ||
       s.snippetInsertOpen ||
@@ -125,6 +130,7 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
       s.timelineOpen ||
       s.quickOpenOpen ||
       s.commandPaletteOpen ||
+      s.workspaceSwitcherOpen ||
       s.headingJumpOpen ||
       s.bookmarkListOpen ||
       s.snippetInsertOpen
@@ -149,6 +155,7 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
     const patch: Partial<OverlayState> = {};
     if (s.quickOpenOpen) patch.quickOpenOpen = false;
     if (s.commandPaletteOpen) patch.commandPaletteOpen = false;
+    if (s.workspaceSwitcherOpen) patch.workspaceSwitcherOpen = false;
     if (s.headingJumpOpen) patch.headingJumpOpen = false;
     if (s.bookmarkListOpen) patch.bookmarkListOpen = false;
     // snippetInsert also clears its captured host identity.

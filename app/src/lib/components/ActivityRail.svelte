@@ -71,7 +71,7 @@
   let {
     workspaces = [],
     currentWindowId = 'main',
-    searchQuery = '',
+    searchQuery = $bindable(''),
     manualOrder = true,
     onError = console.error,
     activeContextId = "notepad",
@@ -93,6 +93,8 @@
   let railWorkspacesEl: HTMLDivElement | null = null;
   let displayWidth = $state(DEFAULT_ACTIVITY_RAIL_WIDTH_PX);
   let isResizing = $state(false);
+  let railSearchOpen = $state(false);
+  let railSearchInput = $state<HTMLInputElement | null>(null);
   // Keep the local display width in sync with the persisted width unless the
   // user is actively dragging the handle (mirrors the project-panel pattern).
   $effect(() => {
@@ -324,6 +326,11 @@
     return `${workspace.rootPath} · Git status not checked${sessions} · Tabs: ${tabCountsByRoot.get(workspace.rootPath) ?? 0}`;
   }
   function workspaceKeydown(event: KeyboardEvent, workspace: RailProject): void {
+    if (event.key === 'Escape' && searchQuery) { event.preventDefault(); event.stopPropagation(); searchQuery = ''; return; }
+    if (!event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault(); const rows = [...(railWorkspacesEl?.querySelectorAll<HTMLButtonElement>('[data-workspace-id]') ?? [])];
+      const index = rows.indexOf(event.currentTarget as HTMLButtonElement); rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus(); return;
+    }
     if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openMenu(event, { project: workspace });
     else if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault(); if (dragEnabled) reorderProject(workspace, event.key === 'ArrowUp' ? -1 : 1);
@@ -444,6 +451,14 @@
     </HoverTooltip>
   {/if}
 
+  {#if !expanded}<button type="button" class="rail-button" aria-label="Search workspaces" title="Search workspaces" onclick={() => { railSearchOpen = !railSearchOpen; void tick().then(() => railSearchInput?.focus()); }}>⌕</button>{/if}
+  {#if expanded || railSearchOpen}
+    <input bind:this={railSearchInput} class="rail-search" class:rail-search-compact={!expanded} aria-label="Search workspaces" placeholder="Search name or path…" bind:value={searchQuery}
+      onkeydown={(event) => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); searchQuery = ''; railSearchOpen = false; }
+        if (event.key === 'ArrowDown' || event.key === 'Enter') { event.preventDefault(); railWorkspacesEl?.querySelector<HTMLButtonElement>('[data-workspace-id]')?.focus(); }
+      }} />
+  {/if}
   {#if folderEdit}
     <form class="rail-folder-form" onsubmit={(event) => { event.preventDefault(); saveFolder(); }}>
       <input aria-label="Folder name" bind:value={folderName} onkeydown={(event) => { if (event.key === 'Escape') folderEdit = null; }} />
@@ -451,7 +466,8 @@
     </form>
   {/if}
   <div class={`rail-workspaces${expanded ? " rail-workspaces-expanded" : ""}`} bind:this={railWorkspacesEl} onscroll={saveRailPreferences}>
-    {#each sections as section (section.id)}
+    {#if railProjects.length === 0}<p class="rail-empty" role="status">{searchQuery.trim() ? 'No matching projects' : 'No projects in the sidebar'}</p>{/if}
+    {#each sections.filter(section => !searchQuery.trim() || section.projects.length > 0) as section (section.id)}
       <section class="rail-section" data-rail-section={section.id} aria-label={`${section.name}, ${section.projects.length} projects`}>
         <div class="rail-section-heading">
           <button class="rail-section-toggle" type="button" aria-label={`${section.name}, ${section.projects.length} projects`}
@@ -623,6 +639,9 @@
 {/if}
 
 <style>
+  .rail-search { width: calc(100% - 12px); margin: 6px; min-width: 0; padding: 5px; background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); }
+  .rail-search-compact { width: 220px; position: absolute; z-index: 20; left: 44px; top: 45px; }
+  .rail-empty { padding: 8px; font-size: 12px; color: var(--color-text-secondary); }
   .rail-section { width: 100%; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .activity-rail-expanded .rail-section { align-items: stretch; }
   .rail-section-heading { display: flex; width: 100%; align-items: center; min-width: 0; }

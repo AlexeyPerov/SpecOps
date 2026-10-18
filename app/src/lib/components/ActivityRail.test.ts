@@ -19,6 +19,22 @@ function workspace(index: number, rootPath: string): WorkspaceEntry {
 }
 beforeEach(() => { _resetProjectCatalogForTests(); vi.mocked(invoke).mockReset(); localStorage.clear(); vi.mocked(readLiveWorkspaceWindowOwners).mockResolvedValue({}); vi.mocked(addWorkspaceToWindow).mockClear(); vi.mocked(invoke).mockResolvedValue({version:1, revision:1, projects:{}, folders:{}, savedContexts:{}}); });
 describe("ActivityRail", () => {
+  it('temporarily reveals collapsed matches and restores collapse on Escape without Git or catalog writes', async () => {
+    const project = { ...catalogProjectForRoot('/team/hidden-app'), folderId: 'team' };
+    vi.mocked(invoke).mockResolvedValue({ version:1, revision:1, projects:{[project.id]:project}, folders:{team:{id:'team',name:'Team',order:0}}, savedContexts:{} });
+    await loadProjectCatalog();
+    localStorage.setItem('spec-ops:workspace-rail:main', JSON.stringify({ collapsed:['folder:team'], scrollTop:0 }));
+    const { host } = mountComponent(ActivityRail, { panelWidthPx: 240 }); await tick();
+    expect(host.querySelector('[data-workspace-id]')).toBeNull();
+    vi.mocked(invoke).mockClear();
+    const input = host.querySelector<HTMLInputElement>('[aria-label="Search workspaces"]')!;
+    input.value = 'hidden'; input.dispatchEvent(new Event('input', { bubbles:true })); await tick();
+    expect(host.querySelector('[data-workspace-id]')).not.toBeNull();
+    expect(host.querySelector('.rail-section-toggle')?.getAttribute('draggable')).toBe('false');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key:'Escape', bubbles:true })); await tick();
+    expect(host.querySelector('[data-workspace-id]')).toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+  });
   it("renders 30 expanded rows with distinct names, drop targets and no Git reads", async () => {
     const workspaces = Array.from({ length: 30 }, (_, i) => workspace(i, `/projects/group-${i}/app`));
     const { host } = mountComponent(ActivityRail, { workspaces, panelWidthPx: 240, sessionsEnabled: true });

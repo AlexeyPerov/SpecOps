@@ -1,6 +1,8 @@
 import type { CommandDefinition } from "../domain/contracts";
 
 export const commandDefinitions: CommandDefinition[] = [
+  { id: 'workspace.switch', label: 'Switch Workspace', menuPath: 'SpecOps/Switch Workspace', category: 'Workspace', paletteIntent: 'palette', searchTerms: ['project', 'quick switch'], binding: { mac: 'Cmd+Alt+P', windows: 'Ctrl+Alt+P' } },
+  { id: 'workspace.previous', label: 'Previous Workspace', menuPath: 'SpecOps/Previous Workspace', category: 'Workspace', paletteIntent: 'palette', searchTerms: ['project', 'back'], binding: { mac: 'Cmd+Alt+Left', windows: 'Ctrl+Alt+Left' } },
   {
     id: "app.toggleThemePane",
     label: "Themes",

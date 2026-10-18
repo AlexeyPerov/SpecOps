@@ -1,3 +1,4 @@
+import { markWorkspaceLifecycleActive } from './workspaceLifecycle';
 import { flushWorkspaceChatPersistence } from "./chatPersistence";
 import { emitTo, listen } from '@tauri-apps/api/event';
 import { getAllWebviewWindows, getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -136,7 +137,7 @@ export async function listenWorkspaceWindowTransfers(): Promise<() => void> {
       if (request.action === 'info') info = { windowId, roots: appState.getSnapshot().contexts.workspaces.map(workspace => workspace.rootPath) };
       if (request.action === 'focus') {
         const entry = appState.getSnapshot().contexts.workspaces.find(workspace => normalizePathSync(workspace.rootPath) === request.root || normalizePathSync(workspace.rootPath) === normalizePathSync(request.root!));
-        if (entry) appState.switchContext(entry.id);
+        if (entry) { appState.switchContext(entry.id); markWorkspaceLifecycleActive(); }
         await getCurrentWebviewWindow().setFocus();
       }
       if (request.action === 'prepare') {
@@ -172,7 +173,7 @@ export async function listenWorkspaceWindowTransfers(): Promise<() => void> {
         markWorkspaceIncoming(request.root!);
         if (request.chat) chatStore.adoptWorkspaceState(request.root!, request.chat);
         chatStore.setActiveWorkspaceRoot(request.root!);
-        const id = appState.adoptWorkspace(request.workspace, windowId);
+        const id = appState.adoptWorkspace(request.workspace, windowId, { deferActivation: true });
         const adopted = appState.getSnapshot().contexts.workspaces.find(workspace => workspace.id === id)!;
         try {
           for (const doc of adopted.snapshot.documents) if (doc.filePath) {
@@ -182,7 +183,7 @@ export async function listenWorkspaceWindowTransfers(): Promise<() => void> {
           await flushSessionPersistence(appState.getSnapshot(), windowId);
           await setWorkspaceWindowOwner(request.root!, windowId, request.source);
         } catch (error) {
-          appState.closeWorkspace(id);
+          appState.closeWorkspace(id, { deferActivation: true });
           appState.switchContext(previousContext);
           chatStore.evictWorkspace(request.root!);
           chatStore.setActiveWorkspaceRoot(previousChatScope);
@@ -192,6 +193,7 @@ export async function listenWorkspaceWindowTransfers(): Promise<() => void> {
           throw error;
         }
         clearTimeout(pending.timer);
+        appState.confirmWorkspaceActivation(id);
         committed.add(request.id);
         chatStore.setActiveWorkspaceRoot(request.root!);
         (request.turns ?? []).forEach(turn => resumeWorkspaceTurn(turn, pending.observers.get(turn.turnId)!.events(turn)));

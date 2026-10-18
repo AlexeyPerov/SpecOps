@@ -61,8 +61,14 @@
   // an unreachable remote, stalling every status/log/staging command behind it.
   let remotePresenceStatus = $state<LoadStatus>("idle");
   let remotePresenceCommandId = $state<string | null>(null);
+  // Bumped by every tag list load so a remote-presence check that started
+  // against an older list never overwrites a newer one.
+  let tagsLoadGeneration = 0;
 
-  const canDelete = $derived(selectedTag !== null && !actionBusy && !readOnly);
+  const canCreate = $derived(
+    !actionBusy && !readOnly && !remoteOpBusy && remotePresenceStatus !== "loading",
+  );
+  const canDelete = $derived(selectedTag !== null && !actionBusy && !readOnly && !remoteOpBusy);
   const canPush = $derived(
     selectedTag !== null && !actionBusy && !readOnly && !remoteOpBusy && remotes.length > 0,
   );
@@ -76,7 +82,6 @@
   async function loadRemoteTagPresence(
     root: string,
     remoteName: string,
-    signal?: AbortSignal,
   ): Promise<string[]> {
     try {
       // F30: run the probe off the per-repo queue (a dead remote must not block
@@ -90,9 +95,6 @@
         bypassQueue: true,
       });
     } catch (error) {
-      if (signal?.aborted) {
-        return [];
-      }
       const message = error instanceof Error ? error.message : String(error);
       void logDiagnostic({
         level: "warn",
@@ -108,6 +110,7 @@
   }
 
   async function loadTags(root: string, signal?: AbortSignal): Promise<void> {
+    tagsLoadGeneration += 1;
     loadStatus = "loading";
     loadError = null;
     tags = [];
@@ -154,19 +157,20 @@
       return;
     }
     remotePresenceStatus = "loading";
-    const controller = new AbortController();
+    const generation = tagsLoadGeneration;
     try {
       const localTags = tags.map((tag) => tag.name);
-      const remoteTagNames = await loadRemoteTagPresence(
-        root,
-        defaultRemoteName,
-        controller.signal,
-      );
-      if (controller.signal.aborted) {
+      const remoteTagNames = await loadRemoteTagPresence(root, defaultRemoteName);
+      if (generation !== tagsLoadGeneration) {
+        // The list was reloaded while the probe ran; its snapshot is stale.
+        remotePresenceStatus = "idle";
         return;
       }
       tags = mergeTagRemotePresence(localTags, remoteTagNames);
-      selectedTag = tags.find((tag) => tag.name === selectedTag)?.name ?? tags[0]?.name ?? null;
+      // Keep the user's selection only; never pick a tag on their behalf.
+      if (selectedTag !== null && !tags.some((tag) => tag.name === selectedTag)) {
+        selectedTag = null;
+      }
       remotePresenceStatus = "ready";
     } catch {
       remotePresenceStatus = "error";
@@ -197,7 +201,7 @@
   }
 
   async function handleCreateTag(): Promise<void> {
-    if (actionBusy || readOnly) {
+    if (!canCreate) {
       return;
     }
 
@@ -240,7 +244,8 @@
   }
 
   async function handlePushTag(): Promise<void> {
-    if (!selectedTag || !canPush) {
+    const tagName = selectedTag;
+    if (!tagName || !canPush) {
       return;
     }
 
@@ -259,7 +264,7 @@
       return;
     }
 
-    const result = await promptTagPush({ tagName: selectedTag, remotes: remoteRows });
+    const result = await promptTagPush({ tagName, remotes: remoteRows });
     if (!result) {
       return;
     }
@@ -271,13 +276,13 @@
 
     try {
       for (const remoteName of result.remoteNames) {
-        await pushTag(repoRoot, remoteName, selectedTag, { commandId });
+        await pushTag(repoRoot, remoteName, tagName, { commandId });
       }
       await loadTags(repoRoot);
       await onMutation("tag");
       const remoteLabel =
         result.remoteNames.length === 1 ? result.remoteNames[0] : `${result.remoteNames.length} remotes`;
-      notify(`Pushed tag "${selectedTag}" to ${remoteLabel}.`);
+      notify(`Pushed tag "${tagName}" to ${remoteLabel}.`);
     } catch (error) {
       if (isGitCommandCancelledError(error)) {
         notify("Push tag cancelled.");
@@ -291,7 +296,8 @@
   }
 
   async function handleDeleteTag(): Promise<void> {
-    if (!selectedTag || actionBusy) {
+    const tagName = selectedTag;
+    if (!tagName || !canDelete) {
       return;
     }
 
@@ -304,7 +310,7 @@
       }
     }
 
-    const result = await promptTagDelete({ tagName: selectedTag, remotes: remoteRows });
+    const result = await promptTagDelete({ tagName, remotes: remoteRows });
     if (!result) {
       return;
     }
@@ -319,20 +325,20 @@
     }
 
     try {
-      await deleteTag(repoRoot, selectedTag, {
+      await deleteTag(repoRoot, tagName, {
         remoteNames: hasRemoteDeletes ? remoteNames : undefined,
         commandId: hasRemoteDeletes ? commandId : undefined,
       });
       await loadTags(repoRoot);
       await onMutation("tag");
-      notify(`Deleted tag "${selectedTag}".`);
+      notify(`Deleted tag "${tagName}".`);
     } catch (error) {
       if (isGitCommandCancelledError(error)) {
         notify("Delete remote tag cancelled.");
       } else if (error instanceof GitTagPartialDeleteError) {
         const remoteList = error.failedRemotes.map((entry) => entry.remoteName).join(", ");
         notify(
-          `Tag "${selectedTag}" deleted locally, but remote delete failed on: ${remoteList}.`,
+          `Tag "${tagName}" deleted locally, but remote delete failed on: ${remoteList}.`,
         );
         await loadTags(repoRoot);
         await onMutation("tag");
@@ -353,7 +359,7 @@
     <button
       type="button"
       class="git-tags-action"
-      disabled={actionBusy || readOnly}
+      disabled={!canCreate}
       title={readOnly ? "Tag creation is unavailable for bare repositories" : "Create a new tag"}
       onclick={handleCreateTag}
     >

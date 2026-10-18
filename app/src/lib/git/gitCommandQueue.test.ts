@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  activeReadsForRepoForTests,
   enqueueGitCommandForRepo,
   resetGitCommandQueueForTests,
   type GitCommandLane,
@@ -240,5 +241,59 @@ describe("enqueueGitCommandForRepo — read lane (bounded concurrent, P03-08-08)
       ),
     ).rejects.toBeInstanceOf(DOMException);
     expect(ran).toBe(false);
+  });
+
+  it("does not release a slot for a read aborted while waiting, so the cap holds", async () => {
+    const releases: Array<() => void> = [];
+    let running = 0;
+    let peak = 0;
+    const blockingRead = () =>
+      enqueueGitCommandForRepo(
+        "/repo",
+        () =>
+          new Promise<void>((resolve) => {
+            running += 1;
+            peak = Math.max(peak, running);
+            releases.push(() => {
+              running -= 1;
+              resolve();
+            });
+          }),
+        { lane: "read" },
+      );
+
+    const first = [blockingRead(), blockingRead(), blockingRead(), blockingRead()];
+    await Promise.resolve();
+    expect(activeReadsForRepoForTests("/repo")).toBe(4);
+
+    const controller = new AbortController();
+    let abortedRan = false;
+    const aborted = enqueueGitCommandForRepo(
+      "/repo",
+      () => {
+        abortedRan = true;
+        return Promise.resolve();
+      },
+      { lane: "read", signal: controller.signal },
+    );
+    const queued = blockingRead();
+    controller.abort();
+    await expect(aborted).rejects.toBeInstanceOf(DOMException);
+    expect(abortedRan).toBe(false);
+    // The aborted waiter took no slot, so none was given back.
+    expect(activeReadsForRepoForTests("/repo")).toBe(4);
+
+    releases.shift()!();
+    await first[0];
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(running).toBe(4);
+    expect(peak).toBe(4);
+
+    while (releases.length > 0) {
+      releases.shift()!();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await Promise.all([...first, queued]);
+    expect(activeReadsForRepoForTests("/repo")).toBe(0);
   });
 });

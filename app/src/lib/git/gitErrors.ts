@@ -120,6 +120,46 @@ export class GitStashApplyConflictError extends Error {
   }
 }
 
+/**
+ * A pull stopped part-way with merge or rebase conflicts. The repository is left
+ * mid-operation (merge in progress or rebase stopped), so the UI should send
+ * the user to resolve conflicts rather than treat it as a generic failure.
+ */
+export class GitPullConflictError extends Error {
+  readonly kind = "pullConflict" as const;
+  readonly output: string;
+
+  constructor(output: string) {
+    super(
+      "Pull stopped with conflicts. Resolve the conflicted files in File Status, then continue or abort the operation.",
+    );
+    this.name = "GitPullConflictError";
+    this.output = output;
+  }
+}
+
+/**
+ * True when combined git output reports merge/rebase/stash conflicts.
+ *
+ * Git writes `CONFLICT (...)` and "Automatic merge failed" to stdout, and
+ * "could not apply <sha>" (rebase) to stderr, so callers should pass both
+ * streams joined together.
+ */
+export function isGitConflictOutput(output: string): boolean {
+  const lower = output.toLowerCase();
+  return (
+    lower.includes("conflict (") ||
+    lower.includes("merge conflict in") ||
+    lower.includes("automatic merge failed") ||
+    lower.includes("could not apply")
+  );
+}
+
+/** Join stderr and stdout of a git response for pattern matching. */
+export function combinedGitOutput(response: { stderr: string; stdout?: string }): string {
+  return `${response.stderr}\n${response.stdout ?? ""}`;
+}
+
 export function isGitCommandCancelledError(error: unknown): error is GitCommandCancelledError {
   return error instanceof GitCommandCancelledError;
 }

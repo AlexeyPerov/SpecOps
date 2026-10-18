@@ -291,18 +291,27 @@ export function parseStatusShortBranchHeader(line: string): ParsedStatusShortBra
   // (a freshly `git init`-ed repo with no commits). Parsing it through the
   // generic branch-name path would treat the whole sentence as the branch
   // name. Pull out the real branch name and flag the unborn state so callers
-  // can render their dedicated empty state instead.
-  const unbornMatch = /^No commits yet on (.+)$/.exec(body);
-  if (unbornMatch) {
+  // can render their dedicated empty state instead. An unborn branch can
+  // still carry a configured upstream (cloning an empty remote prints
+  // `## No commits yet on main...origin/main [gone]`), so the remainder goes
+  // through the same `...`/`[track]` split as an ordinary branch header.
+  const unbornPrefix = "No commits yet on ";
+  if (body.startsWith(unbornPrefix)) {
+    const rest = parseStatusShortBranchBody(body.slice(unbornPrefix.length).trim());
     return {
-      branchName: unbornMatch[1].trim(),
+      ...rest,
       isDetached: false,
-      upstream: null,
       aheadBehind: null,
       isUnborn: true,
     };
   }
 
+  return { ...parseStatusShortBranchBody(body), isDetached: false, isUnborn: false };
+}
+
+function parseStatusShortBranchBody(
+  body: string,
+): { branchName: string; upstream: string | null; aheadBehind: AheadBehindCounts | null } {
   const bracketMatch = / \[([^\]]+)\]$/.exec(body);
   const bracketContent = bracketMatch ? bracketMatch[1] : null;
   const branchPart = bracketMatch ? body.slice(0, bracketMatch.index) : body;
@@ -317,13 +326,7 @@ export function parseStatusShortBranchHeader(line: string): ParsedStatusShortBra
     aheadBehind = parseStatusShortTrackCounts(bracketContent);
   }
 
-  return {
-    branchName,
-    isDetached: false,
-    upstream,
-    aheadBehind,
-    isUnborn: false,
-  };
+  return { branchName, upstream, aheadBehind };
 }
 
 /** Structured NUL-separated `git show --format=…` prefix (phase 2 commit detail). */
@@ -335,23 +338,6 @@ const NAME_STATUS_LINE = /^[ADMRCTU]\d*\t/;
 
 function isNameStatusLine(line: string): boolean {
   return NAME_STATUS_LINE.test(line);
-}
-
-function parseUpstreamBracket(content: string): { upstream: string | null; track: string | null } {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    return { upstream: null, track: null };
-  }
-
-  const colon = trimmed.indexOf(":");
-  if (colon === -1) {
-    return { upstream: trimmed, track: null };
-  }
-
-  return {
-    upstream: trimmed.slice(0, colon).trim() || null,
-    track: trimmed.slice(colon + 1).trim() || null,
-  };
 }
 
 function normalizeRepoRelativePath(path: string): string {
@@ -504,27 +490,26 @@ export function parseBranchVvLine(line: string): ParsedBranchLine | null {
   let upstream: string | null = null;
   let upstreamTrack: string | null = null;
 
-  // A branch checked out in a linked worktree carries a `(/path/to/worktree)`
-  // annotation where the upstream bracket normally sits. That parenthesised
-  // path is not an upstream ref — skip it and continue scanning for a real
-  // `[upstream: track]` bracket further along the line.
-  if (tail.startsWith("(")) {
-    const closingParen = tail.indexOf(")");
-    if (closingParen === -1) {
-      return null;
+  // Only a branch checked out in a linked worktree (`+` marker) carries a
+  // `(/path/to/worktree)` annotation where the upstream bracket normally sits.
+  // For every other row a leading `(` belongs to the commit subject and must
+  // be left intact.
+  if (markerMatch[1] === "+" && tail.startsWith("(")) {
+    const closingParen = findWorktreePathEnd(tail);
+    if (closingParen !== -1) {
+      tail = tail.slice(closingParen + 1).trimStart();
     }
-    tail = tail.slice(closingParen + 1).trimStart();
   }
 
-  if (tail.startsWith("[")) {
-    const closingBracket = tail.indexOf("]");
-    if (closingBracket === -1) {
-      return null;
-    }
-    const upstreamInfo = parseUpstreamBracket(tail.slice(1, closingBracket));
-    upstream = upstreamInfo.upstream;
-    upstreamTrack = upstreamInfo.track;
-    tail = tail.slice(closingBracket + 1).trimStart();
+  // `git branch -vv` prints no bracket at all for a branch without upstream,
+  // so a subject such as `[JIRA-12] Fix login` sits exactly where the
+  // upstream bracket would. Only accept a bracket that looks like upstream
+  // tracking info; anything else stays part of the subject.
+  const upstreamBracket = readUpstreamBracket(tail);
+  if (upstreamBracket) {
+    upstream = upstreamBracket.upstream;
+    upstreamTrack = upstreamBracket.track;
+    tail = tail.slice(upstreamBracket.length).trimStart();
   }
 
   return {
@@ -535,6 +520,90 @@ export function parseBranchVvLine(line: string): ParsedBranchLine | null {
     upstreamTrack,
     subject: tail.trim(),
   };
+}
+
+/**
+ * Upstream bracket content in `git branch -vv`: `<ref>` (in sync),
+ * `<ref>: gone`, `<ref>: ahead N`, `<ref>: behind N` or
+ * `<ref>: ahead N, behind M`.
+ */
+const UPSTREAM_BRACKET_CONTENT =
+  /^([^\s:[\]]+)(?:: (gone|ahead \d+(?:, behind \d+)?|behind \d+))?$/;
+
+/**
+ * Read a leading `[upstream: track]` bracket from the tail of a
+ * `git branch -vv` row. Returns `null` when the tail does not start with a
+ * bracket that looks like upstream tracking info.
+ *
+ * A bracket with a tracking suffix (`: gone`, `: ahead 1`) is unambiguous.
+ * A bare `[name]` is only accepted when the name contains `/`
+ * (`remote/branch`), so a ticket-style subject prefix such as `[JIRA-12]`
+ * is not mistaken for an upstream. Known limitation: a local-branch upstream
+ * that is in sync (`[main]`) is then reported as part of the subject, and a
+ * subject starting with a slash-containing bracket (`[ui/button] Fix`) is still
+ * read as an upstream; only structured ref output resolves both.
+ */
+function readUpstreamBracket(
+  tail: string,
+): { upstream: string; track: string | null; length: number } | null {
+  if (!tail.startsWith("[")) {
+    return null;
+  }
+  const closingBracket = tail.indexOf("]");
+  if (closingBracket === -1) {
+    return null;
+  }
+  const match = UPSTREAM_BRACKET_CONTENT.exec(tail.slice(1, closingBracket));
+  if (!match) {
+    return null;
+  }
+  const upstream = match[1]!;
+  const track = match[2] ?? null;
+  if (track === null && !upstream.includes("/")) {
+    return null;
+  }
+  return { upstream, track, length: closingBracket + 1 };
+}
+
+/**
+ * Index of the `)` that closes the leading `(worktree path)` group of a
+ * `git branch -vv` tail, or -1 when none is found. The path itself may contain
+ * parentheses (`/Users/me/proj (copy)/wt`), so a closing paren only counts
+ * when it is followed by a space or the end of the line. Preference order:
+ * the candidate that balances the opening paren, then the first candidate
+ * followed by an upstream bracket, then the first candidate.
+ */
+function findWorktreePathEnd(tail: string): number {
+  const candidates: number[] = [];
+  let balanced = -1;
+  let depth = 0;
+  for (let index = 0; index < tail.length; index += 1) {
+    const char = tail[index];
+    if (char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char !== ")") {
+      continue;
+    }
+    depth -= 1;
+    const atBoundary = index + 1 === tail.length || tail[index + 1] === " ";
+    if (!atBoundary) {
+      continue;
+    }
+    candidates.push(index);
+    if (depth === 0 && balanced === -1) {
+      balanced = index;
+    }
+  }
+
+  if (balanced !== -1) {
+    return balanced;
+  }
+  const beforeUpstream = candidates.find((index) =>
+    readUpstreamBracket(tail.slice(index + 1).trimStart()) !== null,
+  );
+  return beforeUpstream ?? candidates[0] ?? -1;
 }
 
 /** Parse `git branch -vv` stdout into local branch rows. */
@@ -798,6 +867,22 @@ export function decodeGitQuotedPath(inner: string): string {
 
     const next = inner[index + 1]!;
     switch (next) {
+      case "a":
+        bytes.push(0x07);
+        index += 1;
+        continue;
+      case "b":
+        bytes.push(0x08);
+        index += 1;
+        continue;
+      case "f":
+        bytes.push(0x0c);
+        index += 1;
+        continue;
+      case "v":
+        bytes.push(0x0b);
+        index += 1;
+        continue;
       case "n":
         bytes.push(0x0a);
         index += 1;
@@ -819,11 +904,10 @@ export function decodeGitQuotedPath(inner: string): string {
         index += 1;
         continue;
       default: {
-        // git's quoting (`quote_c.c`) only emits `\n \t \r \" \\` and octal escapes
-        // for other bytes — it never emits `\a \b \f \v`. Treat any other `\x` as a
-        // literal backslash followed by `x` (push the backslash here; `x` is handled
-        // on the next loop iteration), which also keeps Windows path separators
-        // (`\folder`, `\build`) intact instead of misreading `\f`/`\b` as escapes.
+        // git's C-style quoting emits `\a \b \t \n \v \f \r \" \\` and octal
+        // escapes for other bytes (handled above). Treat any other `\x` as a
+        // literal backslash followed by `x` (push the backslash here; `x` is
+        // handled on the next loop iteration).
         const octalMatch = /^[0-7]{1,3}/.exec(inner.slice(index + 1));
         if (octalMatch) {
           bytes.push(Number.parseInt(octalMatch[0], 8));
@@ -840,30 +924,34 @@ export function decodeGitQuotedPath(inner: string): string {
 }
 
 function unquotePorcelainPath(raw: string): string {
-  const trimmed = raw.trim();
-  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return decodeGitQuotedPath(trimmed.slice(1, -1));
+  // Do not `.trim()`: git does not quote a path in `--name-status` output just
+  // because it has leading/trailing spaces, so `A\ttrail.txt ` names a file
+  // whose trailing space is significant. Only a stray CR line ending is dropped.
+  const value = raw.replace(/\r$/, "");
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    return decodeGitQuotedPath(value.slice(1, -1));
   }
-  return trimmed;
+  return value;
 }
 
-function parsePorcelainPathPart(pathPart: string): string {
+function parsePorcelainPathPart(pathPart: string, isRenameOrCopy: boolean): string {
   // A rename/copy row is `OLD -> NEW`, where each side may independently be a
   // quoted path (`"a b.txt" -> "c d.txt"`). Split on the arrow *before* unquoting
-  // so the surrounding quotes are not collapsed into one path and a path that
-  // literally contains ` -> ` (e.g. `a -> b.txt`) survives intact.
-  const arrowIndex = findPorcelainRenameArrow(pathPart);
+  // so the surrounding quotes are not collapsed into one path. Only rename/copy
+  // rows carry an arrow: any other row's path is taken whole, so an untracked
+  // file literally named `a -> b.txt` is not shortened to `b.txt`.
+  const arrowIndex = isRenameOrCopy ? findPorcelainRenameArrow(pathPart) : -1;
   if (arrowIndex !== -1) {
     const afterArrow = pathPart.slice(arrowIndex + " -> ".length);
-    return normalizeRepoRelativePath(unquotePorcelainPath(afterArrow));
+    return normalizeRepoRelativePath(afterArrow);
   }
 
   const tabIndex = pathPart.indexOf("\t");
   if (tabIndex !== -1) {
-    return normalizeRepoRelativePath(unquotePorcelainPath(pathPart.slice(tabIndex + 1)));
+    return normalizeRepoRelativePath(pathPart.slice(tabIndex + 1));
   }
 
-  return normalizeRepoRelativePath(unquotePorcelainPath(pathPart));
+  return normalizeRepoRelativePath(pathPart);
 }
 
 /**
@@ -899,7 +987,8 @@ export function parseStatusPorcelain(stdout: string): ParsedStatusLine[] {
 
     const indexStatus = line[0] ?? " ";
     const workTreeStatus = line[1] ?? " ";
-    const path = parsePorcelainPathPart(line.slice(3));
+    const isRenameOrCopy = /[RC]/.test(`${indexStatus}${workTreeStatus}`);
+    const path = parsePorcelainPathPart(line.slice(3), isRenameOrCopy);
 
     if (!path) {
       continue;

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
@@ -158,9 +158,24 @@ static STATE: OnceLock<Mutex<Coordinator>> = OnceLock::new();
 fn coordinator() -> &'static Mutex<Coordinator> {
     STATE.get_or_init(|| Mutex::new(Coordinator::default()))
 }
+/// Lock the coordinator, recovering from poisoning. A panic elsewhere must not turn
+/// every later summary call into a panic — notably `CommandGuard::drop`, where a
+/// second panic during unwinding would abort the process.
+fn lock_coordinator() -> MutexGuard<'static, Coordinator> {
+    coordinator().lock().unwrap_or_else(|poison| poison.into_inner())
+}
 impl Coordinator {
     fn begin_command(&mut self, lease: &str, window: &str) -> Result<(), String> {
-        if self.inactive_windows.contains(window) { return Err("Inactive summary window".into()); }
+        if self.inactive_windows.contains(window) {
+            // The read is abandoned mid-way; bump the revision so its (error) result
+            // is discarded by `finish` and the entry is re-queued instead of cached.
+            if let Some(key) = self.leases.get(lease).map(|active| active.grant.key.clone()) {
+                if let Some(entry) = self.entries.get_mut(&key) {
+                    entry.revision += 1;
+                }
+            }
+            return Err("Inactive summary window".into());
+        }
         let active = self.leases.get_mut(lease).ok_or("Expired summary lease")?;
         if active.revoked || active.grant.window != window {
             return Err("Revoked summary lease".into());
@@ -244,6 +259,21 @@ impl Coordinator {
             entry.pending = true;
         }
         Ok(())
+    }
+    /// Force bypasses TTL but never runs two reads of one key at once. A read already
+    /// in flight may predate the change the caller refreshes for, so it is
+    /// invalidated instead: `finish` discards it and re-queues one follow-up read.
+    fn force_refresh(&mut self, keys: Vec<String>) {
+        for key in keys {
+            let running = self.running(&key);
+            if let Some(entry) = self.entries.get_mut(&key) {
+                if running {
+                    entry.revision += 1;
+                } else {
+                    entry.pending = true;
+                }
+            }
+        }
     }
     fn demanded(&self, key: &str) -> bool {
         self.demands
@@ -439,7 +469,7 @@ pub async fn workspace_git_summary_sync(
             .into_iter()
             .map(|demand| (layout(&demand.root_path), demand))
             .collect();
-        let mut state = coordinator().lock().unwrap();
+        let mut state = lock_coordinator();
         // A sync queued by a closing webview must not resurrect its demands after
         // `window_destroyed`; checked under the lock that destruction also takes.
         if app.get_webview_window(&label).is_none() {
@@ -476,22 +506,15 @@ pub async fn workspace_git_summary_sync(
 pub async fn workspace_git_summary_refresh(app: AppHandle, paths: Vec<String>) -> Result<Value, String> {
     blocking(move || {
         let keys: Vec<_> = paths.iter().map(|path| key(&layout(path))).collect();
-        let mut state = coordinator().lock().unwrap();
-        for key in keys {
-            if state.running(&key) {
-                continue;
-            } // Force bypasses TTL, never single-flight.
-            if let Some(entry) = state.entries.get_mut(&key) {
-                entry.pending = true;
-            }
-        }
+        let mut state = lock_coordinator();
+        state.force_refresh(keys);
         publish(&app, &mut state)
     })
     .await
 }
 
 fn invalidate_keys(app: &AppHandle, keys: Vec<String>) {
-    let mut state = coordinator().lock().unwrap();
+    let mut state = lock_coordinator();
     for key in keys {
         let Some(entry) = state.entries.get_mut(&key) else {
             continue;
@@ -506,12 +529,12 @@ fn invalidate_keys(app: &AppHandle, keys: Vec<String>) {
             tokio::time::sleep(std::time::Duration::from_millis(350)).await;
             let _ = blocking(move || {
                 let root = {
-                    let state = coordinator().lock().unwrap();
+                    let state = lock_coordinator();
                     state.entries.get(&key).map(|entry| entry.layout.root.clone())
                 };
                 // Rediscover .git outside the lock; it may have been created or replaced.
                 let refreshed = root.map(|root| layout(&root.to_string_lossy()));
-                let mut state = coordinator().lock().unwrap();
+                let mut state = lock_coordinator();
                 if let Some(entry) = state.entries.get_mut(&key) {
                     if let Some(layout) = refreshed {
                         entry.layout = layout;
@@ -530,7 +553,7 @@ fn invalidate_keys(app: &AppHandle, keys: Vec<String>) {
 }
 fn metadata_changed(app: &AppHandle, paths: &[PathBuf]) {
     let keys = {
-        let state = coordinator().lock().unwrap();
+        let state = lock_coordinator();
         state
             .entries
             .iter()
@@ -577,7 +600,7 @@ pub async fn workspace_git_summary_invalidate(app: AppHandle, path: String) -> R
         let raw = PathBuf::from(&path);
         let resolved = canonical_lenient(&raw);
         let keys = {
-            let state = coordinator().lock().unwrap();
+            let state = lock_coordinator();
             state
                 .entries
                 .iter()
@@ -607,7 +630,7 @@ pub async fn workspace_git_summary_complete(
 ) -> Result<Value, String> {
     let label = window.label().to_string();
     blocking(move || {
-        let mut state = coordinator().lock().unwrap();
+        let mut state = lock_coordinator();
         if deferred.unwrap_or(false) || state.inactive_windows.contains(&label) {
             // An owner lost focus between two commands. Do not cache the partial read.
             if let Some(active) = state.leases.get(&lease) {
@@ -632,7 +655,7 @@ struct CommandGuard {
 }
 impl Drop for CommandGuard {
     fn drop(&mut self) {
-        let mut state = coordinator().lock().unwrap();
+        let mut state = lock_coordinator();
         state.end_command(&self.lease);
         publish(&self.app, &mut state);
     }
@@ -645,13 +668,13 @@ pub async fn workspace_git_summary_run(
     lease: String,
 ) -> Result<RunGitResponse, String> {
     {
-        let mut state = coordinator().lock().unwrap();
+        let mut state = lock_coordinator();
         state.begin_command(&lease, window.label())?;
     }
     git::run_git_with_lifetime(request, CommandGuard { app, lease }).await
 }
 fn drop_window_blocking(app: &AppHandle, window: &str) {
-    let mut state = coordinator().lock().unwrap();
+    let mut state = lock_coordinator();
     state.drop_window(window);
     state.sync_watchers(app);
     publish(app, &mut state);
@@ -671,7 +694,7 @@ pub async fn workspace_git_summary_detach(app: AppHandle, window: WebviewWindow)
 pub async fn workspace_git_summary_release(path: String) -> Result<(), String> {
     blocking(move || {
         let key = key(&layout(&path));
-        let mut state = coordinator().lock().unwrap();
+        let mut state = lock_coordinator();
         if !state.demanded(&key) && !state.running(&key) {
             state.entries.remove(&key);
         }
@@ -680,7 +703,7 @@ pub async fn workspace_git_summary_release(path: String) -> Result<(), String> {
 }
 #[tauri::command]
 pub fn workspace_git_summary_diagnostics() -> Value {
-    let state = coordinator().lock().unwrap();
+    let state = lock_coordinator();
     json!({"gitProcessesStarted":git::git_processes_started(),"activeLeases":state.leases.len(),"activeCommands":state.leases.values().map(|lease| lease.commands).sum::<usize>(),
         "commandsStarted":state.commands_started,"commandsFinished":state.commands_finished,
         "maxActiveCommands":state.max_active_commands,"maxActiveLeases":state.max_active_leases,
@@ -932,6 +955,57 @@ mod tests {
             state.entries["/repo"].summary.as_ref().unwrap()["branchName"],
             "new"
         );
+    }
+    #[test]
+    fn forced_refresh_during_read_discards_in_flight_answer_and_rereads_once() {
+        let (mut state, grant) = demanded_state();
+        state.begin_command(&grant.lease, "a").unwrap();
+        state.force_refresh(vec!["/repo".into()]);
+        assert_eq!(state.leases.len(), 1, "no second concurrent read");
+        state.end_command(&grant.lease);
+        state
+            .finish("a", &grant.lease, grant.revision, Some(json!({"branchName":"old"})), None, false)
+            .unwrap();
+        assert!(state.entries["/repo"].summary.is_none(), "pre-refresh answer is discarded");
+        assert!(state.payload(Vec::new())["rows"][0]["snapshot"]["refreshing"] == true);
+        let next = state.schedule();
+        assert_eq!(next.len(), 1);
+        assert_eq!(next[0].revision, grant.revision + 1);
+        assert!(state.schedule().is_empty());
+    }
+    #[test]
+    fn idle_forced_refresh_queues_a_read_despite_fresh_cache() {
+        let (mut state, grant) = demanded_state();
+        state.finish("a", &grant.lease, 0, Some(json!({})), None, false).unwrap();
+        assert!(state.schedule().is_empty());
+        state.force_refresh(vec!["/repo".into()]);
+        assert_eq!(state.schedule().len(), 1);
+    }
+    #[test]
+    fn inactive_window_rejection_is_not_cached_as_an_error() {
+        let (mut state, grant) = demanded_state();
+        state.inactive_windows.insert("a".into());
+        assert!(state.begin_command(&grant.lease, "a").is_err());
+        // The window regains focus before its completion arrives.
+        state.inactive_windows.remove("a");
+        state
+            .finish("a", &grant.lease, grant.revision, None, Some("Inactive summary window".into()), false)
+            .unwrap();
+        let entry = &state.entries["/repo"];
+        assert!(entry.error.is_none());
+        assert!(entry.pending);
+        assert_eq!(state.schedule().len(), 1);
+    }
+    #[test]
+    fn poisoned_coordinator_lock_still_releases_command_accounting() {
+        let _ = std::thread::spawn(|| {
+            let _guard = lock_coordinator();
+            panic!("poison the coordinator");
+        })
+        .join();
+        assert!(coordinator().is_poisoned());
+        let mut state = lock_coordinator();
+        state.end_command("missing-lease");
     }
     #[test]
     fn destroy_revokes_future_commands_but_keeps_slot_until_native_runner_finishes() {

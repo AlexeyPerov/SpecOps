@@ -6,8 +6,11 @@ import { runGit, runRemoteGit } from "./gitRun";
 import type { GitCallScope } from "./gitIntegrationGating";
 import {
   assertGitCommandCompleted,
+  combinedGitOutput,
   GitNoUpstreamError,
+  GitPullConflictError,
   GitRefValidationError,
+  isGitConflictOutput,
 } from "./gitErrors";
 import {
   createGitCommandError,
@@ -46,9 +49,19 @@ function buildPushArgs(target?: RemoteOperationTarget): string[] {
   if (!target?.remoteName?.trim()) {
     return ["push"];
   }
+  validateRemoteName(target.remoteName);
   const remoteName = target.remoteName.trim();
   const branchName = target.branchName?.trim();
-  return branchName ? ["push", remoteName, branchName] : ["push", remoteName, "HEAD"];
+  if (!branchName) {
+    return ["push", remoteName, "HEAD"];
+  }
+  if (!validateGitRefName(branchName).ok) {
+    throw new GitRefValidationError("Invalid remote branch.");
+  }
+  // `branchName` names the destination branch on the remote. A bare `<name>`
+  // refspec would push the *local* branch of that name, so push the current
+  // HEAD to the remote branch explicitly.
+  return ["push", remoteName, `HEAD:refs/heads/${branchName}`];
 }
 
 /**
@@ -208,6 +221,10 @@ export async function pullRemote(
   });
   assertGitCommandCompleted(response);
   if (response.exitCode !== 0) {
+    const output = combinedGitOutput(response);
+    if (isGitConflictOutput(output)) {
+      throw new GitPullConflictError(output.trim());
+    }
     throw createGitCommandError(response);
   }
 }

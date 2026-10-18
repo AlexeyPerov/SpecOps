@@ -1,6 +1,6 @@
 import { queryRemotes } from "./gitService";
 import { resolveRepoRoot } from "./gitRepo";
-import type { GitRemote } from "./types";
+import { normalizeGitOutputPath, type GitRemote } from "./types";
 import {
   subscribeVersionControlMutations,
   type VersionControlMutationScope,
@@ -19,9 +19,9 @@ import {
  * The cache is keyed by the resolved repository root (what callers pass to
  * `loadRemotes`), while VC mutations are notified with the workspace path.
  * Those two differ when a workspace is opened as a subdirectory of a repo, so
- * invalidation resolves the repo root from the workspace path (sync-cached by
- * P03-08-06's `resolveRepoRoot`) before dropping the entry — otherwise a
- * subdirectory workspace's remotes would stay stale for the full TTL.
+ * invalidation drops every cached root that contains the workspace path —
+ * otherwise a subdirectory workspace's remotes would stay stale for the full
+ * TTL.
  */
 const REMOTES_TTL_MS = 30_000;
 
@@ -32,6 +32,20 @@ interface CachedRemotes {
 
 const cacheByRepoRoot = new Map<string, CachedRemotes>();
 let mutationHookInstalled = false;
+/**
+ * Bumped on every invalidation. A `loadRemotes` call only stores its result
+ * when no invalidation happened while its `git remote -v` was in flight, so a
+ * pre-mutation answer can never overwrite the invalidation.
+ */
+let invalidationGeneration = 0;
+
+function cacheKey(path: string): string {
+  return normalizeGitOutputPath(path);
+}
+
+function isSameOrAncestorPath(ancestor: string, path: string): boolean {
+  return path === ancestor || path.startsWith(ancestor.endsWith("/") ? ancestor : `${ancestor}/`);
+}
 
 function ensureMutationHook(): void {
   if (mutationHookInstalled) {
@@ -42,27 +56,34 @@ function ensureMutationHook(): void {
   // a fetch/pull/push flow, a branch operation that updates tracking). Drop the
   // cached entry so the next read re-shells-out.
   subscribeVersionControlMutations((workspaceRootPath: string, _scope: VersionControlMutationScope) => {
-    void invalidateRemotesForWorkspace(workspaceRootPath);
+    invalidateRemotesForWorkspace(workspaceRootPath);
   });
 }
 
 /**
- * Resolve the mutation's workspace path to its repository root and drop the
- * cached remotes for that root. Fire-and-forget: `resolveRepoRoot` is
- * sync-cached per workspace path (P03-08-06), so after the first resolution
- * this completes without a subprocess. If resolution fails (not a repo), there
- * is nothing to invalidate.
+ * Drop cached remotes for the repository that contains `workspaceRootPath`.
+ *
+ * Runs synchronously so a listener that reloads remotes in the same tick never
+ * sees the stale entry: the repo root is the workspace path itself or one of
+ * its ancestors, so every cached root that contains the workspace path is
+ * dropped. A follow-up resolution through `resolveRepoRoot` (cached after the
+ * first call) also covers roots that differ only by symlinks.
  */
-async function invalidateRemotesForWorkspace(workspaceRootPath: string): Promise<void> {
-  const repoResult = await resolveRepoRoot(workspaceRootPath, "background").catch(() => null);
-  if (repoResult?.ok) {
-    cacheByRepoRoot.delete(repoResult.repoRoot);
-    return;
+function invalidateRemotesForWorkspace(workspaceRootPath: string): void {
+  invalidationGeneration += 1;
+  const workspaceKey = cacheKey(workspaceRootPath);
+  for (const key of [...cacheByRepoRoot.keys()]) {
+    if (isSameOrAncestorPath(key, workspaceKey)) {
+      cacheByRepoRoot.delete(key);
+    }
   }
-  // Not a repository or resolution failed: also drop any entry filed directly
-  // under the workspace path (covers callers that passed the workspace path
-  // itself as the repo root when the two coincide).
-  cacheByRepoRoot.delete(workspaceRootPath);
+  void resolveRepoRoot(workspaceRootPath, "background")
+    .then((repoResult) => {
+      if (repoResult.ok && cacheByRepoRoot.delete(cacheKey(repoResult.repoRoot))) {
+        invalidationGeneration += 1;
+      }
+    })
+    .catch(() => undefined);
 }
 
 /**
@@ -77,20 +98,25 @@ export async function loadRemotes(
   options?: { force?: boolean },
 ): Promise<GitRemote[]> {
   ensureMutationHook();
+  const key = cacheKey(repoRoot);
   if (!options?.force) {
-    const cached = cacheByRepoRoot.get(repoRoot);
+    const cached = cacheByRepoRoot.get(key);
     if (cached && Date.now() - cached.at < REMOTES_TTL_MS) {
       return cached.remotes;
     }
   }
+  const generation = invalidationGeneration;
   const remotes = await queryRemotes(repoRoot, "versionControl");
-  cacheByRepoRoot.set(repoRoot, { at: Date.now(), remotes });
+  if (generation === invalidationGeneration) {
+    cacheByRepoRoot.set(key, { at: Date.now(), remotes });
+  }
   return remotes;
 }
 
 /** Drop the cached remotes for one repo root. */
 export function invalidateRemotesCache(repoRoot: string): void {
-  cacheByRepoRoot.delete(repoRoot);
+  invalidationGeneration += 1;
+  cacheByRepoRoot.delete(cacheKey(repoRoot));
 }
 
 /** Clear all cached remotes (tests only). */

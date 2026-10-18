@@ -185,8 +185,11 @@ function findParsedTextDiff(
   path: string,
 ): ReturnType<typeof parseUnifiedDiff>[number] | undefined {
   const normalizedPath = normalizeGitOutputPath(path);
-  return parsed.find(
-    (diff) => diff.path === normalizedPath || diff.oldPath === normalizedPath,
+  // Prefer the section whose new path matches: with a rename/copy pathspec the
+  // output may also hold a separate section for the source path.
+  return (
+    parsed.find((diff) => diff.path === normalizedPath) ??
+    parsed.find((diff) => diff.oldPath === normalizedPath)
   );
 }
 
@@ -196,6 +199,11 @@ function findParsedTextDiff(
  * Normal commits use `git diff <parent>..<sha> -- <path>`. Root commits (no
  * `parentSha`) use `git show <sha> -- <path>`. Renamed files may be requested
  * by either the new path or the previous path in the parsed diff.
+ *
+ * Pass `previousPath` for a renamed/copied file (the commit detail's
+ * `CommitFileChange.previousPath`). Rename detection only pairs paths that are
+ * both inside the pathspec, so limiting the diff to the new path alone turns a
+ * rename into a "new file" whose whole content shows as added.
  */
 export async function queryCommitFileDiff(
   repoRoot: string,
@@ -203,8 +211,17 @@ export async function queryCommitFileDiff(
   path: string,
   parentSha?: string,
   scope: GitCallScope = "versionControl",
+  previousPath?: string,
 ): Promise<ParsedTextDiff> {
   const normalizedPath = normalizeGitOutputPath(path);
+  const normalizedPreviousPath =
+    previousPath !== undefined ? normalizeGitOutputPath(previousPath) : undefined;
+  const pathspecs = [asLiteralPathspec(normalizedPath)];
+  const renameArgs: string[] = [];
+  if (normalizedPreviousPath && normalizedPreviousPath !== normalizedPath) {
+    pathspecs.push(asLiteralPathspec(normalizedPreviousPath));
+    renameArgs.push("--find-renames");
+  }
   const args =
     parentSha !== undefined
       ? [
@@ -212,10 +229,11 @@ export async function queryCommitFileDiff(
           "--no-color",
           "--no-ext-diff",
           "--patch",
+          ...renameArgs,
           `--unified=${DIFF_CONTEXT_LINES}`,
           `${parentSha}..${sha}`,
           "--",
-          asLiteralPathspec(normalizedPath),
+          ...pathspecs,
         ]
       : [
           "show",

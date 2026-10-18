@@ -55,6 +55,21 @@ export function validateGitRefName(name: string): GitRefNameValidationResult {
     };
   }
 
+  // Per-component rules (each `/`-separated part): no empty part (`a//b`), no
+  // part starting with `.` (`a/.b`, `a/./b`), no part ending with `.lock`
+  // (`a.lock/b`).
+  for (const component of trimmed.split("/")) {
+    if (!component) {
+      return { ok: false, message: "Branch name cannot contain empty path components ('//')." };
+    }
+    if (component.startsWith(".")) {
+      return { ok: false, message: "Branch name components cannot start with '.'." };
+    }
+    if (component.endsWith(".lock")) {
+      return { ok: false, message: "Branch name components cannot end with '.lock'." };
+    }
+  }
+
   if (trimmed.length > 255) {
     return { ok: false, message: "Branch name is too long (max 255 characters)." };
   }

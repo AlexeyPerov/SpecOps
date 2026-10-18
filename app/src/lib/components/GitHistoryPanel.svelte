@@ -208,6 +208,11 @@
     return commits.map((commit) => {
       const ms = commit.authorTime * 1000;
       const date = new Date(ms);
+      // An out-of-range timestamp yields an invalid Date, whose `toISOString`
+      // throws and would break the whole list.
+      if (!Number.isFinite(date.getTime())) {
+        return { iso: undefined, local: undefined };
+      }
       return {
         iso: date.toISOString(),
         local: date.toLocaleString(),

@@ -42,3 +42,17 @@ describe("validateGitRefName", () => {
     });
   });
 });
+
+describe("validateGitRefName per-component rules", () => {
+  it("rejects components git check-ref-format rejects", () => {
+    expect(validateGitRefName("a//b").ok).toBe(false);
+    expect(validateGitRefName("a/.b").ok).toBe(false);
+    expect(validateGitRefName("a/./b").ok).toBe(false);
+    expect(validateGitRefName("a.lock/b").ok).toBe(false);
+  });
+
+  it("still accepts dotted and nested names", () => {
+    expect(validateGitRefName("release/1.2.x").ok).toBe(true);
+    expect(validateGitRefName("user/a.b/c").ok).toBe(true);
+  });
+});

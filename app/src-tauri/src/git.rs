@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -93,6 +94,35 @@ const DENIED_GIT_ARG_PREFIXES: &[&str] = &[
     // `.git/config` with arbitrary `core.fsmonitor`/`core.hooksPath` (which execute
     // on the next plain `git status`, bypassing the config-key allowlist entirely).
     "--template",
+];
+
+/// Repository-location and config-injection variables never inherited by git children.
+const INHERITED_GIT_ENV_TO_CLEAR: &[&str] = &[
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GIT_PREFIX",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+];
+
+/// User config that changes the shape of output the frontend parses: colour codes in
+/// `status -sb`/`branch -vv`, `c/`/`i/` or missing `a/`/`b/` diff path prefixes, and
+/// signature blocks inside `log`/`show` records. Passed as `-c` before the subcommand,
+/// so it overrides every config file for that invocation only.
+const OUTPUT_FORMAT_GIT_CONFIG: &[&str] = &[
+    "color.ui=never",
+    "color.status=never",
+    "color.branch=never",
+    "color.diff=never",
+    "diff.noprefix=false",
+    "diff.mnemonicPrefix=false",
+    "log.showSignature=false",
 ];
 
 static GIT_EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
@@ -357,14 +387,25 @@ fn join_output_readers(readers: Option<GitOutputReaders>) -> Result<(String, Str
         return Ok((String::new(), String::new()));
     };
 
-    let (stdout, stdout_invalid) = match readers.stdout {
-        Some(handle) => join_reader_with_timeout(handle, "stdout")?,
-        None => (String::new(), false),
+    // A reader that cannot be joined (a surviving grandchild holds the pipe open, or
+    // the read failed) loses only its own stream; the exit code and the other stream
+    // are still returned.
+    let mut reader_errors = Vec::new();
+    let mut join = |handle: Option<JoinHandle<Result<(String, bool), String>>>, what: &str| {
+        match handle.map(|handle| join_reader_with_timeout(handle, what)) {
+            Some(Ok(output)) => output,
+            Some(Err(error)) => {
+                reader_errors.push(error);
+                (String::new(), false)
+            }
+            None => (String::new(), false),
+        }
     };
-    let (mut stderr, stderr_invalid) = match readers.stderr {
-        Some(handle) => join_reader_with_timeout(handle, "stderr")?,
-        None => (String::new(), false),
-    };
+    let (stdout, stdout_invalid) = join(readers.stdout, "stdout");
+    let (mut stderr, stderr_invalid) = join(readers.stderr, "stderr");
+    for error in reader_errors {
+        stderr.push_str(&format!("\n\n{error}\n"));
+    }
 
     // F21: surface non-UTF-8 corruption on stderr (free-form diagnostics) rather
     // than stdout (structured output parsed by `-z`/diff/log consumers).
@@ -422,40 +463,80 @@ fn send_terminate_signal(child: &Child) {
 /// SIGKILL only if it is still alive. On Windows SIGTERM is unavailable, so it goes
 /// straight to `Child::kill` (TerminateProcess).
 ///
-/// After the process is reaped, any stale `.git/index.lock` for `repo_root` is
-/// removed. The removal is best-effort and ignored if the file is still held by a
-/// live process (e.g. another git the app did not spawn), so it is safe to call
-/// even when other writers may be active in the same repo.
+/// The index lock is removed only when the process had to be killed outright
+/// (SIGKILL after the grace window, or TerminateProcess on Windows). A git that exits
+/// on SIGTERM or on its own releases its lock itself, so a lock present afterwards
+/// belongs to another writer and must be left alone. Unix `unlink` succeeds even on a
+/// file another process holds open, so the removal itself cannot detect that case.
 fn terminate_child_process_gracefully(child: &mut Child, repo_root: &Path) {
+    // Never signal a child that was already reaped: its PID may have been reused.
+    if matches!(child.try_wait(), Ok(Some(_))) {
+        return;
+    }
+
     #[cfg(unix)]
-    {
+    let exited_gracefully = {
         send_terminate_signal(child);
         let deadline = Instant::now() + Duration::from_millis(GIT_GRACEFUL_SHUTDOWN_TIMEOUT_MS);
+        let mut exited = false;
         while Instant::now() < deadline {
             match child.try_wait() {
-                Ok(Some(_)) => break,
+                Ok(Some(_)) => {
+                    exited = true;
+                    break;
+                }
                 Ok(None) => std::thread::sleep(Duration::from_millis(50)),
                 Err(_) => break,
             }
         }
-    }
+        exited
+    };
+    #[cfg(not(unix))]
+    let exited_gracefully = false;
 
     // Either we're on Windows, the grace window expired, or the process exited on
     // SIGTERM — ensure it is fully gone and reaped either way.
     let _ = child.kill();
     let _ = child.wait();
 
-    cleanup_stale_index_lock_if_unowned(repo_root);
+    if !exited_gracefully {
+        cleanup_stale_index_lock_if_unowned(repo_root);
+    }
 }
 
-/// Best-effort removal of `<repo_root>/.git/index.lock`.
+/// Resolve the repository's Git directory: `<repo_root>/.git`, or the `gitdir:`
+/// target when `.git` is a file (linked worktrees and submodules).
+fn resolve_git_dir(repo_root: &Path) -> Option<PathBuf> {
+    let dot_git = repo_root.join(".git");
+    let metadata = std::fs::metadata(&dot_git).ok()?;
+    if metadata.is_dir() {
+        return Some(dot_git);
+    }
+    let contents = std::fs::read_to_string(&dot_git).ok()?;
+    let target = contents
+        .lines()
+        .find_map(|line| line.strip_prefix("gitdir:"))?
+        .trim();
+    if target.is_empty() {
+        return None;
+    }
+    let target = Path::new(target);
+    Some(if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        repo_root.join(target)
+    })
+}
+
+/// Best-effort removal of the repository's `index.lock`.
 ///
-/// Only called after the app has confirmed one of *its own* git subprocesses has
-/// been reaped. If the lock is still held by a live process belonging to something
-/// else (the OpenCode sidecar, an external git tool), the `remove_file` fails and we
-/// leave it alone — we never want to clobber a lock a running process depends on.
+/// Only called after one of *its own* git subprocesses had to be killed before it
+/// could release the lock, so the lock is stale.
 fn cleanup_stale_index_lock_if_unowned(repo_root: &Path) {
-    let lock_path = repo_root.join(".git").join("index.lock");
+    let Some(git_dir) = resolve_git_dir(repo_root) else {
+        return;
+    };
+    let lock_path = git_dir.join("index.lock");
     match std::fs::remove_file(&lock_path) {
         Ok(()) => log::info!(
             "Removed stale git index lock at {}",
@@ -592,16 +673,20 @@ fn wait_for_registered_git_command(
                 return Err(format!("git command child already finished: {command_id}"));
             };
 
-            child
-                .try_wait()
-                .map_err(|error| format!("Failed to wait for git command: {error}"))
+            // Take the exited child under the same lock as `try_wait`, so a concurrent
+            // cancel cannot take (and signal) an already-reaped process in between.
+            match child.try_wait() {
+                Ok(Some(status)) => Ok(Some((status, child_guard.take()))),
+                Ok(None) => Ok(None),
+                Err(error) => Err(format!("Failed to wait for git command: {error}")),
+            }
         };
 
         match wait_status {
-            Ok(Some(status)) => {
-                let child = take_registered_git_command_child(command_id)
-                    .ok_or_else(|| format!("git command child already finished: {command_id}"))?;
-                let mut child = child.0;
+            Ok(Some((status, child))) => {
+                let Some(mut child) = child else {
+                    return Err(format!("git command child already finished: {command_id}"));
+                };
                 let exit_code = status.code().unwrap_or(-1);
                 // The pipes were drained on reader threads while the process ran; the
                 // child has exited, so both readers have hit EOF and joining is prompt.
@@ -703,7 +788,6 @@ pub fn cancel_git_command_by_id(command_id: &str) -> CancelGitCommandResponse {
             };
         };
 
-        entry.cancelled.store(true, Ordering::SeqCst);
         let repo_root = entry.repo_root.clone();
 
         let Ok(mut child_guard) = entry.child.lock() else {
@@ -712,14 +796,19 @@ pub fn cancel_git_command_by_id(command_id: &str) -> CancelGitCommandResponse {
             };
         };
 
-        match child_guard.take() {
-            Some(child) => Some((child, repo_root)),
-            None => {
-                return CancelGitCommandResponse {
-                    outcome: CancelGitCommandOutcome::AlreadyFinished,
-                };
-            }
+        // Mark cancelled only while the process is still running. A command that
+        // already exited (successfully or not) keeps its real result instead of
+        // being reported as cancelled.
+        let still_running = child_guard
+            .as_mut()
+            .is_some_and(|child| matches!(child.try_wait(), Ok(None)));
+        if !still_running {
+            return CancelGitCommandResponse {
+                outcome: CancelGitCommandOutcome::AlreadyFinished,
+            };
         }
+        entry.cancelled.store(true, Ordering::SeqCst);
+        child_guard.take().map(|child| (child, repo_root))
     };
 
     let Some((mut child, repo_root)) = taken else {
@@ -929,11 +1018,17 @@ fn sanitize_git_env(env: Option<&HashMap<String, String>>) -> HashMap<String, St
 }
 
 /// True when `arg` is (or begins) one of the exec-granting options.
+///
+/// Git accepts any unambiguous prefix of a long option (`--upload-p=x` is
+/// `--upload-pack=x`), so a name that is a prefix of a denied option is denied too.
 fn is_denied_git_option(arg: &str) -> bool {
-    let name = arg.split('=').next().unwrap_or(arg);
+    let name = arg.split('=').next().unwrap_or(arg).to_ascii_lowercase();
+    if !name.starts_with("--") || name.len() < 3 {
+        return false;
+    }
     DENIED_GIT_ARG_PREFIXES
         .iter()
-        .any(|denied| name.eq_ignore_ascii_case(denied))
+        .any(|denied| denied.starts_with(name.as_str()))
 }
 
 /// True for transport URLs that make git run a helper program of the caller's choosing.
@@ -1025,7 +1120,12 @@ fn validate_git_args(args: &[String]) -> Result<(), String> {
 
     // `-u` is `--upload-pack` for ls-remote, but `--set-upstream` for push and an
     // untracked-files mode for status, so it can only be rejected per subcommand.
-    if subcommand == "ls-remote" && args.iter().any(|arg| arg == "-u") {
+    // Short options can be stuck to their value (`-u/tmp/x`) or clustered (`-qu/tmp/x`).
+    if subcommand == "ls-remote"
+        && args
+            .iter()
+            .any(|arg| arg.starts_with('-') && !arg.starts_with("--") && arg.contains('u'))
+    {
         return Err("git argument not allowed: -u".to_string());
     }
 
@@ -1085,9 +1185,9 @@ fn is_read_only_git_args(args: &[String]) -> bool {
         // Listing forms stay reads (mirror the frontend `isWriteGitCommand`).
         "branch" | "tag" => {
             rest.is_empty()
-                || rest
-                    .iter()
-                    .any(|arg| matches!(arg.as_str(), "-l" | "--list" | "-v" | "-vv"))
+                || rest.iter().any(|arg| {
+                    matches!(arg.as_str(), "-l" | "--list" | "-v" | "-vv" | "--show-current")
+                })
         }
         "config" => {
             rest.iter().any(|arg| matches!(arg.as_str(), "--get" | "--get-all"))
@@ -1200,6 +1300,11 @@ fn read_limited_stream(
     // off to the longest UTF-8-valid prefix *before* decoding: the decoded result
     // is then at most `max_bytes` bytes and downstream truncation is char-safe.
     truncate_bytes_to_utf8_boundary(&mut buf, max_bytes);
+    if exceeded {
+        // The cap is applied while reading, so `buf` is exactly `max_bytes` long and
+        // the boundary helper above has nothing to do; drop a character split by it.
+        trim_incomplete_utf8_tail(&mut buf);
+    }
 
     // F21: `status --porcelain=v2 -z` (and other `-z` output) carries raw bytes
     // for paths. A non-UTF-8 filename (Latin-1, invalid byte sequence) decodes
@@ -1246,6 +1351,27 @@ fn truncate_bytes_to_utf8_boundary(buf: &mut Vec<u8>, max_bytes: usize) {
     buf.truncate(end);
 }
 
+/// Drop a trailing multi-byte UTF-8 sequence that was cut short.
+fn trim_incomplete_utf8_tail(buf: &mut Vec<u8>) {
+    let len = buf.len();
+    for back in 1..=len.min(4) {
+        let byte = buf[len - back];
+        if byte & 0xC0 == 0x80 {
+            continue;
+        }
+        let needed = match byte {
+            0xF0..=0xFF => 4,
+            0xE0..=0xEF => 3,
+            0xC0..=0xDF => 2,
+            _ => 1,
+        };
+        if needed > back {
+            buf.truncate(len - back);
+        }
+        return;
+    }
+}
+
 /// Result of [`run_command_with_limited_output`].
 struct LimitedCommandOutput {
     exit_code: i32,
@@ -1281,10 +1407,17 @@ fn run_command_with_limited_output(
         Some(timeout) => {
             let wait_start = Instant::now();
             loop {
-                match child
-                    .try_wait()
-                    .map_err(|error| format!("Failed to wait for git: {error}"))?
-                {
+                let polled = child.try_wait();
+                let polled = match polled {
+                    Ok(polled) => polled,
+                    Err(error) => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let _ = join_output_readers(Some(readers));
+                        return Err(format!("Failed to wait for git: {error}"));
+                    }
+                };
+                match polled {
                     Some(status) => break Some(status),
                     None => {
                         if wait_start.elapsed().as_millis() as u64 >= timeout {
@@ -1412,11 +1545,22 @@ impl Drop for AskpassSessionGuard {
 /// at the IPC boundary, so the trusted askpass variables survive this step.
 fn build_git_command(repo_root: &Path, args: &[String], env: &HashMap<String, String>) -> Command {
     let mut command = Command::new(git_executable());
+    for setting in OUTPUT_FORMAT_GIT_CONFIG {
+        command.arg("-c").arg(setting);
+    }
     command
         .current_dir(repo_root)
         .args(args)
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
+    // Variables inherited from the app's own environment (for example when it is
+    // started from a Git hook or a shell inside another repository) would point every
+    // command at a different repository, index or config.
+    for key in INHERITED_GIT_ENV_TO_CLEAR {
+        command.env_remove(key);
+    }
 
     for (key, value) in env {
         command.env(key, value);
@@ -1875,6 +2019,10 @@ fn has_active_git_mutation_under(root: &Path) -> Result<bool, String> {
     }))
 }
 
+/// Minimum age of an `index.lock` before [`remove_stale_index_lock`] treats it as
+/// orphaned rather than held by a running git process.
+const STALE_INDEX_LOCK_MIN_AGE: Duration = Duration::from_secs(5 * 60);
+
 /// Best-effort removal of a stale `.git/index.lock` for `repo_root`.
 ///
 /// Refuses to touch the lock when an in-flight SpecOps git command for this repo is
@@ -1900,16 +2048,41 @@ pub fn remove_stale_index_lock(request: RemoveStaleIndexLockRequest) -> RemoveSt
     }
 
     // Confine the delete to paths that are actually git repositories. The lock file
-    // is only meaningful under `.git/` anyway, so a path without one is not a repo
-    // this command should touch — refuse rather than construct a stray `.git/`
-    // directory just to delete a file inside it.
-    if !repo_root.join(".git").exists() {
+    // is only meaningful inside the Git directory anyway, so a path without one is not
+    // a repo this command should touch.
+    let Some(git_dir) = resolve_git_dir(&repo_root) else {
         return RemoveStaleIndexLockResponse {
             outcome: RemoveStaleIndexLockOutcome::Absent,
         };
-    }
+    };
 
-    let lock_path = repo_root.join(".git").join("index.lock");
+    let lock_path = git_dir.join("index.lock");
+    // A fresh lock almost always belongs to a git process that is running right now
+    // (a terminal, an editor, the agent). Unix `unlink` would succeed anyway, so only
+    // locks that have not been touched for a while count as stale.
+    match std::fs::metadata(&lock_path) {
+        Ok(metadata) => {
+            let age = metadata
+                .modified()
+                .ok()
+                .and_then(|modified| modified.elapsed().ok());
+            if !age.is_some_and(|age| age >= STALE_INDEX_LOCK_MIN_AGE) {
+                return RemoveStaleIndexLockResponse {
+                    outcome: RemoveStaleIndexLockOutcome::Busy,
+                };
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return RemoveStaleIndexLockResponse {
+                outcome: RemoveStaleIndexLockOutcome::Absent,
+            };
+        }
+        Err(_) => {
+            return RemoveStaleIndexLockResponse {
+                outcome: RemoveStaleIndexLockOutcome::Error,
+            };
+        }
+    }
     match std::fs::remove_file(&lock_path) {
         Ok(()) => {
             log::info!("Removed stale git index lock at {}", lock_path.display());
@@ -2414,6 +2587,68 @@ mod tests {
         let cancel = cancel_git_command_by_id(&command_id);
         assert_eq!(cancel.outcome, CancelGitCommandOutcome::NotFound);
         let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn cancel_after_process_exit_keeps_the_real_result() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        let command_id = format!(
+            "exited-command-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let child = Command::new("true")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn true");
+        // Let the process exit before cancel runs, as when Cancel races completion.
+        std::thread::sleep(Duration::from_millis(300));
+        register_active_git_command(&command_id, PathBuf::from("/tmp/spec-ops-test"), child)
+            .expect("register command");
+
+        let cancel = cancel_git_command_by_id(&command_id);
+        assert_eq!(cancel.outcome, CancelGitCommandOutcome::AlreadyFinished);
+        assert!(!active_git_command_was_cancelled(&command_id));
+        let output = wait_for_registered_git_command(&command_id, None).expect("poll result");
+        assert_eq!(output.exit_code, 0);
+        unregister_active_git_command(&command_id);
+    }
+
+    #[test]
+    fn abbreviated_exec_options_are_denied() {
+        for arg in [
+            "--upload-p=/tmp/x.sh",
+            "--upload-pa",
+            "--receive-p=/tmp/x",
+            "--templ=/tmp/evil",
+            "--exec-pa=/tmp",
+            "--out=/tmp/file",
+            "--config-e=x=y",
+        ] {
+            assert!(is_denied_git_option(arg), "{arg} should be denied");
+        }
+        for arg in ["--oneline", "--output-indicator-new=+", "--ext-diff", "--exclude=x", "--", "-u"] {
+            assert!(!is_denied_git_option(arg), "{arg} should be allowed");
+        }
+        let args = |values: &[&str]| values.iter().map(|value| value.to_string()).collect::<Vec<_>>();
+        assert!(validate_git_args(&args(&["fetch", "--upload-p=/tmp/x.sh", "."])).is_err());
+        assert!(validate_git_args(&args(&["ls-remote", "-u/tmp/x.sh", "."])).is_err());
+        assert!(validate_git_args(&args(&["ls-remote", "-qu/tmp/x.sh", "."])).is_err());
+        assert!(validate_git_args(&args(&["ls-remote", "--tags", "origin"])).is_ok());
+    }
+
+    #[test]
+    fn incomplete_utf8_tail_is_dropped_on_truncation() {
+        let text = "ab\u{00e9}\u{4e2d}";
+        let bytes = text.as_bytes();
+        // Cut inside the 3-byte character: the partial bytes are removed.
+        let (decoded, invalid) = read_limited_stream(&mut Cursor::new(bytes.to_vec()), bytes.len() - 1)
+            .expect("read stream");
+        assert!(decoded.starts_with("ab\u{00e9}\n"));
+        assert!(!invalid);
+        let mut complete = "ab\u{00e9}".as_bytes().to_vec();
+        trim_incomplete_utf8_tail(&mut complete);
+        assert_eq!(complete, "ab\u{00e9}".as_bytes());
     }
 
     #[test]
@@ -2925,6 +3160,7 @@ mod tests {
             // Listing forms of subcommands that can also mutate.
             vec!["branch".into()],
             vec!["branch".into(), "-vv".into()],
+            vec!["branch".into(), "--show-current".into()],
             vec!["tag".into(), "-l".into()],
             vec!["config".into(), "--get".into(), "user.name".into()],
             vec!["stash".into(), "list".into()],
@@ -3064,17 +3300,16 @@ mod tests {
     }
 
     #[test]
-    fn cancel_git_command_removes_stale_index_lock_for_its_repo() {
+    fn cancel_git_command_keeps_index_lock_after_graceful_exit() {
         let _guard = registry_test_mutex().lock().expect("registry test lock");
-        // Cancellation reaps the child and must clear the stale `.git/index.lock`
-        // for the repo the command was registered with.
+        // A child that exits on SIGTERM released its own lock, so a lock still present
+        // belongs to another writer and must survive the cancel.
         let repo_root = create_temp_git_repo();
         let lock_path = repo_root.join(".git").join("index.lock");
-        std::fs::write(&lock_path, b"stale").expect("write index.lock");
-        assert!(lock_path.exists(), "lock should exist before cancel");
+        std::fs::write(&lock_path, b"held elsewhere").expect("write index.lock");
 
         let command_id = format!(
-            "lock-cleanup-{}",
+            "lock-keep-{}",
             TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
         );
         let child = Command::new("sleep")
@@ -3086,6 +3321,41 @@ mod tests {
         register_active_git_command(&command_id, repo_root.clone(), child)
             .expect("register command");
 
+        let outcome = cancel_git_command_by_id(&command_id);
+        assert_eq!(outcome.outcome, CancelGitCommandOutcome::Cancelled);
+        assert!(lock_path.exists(), "a lock owned by another writer must be kept");
+
+        unregister_active_git_command(&command_id);
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cancel_git_command_removes_stale_index_lock_for_its_repo() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        // A child that ignores SIGTERM is killed outright and cannot release its lock,
+        // so cancellation clears the stale `.git/index.lock` for its repo.
+        let repo_root = create_temp_git_repo();
+        let lock_path = repo_root.join(".git").join("index.lock");
+        std::fs::write(&lock_path, b"stale").expect("write index.lock");
+        assert!(lock_path.exists(), "lock should exist before cancel");
+
+        let command_id = format!(
+            "lock-cleanup-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg("trap '' TERM; exec sleep 30")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+        register_active_git_command(&command_id, repo_root.clone(), child)
+            .expect("register command");
+
+        // Give the shell time to install the trap before the cancel signals it.
+        std::thread::sleep(Duration::from_millis(300));
         let outcome = cancel_git_command_by_id(&command_id);
         assert_eq!(outcome.outcome, CancelGitCommandOutcome::Cancelled);
 
@@ -3132,11 +3402,54 @@ mod tests {
     }
 
     #[test]
+    fn remove_stale_index_lock_keeps_a_fresh_lock() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        let repo_root = create_temp_git_repo();
+        let lock_path = repo_root.join(".git").join("index.lock");
+        std::fs::write(&lock_path, b"held").expect("write index.lock");
+
+        let response = remove_stale_index_lock(RemoveStaleIndexLockRequest {
+            repo_root: repo_root.to_string_lossy().into_owned(),
+        });
+        assert_eq!(response.outcome, RemoveStaleIndexLockOutcome::Busy);
+        assert!(lock_path.exists());
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
+    fn remove_stale_index_lock_resolves_linked_worktree_git_dir() {
+        let _guard = registry_test_mutex().lock().expect("registry test lock");
+        let repo_root = create_temp_git_repo();
+        let admin_dir = repo_root.join("admin");
+        fs::create_dir_all(&admin_dir).unwrap();
+        let worktree = repo_root.join("linked");
+        fs::create_dir_all(&worktree).unwrap();
+        fs::write(worktree.join(".git"), "gitdir: ../admin\n").unwrap();
+        let lock_path = admin_dir.join("index.lock");
+        let lock = fs::File::create(&lock_path).unwrap();
+        lock.set_modified(std::time::SystemTime::now() - Duration::from_secs(600)).unwrap();
+        drop(lock);
+
+        assert_eq!(resolve_git_dir(&worktree), Some(worktree.join("../admin")));
+        let response = remove_stale_index_lock(RemoveStaleIndexLockRequest {
+            repo_root: worktree.to_string_lossy().into_owned(),
+        });
+        assert_eq!(response.outcome, RemoveStaleIndexLockOutcome::Removed);
+        assert!(!lock_path.exists());
+
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
     fn remove_stale_index_lock_removes_an_orphaned_lock() {
         let _guard = registry_test_mutex().lock().expect("registry test lock");
         let repo_root = create_temp_git_repo();
         let lock_path = repo_root.join(".git").join("index.lock");
-        std::fs::write(&lock_path, b"stale").expect("write index.lock");
+        let lock = fs::File::create(&lock_path).expect("write index.lock");
+        lock.set_modified(std::time::SystemTime::now() - Duration::from_secs(600))
+            .expect("age index.lock");
+        drop(lock);
 
         let response = remove_stale_index_lock(RemoveStaleIndexLockRequest {
             repo_root: repo_root.to_string_lossy().into_owned(),

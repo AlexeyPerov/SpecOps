@@ -82,17 +82,21 @@ const WRITE_GIT_SUBCOMMANDS = new Set<string>([
   "config",
 ]);
 
-function isWriteGitCommand(args: string[]): boolean {
+const BRANCH_TAG_LISTING_FLAGS = new Set<string>(["-l", "--list", "-v", "-vv", "--show-current"]);
+
+/** Exported for tests: whether `args` runs on the serialized, registered mutation lane. */
+export function isWriteGitCommand(args: string[]): boolean {
   const subcommand = args[0];
   if (!subcommand || !WRITE_GIT_SUBCOMMANDS.has(subcommand)) {
     return false;
   }
   // `branch` and `tag` with no destructive flag are reads; only register when they
-  // actually mutate. Listing forms (`-l`, `--list`, `-v`, `-vv`, no args) stay fast.
+  // actually mutate. Listing forms (`-l`, `--list`, `-v`, `-vv`, `--show-current`,
+  // no args) stay fast. Keep this set identical to the backend's read-only
+  // classification so both sides agree on locks and registration.
   if (subcommand === "branch" || subcommand === "tag") {
     const rest = args.slice(1);
-    const isListing = rest.length === 0
-      || rest.some((arg) => arg === "-l" || arg === "--list" || arg === "-v" || arg === "-vv");
+    const isListing = rest.length === 0 || rest.some((arg) => BRANCH_TAG_LISTING_FLAGS.has(arg));
     return !isListing;
   }
   // `config` without a value is a read (`config --get <key>`); with a value it's a write.

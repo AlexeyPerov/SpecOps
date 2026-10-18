@@ -4,11 +4,13 @@ import type { GitCallScope } from "./gitIntegrationGating";
 import { validateGitRefName } from "./gitRefName";
 import {
   assertGitCommandCompleted,
+  combinedGitOutput,
   GitRefValidationError,
   GitStashApplyConflictError,
   GitStashNotFoundError,
   GitStashNothingToSaveError,
   GitTagPartialDeleteError,
+  isGitConflictOutput,
 } from "./gitErrors";
 import {
   createGitCommandError,
@@ -164,8 +166,21 @@ export async function deleteTag(
 }
 
 function isStashNothingToSaveResponse(response: RunGitResponse): boolean {
-  const lower = response.stderr.toLowerCase();
-  return lower.includes("no local changes to save");
+  // `git stash push` on a clean tree exits 0 and prints this on stdout; check
+  // both streams regardless of exit code.
+  return combinedGitOutput(response).toLowerCase().includes("no local changes to save");
+}
+
+const STASH_SHA_PATTERN = /^[0-9a-f]{40,64}$/i;
+
+/** Current `stash@{0}` object id, or null when the stash stack is empty. */
+async function readTopStashSha(repoRoot: string, scope: GitCallScope): Promise<string | null> {
+  const response = await runGit(repoRoot, ["rev-parse", "--verify", "--quiet", "stash@{0}"], scope);
+  if (response.exitCode !== 0) {
+    return null;
+  }
+  const sha = response.stdout.trim();
+  return sha.length > 0 ? sha : null;
 }
 
 function isStashNotFoundResponse(stderr: string): boolean {
@@ -189,11 +204,11 @@ function isStashNotFoundResponse(stderr: string): boolean {
   );
 }
 
-function isStashApplyConflictResponse(stderr: string): boolean {
-  const lower = stderr.toLowerCase();
+/** `output` is stderr + stdout: git prints stash `CONFLICT` lines on stdout. */
+function isStashApplyConflictResponse(output: string): boolean {
+  const lower = output.toLowerCase();
   return (
-    lower.includes("could not apply") ||
-    lower.includes("merge conflict") ||
+    isGitConflictOutput(lower) ||
     lower.includes("overwritten by merge") ||
     lower.includes("conflict in") ||
     lower.includes("unmerged files")
@@ -219,11 +234,15 @@ export async function createStash(
     args.push("-m", trimmedMessage);
   }
 
+  // Read the stack top first: if it is unchanged after the push, nothing was
+  // saved and the top entry is an older, unrelated stash.
+  const previousTop = await readTopStashSha(repoRoot, scope);
+
   const response = await runGit(repoRoot, args, scope);
+  if (isStashNothingToSaveResponse(response)) {
+    throw new GitStashNothingToSaveError();
+  }
   if (response.exitCode !== 0) {
-    if (isStashNothingToSaveResponse(response)) {
-      throw new GitStashNothingToSaveError();
-    }
     throw createGitCommandError(response);
   }
 
@@ -239,6 +258,9 @@ export async function createStash(
       exitCode: refResponse.exitCode || 1,
       stderr: refResponse.stderr || "Failed to resolve stash ref after push",
     });
+  }
+  if (previousTop !== null && stashRef === previousTop) {
+    throw new GitStashNothingToSaveError();
   }
 
   return stashRef;
@@ -304,8 +326,8 @@ export async function applyStash(
       if (isStashNotFoundResponse(stderr)) {
         throw new GitStashNotFoundError(trimmedRef, stderr || undefined);
       }
-      if (isStashApplyConflictResponse(stderr)) {
-        throw new GitStashApplyConflictError(trimmedRef, stderr);
+      if (isStashApplyConflictResponse(combinedGitOutput(response))) {
+        throw new GitStashApplyConflictError(trimmedRef, combinedGitOutput(response).trim());
       }
       throw createGitCommandError(response);
     }
@@ -318,8 +340,8 @@ export async function applyStash(
     if (isStashNotFoundResponse(stderr)) {
       throw new GitStashNotFoundError(trimmedRef, stderr || undefined);
     }
-    if (isStashApplyConflictResponse(stderr)) {
-      throw new GitStashApplyConflictError(trimmedRef, stderr);
+    if (isStashApplyConflictResponse(combinedGitOutput(response))) {
+      throw new GitStashApplyConflictError(trimmedRef, combinedGitOutput(response).trim());
     }
     throw createGitCommandError(response);
   }
@@ -362,22 +384,33 @@ async function resolveStashIndexForRef(
   return `stash@{${index}}`;
 }
 
-/** Drop a stash ref (`git stash drop`). Missing refs map to {@link GitStashNotFoundError}. */
+/**
+ * Drop the stash entry identified by its commit SHA (`git stash drop stash@{n}`).
+ *
+ * A positional `stash@{n}` taken from an earlier listing goes stale as soon as
+ * the stack changes (a new stash shifts every index), so callers pass the
+ * immutable SHA and it is re-resolved to its current index right before the
+ * drop. Throws {@link GitStashNotFoundError} when the entry is gone.
+ */
 export async function dropStash(
   repoRoot: string,
-  stashRef: string,
+  stashSha: string,
   scope: GitCallScope = "versionControl",
 ): Promise<void> {
-  const trimmedRef = stashRef.trim();
-  if (!trimmedRef) {
-    throw new GitStashNotFoundError(stashRef, "Stash ref cannot be empty.");
+  const trimmedSha = stashSha.trim();
+  if (!trimmedSha) {
+    throw new GitStashNotFoundError(stashSha, "Stash ref cannot be empty.");
+  }
+  if (!STASH_SHA_PATTERN.test(trimmedSha)) {
+    throw new GitStashNotFoundError(trimmedSha, "Stash must be identified by its commit SHA.");
   }
 
+  const trimmedRef = await resolveStashIndexForRef(repoRoot, trimmedSha, scope);
   const response = await runGit(repoRoot, ["stash", "drop", "-q", trimmedRef], scope);
   if (response.exitCode !== 0) {
     const stderr = response.stderr.trim();
     if (isStashNotFoundResponse(stderr)) {
-      throw new GitStashNotFoundError(trimmedRef, stderr || undefined);
+      throw new GitStashNotFoundError(trimmedSha, stderr || undefined);
     }
     throw createGitCommandError(response);
   }

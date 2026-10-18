@@ -97,3 +97,11 @@ it('refreshes the selected row metadata without selecting a different commit', a
   vi.mocked(queryCommits).mockResolvedValue([refreshed,commit(2)]); token.set(1); await settle();
   expect(onRefreshSelection).toHaveBeenLastCalledWith(refreshed); expect(onSelectCommit).not.toHaveBeenCalled(); expect(view.host.textContent).toContain('release-next');
 });
+describe('timestamp guards', () => {
+  it('renders commits whose author time is out of range', async () => {
+    vi.mocked(queryCommits).mockResolvedValue([{ ...commit(1), authorTime: 1e13 }, commit(2)]);
+    const view = mountComponent(GitHistoryPanel, { repoRoot: '/repo' }); await settle();
+    expect(view.host.textContent).toContain('Commit 1');
+    expect(view.host.querySelectorAll('[role=option]').length).toBe(2);
+  });
+});

@@ -79,6 +79,7 @@ export {
   GitCommitValidationError,
   GitDiffTooLargeError,
   GitNoUpstreamError,
+  GitPullConflictError,
   GitRefValidationError,
   GitStashApplyConflictError,
   GitStashNotFoundError,

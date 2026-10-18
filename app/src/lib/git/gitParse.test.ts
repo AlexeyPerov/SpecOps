@@ -29,6 +29,7 @@ import {
   splitWorkingTreeStatus,
   parseUpstreamRef,
   GIT_SHOW_FORMAT,
+  decodeGitQuotedPath,
 } from "./gitParse";
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -717,7 +718,9 @@ describe("parseStatusPorcelain", () => {
           " M src\\components\\App.svelte",
           "?? nested\\folder\\new.txt",
           'R  old\\name.txt -> new\\name.txt',
-          '?? "nested\\folder\\spaces file.txt"',
+          // Inside a quoted path git escapes a backslash as `\\`; a bare `\f`
+          // would be the form-feed escape.
+          '?? "nested\\\\folder\\\\spaces file.txt"',
         ].join("\n"),
       );
 
@@ -977,5 +980,79 @@ describe("fixture files", () => {
     expect(readFixture("git-show-name-status.txt").trim().length).toBeGreaterThan(0);
     expect(readFixture("git-tag-list.txt").trim().length).toBeGreaterThan(0);
     expect(readFixture("git-status-porcelain.txt").trim().length).toBeGreaterThan(0);
+  });
+});
+
+describe("parser edge cases from real git output", () => {
+  it("keeps a bracketed ticket subject on a branch without upstream", () => {
+    expect(parseBranchVvLine("  side ec2950f [JIRA-1] first")).toEqual({
+      isCurrent: false,
+      name: "side",
+      head: "ec2950f",
+      upstream: null,
+      upstreamTrack: null,
+      subject: "[JIRA-1] first",
+    });
+  });
+
+  it("does not drop a branch whose subject opens an unclosed bracket or paren", () => {
+    expect(parseBranchVvLine("  feature abc1234 [WIP fix")?.subject).toBe("[WIP fix");
+    expect(parseBranchVvLine("  feature abc1234 (wip refactor")?.subject).toBe("(wip refactor");
+  });
+
+  it("keeps a parenthesised subject on a branch that is not in a linked worktree", () => {
+    expect(parseBranchVvLine("* main abc1234 (scope) refactor")).toMatchObject({
+      isCurrent: true,
+      upstream: null,
+      subject: "(scope) refactor",
+    });
+    expect(parseBranchVvLine("  main abc1234 [origin/main] (scope) refactor")).toMatchObject({
+      upstream: "origin/main",
+      upstreamTrack: null,
+      subject: "(scope) refactor",
+    });
+  });
+
+  it("skips a worktree path that itself contains parentheses", () => {
+    expect(
+      parseBranchVvLine("+ feature abc1234 (/Users/me/proj (copy)/wt) [origin/feature: ahead 1] Fix"),
+    ).toMatchObject({ upstream: "origin/feature", upstreamTrack: "ahead 1", subject: "Fix" });
+    expect(parseBranchVvLine("+ feature abc1234 (/a (old) b/wt) (scope) Fix")).toMatchObject({
+      upstream: null,
+      subject: "(scope) Fix",
+    });
+  });
+
+  it("parses the upstream of an unborn branch cloned from an empty remote", () => {
+    expect(parseStatusShortBranchHeader("## No commits yet on main...origin/main [gone]")).toEqual({
+      branchName: "main",
+      isDetached: false,
+      upstream: "origin/main",
+      aheadBehind: null,
+      isUnborn: true,
+    });
+  });
+
+  it("decodes the \\a \\b \\f \\v escapes git emits in quoted paths", () => {
+    expect(decodeGitQuotedPath("a\\bb\\fc\\vd\\ae")).toBe("a\bb\fc\vd\x07e");
+  });
+
+  it("preserves leading and trailing spaces in name-status paths", () => {
+    const detail = parseCommitShow(
+      `${["abc", "", "A", "a@x", "1", "C", "c@x", "1"].join("\0")}\0msg\n\nA\t lead.txt\nM\ttr .txt \nR100\told \tnew \n`,
+    );
+    expect(detail?.files).toEqual([
+      { status: "A", path: " lead.txt" },
+      { status: "M", path: "tr .txt " },
+      { status: "R", previousPath: "old ", path: "new " },
+    ]);
+  });
+
+  it("splits ` -> ` only on rename/copy rows in porcelain v1", () => {
+    expect(parseStatusPorcelain("?? a -> b.txt\n M c -> d.txt\nR  old.txt -> new.txt\n")).toEqual([
+      { indexStatus: "?", workTreeStatus: "?", path: "a -> b.txt" },
+      { indexStatus: " ", workTreeStatus: "M", path: "c -> d.txt" },
+      { indexStatus: "R", workTreeStatus: " ", path: "new.txt" },
+    ]);
   });
 });

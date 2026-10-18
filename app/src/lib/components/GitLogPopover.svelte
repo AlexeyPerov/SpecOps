@@ -130,7 +130,10 @@
       message = describeFailure(result);
       return;
     }
-    commits = [...commits, ...result.commits];
+    // History can move between pages (a new commit shifts the skip window),
+    // so drop rows already shown; the list is keyed by SHA.
+    const shown = new Set(commits.map((commit) => commit.sha));
+    commits = [...commits, ...result.commits.filter((commit) => !shown.has(commit.sha))];
     hasMore = result.hasMore;
   }
 

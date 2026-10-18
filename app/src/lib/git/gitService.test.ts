@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
   applyStash,
@@ -58,6 +58,8 @@ import {
   REMOTE_GIT_OPERATION_TIMEOUT_MS,
 } from "./gitRun";
 import { resetGitCommandQueueForTests } from "./gitCommandQueue";
+import { NEGATIVE_REPO_ROOT_TTL_MS } from "./gitRepo";
+import { GitPullConflictError } from "./gitErrors";
 import { DEFAULT_COMMIT_LOG_LIMIT, DEFAULT_HISTORY_FILTER_MODE } from "./types";
 import type { GitAvailableResponse, RunGitResponse } from "./types";
 import { isGitError } from "./types";
@@ -308,6 +310,39 @@ describe("resolveRepoRoot", () => {
   });
 });
 
+describe("resolveRepoRoot negative caching", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("re-probes a not-a-repository answer after the short TTL", async () => {
+    const workspaceRootPath = "/tmp/becomes-a-repo";
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 128,
+        stdout: "",
+        stderr: "fatal: not a git repository (or any of the parent directories): .git\n",
+        durationMs: 1,
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: `${workspaceRootPath}\n`, stderr: "", durationMs: 1 });
+
+    expect((await resolveRepoRoot(workspaceRootPath)).ok).toBe(false);
+    // Within the TTL the cached negative answer is reused.
+    expect((await resolveRepoRoot(workspaceRootPath)).ok).toBe(false);
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+
+    // `git init` ran outside the app; after the TTL the probe sees the repo.
+    vi.advanceTimersByTime(NEGATIVE_REPO_ROOT_TTL_MS);
+    expect(await resolveRepoRoot(workspaceRootPath)).toEqual({ ok: true, repoRoot: workspaceRootPath });
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("queryCurrentBranch", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -492,6 +527,16 @@ describe("isNoUpstreamAheadBehindError", () => {
         durationMs: 1,
       }),
     ).toBe(true);
+  });
+
+  it("matches a gone upstream and detached HEAD", () => {
+    for (const stderr of [
+      "fatal: upstream branch 'refs/heads/gone' not stored as a remote-tracking branch\n",
+      "fatal: HEAD does not point to a branch\n",
+      "fatal: no such branch: 'topic'\n",
+    ]) {
+      expect(isNoUpstreamAheadBehindError({ exitCode: 128, stdout: "", stderr, durationMs: 1 })).toBe(true);
+    }
   });
 
   it("does not match lock conflicts", () => {
@@ -1520,6 +1565,23 @@ describe("pullRemote", () => {
   });
 });
 
+describe("pullRemote conflicts", () => {
+  beforeEach(() => {
+    invokeMock.mockReset();
+  });
+
+  it("throws GitPullConflictError when conflict lines are on stdout", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 1,
+      stdout: "Auto-merging f\nCONFLICT (content): Merge conflict in f\nAutomatic merge failed; fix conflicts and then commit the result.\n",
+      stderr: "From /tmp/remote\n * branch            main       -> FETCH_HEAD\n",
+      durationMs: 40,
+    });
+
+    await expect(pullRemote("/tmp/repo")).rejects.toBeInstanceOf(GitPullConflictError);
+  });
+});
+
 describe("pushRemote", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -1549,6 +1611,31 @@ describe("pushRemote", () => {
     await pushRemote("/tmp/repo", { remoteName: "upstream" });
 
     expectRemoteGitInvoke("/tmp/repo", ["push", "upstream", "HEAD"], "push");
+  });
+
+  it("pushes HEAD to an explicit remote branch instead of a same-named local branch", async () => {
+    invokeMock.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "", durationMs: 120 });
+
+    await pushRemote("/tmp/repo", { remoteName: "origin", branchName: "release/1.0" });
+
+    expectRemoteGitInvoke("/tmp/repo", ["push", "origin", "HEAD:refs/heads/release/1.0"], "push");
+  });
+
+  it("pushes HEAD to the tracked upstream branch when only the remote is given", async () => {
+    invokeMock
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "feature\n", stderr: "", durationMs: 1 })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "origin/main\n", stderr: "", durationMs: 1 })
+      .mockResolvedValue({ exitCode: 0, stdout: "", stderr: "", durationMs: 120 });
+
+    await pushRemote("/tmp/repo", { remoteName: "origin" });
+
+    expectRemoteGitInvoke("/tmp/repo", ["push", "origin", "HEAD:refs/heads/main"], "push");
+  });
+
+  it("rejects option-like remote names before invoking git", async () => {
+    await expect(pushRemote("/tmp/repo", { remoteName: "--mirror" })).rejects.toBeInstanceOf(
+      GitRefValidationError,
+    );
   });
 
   it("throws GitNoUpstreamError when branch has no upstream", async () => {
@@ -1935,6 +2022,12 @@ describe("createStash", () => {
   it("invokes git stash push with include-untracked and message", async () => {
     invokeMock
       .mockResolvedValueOnce({
+        exitCode: 1,
+        stdout: "",
+        stderr: "",
+        durationMs: 1,
+      })
+      .mockResolvedValueOnce({
         exitCode: 0,
         stdout: "",
         stderr: "",
@@ -1964,6 +2057,12 @@ describe("createStash", () => {
     invokeMock
       .mockResolvedValueOnce({
         exitCode: 0,
+        stdout: "0000000000000000000000000000000000000001\n",
+        stderr: "",
+        durationMs: 1,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
         stdout: "",
         stderr: "",
         durationMs: 2,
@@ -1981,13 +2080,33 @@ describe("createStash", () => {
     expect(stashRef).toBe("def456");
   });
 
-  it("throws GitStashNothingToSaveError when git reports no changes", async () => {
-    invokeMock.mockResolvedValue({
-      exitCode: 1,
-      stdout: "",
-      stderr: "No local changes to save\n",
-      durationMs: 1,
-    });
+  it("throws GitStashNothingToSaveError when git exits 0 with the clean-tree message on stdout", async () => {
+    // Real git: `stash push` on a clean tree exits 0 and prints to stdout.
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "1111111111111111111111111111111111111111\n",
+        stderr: "",
+        durationMs: 1,
+      })
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        stdout: "No local changes to save\n",
+        stderr: "",
+        durationMs: 1,
+      });
+
+    await expect(createStash("/tmp/repo")).rejects.toBeInstanceOf(GitStashNothingToSaveError);
+    // Never resolves the old stack top as if it were the new stash.
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws GitStashNothingToSaveError when stash@{0} is unchanged after the push", async () => {
+    const previous = "2222222222222222222222222222222222222222";
+    invokeMock
+      .mockResolvedValueOnce({ exitCode: 0, stdout: `${previous}\n`, stderr: "", durationMs: 1 })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: `${previous}\n`, stderr: "", durationMs: 1 });
 
     await expect(createStash("/tmp/repo")).rejects.toBeInstanceOf(GitStashNothingToSaveError);
   });
@@ -2092,6 +2211,34 @@ describe("applyStash", () => {
     );
   });
 
+  it("throws GitStashApplyConflictError when conflict lines are only on stdout", async () => {
+    // Real git: `stash apply` conflicts print CONFLICT to stdout, stderr empty.
+    invokeMock.mockResolvedValue({
+      exitCode: 1,
+      stdout: "Auto-merging f\nCONFLICT (content): Merge conflict in f\n",
+      stderr: "",
+      durationMs: 2,
+    });
+
+    await expect(applyStash("/tmp/repo", "stash@{0}")).rejects.toBeInstanceOf(
+      GitStashApplyConflictError,
+    );
+  });
+
+  it("throws GitStashApplyConflictError when pop conflicts and the index is not unstashed", async () => {
+    invokeMock.mockResolvedValue({
+      exitCode: 1,
+      stdout:
+        "Auto-merging f\nCONFLICT (content): Merge conflict in f\nThe stash entry is kept in case you need it again.\n",
+      stderr: "Index was not unstashed.\n",
+      durationMs: 2,
+    });
+
+    await expect(applyStash("/tmp/repo", "stash@{0}", true)).rejects.toBeInstanceOf(
+      GitStashApplyConflictError,
+    );
+  });
+
   it("throws GitStashApplyConflictError when apply conflicts", async () => {
     invokeMock.mockResolvedValue({
       exitCode: 1,
@@ -2111,33 +2258,47 @@ describe("dropStash", () => {
     invokeMock.mockReset();
   });
 
-  it("invokes git stash drop for the selected ref", async () => {
-    invokeMock.mockResolvedValue({
-      exitCode: 0,
-      stdout: "",
-      stderr: "",
-      durationMs: 2,
-    });
+  const DROP_SHA = "abc1111111111111111111111111111111111111";
+  const OTHER_SHA = "def2222222222222222222222222222222222222";
 
-    await dropStash("/tmp/repo", "stash@{0}");
+  it("re-resolves the SHA to its current stash index before dropping", async () => {
+    invokeMock
+      .mockResolvedValueOnce({
+        exitCode: 0,
+        // A newer stash landed on top since the list was read: the entry is now @{1}.
+        stdout: `${OTHER_SHA}\0${DROP_SHA}\0`,
+        stderr: "",
+        durationMs: 1,
+      })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: "", stderr: "", durationMs: 2 });
+
+    await dropStash("/tmp/repo", DROP_SHA);
 
     expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
       repoRoot: "/tmp/repo",
-      args: ["stash", "drop", "-q", "stash@{0}"],
+      args: ["stash", "list", "-z", "--format=%H"],
+    }));
+    expect(invokeMock).toHaveBeenCalledWith("run_git", expectRunGitPayload({
+      repoRoot: "/tmp/repo",
+      args: ["stash", "drop", "-q", "stash@{1}"],
     }));
   });
 
-  it("throws GitStashNotFoundError for missing stash refs", async () => {
-    invokeMock.mockResolvedValue({
-      exitCode: 1,
-      stdout: "",
-      stderr: "fatal: log for 'stash' only has 1 entries\n",
+  it("throws GitStashNotFoundError without dropping when the SHA is gone", async () => {
+    invokeMock.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: `${OTHER_SHA}\0`,
+      stderr: "",
       durationMs: 1,
     });
 
-    await expect(dropStash("/tmp/repo", "stash@{9}")).rejects.toBeInstanceOf(
-      GitStashNotFoundError,
-    );
+    await expect(dropStash("/tmp/repo", DROP_SHA)).rejects.toBeInstanceOf(GitStashNotFoundError);
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects positional refs so a stale stash@{n} cannot be dropped", async () => {
+    await expect(dropStash("/tmp/repo", "stash@{0}")).rejects.toBeInstanceOf(GitStashNotFoundError);
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 
   it("throws GitStashNotFoundError for empty ref", async () => {

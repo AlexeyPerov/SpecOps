@@ -23,3 +23,33 @@ describe("sanitizeGitStderrForDiagnosticLog", () => {
     expect(sanitizeGitStderrForDiagnosticLog(stderr)).toBe(stderr);
   });
 });
+
+describe("sanitizeGitStderrForDiagnosticLog credential patterns", () => {
+  it("redacts the credential after an auth scheme word", () => {
+    expect(sanitizeGitStderrForDiagnosticLog("Authorization: Bearer ghp_SECRET\n")).toBe(
+      "Authorization: ***\n",
+    );
+    expect(sanitizeGitStderrForDiagnosticLog("Proxy-Authorization: Basic dXNlcjpwYXNz")).toBe(
+      "Proxy-Authorization: ***",
+    );
+  });
+
+  it("redacts a username-only token URL but keeps a plain ssh user", () => {
+    expect(
+      sanitizeGitStderrForDiagnosticLog("fatal: unable to access 'https://ghp_SECRET@github.com/o/r.git/'"),
+    ).toBe("fatal: unable to access '***/github.com/o/r.git/'");
+    expect(sanitizeGitStderrForDiagnosticLog("ssh://git@github.com/o/r.git")).toBe(
+      "ssh://git@github.com/o/r.git",
+    );
+    expect(sanitizeGitStderrForDiagnosticLog("ssh://user:pw@host/r.git")).toBe("***/host/r.git");
+  });
+
+  it("redacts prefixed token keys in query strings parameter by parameter", () => {
+    expect(
+      sanitizeGitStderrForDiagnosticLog("GET https://h/x?access_token=SECRET&page=2&private_token=SEC2"),
+    ).toBe("GET https://h/x?access_token=***&page=2&private_token=***");
+    expect(sanitizeGitStderrForDiagnosticLog("client_secret=abc tokens: 3")).toBe(
+      "client_secret=*** tokens: 3",
+    );
+  });
+});

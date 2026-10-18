@@ -39,12 +39,36 @@ function isNotARepositoryResponse(response: RunGitResponse): boolean {
  * per workspace path for the process lifetime and invalidate on init-class
  * version-control mutations.
  */
-const repoRootCache = new Map<string, ResolveRepoRootResult>();
+/** How long a "not a repository" answer is reused before re-probing. */
+export const NEGATIVE_REPO_ROOT_TTL_MS = 5_000;
+
+interface CachedRepoRoot {
+  result: ResolveRepoRootResult;
+  /** Expiry for negative results; positive results never expire. */
+  expiresAt: number | null;
+}
+
+const repoRootCache = new Map<string, CachedRepoRoot>();
 let repoRootMutationHookInstalled = false;
 function cacheRepoRoot(path: string, result: ResolveRepoRootResult): void {
   repoRootCache.delete(path);
-  repoRootCache.set(path, result);
+  repoRootCache.set(path, {
+    result,
+    expiresAt: result.ok ? null : Date.now() + NEGATIVE_REPO_ROOT_TTL_MS,
+  });
   while (repoRootCache.size > 128) repoRootCache.delete(repoRootCache.keys().next().value!);
+}
+
+function readCachedRepoRoot(path: string): ResolveRepoRootResult | null {
+  const cached = repoRootCache.get(path);
+  if (!cached) {
+    return null;
+  }
+  if (cached.expiresAt !== null && Date.now() >= cached.expiresAt) {
+    repoRootCache.delete(path);
+    return null;
+  }
+  return cached.result;
 }
 
 function ensureRepoRootMutationHook(): void {
@@ -74,7 +98,9 @@ export function resetResolveRepoRootCacheForTests(): void {
 
 /**
  * Resolve the git repository root for a workspace path via
- * `git rev-parse --show-toplevel`. Memoized per workspace path.
+ * `git rev-parse --show-toplevel`. Successful results are memoized per
+ * workspace path; "not a repository" results expire after
+ * {@link NEGATIVE_REPO_ROOT_TTL_MS}.
  */
 export async function resolveRepoRoot(
   workspaceRootPath: string,
@@ -82,7 +108,7 @@ export async function resolveRepoRoot(
   options?: CancellableGitOptions,
 ): Promise<ResolveRepoRootResult> {
   ensureRepoRootMutationHook();
-  const cached = repoRootCache.get(workspaceRootPath);
+  const cached = readCachedRepoRoot(workspaceRootPath);
   if (cached) {
     return cached;
   }
@@ -91,6 +117,9 @@ export async function resolveRepoRoot(
     ? await runGit(workspaceRootPath, ["rev-parse", "--show-toplevel"], scope, undefined, options)
     : await runGit(workspaceRootPath, ["rev-parse", "--show-toplevel"], scope);
 
+  // Negative answers are cached only briefly (bursts of badge refreshes): a
+  // workspace can become a repository outside the app (`git init` or a clone
+  // in a terminal), and only the app's own init invalidates the cache.
   if (isNotARepositoryResponse(response)) {
     const error: GitNotARepositoryError = createGitNotARepositoryError(
       workspaceRootPath,
@@ -162,7 +191,11 @@ export async function queryCurrentBranch(
   };
 }
 
-/** True when `rev-list @{u}...HEAD` failed because upstream is missing or unknown. */
+/**
+ * True when `rev-list @{u}...HEAD` failed because there is no usable upstream:
+ * none configured, the remote-tracking branch is gone (deleted on the remote
+ * and pruned), HEAD is detached, or the revision is unknown.
+ */
 export function isNoUpstreamAheadBehindError(response: RunGitResponse): boolean {
   if (response.exitCode === 0) {
     return false;
@@ -171,6 +204,9 @@ export function isNoUpstreamAheadBehindError(response: RunGitResponse): boolean 
   const stderr = response.stderr.toLowerCase();
   return (
     stderr.includes("no upstream configured") ||
+    stderr.includes("not stored as a remote-tracking branch") ||
+    stderr.includes("does not point to a branch") ||
+    stderr.includes("no such branch") ||
     stderr.includes("unknown revision") ||
     stderr.includes("no merge base")
   );

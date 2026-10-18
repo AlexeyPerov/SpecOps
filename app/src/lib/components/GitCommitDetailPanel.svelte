@@ -73,7 +73,9 @@
     diffError = null;
     fileDiff = null;
     try {
-      const result = await queryCommitFileDiff(root, commitSha, path, parentSha);
+      // A renamed file needs both paths, or git reports it as newly added.
+      const previousPath = detail?.files.find(file => file.path === path)?.previousPath;
+      const result = await queryCommitFileDiff(root, commitSha, path, parentSha, undefined, previousPath);
       if (isCurrent()) fileDiff = result;
     } catch (error) {
       if (!isCurrent()) return;

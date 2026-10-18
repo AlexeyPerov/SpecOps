@@ -61,6 +61,55 @@ describe("formatGitErrorPrimaryMessage", () => {
     expect(formatGitErrorPrimaryMessage(error)).toContain("Merge conflict");
   });
 
+  it("maps pull conflicts reported only on stdout", () => {
+    const error = createGitCommandError({
+      exitCode: 1,
+      stdout: "Auto-merging f\nCONFLICT (content): Merge conflict in f\nAutomatic merge failed; fix conflicts and then commit the result.\n",
+      stderr: "From /tmp/remote\n * branch            main       -> FETCH_HEAD\n",
+      durationMs: 1,
+    } satisfies RunGitResponse);
+
+    expect(error.stdout).toContain("CONFLICT");
+    expect(formatGitErrorPrimaryMessage(error)).toContain("Merge conflict");
+  });
+
+  it("does not report a local index.lock permission error as an auth failure", () => {
+    const error = createGitCommandError({
+      exitCode: 128,
+      stdout: "",
+      stderr: "fatal: Unable to create '/tmp/repo/.git/index.lock': Permission denied\n",
+      durationMs: 1,
+    } satisfies RunGitResponse);
+
+    const message = formatGitErrorPrimaryMessage(error);
+    expect(message).not.toContain("Authentication failed");
+    expect(message).toContain("permission denied");
+  });
+
+  it("does not report a working-tree permission error as an auth failure", () => {
+    const error = createGitCommandError({
+      exitCode: 1,
+      stdout: "",
+      stderr: "error: unable to unlink old 'docs/a.md': Permission denied\n",
+      durationMs: 1,
+    } satisfies RunGitResponse);
+
+    const message = formatGitErrorPrimaryMessage(error);
+    expect(message).not.toContain("Authentication failed");
+    expect(message).toContain("Check file and folder permissions");
+  });
+
+  it("still maps remote permission denials to auth guidance", () => {
+    const error = createGitCommandError({
+      exitCode: 128,
+      stdout: "",
+      stderr: "remote: Permission to org/repo.git denied to someone.\nfatal: unable to access 'https://example.com/org/repo.git/': The requested URL returned error: 403\n",
+      durationMs: 1,
+    } satisfies RunGitResponse);
+
+    expect(formatGitErrorPrimaryMessage(error)).not.toContain("Check file and folder permissions");
+  });
+
   it("maps missing upstream errors", () => {
     const error = new GitNoUpstreamError('Branch "main" has no upstream.');
     expect(formatGitErrorPrimaryMessage(error)).toContain("no upstream");

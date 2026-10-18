@@ -1,12 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { GitAskpassRequest } from "./types";
-import { promptGitCredentials } from "../services/askpassPrompt";
+import { dismissAskpassRequest, promptGitCredentials } from "../services/askpassPrompt";
 
 const ASKPASS_EVENT = "spec-ops/git/askpass-request";
+/** The backend no longer needs an answer (answered in any window, cancelled, timed out, ended). */
+const ASKPASS_RESOLVED_EVENT = "spec-ops/git/askpass-resolved";
 
 let unlisten: UnlistenFn | null = null;
 let startPromise: Promise<void> | null = null;
+/** Bumped by stop so a start still awaiting `listen` disposes its listeners. */
+let generation = 0;
+let startGeneration = 0;
 
 function mapAskpassRequest(payload: Record<string, unknown>): GitAskpassRequest | null {
   const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : "";
@@ -50,6 +55,9 @@ async function handleAskpassRequest(payload: Record<string, unknown>): Promise<v
   }
 
   const response = await promptGitCredentials(request);
+  if (!response) {
+    return;
+  }
   try {
     await invoke("respond_git_askpass", {
       request: {
@@ -76,25 +84,47 @@ export async function startGitAskpassBridge(): Promise<void> {
   if (unlisten) {
     return;
   }
-  if (startPromise) {
+  if (startPromise && startGeneration === generation) {
     return startPromise;
   }
 
-  startPromise = (async () => {
-    unlisten = await listen<Record<string, unknown>>(ASKPASS_EVENT, (event) => {
+  const startedGeneration = generation;
+  const promise = (async () => {
+    const stopRequests = await listen<Record<string, unknown>>(ASKPASS_EVENT, (event) => {
       void handleAskpassRequest(event.payload);
     });
+    const stopResolved = await listen<Record<string, unknown>>(ASKPASS_RESOLVED_EVENT, (event) => {
+      const { sessionId, requestId } = event.payload ?? {};
+      if (typeof sessionId === "string" && typeof requestId === "string") {
+        dismissAskpassRequest(sessionId, requestId);
+      }
+    });
+    const dispose = () => {
+      stopRequests();
+      stopResolved();
+    };
+    if (startedGeneration !== generation) {
+      // Stopped while subscribing: do not leave listeners behind.
+      dispose();
+      return;
+    }
+    unlisten = dispose;
   })();
+  startPromise = promise;
+  startGeneration = startedGeneration;
 
   try {
-    await startPromise;
+    await promise;
   } finally {
-    startPromise = null;
+    if (startPromise === promise) {
+      startPromise = null;
+    }
   }
 }
 
 /** Stop listening for askpass credential requests. */
 export async function stopGitAskpassBridge(): Promise<void> {
+  generation += 1;
   if (unlisten) {
     const dispose = unlisten;
     unlisten = null;

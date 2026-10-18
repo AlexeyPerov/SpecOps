@@ -5,6 +5,7 @@ import { readdir } from 'node:fs/promises';
 import { createTempGitRepo, describeIfGitInstalled, type TempGitRepo } from './test/gitTempRepoHarness';
 import { resetGitCommandQueueForTests } from './gitCommandQueue';
 import { pullRemote, queryRemoteHeads } from './gitRemotes';
+import { GitPullConflictError } from './gitErrors';
 import { DEFAULT_PULL_OPTIONS, queryGitOperationState, queryPullSnapshot, recoverGitOperation, type PullOptions } from './gitPull';
 vi.mock('@tauri-apps/plugin-fs', () => ({ readDir: vi.fn(async (path: string) => (await readdir(path)).map(name => ({ name }))) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async (_command: string, { request }: { request: { repoRoot: string; args: string[] } }) => {
@@ -63,7 +64,7 @@ describeIfGitInstalled('pull variants against temporary local remotes', () => {
   for (const strategy of ['merge', 'rebase'] as const) {
     it(`${strategy} conflicts survive restart reads, block continue, and abort restores HEAD`, async () => pair(async (remote, local) => {
       commit(local, 'shared.txt', 'local conflict'); const before = local.run(['rev-parse', 'HEAD']); commit(remote, 'shared.txt', 'remote conflict');
-      await expect(pull(local, { strategy })).rejects.toBeTruthy();
+      await expect(pull(local, { strategy })).rejects.toBeInstanceOf(GitPullConflictError);
       expect(await queryGitOperationState(local.dir)).toEqual({ kind: strategy, conflicts: ['shared.txt'] });
       await expect(recoverGitOperation(local.dir, strategy, 'continue')).rejects.toThrow('Resolve and stage');
       await expect(pullRemote(local.dir, {remoteName:'origin',branchName:'main'}, {pull:DEFAULT_PULL_OPTIONS})).rejects.toThrow('Finish the current');
@@ -73,7 +74,7 @@ describeIfGitInstalled('pull variants against temporary local remotes', () => {
     }));
     it(`${strategy} continues after conflicts are resolved and staged`, async () => pair(async (remote, local) => {
       commit(local, 'shared.txt', 'local conflict'); commit(remote, 'shared.txt', 'remote conflict');
-      await expect(pull(local, { strategy })).rejects.toBeTruthy();
+      await expect(pull(local, { strategy })).rejects.toBeInstanceOf(GitPullConflictError);
       local.writeFile('shared.txt', 'resolved'); local.run(['add', 'shared.txt']);
       await recoverGitOperation(local.dir, strategy, 'continue');
       expect((await queryGitOperationState(local.dir)).kind).toBe('none');

@@ -62,8 +62,16 @@
   }: Props = $props();
 
   let messageElement = $state<HTMLTextAreaElement>();
+  // Each focus request is handled once. The textarea is re-created whenever a
+  // status reload swaps the panel content, so keying on the element alone would
+  // steal focus back into the message field after every refresh.
+  let handledFocusToken = untrack(() => focusMessageToken);
   $effect(() => {
-    if (focusMessageToken > 0 && messageElement && !readOnly) messageElement.focus();
+    const token = focusMessageToken;
+    const element = messageElement;
+    if (token <= handledFocusToken || !element) return;
+    handledFocusToken = token;
+    if (!untrack(() => readOnly)) element.focus();
   });
 
   type LoadStatus = "idle" | "loading" | "ready" | "error";
@@ -132,8 +140,10 @@
     signal?: AbortSignal,
   ): Promise<void> {
     const preserveDiffSelection = options.preserveDiffSelection ?? false;
-    const priorPath = preserveDiffSelection ? activeDiffPath : null;
-    const priorSource = preserveDiffSelection ? activeDiffSource : null;
+    // Read without tracking: this runs synchronously inside the status effect,
+    // and selecting another file for diff must not re-run `git status`.
+    const priorPath = preserveDiffSelection ? untrack(() => activeDiffPath) : null;
+    const priorSource = preserveDiffSelection ? untrack(() => activeDiffSource) : null;
 
     loadStatus = "loading";
     loadError = null;
@@ -477,6 +487,8 @@
                     tabindex="0"
                     onclick={() => selectForDiff(entry.path, "unstaged")}
                     onkeydown={(event) => {
+                      // Keys typed on the row's checkbox keep their native toggle.
+                      if (event.target !== event.currentTarget) return;
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         selectForDiff(entry.path, "unstaged");
@@ -538,6 +550,8 @@
                     tabindex="0"
                     onclick={() => selectForDiff(entry.path, "staged")}
                     onkeydown={(event) => {
+                      // Keys typed on the row's checkbox keep their native toggle.
+                      if (event.target !== event.currentTarget) return;
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         selectForDiff(entry.path, "staged");

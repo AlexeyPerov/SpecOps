@@ -79,6 +79,7 @@
     cancelGitCommand,
     createStash,
     fetchRemote,
+    GitPullConflictError,
     GitStashApplyConflictError,
     isWorkingTreeDirty,
     pullRemote,
@@ -1161,14 +1162,20 @@
           remoteCancelRequested = false;
         } });
       } catch (error) {
-        if (stashedRef) {
-          notify(
-            "Pull failed. Your changes were stashed — apply the latest stash to restore them.",
-          );
+        // A conflicted pull leaves a merge or rebase in progress: continue below so
+        // the operation state is read and the user is sent to resolve conflicts.
+        if (error instanceof GitPullConflictError) {
+          notify(error.message);
+        } else {
+          if (stashedRef) {
+            notify(
+              "Pull failed. Your changes were stashed — apply the latest stash to restore them.",
+            );
+          }
+          if (current()) pullDialogError = formatGitErrorPrimaryMessage(error);
+          handleRemoteOperationError("Pull", error, root);
+          return;
         }
-        if (current()) pullDialogError = formatGitErrorPrimaryMessage(error);
-        handleRemoteOperationError("Pull", error, root);
-        return;
       }
 
       const resultingState = await queryGitOperationState(root);

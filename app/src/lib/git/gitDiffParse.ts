@@ -95,10 +95,32 @@ function parseDiffSection(section: string): ParsedTextDiff {
       continue;
     }
 
-    const modeChange = /^old mode (\S+) new mode (\S+)$/.exec(line);
-    if (modeChange) {
-      oldMode = modeChange[1];
-      newMode = modeChange[2];
+    // A mode change is two extended-header lines: `old mode <m>` then
+    // `new mode <m>`.
+    if (currentHunk === null && line.startsWith("old mode ")) {
+      oldMode = line.slice("old mode ".length).trim();
+      continue;
+    }
+
+    if (currentHunk === null && line.startsWith("new mode ")) {
+      newMode = line.slice("new mode ".length).trim();
+      continue;
+    }
+
+    // `rename from/to` and `copy from/to` carry the exact (possibly quoted)
+    // paths without an `a/`/`b/` prefix. They are the only reliable source for
+    // a pure rename whose bare paths contain spaces: such a diff has no
+    // `---`/`+++` headers and its `diff --git` line is ambiguous.
+    const renameOrCopy = currentHunk === null
+      ? /^(rename|copy) (from|to) (.+)$/.exec(line)
+      : null;
+    if (renameOrCopy) {
+      const headerPath = normalizeGitOutputPath(unquoteGitPath(renameOrCopy[3]!));
+      if (renameOrCopy[2] === "from") {
+        oldPath = headerPath;
+      } else {
+        path = headerPath;
+      }
       continue;
     }
 
@@ -245,18 +267,17 @@ function parseDiffGitLine(line: string): DiffGitPaths | null {
 /// Parse the two path halves of a `diff --git a/<old> b/<new>` header.
 ///
 /// git emits exactly two paths after `diff --git`. Each is either quoted
-/// (`"a/path"`, used when the path contains characters git's `quote_c.c` flags)
-/// or bare. The previous tokenizer split on whitespace, which broke on a bare
-/// path containing a space — verified `diff --git a/my img.png b/my img.png`
-/// yielded four tokens and `parseDiffGitLine` returned null, so a binary or
-/// mode-only diff (no `---`/`+++` lines to recover the path from) rendered as
-/// "Could not load diff" instead of the existing binary placeholder.
+/// (`"a/path"`, when the path contains characters git C-quotes) or bare. A bare
+/// path may contain spaces, which makes the line ambiguous in general; the
+/// resolution order mirrors git's own header parsing:
 ///
-/// F22: when the bare-token count is not exactly two, fall back to the known
-/// ` b/` boundary git places between the two halves. The first token is always
-/// a complete bare/quoted unit, so the boundary we want is the first ` b/`
-/// (or `"b/`) *after* it; the second half is the canonical path used for the
-/// file lookup.
+/// 1. Exactly two quote-aware tokens: use them.
+/// 2. One side quoted, the other bare: split at the quoted token's edge.
+/// 3. Both bare: when old and new name the same file the line is
+///    `a/<P> b/<P>`, so split it into two equal halves around the middle space.
+/// 4. Otherwise (a rename whose bare paths contain spaces) split at the first
+///    ` b/`; the caller then overrides both paths from the reliable
+///    `rename from/to` / `copy from/to` / `---`/`+++` header lines.
 function parseDiffGitPathPair(rest: string): { oldRaw: string; newRaw: string } | null {
   const tokens = tokenizeDiffGitPaths(rest);
   if (tokens.length === 2) {
@@ -266,76 +287,42 @@ function parseDiffGitPathPair(rest: string): { oldRaw: string; newRaw: string } 
     return null;
   }
 
-  // Ambiguous: a bare path contains whitespace. Locate the second half by
-  // scanning for ` b/` (or ` "b/`) starting just past the first token, then
-  // re-split there. The first token is always a complete bare/quoted unit, so
-  // the boundary we want is the first ` b/` *after* it.
-  const firstEnd = tokenEndOffset(rest, 0);
-  if (firstEnd < 0) {
-    return null;
+  if (rest.startsWith('"')) {
+    const oldRaw = tokens[0]!;
+    const newRaw = rest.slice(oldRaw.length).replace(/^ /, "");
+    return newRaw ? { oldRaw, newRaw } : null;
   }
-  const tail = rest.slice(firstEnd);
-  const boundaryIdx = findPathBoundary(tail);
-  if (boundaryIdx < 0) {
-    return null;
-  }
-  const oldRaw = rest.slice(0, firstEnd).trim();
-  const newRaw = tail.slice(boundaryIdx).trim();
-  if (!oldRaw || !newRaw) {
-    return null;
-  }
-  return { oldRaw, newRaw };
-}
 
-/// Index in `rest` just past the end of token `tokenIndex` (inclusive of any
-/// trailing inter-token whitespace), or -1 if there is no such token. Used to
-/// anchor the second-half boundary search after the first complete token.
-function tokenEndOffset(rest: string, tokenIndex: number): number {
-  let index = 0;
-  let consumed = 0;
-  while (index < rest.length && consumed <= tokenIndex) {
-    while (index < rest.length && rest[index] === " ") {
-      index += 1;
+  if (rest.endsWith('"')) {
+    // An unescaped ` "` cannot occur inside a quoted path (an embedded quote is
+    // written as `\"`), so the last ` "` starts the quoted new path.
+    const quoteStart = rest.lastIndexOf(' "');
+    if (quoteStart > 0) {
+      return { oldRaw: rest.slice(0, quoteStart), newRaw: rest.slice(quoteStart + 1) };
     }
-    if (index >= rest.length) {
-      break;
-    }
-    if (rest[index] === '"') {
-      let end = index + 1;
-      while (end < rest.length) {
-        if (rest[end] === "\\" && end + 1 < rest.length) {
-          end += 2;
-          continue;
-        }
-        if (rest[end] === '"') {
-          break;
-        }
-        end += 1;
-      }
-      index = end + 1;
-    } else {
-      const nextSpace = rest.indexOf(" ", index);
-      index = nextSpace === -1 ? rest.length : nextSpace;
-    }
-    consumed += 1;
   }
-  return consumed > tokenIndex ? index : -1;
-}
 
-/// Offset into `tail` of the start of the second path half. git always emits
-/// the new path with a `b/` prefix (or `"b/` when quoted), preceded by a single
-/// space. The first such occurrence after the first token is the boundary.
-function findPathBoundary(tail: string): number {
-  for (let index = 0; index < tail.length; index += 1) {
-    if (tail[index] !== " ") {
-      continue;
-    }
-    const look = tail.slice(index + 1);
-    if (look.startsWith("b/") || look.startsWith('"b/')) {
-      return index + 1;
+  if (rest.length % 2 === 1) {
+    const middle = (rest.length - 1) / 2;
+    const oldRaw = rest.slice(0, middle);
+    const newRaw = rest.slice(middle + 1);
+    if (
+      rest[middle] === " " &&
+      oldRaw.startsWith("a/") &&
+      newRaw.startsWith("b/") &&
+      oldRaw.slice(2) === newRaw.slice(2)
+    ) {
+      return { oldRaw, newRaw };
     }
   }
-  return -1;
+
+  const boundary = rest.indexOf(" b/", 1);
+  if (boundary === -1) {
+    return null;
+  }
+  const oldRaw = rest.slice(0, boundary);
+  const newRaw = rest.slice(boundary + 1);
+  return oldRaw && newRaw ? { oldRaw, newRaw } : null;
 }
 
 function tokenizeDiffGitPaths(raw: string): string[] {

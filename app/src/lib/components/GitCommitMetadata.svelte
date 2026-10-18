@@ -9,6 +9,12 @@
     notify?: (message: string) => void;
   } = $props();
 
+  /** Machine-readable time, or undefined when the timestamp is out of range. */
+  function isoTimestamp(unixSeconds: number): string | undefined {
+    const date = new Date(unixSeconds * 1000);
+    return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
+  }
+
   async function copySha() {
     try { await navigator.clipboard.writeText(commit.sha); }
     catch { notify("Could not copy commit SHA"); }
@@ -50,7 +56,7 @@
           {/if}
           <time
             class="git-commit-detail-time"
-            datetime={new Date(commit.authorTime * 1000).toISOString()}
+            datetime={isoTimestamp(commit.authorTime)}
           >
             {formatCommitTimestamp(commit.authorTime)}
           </time>
@@ -65,7 +71,7 @@
           {/if}
           <time
             class="git-commit-detail-time"
-            datetime={new Date(commit.committerTime * 1000).toISOString()}
+            datetime={isoTimestamp(commit.committerTime)}
           >
             {formatCommitTimestamp(commit.committerTime)}
           </time>

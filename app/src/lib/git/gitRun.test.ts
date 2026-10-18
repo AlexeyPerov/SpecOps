@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { resetGitCommandQueueForTests } from "./gitCommandQueue";
-import { runGit } from "./gitRun";
+import { isWriteGitCommand, runGit } from "./gitRun";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -72,5 +72,29 @@ describe("compact summary native accounting", () => {
     invokeMock.mockResolvedValue({exitCode:0,stdout:"## main\n",stderr:"",durationMs:1});
     await runGit("/repo", ["status","-sb"], "background", undefined, {summaryLease:"permit",timeoutMs:30_000});
     expect(invokeMock).toHaveBeenCalledWith("workspace_git_summary_run", {request:{repoRoot:"/repo",args:["status","-sb"],timeoutMs:30_000},lease:"permit"});
+  });
+});
+
+describe("isWriteGitCommand", () => {
+  it("treats branch/tag listing forms, including --show-current, as reads", () => {
+    expect(isWriteGitCommand(["branch", "--show-current"])).toBe(false);
+    expect(isWriteGitCommand(["branch", "-vv"])).toBe(false);
+    expect(isWriteGitCommand(["branch"])).toBe(false);
+    expect(isWriteGitCommand(["tag", "-l"])).toBe(false);
+  });
+
+  it("keeps mutating branch/tag forms on the mutation lane", () => {
+    expect(isWriteGitCommand(["branch", "-d", "topic"])).toBe(true);
+    expect(isWriteGitCommand(["tag", "v1"])).toBe(true);
+    expect(isWriteGitCommand(["checkout", "-b", "topic", "--"])).toBe(true);
+  });
+
+  it("runs branch --show-current unregistered on the read lane", async () => {
+    invokeMock.mockReset();
+    resetGitCommandQueueForTests();
+    invokeMock.mockResolvedValue({ exitCode: 0, stdout: "main\n", stderr: "", durationMs: 1 });
+    await runGit("/tmp/repo", ["branch", "--show-current"], "versionControl");
+    const payload = invokeMock.mock.calls[0]![1] as { request: Record<string, unknown> };
+    expect(payload.request.commandId).toBeUndefined();
   });
 });

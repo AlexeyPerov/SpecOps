@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildQueryCommitsArgs, isUnbornRepoLogError, queryCommits, resolveHistoryCommit } from "./gitHistory";
+import { buildQueryCommitsArgs, isUnbornRepoLogError, queryCommitFileDiff, queryCommits, resolveHistoryCommit } from "./gitHistory";
 import { resetGitCommandQueueForTests } from "./gitCommandQueue";
 import { runGit } from "./gitRun";
 import type { RunGitResponse } from "./types";
@@ -123,5 +123,40 @@ describe("repository-wide history resolution", () => {
     expect(buildQueryCommitsArgs({order:"topological",includeRemotes:true})).toContain("--topo-order");
     expect(buildQueryCommitsArgs({order:"date",includeRemotes:true})).toContain("--date-order");
     expect(buildQueryCommitsArgs({includeRemotes:true})).toContain("--remotes");
+  });
+});
+
+describe("queryCommitFileDiff renames", () => {
+  beforeEach(() => {
+    resetGitCommandQueueForTests();
+    vi.clearAllMocks();
+  });
+
+  const renameDiff = [
+    "diff --git a/f.txt b/g h.txt",
+    "similarity index 100%",
+    "rename from f.txt",
+    "rename to g h.txt",
+    "",
+  ].join("\n");
+
+  it("includes the previous path in the pathspec so git pairs the rename", async () => {
+    runGitMock.mockResolvedValue(okResponse(renameDiff));
+
+    const diff = await queryCommitFileDiff("/repo", "b".repeat(40), "g h.txt", "a".repeat(40), "versionControl", "f.txt");
+
+    const args = runGitMock.mock.calls[0]![1];
+    expect(args).toContain("--find-renames");
+    expect(args.slice(args.indexOf("--") + 1)).toEqual([":(literal)g h.txt", ":(literal)f.txt"]);
+    expect(diff).toMatchObject({ path: "g h.txt", oldPath: "f.txt", hunks: [] });
+  });
+
+  it("keeps a single pathspec without a previous path", async () => {
+    runGitMock.mockResolvedValue(okResponse("diff --git a/x.txt b/x.txt\nindex 1..2 100644\n--- a/x.txt\n+++ b/x.txt\n@@ -1 +1 @@\n-a\n+b\n"));
+
+    await queryCommitFileDiff("/repo", "b".repeat(40), "x.txt", "a".repeat(40));
+
+    const args = runGitMock.mock.calls[0]![1];
+    expect(args.slice(args.indexOf("--") + 1)).toEqual([":(literal)x.txt"]);
   });
 });

@@ -118,6 +118,12 @@ export interface GitCommandError {
   message: string;
   exitCode: number;
   stderr: string;
+  /**
+   * Captured stdout of the failed command, when available. Git prints several
+   * failure details (merge/stash `CONFLICT` lines, "Automatic merge failed")
+   * on stdout rather than stderr, so classifiers must look at both streams.
+   */
+  stdout?: string;
 }
 
 /** Invalid workspace path for git operations. */
@@ -169,6 +175,7 @@ export function createGitCommandError(response: RunGitResponse): GitCommandError
     message: trimmed || `git exited with code ${response.exitCode}`,
     exitCode: response.exitCode,
     stderr: response.stderr,
+    stdout: response.stdout,
   };
 }
 

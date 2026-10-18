@@ -36,7 +36,7 @@ describe("mounted commit inspector", () => {
     view.host.querySelector<HTMLButtonElement>('[aria-label="Resize files and metadata"]')!.dispatchEvent(new KeyboardEvent("keydown",{key:"ArrowDown",bubbles:true}));
     flushSync(); expect(view.host.querySelector(".git-commit-detail-diff-pane")).toBe(diffPane);
     token.set(1); await settle(); expect(fileButton(view.host,"z.txt").getAttribute("aria-selected")).toBe("true");
-    expect(queryCommitFileDiff).toHaveBeenLastCalledWith("/repo","one","z.txt","parent");
+    expect(queryCommitFileDiff).toHaveBeenLastCalledWith("/repo","one","z.txt","parent",undefined,undefined);
     vi.mocked(queryCommitDetail).mockResolvedValue({...commit("one"),files:[{path:"next.txt",status:"A"}]}); token.set(2); await settle();
     expect(fileButton(view.host,"next.txt").getAttribute("aria-selected")).toBe("true");
   });
@@ -49,7 +49,7 @@ describe("mounted commit inspector", () => {
     expect(view.host.textContent).toContain("Message two");
     first.resolve(commit("stale-one")); second.reject(new Error("stale error")); await settle();
     expect(view.host.textContent).not.toContain("stale"); expect(view.host.textContent).toContain("Message two");
-    expect(queryCommitFileDiff).toHaveBeenLastCalledWith("/new","two","src/a.ts","parent");
+    expect(queryCommitFileDiff).toHaveBeenLastCalledWith("/new","two","src/a.ts","parent",undefined,"old/a.ts");
   });
   it("rejects late file results and errors; file changes do not reload commit metadata", async () => {
     const old = deferred<ParsedTextDiff>();
@@ -78,7 +78,7 @@ describe("mounted commit inspector", () => {
     const view=mountComponent(GitCommitDetailPanel,{repoRoot:"/repo",sha:"merge",get refreshToken(){return state.current;}}); await settle();
     expect(view.host.textContent).toContain("diff unavailable"); expect(view.host.textContent).toContain("Message merge"); expect(view.host.querySelector('[role=listbox]')).not.toBeNull();
     expect(view.host.textContent).toContain("Merge comparison: first parent first-p");
-    expect(queryCommitFileDiff).toHaveBeenLastCalledWith("/repo","merge","src/a.ts","first-parent");
+    expect(queryCommitFileDiff).toHaveBeenLastCalledWith("/repo","merge","src/a.ts","first-parent",undefined,"old/a.ts");
     vi.mocked(queryCommitFileDiff).mockRejectedValueOnce(new GitDiffTooLargeError("src/a.ts",100,50)); token.set(1); await settle(); expect(view.host.textContent).toContain("exceeds the inline display limit"); expect(view.host.textContent).not.toContain("external diff tool");
     vi.mocked(queryCommitFileDiff).mockResolvedValueOnce({...patch(),isBinary:true,hunks:[]}); token.set(2); await settle(); expect(view.host.textContent).toContain("Binary file");
     vi.mocked(queryCommitFileDiff).mockResolvedValueOnce({...patch(),hunks:[]}); token.set(3); await settle(); expect(view.host.textContent).toContain("No diff content");

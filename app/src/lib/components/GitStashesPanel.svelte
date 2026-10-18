@@ -234,6 +234,10 @@
     }
 
     const stashRef = selectedSummary.ref;
+    // Drop by the immutable SHA: `stash@{n}` from this listing goes stale when
+    // the stack changes; `dropStash` re-resolves the current index and fails if
+    // the entry is gone.
+    const stashSha = selectedSummary.sha;
     const result = await promptStashDrop({
       stashRef,
       message: stashSummaryLine(selectedSummary),
@@ -246,7 +250,7 @@
     actionError = null;
 
     try {
-      await dropStash(repoRoot, stashRef);
+      await dropStash(repoRoot, stashSha);
       await loadStashes(repoRoot);
       await onMutation("stash");
       notify(`Dropped ${stashRef}.`);

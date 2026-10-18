@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import DialogShell from './DialogShell.svelte';
   import { queryPushSources, pushPlanError, type PushBranch, type PushPlan, type PushResult, type PushSource } from '../git/gitPush';
   import { cancelGitCommand, queryRemoteHeads } from '../git/gitService';
@@ -21,10 +22,22 @@
   const plan = $derived<PushPlan>({ remote: remoteName, branches: rows.filter(row => row.selected).map(row => ({ ref: row.ref, sha: row.sha, destination: `refs/heads/${row.destination}`, track: row.track })), tags: allTags ? tags.map(tag => ({ ...tag })) : [] });
   const validation = $derived(pushPlanError(plan));
   const valid = $derived(!loading && !loadError && !!remote && !validation && !result);
+  // A repository refresh reloads branches only while the dialog is idle with no
+  // result: the refresh that follows a push must not re-query the remote (and
+  // possibly prompt for credentials again) or reset the rows under the result.
+  let appliedRefreshToken = untrack(() => refreshToken);
+  $effect(() => {
+    const token = refreshToken;
+    untrack(() => {
+      if (token === appliedRefreshToken || busy || result) return;
+      appliedRefreshToken = token;
+      refresh += 1;
+    });
+  });
   $effect(() => {
     const repo = root, name = remoteName;
     const endpoint = remotes.find(item => item.name === name)?.pushUrl ?? name;
-    refresh; refreshToken;
+    refresh;
     const controller = new AbortController(), commandId = `push-heads-${crypto.randomUUID()}`;
     let pending = !!name;
     loading = true; loadError = null; rows = []; tags = []; heads = []; allTags = false;

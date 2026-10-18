@@ -1,5 +1,6 @@
 import { logDiagnostic } from "../services/logging";
 import { GitNoUpstreamError, isGitCommandCancelledError, isGitCommandTimedOutError } from "./gitService";
+import { combinedGitOutput, isGitConflictOutput } from "./gitErrors";
 import { isGitError, type GitCommandError } from "./types";
 
 export interface ReportGitErrorOptions {
@@ -20,8 +21,36 @@ function commandErrorStderr(error: GitCommandError): string {
   return error.stderr.trim();
 }
 
+/**
+ * True when "permission denied" comes from the local filesystem (git could not
+ * create, open, write or unlink a file) rather than from a remote server.
+ */
+function isLocalFilesystemPermissionStderr(stderr: string): boolean {
+  const lower = stderr.toLowerCase();
+  if (!lower.includes("permission denied") && !lower.includes("insufficient permission")) {
+    return false;
+  }
+  return (
+    lower.includes("insufficient permission") ||
+    lower.includes("unable to create") ||
+    lower.includes("unable to unlink") ||
+    lower.includes("unable to write") ||
+    lower.includes("unable to open") ||
+    lower.includes("could not open") ||
+    lower.includes("cannot open") ||
+    lower.includes("could not write") ||
+    lower.includes("failed to write") ||
+    lower.includes("unable to rename") ||
+    lower.includes("cannot create directory") ||
+    lower.includes("could not create")
+  );
+}
+
 function isAuthRelatedStderr(stderr: string): boolean {
   const lower = stderr.toLowerCase();
+  if (isLocalFilesystemPermissionStderr(lower)) {
+    return false;
+  }
   return (
     lower.includes("authentication failed") ||
     lower.includes("permission denied") ||
@@ -67,25 +96,37 @@ export function formatGitErrorPrimaryMessage(error: unknown): string {
 
   if (isGitError(error) && error.kind === "command") {
     const stderr = commandErrorStderr(error).toLowerCase();
+    // Conflict details (`CONFLICT (...)`, "Automatic merge failed") go to stdout.
+    const combined = combinedGitOutput(error).toLowerCase();
+
+    // Lock and local-permission failures are checked before auth: their stderr
+    // also contains "permission denied" / "unable to create", which must not be
+    // reported as a credentials problem.
+    if (
+      stderr.includes("index.lock") ||
+      (stderr.includes("unable to create") && stderr.includes("lock"))
+    ) {
+      if (stderr.includes("permission denied")) {
+        return "Git could not write the repository lock file (permission denied). Check file and folder permissions for this repository.";
+      }
+      return "Another git operation may still be running. Wait a moment and try again, or remove .git/index.lock if no git process is active.";
+    }
+
+    if (isLocalFilesystemPermissionStderr(stderr)) {
+      return "Git could not write to the working tree or repository (permission denied). Check file and folder permissions.";
+    }
 
     if (isAuthRelatedStderr(stderr)) {
       return authFailureGuidance(stderr);
     }
 
     if (
-      stderr.includes("merge conflict") ||
-      stderr.includes("overwritten by merge") ||
-      stderr.includes("unmerged files") ||
-      stderr.includes("needs merge")
+      isGitConflictOutput(combined) ||
+      combined.includes("overwritten by merge") ||
+      combined.includes("unmerged files") ||
+      combined.includes("needs merge")
     ) {
       return "Merge conflict or local changes would be overwritten. Resolve conflicts and try again.";
-    }
-
-    if (
-      stderr.includes("index.lock") ||
-      (stderr.includes("unable to create") && stderr.includes("lock"))
-    ) {
-      return "Another git operation may still be running. Wait a moment and try again, or remove .git/index.lock if no git process is active.";
     }
 
     if (stderr.includes("not a git command") || stderr.includes("is not recognized as an internal or external command")) {

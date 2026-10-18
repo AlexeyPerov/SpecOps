@@ -47,3 +47,10 @@ it('probes the configured push endpoint and rereads local tracking/remote refs a
 it('shows partial results without offering an automatic retry',async()=>{
  const p=props();const v=mountComponent(GitPushDialog,{...p,result:{ok:false,cancelled:false,message:'rejected',refs:[{destination:'refs/heads/main',status:'rejected',summary:'non-fast-forward'}]}});await settle();expect(v.host.textContent).toContain('non-fast-forward');expect(v.host.textContent).toContain('did not fully complete');expect(button(v.host,'Push').disabled).toBe(true);
 });
+it('does not reload branches or re-probe the remote when a refresh lands while showing a push result',async()=>{
+ const p=props();const token=writable(0),tokenState=fromStore(token);const pushed=writable<null|{ok:boolean;cancelled:boolean;message:string;refs:[]}>(null),pushedState=fromStore(pushed);
+ const v=mountComponent(GitPushDialog,{...p,get refreshToken(){return tokenState.current;},get result(){return pushedState.current;}});await settle();
+ expect(queryPushSources).toHaveBeenCalledTimes(1);expect(queryRemoteHeads).toHaveBeenCalledTimes(1);
+ pushed.set({ok:true,cancelled:false,message:'done',refs:[]});await settle();token.set(1);await settle();
+ expect(queryPushSources).toHaveBeenCalledTimes(1);expect(queryRemoteHeads).toHaveBeenCalledTimes(1);expect(field(v.host,'Push main').checked).toBe(true);expect(v.host.textContent).toContain('Push completed.');
+});

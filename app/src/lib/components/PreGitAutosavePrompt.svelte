@@ -96,7 +96,8 @@
         Some editor changes were not saved before the git operation:
       </p>
       <ul class="pre-git-autosave-prompt-list">
-        {#each failureLabels as label (label)}
+        <!-- Labels can repeat (same file name in different folders), so key by position. -->
+        {#each failureLabels as label, index (index)}
           <li>{label}</li>
         {/each}
       </ul>

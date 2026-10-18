@@ -219,3 +219,73 @@ describeIfGitInstalled("parseUnifiedDiff integration (temp repo harness)", () =>
     });
   });
 });
+
+describe("parseUnifiedDiff header edge cases", () => {
+  it("keeps the old path of a same-file binary diff with spaces (no false rename)", () => {
+    const [diff] = parseUnifiedDiff([
+      "diff --git a/my img.png b/my img.png",
+      "index 1111111..2222222 100644",
+      "Binary files a/my img.png and b/my img.png differ",
+    ].join("\n"));
+    expect(diff).toMatchObject({ path: "my img.png", oldPath: undefined, isBinary: true });
+  });
+
+  it("splits a same-file header whose directory contains ` b/` symmetrically", () => {
+    const [diff] = parseUnifiedDiff([
+      "diff --git a/x b/y.bin b/x b/y.bin",
+      "index 1111111..2222222 100644",
+      "Binary files a/x b/y.bin and b/x b/y.bin differ",
+    ].join("\n"));
+    expect(diff).toMatchObject({ path: "x b/y.bin", oldPath: undefined });
+  });
+
+  it("takes pure-rename paths from `rename from/to`", () => {
+    const [diff] = parseUnifiedDiff([
+      "diff --git a/old name.txt b/new name.txt",
+      "similarity index 100%",
+      "rename from old name.txt",
+      "rename to new name.txt",
+    ].join("\n"));
+    expect(diff).toMatchObject({ path: "new name.txt", oldPath: "old name.txt", hunks: [] });
+  });
+
+  it("takes copy paths from quoted `copy from/to` lines", () => {
+    const [diff] = parseUnifiedDiff([
+      'diff --git "a/caf\\303\\251 1.txt" "b/caf\\303\\251 2.txt"',
+      "similarity index 100%",
+      'copy from "caf\\303\\251 1.txt"',
+      'copy to "caf\\303\\251 2.txt"',
+    ].join("\n"));
+    expect(diff).toMatchObject({ path: "café 2.txt", oldPath: "café 1.txt" });
+  });
+
+  it("splits a header with one quoted and one bare side", () => {
+    const [diff] = parseUnifiedDiff([
+      'diff --git "a/tab\\there.txt" b/plain name.txt',
+      "similarity index 100%",
+    ].join("\n"));
+    expect(diff).toMatchObject({ path: "plain name.txt", oldPath: "tab\there.txt" });
+  });
+
+  it("parses a two-line mode change", () => {
+    const [diff] = parseUnifiedDiff([
+      "diff --git a/run.sh b/run.sh",
+      "old mode 100644",
+      "new mode 100755",
+    ].join("\n"));
+    expect(diff).toMatchObject({ path: "run.sh", oldMode: "100644", newMode: "100755", hunks: [] });
+  });
+
+  it("treats `old mode`-looking body lines as content", () => {
+    const [diff] = parseUnifiedDiff([
+      "diff --git a/n.txt b/n.txt",
+      "index 1111111..2222222 100644",
+      "--- a/n.txt",
+      "+++ b/n.txt",
+      "@@ -1 +1 @@",
+      "-old mode 1",
+      "+new mode 2",
+    ].join("\n"));
+    expect(diff).toMatchObject({ oldMode: "100644", newMode: "100644", addedLines: 1, deletedLines: 1 });
+  });
+});

@@ -48,7 +48,10 @@
     return "Password";
   }
 
-  async function showPrompt(request: GitAskpassRequest): Promise<AskpassPromptResult> {
+  async function showPrompt(
+    request: GitAskpassRequest,
+    signal: AbortSignal,
+  ): Promise<AskpassPromptResult> {
     if (resolvePrompt) {
       resolvePrompt({ type: "cancel" });
     }
@@ -57,13 +60,27 @@
       hostHint = request.hostHint;
       inputKind = request.inputKind;
       operation = request.operation;
-      value = request.usernameHint ?? "";
+      // Only a username field is ever prefilled; secrets always start empty.
+      value = request.inputKind === "username" ? (request.usernameHint ?? "") : "";
       submitting = false;
-      resolvePrompt = resolve;
+      const settle = (result: AskpassPromptResult) => resolve(result);
+      resolvePrompt = settle;
       open = true;
+      // Timed out or answered in another window: close this dialog.
+      signal.addEventListener(
+        "abort",
+        () => {
+          if (resolvePrompt === settle) finish({ type: "cancel" });
+        },
+        { once: true },
+      );
+      if (signal.aborted && resolvePrompt === settle) {
+        finish({ type: "cancel" });
+        return;
+      }
       void tick().then(() => {
         inputEl?.focus();
-        if (inputKind !== "username") {
+        if (inputKind === "username") {
           inputEl?.select();
         }
       });
@@ -82,12 +99,13 @@
     if (submitting) {
       return;
     }
-    const trimmed = value.trim();
-    if (!trimmed) {
+    // Usernames are trimmed; passwords and passphrases are sent exactly as typed.
+    const submitted = inputKind === "username" ? value.trim() : value;
+    if (!submitted) {
       return;
     }
     submitting = true;
-    finish({ type: "submit", value: trimmed });
+    finish({ type: "submit", value: submitted });
   }
 
   function cancel(): void {

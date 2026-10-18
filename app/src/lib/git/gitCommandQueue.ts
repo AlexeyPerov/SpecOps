@@ -35,8 +35,11 @@ interface RepoLanes {
   mutationTail: Promise<unknown>;
   /** Number of read commands currently running for this repo. */
   activeReads: number;
-  /** Queue of read waiters when the read lane is saturated. */
-  readWaiters: Array<() => void>;
+  /**
+   * Queue of read waiters when the read lane is saturated. A waiter returns
+   * `true` when it took the freed slot.
+   */
+  readWaiters: Array<() => boolean>;
   /**
    * The mutation tail captured at the time the latest eviction callback was
    * scheduled. Eviction re-checks that this still equals {@link mutationTail}
@@ -71,34 +74,35 @@ function getOrCreateLanes(key: string): RepoLanes {
 
 /**
  * Acquire a read slot, waiting when the per-repo concurrency cap is reached.
- * Resolves once a slot is free (or immediately if the signal aborts first).
+ * Resolves `true` once a slot is held, or `false` when the signal aborts while
+ * waiting — in that case no slot was taken and the caller must not release one.
  */
-function acquireReadSlot(lanes: RepoLanes, signal?: AbortSignal): Promise<void> {
+function acquireReadSlot(lanes: RepoLanes, signal?: AbortSignal): Promise<boolean> {
   if (lanes.activeReads < MAX_CONCURRENT_READS_PER_REPO) {
     lanes.activeReads += 1;
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
-  return new Promise<void>((resolve) => {
-    const waiter = (): void => {
-      if (lanes.activeReads < MAX_CONCURRENT_READS_PER_REPO) {
-        lanes.activeReads += 1;
-        resolve();
+  return new Promise<boolean>((resolve) => {
+    const onAbort = (): void => {
+      const index = lanes.readWaiters.indexOf(waiter);
+      if (index >= 0) {
+        lanes.readWaiters.splice(index, 1);
       }
+      resolve(false);
+    };
+    const waiter = (): boolean => {
+      if (lanes.activeReads >= MAX_CONCURRENT_READS_PER_REPO) {
+        return false;
+      }
+      lanes.activeReads += 1;
+      signal?.removeEventListener("abort", onAbort);
+      resolve(true);
+      return true;
     };
     lanes.readWaiters.push(waiter);
-    // If the caller aborts while waiting, drop the waiter and resolve so the
-    // command function can observe the signal and bail.
-    signal?.addEventListener(
-      "abort",
-      () => {
-        const index = lanes.readWaiters.indexOf(waiter);
-        if (index >= 0) {
-          lanes.readWaiters.splice(index, 1);
-        }
-        resolve();
-      },
-      { once: true },
-    );
+    // If the caller aborts while waiting, drop the waiter and resolve without
+    // a slot so the command function can observe the signal and bail.
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -112,7 +116,9 @@ function releaseReadSlot(lanes: RepoLanes): void {
   lanes.activeReads -= 1;
   const next = lanes.readWaiters.shift();
   if (next) {
-    next();
+    if (!next()) {
+      lanes.readWaiters.unshift(next);
+    }
     return;
   }
   maybeEvictLanes(lanes);
@@ -207,7 +213,11 @@ export function enqueueGitCommandForRepo<T>(
 
   // Read lane: bounded-concurrent.
   const run = async (): Promise<T> => {
-    await acquireReadSlot(lanes, options?.signal);
+    const acquired = await acquireReadSlot(lanes, options?.signal);
+    if (!acquired) {
+      // Aborted while waiting: no slot was taken, so none is released.
+      throw new DOMException("Aborted", "AbortError");
+    }
     try {
       if (options?.signal?.aborted) {
         throw new DOMException("Aborted", "AbortError");
@@ -218,6 +228,11 @@ export function enqueueGitCommandForRepo<T>(
     }
   };
   return run();
+}
+
+/** Active read count for one repo, or 0 when it has no lane (tests only). */
+export function activeReadsForRepoForTests(repoRoot: string): number {
+  return lanesByRepoRoot.get(queueKeyForRepo(repoRoot))?.activeReads ?? 0;
 }
 
 /** Clear per-repo queue state (tests only). */

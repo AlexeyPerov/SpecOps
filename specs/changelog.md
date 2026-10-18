@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-18 16:37 MSK — Refine pending-file inspection and compact note windows
+
+- Show the uncommitted history row only when the working tree has staged, unstaged, or untracked files. Select it in place to inspect staged/unstaged lists and the live diff below history; retain the draft and diff selection, hide the commit form in this inspector, preserve pending selection on refresh, and return to commit inspection when clean. Rename workspace navigation to File Status and align related action/help copy.
+- Hide the entire Sessions panel, including its collapsed strip, until an active verified agent component has an authenticated account profile. Observe component/profile changes and window focus, reject stale results, and avoid starting the host on a fresh installation.
+- Open blank secondary windows as portrait notes occupying about 15% of the current monitor work area, independently of parent size/maximization. Retain explicit restored bounds and tab-transfer sizing. Remove empty tab headers, redundant note-window title chrome and editor borders, and the blank minimap column.
+- Validation: full frontend suite passes 307 files / 3124 tests; final focused regressions pass 43 tests, including an additional pending-selection refresh case. Svelte/type checks and production frontend/host/native app build pass. Native checks in an isolated profile confirm compact notes without empty chrome, no Sessions panel for an unconfigured workspace, inline pending-file lists/diff, and removal of the row after a real repository becomes clean.
+
 ## 2026-10-17 20:09 MSK — Accept Git workspace layout and remote dialogs
 
 - Complete native desktop acceptance at four CSS viewport sizes, light/dark palettes and increased interface size; record dated History, Changes, Pull, Push, empty/detached/bare/offline and secondary-window evidence with honest runner-only authentication coverage.

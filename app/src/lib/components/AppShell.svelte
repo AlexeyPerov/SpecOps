@@ -636,7 +636,7 @@
 </script>
 
 <main class="shell" class:shell-compact-notepad={compactNotepad}>
-  <TitleBar />
+  {#if !compactNotepad}<TitleBar />{/if}
   <div class="shell-main-row" bind:this={shellMainRowEl}>
     {#if activityRail.show && !compactNotepad}
       <ActivityRail

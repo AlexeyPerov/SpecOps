@@ -21,6 +21,7 @@
    * `editorPaneEl`, `workspaceContextMenuEl`) are `$bindable` so the page's
    * layout observers and effects can still see them.
    */
+  import { observeReadyAgents } from "../services/readyAgents";
   import AppShell from "./AppShell.svelte";
   import type { AppShellHostApi } from "./appShellHostTypes";
   import type { OverlayHostApi } from "./overlays/overlayHostTypes";
@@ -60,6 +61,12 @@
   import { markActiveFileTreeExpandApplied } from "../services/appShellEffects";
   import { createWorkspaceContextMenuActions } from "../services/workspaceContextMenuController";
   import { normalizeActivityRailWidthPx } from "../services/panelLayout";
+
+  let hasReadyAgents = $state(false);
+  $effect(() => {
+    if (!sessionsEnabled) { hasReadyAgents = false; return; }
+    return observeReadyAgents(ready => { hasReadyAgents = ready; });
+  });
 
   /** Closed / empty project-search state — used before OverlayHost mounts. */
   const IDLE_PROJECT_SEARCH: import("./overlays/overlayHostTypes").ProjectSearchPanelState = {
@@ -631,7 +638,7 @@
     onSelectNotepadTab: handleSelectNotepadTab,
   }}
   sessionsSidebar={{
-    show: Boolean(activeWorkspaceRoot) && sessionsEnabled,
+    show: Boolean(activeWorkspaceRoot) && sessionsEnabled && hasReadyAgents,
     sessions: workspaceSessions,
     activeSessionId: selectedSessionId,
     sidebarTitle: "Sessions",

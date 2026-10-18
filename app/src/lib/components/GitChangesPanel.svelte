@@ -29,6 +29,7 @@
 
   interface Props {
     stateKey?: string;
+    inspectOnly?: boolean;
     repoRoot: string;
     workspaceRootPath: string;
     preGitSaveDeps?: SaveDocumentDeps | null;
@@ -36,6 +37,7 @@
     refreshToken?: number;
     focusMessageToken?: number;
     operationBusy?: boolean;
+    onStatusChange?: (hasChanges: boolean) => void;
     onBusyChange?: (busy: boolean) => void;
     onMutation?: (scope?: VersionControlMutationScope) => void | Promise<void>;
     onRemoteCommandChange?: (command: { id: string; label: string } | null) => void;
@@ -45,12 +47,14 @@
   let {
     repoRoot,
     stateKey,
+    inspectOnly = false,
     workspaceRootPath,
     preGitSaveDeps = null,
     readOnly = false,
     refreshToken = 0,
     focusMessageToken = 0,
     operationBusy = false,
+    onStatusChange = () => {},
     onBusyChange = () => {},
     onMutation = () => {},
     onRemoteCommandChange = () => {},
@@ -153,6 +157,7 @@
       }
       staged = status.staged;
       unstaged = status.unstaged;
+      onStatusChange(staged.length > 0 || unstaged.length > 0);
 
       const resolved = resolveWorkingTreeDiffSelection({
         path: priorPath,
@@ -410,7 +415,7 @@
   }
 </script>
 
-<div class="git-changes-panel" aria-label="Working tree changes">
+<div class="git-changes-panel" class:git-changes-inspector={inspectOnly} aria-label="Working tree changes">
   {#if loadStatus === "loading"}
     <div class="git-changes-state" role="status" aria-live="polite">
       <p class="git-changes-state-title">Loading changes…</p>
@@ -561,7 +566,7 @@
             </ul>
           {/if}
         </section>
-    <section class="git-changes-commit" aria-labelledby="git-changes-commit-heading">
+    <section hidden={inspectOnly} class="git-changes-commit" aria-labelledby="git-changes-commit-heading">
       <h3 id="git-changes-commit-heading" class="git-changes-section-title">Commit</h3>
       {#if isClean}
         <p class="git-changes-clean-note" role="status">Working tree clean — nothing to commit.</p>
@@ -655,6 +660,13 @@
     font-size: 0.8125rem;
     color: var(--color-danger);
   }
+
+  .git-changes-commit[hidden] { display: none; }
+
+  .git-changes-inspector .git-changes-lists { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); overflow: hidden; }
+  .git-changes-inspector .git-changes-section { min-height: 0; overflow: auto; }
+  .git-changes-inspector [aria-labelledby="git-changes-staged-heading"] { grid-row: 1; }
+  .git-changes-inspector [aria-labelledby="git-changes-unstaged-heading"] { grid-row: 2; }
 
   .git-changes-main {
     flex: 1;

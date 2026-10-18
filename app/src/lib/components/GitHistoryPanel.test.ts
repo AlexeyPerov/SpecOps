@@ -16,7 +16,7 @@ describe('mounted history table', () => {
     vi.mocked(queryCommits).mockResolvedValue([first,commit(2)]);
     const onSelectCommit=vi.fn(), onOpenChanges=vi.fn();
     const selected=writable(first.sha), state=fromStore(selected);
-    const view=mountComponent(GitHistoryPanel,{ repoRoot:'/repo', get selectedSha(){return state.current;}, onSelectCommit,onOpenChanges }); await settle();
+    const view=mountComponent(GitHistoryPanel,{ repoRoot:'/repo', hasUncommittedChanges:true, get selectedSha(){return state.current;}, onSelectCommit,onOpenChanges }); await settle();
     expect(view.host.querySelector('.git-history-header')?.textContent).toMatch(/Graph.*Description.*Commit.*Author.*Date/);
     const row=view.host.querySelector<HTMLButtonElement>('[role=option]')!;
     expect(row.textContent?.indexOf('main')).toBeLessThan(row.textContent!.indexOf('Commit 1'));
@@ -26,6 +26,17 @@ describe('mounted history table', () => {
     resize.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true})); flushSync(); expect(view.host.querySelector('.git-history-table')?.getAttribute('style')).toContain('166px');
     view.host.querySelector<HTMLButtonElement>('.git-history-uncommitted')!.click(); expect(onOpenChanges).toHaveBeenCalled();
     expect(view.host.querySelector('.git-history-uncommitted')?.textContent).not.toContain(first.sha);
+  });
+  it('omits the uncommitted row for a clean working tree', async () => {
+    const view = mountComponent(GitHistoryPanel, { repoRoot: '/repo' }); await settle();
+    expect(view.host.querySelector('.git-history-uncommitted')).toBeNull();
+  });
+  it('keeps pending files selected when commit history refreshes', async () => {
+    const token = writable(0), state = fromStore(token), onSelectCommit = vi.fn();
+    const view = mountComponent(GitHistoryPanel, { repoRoot: '/repo', hasUncommittedChanges: true, uncommittedSelected: true, get refreshToken() { return state.current; }, onSelectCommit });
+    await settle(); token.set(1); await settle();
+    expect(onSelectCommit).not.toHaveBeenCalled();
+    expect(view.host.querySelector('.git-history-uncommitted')?.getAttribute('aria-pressed')).toBe('true');
   });
   it('resolves Jump in the repo and opens ancestry outside the loaded page', async () => {
     const old=commit(9000); vi.mocked(resolveHistoryCommit).mockResolvedValue(old.sha);

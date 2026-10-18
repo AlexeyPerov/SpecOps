@@ -115,6 +115,7 @@
   data-pane-id={`${contextId}:${paneId}`}
   onpointerdown={() => onFocus(paneId)}
 >
+  {#if visibleTabCount > 0 || canClose}
   <header class="pane-header" data-pane-strip={`${contextId}:${paneId}`}>
     <div class="pane-tab-bar" class:pane-tab-bar-empty={visibleTabCount === 0} bind:this={tabStripEl}>
       <TabBar
@@ -147,6 +148,7 @@
       </button>
     {/if}
   </header>
+  {/if}
 
   <div class="pane-body" data-pane-body={`${contextId}:${paneId}`} bind:this={paneBodyEl}>
     {#if selectedTabId}

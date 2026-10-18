@@ -59,7 +59,7 @@ export function isMinimapAffordable(doc: Text): boolean {
  */
 const MINIMAP_DISABLED: Extension = showMinimap.compute([], () => null);
 const MINIMAP_ENABLED: Extension = showMinimap.compute(["doc"], (state) =>
-  isMinimapAffordable(state.doc) ? MINIMAP_CONFIG : null,
+  state.doc.length > 0 && isMinimapAffordable(state.doc) ? MINIMAP_CONFIG : null,
 );
 
 /**

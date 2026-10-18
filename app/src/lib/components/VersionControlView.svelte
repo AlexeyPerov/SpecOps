@@ -159,7 +159,7 @@
     { id: "branches", label: "Branches" },
     { id: "tags", label: "Tags" },
     { id: "stashes", label: "Stashes" },
-    { id: "changes", label: "Changes" },
+    { id: "changes", label: "File Status" },
   ];
 
   const REFRESH_DEBOUNCE_MS = 500;
@@ -217,6 +217,8 @@
   let selectedCommit = $state<CommitSummary | null>(null);
   let selectedCommitSha = $state<string | null>(null);
   let changesBusy = $state(false);
+  let hasUncommittedChanges = $state(false);
+  let uncommittedSelected = $state(false);
   let refreshBusy = $state(false);
   let fetchBusy = $state(false);
   let pullBusy = $state(false);
@@ -641,6 +643,8 @@
         saveOwnedView();
         viewStateReadyScope = null;
         changesBusy = false;
+        hasUncommittedChanges = false;
+        uncommittedSelected = false;
         panelRemoteCommand = null;
       }
       ownedViewScope = nextScope;
@@ -656,6 +660,7 @@
   });
 
   function handleSelectCommit(commit: CommitSummary): void {
+    uncommittedSelected = false;
     selectedCommit = commit;
     selectedCommitSha = commit.sha;
   }
@@ -887,6 +892,7 @@
   }
 
   function selectNavigation(node: NavigationNode | null): void {
+    uncommittedSelected = false;
     if (!node) { historyRevision = null; selectedCommitSha = null; return; }
     const sameHistorySelection = activeSection === "history" && navigationSelection === node.id && historyRevision === (node.revision ?? null);
     const returningToHistory = node.id === "history" && (activeSection === "changes" || (activeSection === "history" && historyRevision === null));
@@ -1125,7 +1131,7 @@
         }
         if (choice.type === "block") {
           await message(
-            "Pull is blocked while the working tree has uncommitted changes. Commit or stash your changes in the Changes panel, then try again.",
+            "Pull is blocked while the working tree has uncommitted changes. Commit or stash your changes in File Status, then try again.",
             {
               title: "Working tree not clean",
               kind: "warning",
@@ -1475,7 +1481,7 @@
         {/if}
       </div>
       <div class="version-control-header-actions">
-        <button type="button" class="btn btn-sm" disabled={toolbarBusy || isReadOnlyRepository} title={isReadOnlyRepository ? "Commit is unavailable for bare repositories" : "Open Changes and write a commit message"} onclick={openCommit}>Commit</button>
+        <button type="button" class="btn btn-sm" disabled={toolbarBusy || isReadOnlyRepository} title={isReadOnlyRepository ? "Commit is unavailable for bare repositories" : "Open File Status and write a commit message"} onclick={openCommit}>Commit</button>
         <button type="button" class="btn btn-sm" aria-expanded={!sidebarCollapsed} onclick={() => sidebarCollapsed = !sidebarCollapsed}>Navigation</button>
         <span class="version-control-remote-indicator" title={remotePickerTitle}>
           {#if showRemotePicker}
@@ -1658,25 +1664,34 @@
         {#if operationState && operationState.kind !== "none"}
           <div class="git-operation-banner" role="status">
             <strong>{operationState.kind === "unsupported" ? "Git operation requires external recovery" : `${operationState.kind} in progress`}</strong>
-            <p>{operationState.conflicts.length ? "Resolve and stage conflicts in Changes before continuing." : "Continue to finish the operation, or abort to restore its starting point."} Git state is recovered when this view reopens.</p>
-            <button type="button" disabled={toolbarBusy} onclick={() => { activeSection = "changes"; navigationSelection = "changes"; }}>Open Changes</button>
+            <p>{operationState.conflicts.length ? "Resolve and stage conflicts in File Status before continuing." : "Continue to finish the operation, or abort to restore its starting point."} Git state is recovered when this view reopens.</p>
+            <button type="button" disabled={toolbarBusy} onclick={() => { activeSection = "changes"; navigationSelection = "changes"; }}>Open File Status</button>
             <button type="button" disabled={toolbarBusy || operationState.kind === "unsupported" || operationState.conflicts.length > 0} onclick={() => { void handleRecovery("continue"); }}>Continue operation</button>
             <button type="button" disabled={toolbarBusy || operationState.kind === "unsupported"} onclick={() => { void handleRecovery("abort"); }}>Abort operation</button>
           </div>
         {:else if operationError}<p role="alert">Unable to read Git operation state: {operationError}</p>{/if}
         <div class="git-workspace-content">
         {#if isBareRepository && activeSection === "changes"}<p class="version-control-note">Working tree changes are unavailable in a bare repository.</p>{/if}
-        {#if repoRoot && workspaceRootPath && !isBareRepository}
+        {#if repoRoot}
           {#key `${layoutScope}:${repoRoot}`}
           {@const changesRoot = repoRoot}
           {@const changesScope = layoutScope}
-          <div class="version-control-changes" hidden={activeSection !== "changes"}>
+          <div class="version-control-history-workspace" hidden={activeSection !== "history" && activeSection !== "changes"}>
+          <GitWorkspaceSplit storageKey={`${layoutScope}:history`} label="Resize history and inspector" vertical initial={0.35} minFirst={140} minSecond={180} collapsed={activeSection === "changes"}>
+            {#snippet first()}
+              <GitHistoryPanel stateKey={layoutScope} bind:this={historyPanel} revision={historyRevision} repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={uncommittedSelected ? null : selectedCommitSha} {hasUncommittedChanges} {uncommittedSelected} onSelectCommit={handleSelectCommit} onRefreshSelection={(commit) => { selectedCommit = commit; selectedCommitSha = commit.sha; }} onClearSelection={() => selectedCommitSha = null} onOpenChanges={() => { uncommittedSelected = true; }} />
+            {/snippet}
+            {#snippet second()}
+              {#if workspaceRootPath && !isBareRepository}
+                <div class="version-control-changes" hidden={activeSection !== "changes" && !uncommittedSelected}>
           <GitChangesPanel
+            inspectOnly={activeSection === "history"}
             stateKey={layoutScope}
+            onStatusChange={(dirty) => { if (changesRoot === repoRoot && changesScope === layoutScope) { hasUncommittedChanges = dirty; if (!dirty) uncommittedSelected = false; } }}
             onBusyChange={(busy) => { if (changesRoot === repoRoot && changesScope === layoutScope) changesBusy = busy; }}
             {focusMessageToken}
             operationBusy={toolbarBusy && !changesBusy}
-            repoRoot={repoRoot}
+            repoRoot={changesRoot}
             workspaceRootPath={workspaceRootPath}
             preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository}
@@ -1685,22 +1700,20 @@
             onRemoteCommandChange={(command) => { if (changesRoot === repoRoot && changesScope === layoutScope) registerPanelRemoteCommand(command); }}
             {notify}
           />
+                </div>
+              {/if}
+              {#if activeSection === "history" && !uncommittedSelected}
+                <GitCommitDetailPanel repoRoot={repoRoot!} sha={selectedCommitSha} refs={selectedCommit?.sha === selectedCommitSha ? selectedCommit.refs : []} onNavigate={sha => { void historyPanel?.jumpTo(sha); }} refreshToken={panelRefreshToken} {notify} layoutScope={layoutScope} />
+              {/if}
+            {/snippet}
+          </GitWorkspaceSplit>
           </div>
           {/key}
         {/if}
         {#key `${layoutScope}:${repoRoot}:${actionSelection}`}
         {@const actionRoot = repoRoot}
         {@const actionScope = layoutScope}
-        {#if activeSection === "history" && repoRoot}
-          <GitWorkspaceSplit storageKey={`${layoutScope}:history`} label="Resize history and inspector" vertical initial={0.35} minFirst={140} minSecond={180}>
-            {#snippet first()}
-              <GitHistoryPanel stateKey={layoutScope} bind:this={historyPanel} revision={historyRevision} repoRoot={repoRoot!} refreshToken={panelRefreshToken} selectedSha={selectedCommitSha} onSelectCommit={handleSelectCommit} onRefreshSelection={handleSelectCommit} onClearSelection={() => selectedCommitSha = null} onOpenChanges={() => { activeSection = "changes"; navigationSelection = "changes"; }} />
-            {/snippet}
-            {#snippet second()}
-              <GitCommitDetailPanel repoRoot={repoRoot!} sha={selectedCommitSha} refs={selectedCommit?.sha === selectedCommitSha ? selectedCommit.refs : []} onNavigate={sha => { void historyPanel?.jumpTo(sha); }} refreshToken={panelRefreshToken} {notify} layoutScope={layoutScope} />
-            {/snippet}
-          </GitWorkspaceSplit>
-        {:else if activeSection === "branches" && repoRoot && workspaceRootPath}
+        {#if activeSection === "branches" && repoRoot && workspaceRootPath}
           <GitBranchesPanel
             compact initialSelection={actionSelection}
             repoRoot={repoRoot}
@@ -1733,7 +1746,7 @@
             onMutation={(scope) => actionRoot === repoRoot && actionScope === layoutScope ? refreshAfterMutation(scope) : undefined}
             {notify}
           />
-        {:else if activeSection !== "changes"}
+        {:else if activeSection !== "changes" && activeSection !== "history"}
           <p class="version-control-placeholder">{placeholderCopy}</p>
         {/if}
         {/key}
@@ -1761,6 +1774,7 @@
 <style>
   .git-workspace-content { flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
   .git-operation-banner { max-height: 35%; overflow-y: auto; padding: var(--space-6); border-bottom: 1px solid var(--color-border-subtle); overflow-wrap: anywhere; flex-shrink: 0; }
+  .version-control-history-workspace { height:100%; min-height:0; }
   .version-control-changes { height: 100%; min-height: 0; }
   .version-control-changes[hidden] { display: none; }
   .version-control-compact-actions, .version-control-compact-fetch { display: none; }

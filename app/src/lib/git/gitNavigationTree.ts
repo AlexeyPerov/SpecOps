@@ -30,7 +30,7 @@ function insert(root: NavigationNode, path: string, node: NavigationNode): void 
 }
 export function buildNavigationTree(branches: BranchSummary[], tags: string[], remotes: GitRemote[], refs: NavigationRef[], stashes: GitStashSummary[]): NavigationNode[] {
   const workspace = group('workspace', 'Workspace');
-  workspace.children = ['changes', 'history', 'search'].map(id => ({ id, label: id[0].toUpperCase() + id.slice(1), kind: 'workspace', detail: id === 'search' ? 'Commit search is not available yet' : undefined }));
+  workspace.children = ['changes', 'history', 'search'].map(id => ({ id, label: id === 'changes' ? 'File Status' : id[0].toUpperCase() + id.slice(1), kind: 'workspace', detail: id === 'search' ? 'Commit search is not available yet' : undefined }));
   const local = group('branches', 'Branches');
   for (const branch of branches) insert(local, branch.name, { id: `refs/heads/${branch.name}`, label: branch.name, kind: 'branch', revision: `refs/heads/${branch.name}`, branch, detail: branch.upstreamTrack ?? undefined });
   const tagRoot = group('tags', 'Tags');

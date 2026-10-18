@@ -10,12 +10,20 @@ import {
 
 describe("minimapExtension", () => {
   it("provides a minimap config when enabled", () => {
-    const state = EditorState.create({ extensions: [minimapExtension(true)] });
+    const state = EditorState.create({ doc: "note", extensions: [minimapExtension(true)] });
     const config = state.facet(showMinimap);
     expect(config).not.toBeNull();
     expect((config as MinimapConfig).displayText).toBe("characters");
     expect((config as MinimapConfig).showOverlay).toBe("always");
     expect(typeof (config as MinimapConfig).create).toBe("function");
+  });
+
+  it("removes the empty minimap and restores it when text is entered", () => {
+    const empty = EditorState.create({ extensions: [minimapExtension(true)] });
+    expect(empty.facet(showMinimap)).toBeNull();
+    const typed = empty.update({ changes: { from: 0, insert: "note" } }).state;
+    expect(typed.facet(showMinimap)).not.toBeNull();
+    expect(typed.update({ changes: { from: 0, to: 4 } }).state.facet(showMinimap)).toBeNull();
   });
 
   it("provides null when disabled so the package renders no minimap", () => {

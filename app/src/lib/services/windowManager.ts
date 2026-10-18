@@ -4,6 +4,7 @@ import {
   WebviewWindow,
 } from "@tauri-apps/api/webviewWindow";
 import type { AppDomainState, WindowBounds } from "../domain/contracts";
+import { currentMonitor } from "@tauri-apps/api/window";
 import { getActiveSession } from "../state/appState/contextHelpers";
 import { applyWindowBounds, readWindowBounds } from "./windowBounds";
 import { getLastActiveWindowId, updateLastActiveWindow } from "./sessionManager";
@@ -130,13 +131,32 @@ export async function resolveNewWindowBounds(snapshot: AppDomainState): Promise<
   }
 }
 
+export async function resolveNewNotepadWindowBounds(): Promise<WindowBounds> {
+  try {
+    const monitor = await currentMonitor();
+    if (monitor) {
+      const scale = monitor.scaleFactor;
+      const area = monitor.workArea;
+      const screenWidth = area.size.width / scale;
+      const screenHeight = area.size.height / scale;
+      // A narrow portrait note occupies about fifteen percent of the work area.
+      const height = Math.min(screenHeight, Math.max(400, screenHeight * 0.62));
+      const width = Math.min(screenWidth, Math.max(320, screenWidth * screenHeight * 0.15 / height));
+      return { width: Math.round(width), height: Math.round(height),
+        x: Math.round(area.position.x / scale + (screenWidth - width) / 2),
+        y: Math.round(area.position.y / scale + (screenHeight - height) / 2), maximized: false };
+    }
+  } catch { /* Use a compact note size when monitor information is unavailable. */ }
+  return { width: 520, height: 640, x: 100, y: 100, maximized: false };
+}
+
 export async function createNewWindowWithTransfer(
   snapshot: AppDomainState,
   transferPayload?: TabTransferPayload | null,
   options?: { label?: string; waitForReady?: boolean; bounds?: WindowBounds | null; activate?: boolean },
 ): Promise<string | null> {
   const label = options?.label ?? generateWindowLabel();
-  const bounds = options?.bounds ?? await resolveNewWindowBounds(snapshot);
+  const bounds = options?.bounds ?? await (transferPayload ? resolveNewWindowBounds(snapshot) : resolveNewNotepadWindowBounds());
 
   return new Promise((resolve) => {
     let settled = false;
@@ -159,6 +179,10 @@ export async function createNewWindowWithTransfer(
     const windowRef = new WebviewWindow(label, {
       title: "SpecOps",
       url: "/",
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
     });
 
     windowRef.once("tauri://error", () => {

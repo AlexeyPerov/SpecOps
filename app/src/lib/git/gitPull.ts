@@ -45,7 +45,7 @@ export async function queryGitOperationState(root: string): Promise<GitOperation
 export async function recoverGitOperation(root: string, expected: GitOperationKind, action: 'continue' | 'abort', options?: CancellableGitOptions): Promise<void> {
   const state = await queryGitOperationState(root);
   if (state.kind !== expected || (expected !== 'merge' && expected !== 'rebase')) throw new Error('Git operation changed. Refresh repository state before continuing.');
-  if (action === 'continue' && state.conflicts.length) throw new Error('Resolve and stage all conflicts in Changes before continuing.');
+  if (action === 'continue' && state.conflicts.length) throw new Error('Resolve and stage all conflicts in File Status before continuing.');
   const args = [expected, `--${action}`];
   const response = await runGit(root, args, 'versionControl', undefined, options);
   assertGitCommandCompleted(response);

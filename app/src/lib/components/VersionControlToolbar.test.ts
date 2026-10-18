@@ -21,6 +21,21 @@ async function settle(){for(let i=0;i<35;i++){await Promise.resolve();flushSync(
 function button(host:HTMLElement,label:string){return Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(b=>b.textContent?.trim()===label)!;}
 beforeEach(()=>{vi.mocked(pushState.executePushPlan).mockResolvedValue({ok:true,refs:[{destination:'refs/heads/main',status:'success',summary:'new branch'}],message:'',cancelled:false});clearVersionControlProbeCache();vi.clearAllMocks();vi.mocked(pullState.queryGitOperationState).mockResolvedValue({kind:"none",conflicts:[]});vi.mocked(pullState.assertPullSnapshot).mockResolvedValue(undefined);vi.mocked(git.isWorkingTreeDirty).mockResolvedValue(false);vi.mocked(git.pullRemote).mockResolvedValue(undefined);vi.stubGlobal('ResizeObserver',class{observe(){} disconnect(){}});vi.mocked(git.queryWorkingTreeStatus).mockResolvedValue({staged:[],unstaged:[{path:'file.ts',statusCode:' M'}]} as never);vi.mocked(prepareWorkspaceForGitOperation).mockResolvedValue(true);});
 describe('mounted version control toolbar',()=>{
+ it('inspects uncommitted files below history and removes the row when clean', async () => {
+ const view=mountComponent(VersionControlView,{workspaceRootPath:'/repo'});await settle();
+ expect(view.host.textContent).toContain('File Status');
+ const row=view.host.querySelector<HTMLButtonElement>('.git-history-uncommitted')!;
+ row.click();await settle();
+ expect(row.getAttribute('aria-pressed')).toBe('true');
+ expect(view.host.querySelector('.git-history-panel')).not.toBeNull();
+ expect(view.host.querySelector<HTMLElement>('.version-control-changes')!.hidden).toBe(false);
+ expect(view.host.querySelector('.git-commit-detail-panel')).toBeNull();
+ vi.mocked(git.queryWorkingTreeStatus).mockResolvedValue({staged:[],unstaged:[]} as never);
+ view.host.querySelector<HTMLButtonElement>('[aria-label="More version control actions"]')!.click();await settle();
+ view.host.querySelector<HTMLButtonElement>('[title="Refresh repository state"]')!.click();await settle();
+ expect(view.host.querySelector('.git-history-uncommitted')).toBeNull();
+ expect(view.host.querySelector<HTMLElement>('.version-control-changes')!.hidden).toBe(true);
+ });
  it('opens Changes with focus and preserves draft and diff selection across History navigation',async()=>{
  const view=mountComponent(VersionControlView,{workspaceRootPath:'/repo'});await settle();button(view.host,'Commit').click();await settle();
  const input=view.host.querySelector<HTMLTextAreaElement>('textarea')!;expect(document.activeElement).toBe(input);input.value='Draft message';input.dispatchEvent(new Event('input',{bubbles:true}));flushSync();

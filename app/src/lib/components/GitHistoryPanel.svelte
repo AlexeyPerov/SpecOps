@@ -40,6 +40,8 @@
     selectedSha?: string | null;
     onClearSelection?: () => void;
     onOpenChanges?: () => void;
+    hasUncommittedChanges?: boolean;
+    uncommittedSelected?: boolean;
     onSelectCommit?: (commit: CommitSummary) => void;
     onRefreshSelection?: (commit: CommitSummary) => void;
   }
@@ -52,6 +54,8 @@
     selectedSha = null,
     onClearSelection = () => {},
     onOpenChanges = () => {},
+    hasUncommittedChanges = false,
+    uncommittedSelected = false,
     onSelectCommit = () => {},
     onRefreshSelection = () => {},
   }: Props = $props();
@@ -90,7 +94,7 @@
   }
   async function focusRow(index: number) {
     if (scrollContainer) {
-      const top = (index + 1) * rowHeight;
+      const top = (index + (hasUncommittedChanges ? 1 : 0)) * rowHeight;
       if (top < scrollContainer.scrollTop || top + rowHeight > scrollContainer.scrollTop + scrollContainer.clientHeight - 28) scrollContainer.scrollTop = top;
       historyScrollTop = scrollContainer.scrollTop;
     }
@@ -223,7 +227,7 @@
     if (viewport <= 0) {
       return { start: 0, end: Math.min(total, HISTORY_VIRTUALIZE_THRESHOLD) };
     }
-    const start = Math.max(0, Math.floor(Math.max(0, historyScrollTop - rowHeight - 28) / rowHeight) - HISTORY_OVERSCAN_ROWS);
+    const start = Math.max(0, Math.floor(Math.max(0, historyScrollTop - (hasUncommittedChanges ? rowHeight : 0) - 28) / rowHeight) - HISTORY_OVERSCAN_ROWS);
     const end = Math.min(
       total,
       Math.ceil((historyScrollTop + viewport) / rowHeight) + HISTORY_OVERSCAN_ROWS,
@@ -269,6 +273,7 @@
       onClearSelection();
       return;
     }
+    if (uncommittedSelected) return;
     const selected = rows.find(commit => commit.sha === previousSha);
     if (selected) {
       onRefreshSelection(selected);
@@ -560,7 +565,9 @@
           <div>{column}<button class="column-resize" aria-label="Resize {column} column" onpointerdown={event => { event.preventDefault(); resize = { index, x: event.clientX, width: widths[index] }; }} onkeydown={event => { if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); widths[index] = Math.max(65, widths[index] + (event.key === "ArrowRight" ? 16 : -16)); } }}>↔</button></div>
         {/each}
       </div>
-      <button class="git-history-uncommitted" onclick={onOpenChanges}><span></span><span>Uncommitted changes</span><span>—</span><span></span><span></span></button>
+      {#if hasUncommittedChanges}
+        <button class="git-history-uncommitted" class:git-history-row-selected={uncommittedSelected} aria-pressed={uncommittedSelected} onclick={onOpenChanges}><span>◉</span><span>Uncommitted changes</span><span>—</span><span></span><span></span></button>
+      {/if}
       <div class="git-history-body" style="height: {graphHeight}px">
         <div class="git-history-graph" style="width: {Math.max(widths[0], graphWidth)}px"><GitCommitGraphColumn layout={graphLayout} rowCount={commits.length} {rowHeight} {selectedSha} /></div>
         <div role="listbox" aria-label="Commits in history scope">

@@ -9,11 +9,14 @@ vi.mock("../../services/workspaceCatalog", () => ({
   subscribeProjectCatalog: vi.fn(() => () => {}),
   _resetProjectCatalogForTests: vi.fn(),
   updateCatalogProject: vi.fn().mockResolvedValue(undefined),
-  getProjectCatalog: () => ({ projects: {} }),
+  getProjectCatalog: () => ({ projects: {}, savedContexts: {} }),
+  saveCatalogProjectContext: vi.fn().mockResolvedValue(undefined),
   loadProjectCatalog: vi.fn().mockResolvedValue(undefined),
   projectIdentity: (root: string) => root,
 }));
 
+vi.mock('../../services/sessionManager', () => ({ flushSessionPersistence: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../../services/chatPersistence', () => ({ flushWorkspaceChatPersistence: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@tauri-apps/api/menu", () => ({
   Menu: { new: vi.fn() },
   MenuItem: { new: vi.fn() },
@@ -38,6 +41,8 @@ vi.mock("../../services/openFileGate", () => ({
 
 vi.mock("../../services/openFileRegistry", () => ({
   renameOpenFileRegistry: vi.fn(),
+  syncOpenFileRegistryForWindow: vi.fn().mockResolvedValue(undefined),
+  claimOpenFile: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../../services/externalFileChanges", () => ({

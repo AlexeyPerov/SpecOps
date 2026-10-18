@@ -158,6 +158,10 @@ pub fn run() {
             session_fs::session_fs_read_text,
             session_fs::session_fs_atomic_write_text,
             project_catalog::project_catalog_transaction,
+            project_catalog::project_catalog_read_recovery,
+            project_catalog::project_catalog_set_owner,
+            file_watcher::get_file_watcher_diagnostics,
+            git::workspace_has_active_git_mutation,
             agent_host::agent_host_start,
             agent_host::agent_host_stop,
             agent_host::agent_host_restart,
@@ -188,6 +192,8 @@ pub fn run() {
     app.run(|app_handle, event| {
         if let RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &event {
             workspace_git_summary::window_destroyed(app_handle, label);
+            file_watcher::window_destroyed(app_handle, label);
+            let _ = app_handle.emit("spec-ops/workspace-placement-changed", ());
         }
         // Both arms: `ExitRequested` covers the normal path (last window closed,
         // `AppHandle::exit`), while `Exit` is the last chance on shutdown paths that

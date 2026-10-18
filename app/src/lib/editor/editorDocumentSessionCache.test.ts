@@ -187,4 +187,13 @@ describe("editorDocumentSessionCache", () => {
       sessionKeyId(key("p", "d", "ws-2")),
     );
   });
+  it('drops closed contexts despite shared document ids and ignores late teardown saves', () => {
+    const cache = createEditorDocumentSessionCache();
+    const closed = key('pane-1','doc-1','ws-1'); const open = key('pane-1','doc-1','ws-2');
+    cache.save(closed,makeState('closed')); cache.save(open,makeState('open'));
+    cache.retainContexts(new Set(['ws-2']));
+    cache.savePortable(closed,{state:{doc:'late closed'},scrollTop:0});
+    expect(cache.size()).toBe(1); expect(cache.has(closed)).toBe(false); expect(cache.peek(open)?.doc.toString()).toBe('open');
+  });
+
 });

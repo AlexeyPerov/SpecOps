@@ -764,3 +764,13 @@ it("collapses every level, preserves listings and reports the empty persisted ex
   expect(controller.getState().childrenByPath.has("/repo/docs")).toBe(true);
   expect(reported).toHaveBeenLastCalledWith("/repo", []);
 });
+
+it('releases closed project trees and blocks late root-load cache restoration', async () => {
+  let finish!: (nodes: ProjectTreeNode[])=>void;
+  const controller=createProjectTreeController(()=>{}, {loadDirectoryChildrenFn:vi.fn(()=>new Promise<ProjectTreeNode[]>(done=>{finish=done;}))});
+  controller.retainRoots(['/closed']);
+  const pending=controller.loadProjectTreeRoot({workspaceRoot:'/closed',isSessionTabActive:false});
+  controller.retainRoots([]);finish([makeNode('a.txt','/closed/a.txt','file')]);await pending;
+  expect(controller.getCachedRootCount()).toBe(0);
+  expect(controller.getState().rootNodes).toEqual([]);
+});

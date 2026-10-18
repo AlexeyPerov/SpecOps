@@ -1,4 +1,8 @@
 <script lang="ts">
+  import { listen } from "@tauri-apps/api/event";
+  import { closeWorkspaceWithConfirm } from "../services/workspaceCloseFlow";
+  import { readLiveWorkspaceWindowOwners, WORKSPACE_PLACEMENT_CHANGED, type WorkspaceWindowOwners } from "../services/workspaceWindowPlacement";
+  import { managerProjects, sortManagerProjects, applyCatalogBatch, removeClosedCatalogProject, type ManagerProject, type ManagerScope, type ManagerSort, type CatalogBatchAction } from "../services/workspaceCatalogManagement";
   import { onMount } from "svelte";
   import type { ContextId, WorkspaceEntry } from "../domain/contracts";
   import { workspaceGitSummaryPresentation } from "../git/workspaceGitSummaryPresentation";
@@ -11,7 +15,7 @@
   import EmptyState from "./EmptyState.svelte";
 
   /** The catalog owns membership; open entries retain their window context actions. */
-  type ManagerRow = { id: string; rootPath: string; name: string; contextId?: ContextId; openError?: string };
+  type ManagerRow = ManagerProject;
   let {
     workspaces = [],
     activeContextId = "notepad",
@@ -36,24 +40,64 @@
   let catalog = $state(getProjectCatalog());
   let catalogError = $state('');
   let searchQuery = $state('');
-  const allRows: ManagerRow[] = $derived.by(() => {
-    const projects = new Map<string, ManagerRow>(Object.values(catalog.projects)
-      .sort((a, b) => a.order - b.order)
-      .map(project => [project.id, { ...project }]));
-    for (const workspace of workspaces) {
-      const id = projectIdentity(workspace.rootPath);
-      projects.set(id, { ...projects.get(id), id, rootPath: workspace.rootPath,
-        name: projects.get(id)?.name ?? workspace.rootPath.replaceAll('\\', '/').split('/').filter(Boolean).at(-1) ?? workspace.rootPath,
-        contextId: workspace.id });
-    }
-    return [...projects.values()];
-  });
-  const rows = $derived(allRows.filter(project => workspaceMatchesQuery(project, searchQuery)));
+  let owners = $state<WorkspaceWindowOwners>({});
+  let scope = $state<ManagerScope>('all');
+  let sort = $state<ManagerSort>('manual');
+  let selected = $state<Set<string>>(new Set());
+  let batchFolder = $state('');
+  let batchBusy = $state(false);
+  let actionStatus = $state('');
+  let actionErrors = $state<string[]>([]);
+  let selectionAnchor: string | null = null;
+  const allRows = $derived(managerProjects(catalog, workspaces, owners));
+  const rows = $derived(sortManagerProjects(allRows.filter(project => workspaceMatchesQuery(project, searchQuery) &&
+    (scope === 'all' || (scope === 'hidden' ? isHidden(project) : project.openState === scope))), sort, catalog.folders));
+  const selectedIds = $derived([...selected].filter(id => allRows.some(row => row.id === id)));
+  async function refreshOwners(): Promise<void> { owners = await readLiveWorkspaceWindowOwners(); }
   onMount(() => {
-    const unsubscribe = subscribeProjectCatalog(next => { catalog = next; });
+    let stopped = false;
+    let release: (() => void) | undefined;
+    const refresh = () => void refreshOwners().catch(error => { catalogError = String(error); });
+    const unsubscribe = subscribeProjectCatalog(next => { catalog = next; refresh(); });
     void loadProjectCatalog().catch(error => { catalogError = String(error); });
-    return unsubscribe;
+    refresh();
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      void listen(WORKSPACE_PLACEMENT_CHANGED, refresh).then(unlisten => { if (stopped) unlisten(); else release = unlisten; });
+      window.addEventListener('focus', refresh);
+    }
+    return () => { stopped = true; unsubscribe(); release?.(); window.removeEventListener('focus', refresh); };
   });
+  function toggleSelection(id: string): void {
+    const next = new Set(selected); if (next.has(id)) next.delete(id); else next.add(id); selected = next; selectionAnchor = id;
+  }
+  function selectRange(id: string): void {
+    const start = rows.findIndex(row => row.id === selectionAnchor); const end = rows.findIndex(row => row.id === id);
+    if (start < 0) { toggleSelection(id); return; }
+    selected = new Set([...selected, ...rows.slice(Math.min(start, end), Math.max(start, end) + 1).map(row => row.id)]);
+  }
+  async function batch(action: CatalogBatchAction): Promise<void> {
+    if (batchBusy) return;
+    batchBusy = true; actionStatus = ''; actionErrors = [];
+    try {
+      const result = await applyCatalogBatch(selectedIds, action);
+      actionStatus = `${result.succeeded.length} project(s) updated; ${result.errors.length} failed.`;
+      actionErrors = result.errors.map(error => `${catalog.projects[error.id]?.name ?? error.id}: ${error.message}`);
+    } finally { batchBusy = false; }
+  }
+  async function closeProject(row: ManagerRow): Promise<void> {
+    if (!row.contextId || batchBusy) return;
+    batchBusy = true; actionErrors = []; actionStatus = '';
+    try { await closeWorkspaceWithConfirm(row.contextId, message => { actionStatus = message; }); await refreshOwners(); }
+    catch (error) { actionErrors = [String(error)]; }
+    finally { batchBusy = false; }
+  }
+  async function removeProject(row: ManagerRow): Promise<void> {
+    if (batchBusy) return;
+    batchBusy = true; actionErrors = []; actionStatus = '';
+    try { await removeClosedCatalogProject(row.id); selected = new Set([...selected].filter(id => id !== row.id)); actionStatus = 'Project removed from catalog. Files and session history are kept.'; }
+    catch (error) { actionErrors = [String(error)]; }
+    finally { batchBusy = false; }
+  }
   async function selectProject(workspace: ManagerRow): Promise<void> {
     if (workspace.contextId) { onSelectWorkspace(workspace.contextId); return; }
     try {
@@ -66,7 +110,7 @@
   let gitCellsByPath = $state<Map<string, WorkspaceGitSummarySnapshot>>(new Map());
   let gitRefreshBusy = $state(false);
   const showGitColumn = $derived(shouldLoadWorkspaceManagerGitColumn());
-  function isHidden(workspace: ManagerRow): boolean { return hiddenRootPaths.has(projectIdentity(workspace.rootPath)); }
+  function isHidden(workspace: ManagerRow): boolean { return workspace.hiddenFromRail || hiddenRootPaths.has(projectIdentity(workspace.rootPath)); }
   function gitCellForWorkspace(workspace: ManagerRow): WorkspaceGitSummarySnapshot {
     return gitCellsByPath.get(workspace.rootPath) ?? { status: "unknown", refreshing: false, summary: null, checkedAt: null, error: null };
   }
@@ -124,7 +168,27 @@
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); searchQuery = ''; }
       if (event.key === 'ArrowDown' || event.key === 'Enter') { event.preventDefault(); (event.currentTarget as HTMLElement).closest('.workspace-manager-view')?.querySelector<HTMLElement>('.wm-row')?.focus(); }
     }} />
-  {#if searchQuery.trim() && rows.length === 0}<p role="status">No matching projects.</p>{/if}
+  <div class="wm-controls">
+    <label>Scope <select aria-label="Project scope" bind:value={scope}>
+      <option value="all">All projects</option><option value="here">In this window</option><option value="other">In another window</option><option value="closed">Closed</option><option value="hidden">Hidden</option>
+    </select></label>
+    <label>Sort <select aria-label="Sort projects" bind:value={sort}><option value="manual">Manual order</option><option value="name">Name</option><option value="recent">Last used</option></select></label>
+  </div>
+  {#if selectedIds.length}
+    <div class="wm-batch" aria-label="Selected project actions">
+      <span>{selectedIds.length} selected</span>
+      <select aria-label="Assign selected folder" bind:value={batchFolder}><option value="">No folder</option>{#each Object.values(catalog.folders).sort((a,b) => a.order-b.order) as folder (folder.id)}<option value={folder.id}>{folder.name}</option>{/each}</select>
+      <button disabled={batchBusy} onclick={() => void batch({ type: 'folder', folderId: batchFolder || null })}>Assign folder</button>
+      <button disabled={batchBusy} onclick={() => void batch({ type: 'pin', value: true })}>Pin</button>
+      <button disabled={batchBusy} onclick={() => void batch({ type: 'pin', value: false })}>Unpin</button>
+      <button disabled={batchBusy} onclick={() => void batch({ type: 'hidden', value: false })}>Show in sidebar</button>
+      <button disabled={batchBusy} onclick={() => void batch({ type: 'hidden', value: true })}>Hide from sidebar</button>
+      <button onclick={() => { selected = new Set(); }}>Clear selection</button>
+    </div>
+  {/if}
+  {#if actionStatus}<p role="status">{actionStatus}</p>{/if}
+  {#each actionErrors as error, index (index)}<p role="alert">{error}</p>{/each}
+  {#if allRows.length && rows.length === 0}<p role="status">No matching projects.</p>{/if}
   {#if catalogError}<p role="alert">{catalogError}</p>{/if}
   {#if allRows.length === 0}
     <EmptyState
@@ -143,7 +207,8 @@
     <table class="workspace-manager-table">
       <thead>
         <tr>
-          <th scope="col">Name</th>
+          <th scope="col"><input type="checkbox" aria-label="Select filtered projects" checked={rows.length > 0 && rows.every(row => selected.has(row.id))} onchange={(event) => { const next = new Set(selected); for (const row of rows) { if (event.currentTarget.checked) next.add(row.id); else next.delete(row.id); } selected = next; }} /></th>
+          <th scope="col">Name</th><th scope="col">Folder</th><th scope="col">State</th>
           <th scope="col">Path</th>
           {#if showGitColumn}
           <th scope="col">Git</th>
@@ -159,7 +224,12 @@
             class="wm-row"
             class:wm-row-active={activeContextId === workspace.contextId}
             class:wm-row-hidden={hidden}
-            onclick={() => void selectProject(workspace)}
+            aria-selected={selected.has(workspace.id)}
+            onclick={(event) => {
+              if (event.shiftKey) { selectRange(workspace.id); return; }
+              if (event.metaKey || event.ctrlKey) { toggleSelection(workspace.id); return; }
+              void selectProject(workspace);
+            }}
             onkeydown={(event) => {
               if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                 event.preventDefault(); const current = event.currentTarget as HTMLElement;
@@ -167,6 +237,8 @@
                 (sibling as HTMLElement | null)?.focus();
               }
               if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); searchQuery = ''; }
+              if (event.target !== event.currentTarget) return;
+              if (event.key === ' ' && (event.ctrlKey || event.metaKey || event.shiftKey)) { event.preventDefault(); toggleSelection(workspace.id); return; }
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 void selectProject(workspace);
@@ -174,10 +246,13 @@
             }}
             tabindex="0"
           >
-            <td class="wm-name">{workspace.name}</td>
+            <td><input type="checkbox" aria-label={`Select ${workspace.name}`} checked={selected.has(workspace.id)} onclick={(event) => event.stopPropagation()} onkeydown={(event) => event.stopPropagation()} onchange={() => toggleSelection(workspace.id)} /></td>
+            <td class="wm-name">{workspace.pinned ? '★ ' : ''}{workspace.name}</td>
+            <td>{workspace.folderId ? catalog.folders[workspace.folderId]?.name ?? 'No folder' : 'No folder'}</td>
+            <td>{workspace.openState === 'here' ? 'In this window' : workspace.openState === 'other' ? `In another window (${workspace.ownerId})` : 'Closed'}{#if workspace.openError} · Unavailable{/if}</td>
             <td class="wm-path">
               <span class="wm-path-text" title={workspace.rootPath}>{workspace.rootPath}</span>
-              {#if !workspace.contextId}<span class="wm-hidden-hint">(closed or in another window)</span>{/if}
+
               {#if workspace.openError}<span class="wm-hidden-hint" title={workspace.openError}>Unavailable: {workspace.openError}</span>{/if}
               {#if hidden}
                 <span class="wm-hidden-hint">(hidden from sidebar)</span>
@@ -198,6 +273,8 @@
             {/if}
             <td class="wm-action-col">
               <div class="wm-row-actions">
+                {#if workspace.contextId}<button type="button" class="btn btn-secondary btn-compact" disabled={batchBusy} onclick={(event) => { event.stopPropagation(); void closeProject(workspace); }}>Close workspace</button>{/if}
+                {#if workspace.openState === 'closed'}<button type="button" class="btn btn-secondary btn-compact" disabled={batchBusy} title="Remove catalog entry; keep files and session history" onclick={(event) => { event.stopPropagation(); void removeProject(workspace); }}>Remove from catalog</button>{/if}
                 {#if showGitColumn}
                   <button
                     type="button"
@@ -234,6 +311,10 @@
 </div>
 
 <style>
+  .wm-controls, .wm-batch { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin-bottom: var(--space-6); }
+  .wm-controls select, .wm-batch select, .wm-batch button { padding: 5px 8px; background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); }
+  .wm-row[aria-selected="true"] { background: color-mix(in srgb, var(--color-accent) 15%, transparent); }
+
   .wm-git-text.wm-git-conflict { color: var(--color-danger, #ee7755); font-weight: bold; }
   .wm-search { width: min(480px, 100%); padding: 6px 8px; margin-bottom: var(--space-6); background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); }
   .workspace-manager-view {

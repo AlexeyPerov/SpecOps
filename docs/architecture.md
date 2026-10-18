@@ -105,6 +105,18 @@ Each context has a **`ContextSnapshot`**: `documents[]` and `session` (tabs, sel
 
 `appState` holds `WindowContextState` (notepad + workspace list + `activeContextId`). Active-context `documents` and `session` live only inside each `ContextSnapshot`; use `getActiveDocuments()` / `getActiveSession()` or `getActiveContextSnapshot(state)` for reads.
 
+The app-wide catalog (`project-catalog.json`) owns normalized project identities, folders, pinning, manual order and rail visibility. `ws-*` identifies an open context in one window, not the catalog project. Manager defaults to all projects and supports window/closed/hidden scopes, local search, sorting and checkbox/modifier multi-selection. Folder/pin/visibility batches patch only their semantic fields in one native transaction and report individual failures.
+
+Closing a workspace keeps its catalog entry, tabs and layout. Save/Discard/Cancel, workspace-document flush, session/native-operation guards and an awaited post-close session checkpoint run before live buffers are released; active sessions are never cancelled to free memory. Removing a catalog entry is available only for closed projects and keeps workspace files, notes/tasks and session history. Ownership claims and guarded catalog removal share the native catalog lock, including transfers between windows.
+
+Closed snapshots contain document metadata only. Ordinary file tabs reread disk and validate availability when reopened; a missing root remains in the catalog with an opening error. Untitled drafts and the existing window-close unsaved-buffer recovery policy use immutable `project-contexts/{sha256}.json` payloads, read only on reopen. The payload is atomically durable before its catalog reference is published; current and last-good-backup references survive cleanup. Explicit workspace Discard never restores discarded buffers.
+
+### Windows and resource lifecycle
+
+A project opened in another window focuses its owner. Explicit secondary-window close awaits both its window checkpoint and catalog recovery checkpoint before removing that window's restart entry; a failed flush keeps the window open. Application quit preserves all windows for restart. Workspace transfer retains its existing commit/rollback protocol and running-turn handoff; it does not run the user-close flow.
+
+Closing a context releases its chat state, workspace-document records/timers, editor sessions, preview HTML and root-scoped file catalog, tree and directory caches. Pending directory/tree results cannot repopulate a released root. Native file and recursive tree watches aggregate per-window contributions, so clearing or destroying one window preserves the others. `get_file_watcher_diagnostics` reports actual registered paths/roots and counts on demand. Git subscriptions follow visible consumers; closing a context evicts only unused summary data and never pretends a running subprocess has stopped.
+
 ### Documents and tabs
 
 - **`DocumentState`** — editor buffer, dirty flag, disk fingerprint, markdown view mode, etc.
@@ -190,6 +202,8 @@ All app data is under Tauri **`appDataDir()/spec-ops`** (`ensureSpecOpsDataDir`)
 | --- | --- |
 | `settings.json` | Editor, external files, OpenCode, git-integration, log/font/sound/notification settings |
 | `provider-secrets.json` | OpenCode server password only (`providerSecretsStore.ts`: `loadOpencodeServerPassword` / `saveOpencodeServerPassword`). HTTP provider API keys were removed in Phase A. |
+| `project-catalog.json` / backup | Shared projects, folders, preferences and lightweight closed-context restore metadata |
+| `project-contexts/` | Immutable recovery payloads for untitled drafts and unsaved window buffers; never copied into catalog subscriptions |
 | `session.json` | Window layouts, tabs, contexts (v2; no v1 migration) |
 | `theme.json` | Theme mode (`auto`/`manual`) plus separate dark/light theme refs (used by `auto`), a single `manualTheme` ref (pinned by `manual`), and custom themes (v2 schema). `auto` follows the OS `prefers-color-scheme` media query, switching between the dark and light theme. Legacy v1 files (single `activeTheme`) and the pre-theme.json `settings.json` `theme` value are defensively re-seeded into the matching dark/light slot on load (not migrated). Read-only preset catalog (daylerees imports) ships in-app, not on disk |
 | `chat/{hash}/` | Per-workspace session index (`index.json`, `sessions` envelope) and per-session thread JSON (`{sessionId}.json`). |

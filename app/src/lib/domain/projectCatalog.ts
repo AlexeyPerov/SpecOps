@@ -1,4 +1,5 @@
 import type { ContextSnapshot } from './workspace';
+import type { DocumentState } from './document';
 
 /** A project identity is its normalized root, never an open context's ws-* id. */
 export type ProjectId = string;
@@ -25,8 +26,13 @@ export interface ProjectFolder {
 /** Persisted separately from live contexts; it owns no editor or watcher. */
 export interface SavedProjectContext {
   savedAt: string;
-  snapshot: ContextSnapshot;
+  snapshot: Omit<ContextSnapshot, 'documents'> & { documents: SavedProjectDocument[] };
+  recoveryRef?: string;
 }
+/** File contents never enter the catalog or its subscribers. */
+export type SavedProjectDocument = Omit<DocumentState, 'content' | 'savedContent' | 'isDirty'>;
+export type ProjectRecoveryBuffers = Record<string, Pick<DocumentState, 'content' | 'savedContent' | 'isDirty'>>;
+export type SavedProjectContextWrite = SavedProjectContext & { recoveryBuffers?: ProjectRecoveryBuffers };
 export interface ProjectCatalog {
   version: 1;
   revision: number;

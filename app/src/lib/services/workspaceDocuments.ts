@@ -63,7 +63,10 @@ export async function saveWorkspaceDocument(record: WorkspaceDocumentRecord): Pr
 }
 export async function flushWorkspaceDocuments(root?: string): Promise<void> {
   for (const record of records.values()) {
-    if (!root || normalizePathSync(root) === normalizePathSync(record.root)) await saveWorkspaceDocument(record);
+    if (!root || normalizePathSync(root) === normalizePathSync(record.root)) {
+      if (record.loading) await record.loading;
+      await saveWorkspaceDocument(record);
+    }
   }
 }
 /** A separate explicit operation; selecting a location alone never copies or removes data. */
@@ -87,4 +90,19 @@ export async function reloadWorkspaceDocument(record: WorkspaceDocumentRecord, d
   if (discard) record.content = result.content;
   record.error = null; changed();
   if (!discard) await saveWorkspaceDocument(record);
+}
+
+/** Release only fully settled records; a flush failure must keep the live buffer. */
+export function releaseWorkspaceDocuments(root: string): void {
+  for (const [id, record] of records) {
+    if (normalizePathSync(record.root) !== normalizePathSync(root) || record.loading || record.saving || record.content !== record.saved) continue;
+    if (record.timer) clearTimeout(record.timer);
+    records.delete(id);
+  }
+  changed();
+}
+
+export function workspaceDocumentsSettled(root: string): boolean {
+  return [...records.values()].filter(record => normalizePathSync(record.root) === normalizePathSync(root))
+    .every(record => !record.loading && !record.saving && record.content === record.saved);
 }

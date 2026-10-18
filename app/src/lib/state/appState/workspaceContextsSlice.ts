@@ -345,6 +345,18 @@ export function createWorkspaceContextsSlice(deps: {
       }
       return closed;
     },
+    /** Restore only the removed entry after an ownership-release failure. */
+    restoreWorkspaceAfterFailedClose(entry: WorkspaceEntry, index: number, activate: boolean, wasActivated = true): void {
+      update(state => {
+        if (state.contexts.workspaces.some(workspace => workspace.id === entry.id || findWorkspaceByPath([workspace], entry.rootPath))) return state;
+        const workspaces = [...state.contexts.workspaces];
+        workspaces.splice(Math.min(index, workspaces.length), 0, entry);
+        return { ...state, contexts: { ...state.contexts, workspaces,
+          activeContextId: activate ? entry.id : state.contexts.activeContextId } };
+      });
+      if (activate) confirmActivation(entry.id);
+      else if (wasActivated && !activationHistory.includes(entry.id)) activationHistory = [...activationHistory, entry.id];
+    },
     setLastActiveSessionId(sessionId: string | null) {
       update((state) =>
         patchActiveContext(state, (ctx) => {

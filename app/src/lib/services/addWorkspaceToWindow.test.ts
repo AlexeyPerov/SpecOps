@@ -1,3 +1,4 @@
+import { setWorkspaceContextClosing } from './workspaceContextTransition';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'current' }) }));
 vi.mock('@tauri-apps/plugin-fs', () => ({ stat: vi.fn().mockResolvedValue({ isDirectory: true }) }));
@@ -9,7 +10,7 @@ vi.mock('./workspaceCatalog', async importOriginal => ({
   registerCatalogProjects: vi.fn().mockResolvedValue(undefined),
   loadProjectCatalog: vi.fn().mockResolvedValue(undefined),
   updateCatalogProject: vi.fn().mockResolvedValue(undefined),
-  getProjectCatalog: vi.fn(() => ({ projects: {} })),
+  getProjectCatalog: vi.fn(() => ({ projects: {}, savedContexts: {} })),
 }));
 import { isWorkspaceLifecycleActive, resetWorkspaceLifecycleForTests } from './workspaceLifecycle';
 import { addWorkspaceToWindow } from './addWorkspaceToWindow';
@@ -27,7 +28,7 @@ beforeEach(() => {
   vi.mocked(registerCatalogProjects).mockResolvedValue({} as never);
   vi.mocked(ensureWorkspaceReadAccess).mockResolvedValue('ready');
   vi.mocked(stat).mockResolvedValue({ isDirectory: true } as never);
-  vi.mocked(getProjectCatalog).mockReturnValue({ projects: {} } as never);
+  vi.mocked(getProjectCatalog).mockReturnValue({ projects: {}, savedContexts: {} } as never);
 });
 afterEach(() => vi.unstubAllGlobals());
 describe('catalog workspace opening', () => {
@@ -109,4 +110,12 @@ describe('catalog workspace opening', () => {
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(0);
     expect(updateCatalogProject).not.toHaveBeenCalled();
   });
+  it('does not reopen a root while its close is still committing', async () => {
+    setWorkspaceContextClosing('/project',true);
+    try { await expect(addWorkspaceToWindow('/project')).rejects.toThrow('still closing'); }
+    finally {setWorkspaceContextClosing('/project',false);}
+    expect(registerCatalogProjects).not.toHaveBeenCalled();
+    expect(appState.getWindowSessionSnapshot().workspaces).toHaveLength(0);
+  });
+
 });

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { releaseWorkspaceDocuments } from "../lib/services/workspaceDocuments";
+  import { releaseWorkspaceGitSummary } from "../lib/git/workspaceGitSummary";
   import { onDestroy, onMount, untrack } from "svelte";
   import AppShellHost from "../lib/components/AppShellHost.svelte";
   import type { AppShellHostBound } from "../lib/components/appShellHostTypes";
@@ -240,9 +242,19 @@
     });
   });
 
+  let retainedWorkspaceRoots = new Set<string>();
   $effect(() => {
     // Retain undo/fold cache across inactive contexts (LRU-bounded); only drop
     // entries whose documents no longer exist in any context.
+    const roots = $appState.contexts.workspaces.map(workspace => workspace.rootPath);
+    const nextRoots = new Set(roots);
+    for (const root of retainedWorkspaceRoots) if (!nextRoots.has(root)) {
+      releaseWorkspaceDocuments(root); releaseWorkspaceGitSummary(root);
+    }
+    retainedWorkspaceRoots = nextRoots;
+    projectTreeController.retainRoots(roots);
+    workspaceDirectoryCache.retainRoots(roots);
+    editorSessionCache.retainContexts(new Set(['notepad', ...$appState.contexts.workspaces.map(workspace => workspace.id)]));
     editorSessionCache.retainDocuments($appOpenDocumentIds);
     retainDocumentMarkdownHtml($appOpenDocumentIds);
   });

@@ -1,10 +1,8 @@
-import { emit } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import { getAllWebviewWindows } from '@tauri-apps/api/webviewWindow';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
 import { ensureSpecOpsDataDir } from './appDataDir';
-import { atomicWriteTextFile } from './atomicWrite';
-import { withSessionWriteLock } from './sessionWriteLock';
 import { normalizePathSync } from './diskFingerprint';
 import type { WindowSessionSnapshot } from '../domain/contracts';
 export type WorkspaceWindowOwners = Record<string, string>;
@@ -30,13 +28,7 @@ async function read(): Promise<Placement> {
 }
 export async function workspaceWindowOwner(root: string): Promise<string | undefined> { return (await read())[normalizePathSync(root)]; }
 export async function setWorkspaceWindowOwner(root: string, windowId: string | null, expectedOwner?: string | null): Promise<void> {
-  await withSessionWriteLock(async () => {
-    const placements = await read(); const key = normalizePathSync(root);
-    if (expectedOwner !== undefined && placements[key] && placements[key] !== expectedOwner) throw new Error("Workspace ownership changed during the move.");
-    if (windowId) placements[key] = windowId; else delete placements[key];
-    await atomicWriteTextFile(await path(), JSON.stringify(placements));
-  });
-  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) await emit(WORKSPACE_PLACEMENT_CHANGED).catch(console.error);
+  await invoke('project_catalog_set_owner', { root, windowId, expectedOwner: expectedOwner ?? null, checkExpected: expectedOwner !== undefined });
 }
 /** A committed move makes old source crash records non-authoritative. */
 export async function filterWorkspacePlacement(snapshot: WindowSessionSnapshot, windowId: string): Promise<WindowSessionSnapshot> {

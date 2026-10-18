@@ -34,6 +34,7 @@ export interface WorkspaceDirectoryCache {
    * so cached listings for other open workspaces survive the rebuild.
    */
   invalidateUnder(prefix: string): void;
+  retainRoots(roots: readonly string[]): void;
   clear(): void;
   dispose(): void;
   /** Current number of retained listings (for tests). */
@@ -53,6 +54,8 @@ export function createWorkspaceDirectoryCache(
   const cache = new Map<string, WorkspaceListEntry[]>();
   const inflight = new Map<string, Promise<WorkspaceListEntry[]>>();
   const generationByKey = new Map<string, number>();
+  let retainedRoots: string[] | null = null;
+  const retained = (key: string) => retainedRoots === null || retainedRoots.some(root => key === root || key.startsWith(`${root}/`));
 
   function touch(key: string, value: WorkspaceListEntry[]): void {
     cache.delete(key);
@@ -80,6 +83,7 @@ export function createWorkspaceDirectoryCache(
     const requestGeneration = generationByKey.get(key) ?? 0;
     const promise = readDirFn(normalizePathForStorage(path))
       .then((entries) => {
+        if (!retained(key)) { inflight.delete(key); return entries as WorkspaceListEntry[]; }
         if ((generationByKey.get(key) ?? 0) !== requestGeneration) {
           inflight.delete(key);
           return readDirCached(path);
@@ -115,6 +119,12 @@ export function createWorkspaceDirectoryCache(
           cache.delete(key);
           inflight.delete(key);
         }
+      }
+    },
+    retainRoots(roots) {
+      retainedRoots = roots.map(normalizeDirPath);
+      for (const key of new Set([...cache.keys(), ...inflight.keys(), ...generationByKey.keys()])) {
+        if (!retained(key)) { cache.delete(key); inflight.delete(key); generationByKey.delete(key); }
       }
     },
     clear() {

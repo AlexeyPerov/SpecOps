@@ -255,6 +255,7 @@ export function createProjectTreeController(
   reloadDirectories: (workspaceRoot: string | null, directoryPaths: string[]) => Promise<void>;
   clearFilesystemChangeDebounce: () => void;
   getCachedRootCount: () => number;
+  retainRoots: (roots: readonly string[]) => void;
 } {
   const loadChildren = deps.loadDirectoryChildrenFn ?? loadDirectoryChildren;
   const probeAccess = deps.probeWorkspaceReadAccessFn;
@@ -335,8 +336,11 @@ export function createProjectTreeController(
   };
   // Insertion order is LRU order (oldest first).
   const cachedTrees = new Map<string, CachedTree>();
+  let retainedRoots: Set<string> | null = null;
+  let loadingWorkspaceRoot: string | null = null;
 
   const touchCachedTree = (workspaceRoot: string, entry: CachedTree): void => {
+    if (retainedRoots && !retainedRoots.has(workspaceRoot)) return;
     cachedTrees.delete(workspaceRoot);
     cachedTrees.set(workspaceRoot, entry);
     while (cachedTrees.size > maxCachedRoots) {
@@ -529,6 +533,7 @@ export function createProjectTreeController(
       }
     }
 
+    loadingWorkspaceRoot = normalizedWorkspaceRoot;
     const loadGeneration = ++rootLoadGeneration;
     if (lastLoadedWorkspaceRoot !== normalizedWorkspaceRoot) {
       state = createInitialState(state.showHidden);
@@ -1127,6 +1132,13 @@ export function createProjectTreeController(
     handleFilesystemChange,
     reloadDirectories,
     clearFilesystemChangeDebounce,
+    retainRoots: (roots: readonly string[]) => {
+      retainedRoots = new Set(roots.map(normalizePathForComparison));
+      if ((lastLoadedWorkspaceRoot && !retainedRoots.has(lastLoadedWorkspaceRoot)) || (loadingWorkspaceRoot && !retainedRoots.has(loadingWorkspaceRoot))) {
+        loadingWorkspaceRoot = null; clearFilesystemChangeDebounce(); reset();
+      }
+      for (const root of cachedTrees.keys()) if (!retainedRoots.has(root)) cachedTrees.delete(root);
+    },
     getCachedRootCount: () => cachedTrees.size,
   };
 }

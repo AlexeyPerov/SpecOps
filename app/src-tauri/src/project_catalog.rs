@@ -3,6 +3,7 @@
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
@@ -91,6 +92,19 @@ fn validate(c: &Catalog) -> Result<(), String> {
         }
     }
     for (id, context) in &c.saved_contexts {
+        if context.get("recoveryBuffers").is_some()
+            || context
+                .get("snapshot")
+                .and_then(|s| s.get("documents"))
+                .and_then(Value::as_array)
+                .is_some_and(|docs| {
+                    docs.iter().any(|doc| {
+                        doc.get("content").is_some() || doc.get("savedContent").is_some()
+                    })
+                })
+        {
+            return Err("Saved project catalog must contain metadata only".into());
+        }
         if !c.projects.contains_key(id)
             || !context.get("savedAt").is_some_and(Value::is_string)
             || !context
@@ -342,7 +356,23 @@ fn apply(c: &mut Catalog, mutation: &Value) -> Result<(), String> {
     }
     validate(c)
 }
+#[cfg(test)]
 fn transact_with_status(root: &Path, mutations: &[Value]) -> Result<(Catalog, bool), String> {
+    transact_with_windows(root, mutations, &std::collections::HashSet::new())
+}
+#[cfg(test)]
+fn transact_with_windows(
+    root: &Path,
+    mutations: &[Value],
+    live_windows: &std::collections::HashSet<String>,
+) -> Result<(Catalog, bool), String> {
+    transact_with_owner_check(root, mutations, || live_windows.clone())
+}
+fn transact_with_owner_check(
+    root: &Path,
+    mutations: &[Value],
+    read_live_windows: impl FnOnce() -> std::collections::HashSet<String>,
+) -> Result<(Catalog, bool), String> {
     fs::create_dir_all(root).map_err(|e| e.to_string())?;
     let lock = OpenOptions::new()
         .create(true)
@@ -363,9 +393,40 @@ fn transact_with_status(root: &Path, mutations: &[Value]) -> Result<(Catalog, bo
         }
         return Ok((previous, recovered));
     }
+    // Refresh liveness only after acquiring the same lock used by owner claims.
+    let live_windows = read_live_windows();
+    let owners = read_owners(root)?;
+    for mutation in mutations {
+        if mutation["type"] == "removeProject"
+            && owners
+                .get(mutation["id"].as_str().unwrap_or(""))
+                .is_some_and(|owner| live_windows.contains(owner))
+        {
+            return Err(
+                "Close the workspace in its owning window before removing it from the catalog"
+                    .into(),
+            );
+        }
+    }
     let mut next = previous.clone();
     for mutation in mutations {
-        apply(&mut next, mutation)?;
+        let mut mutation = mutation.clone();
+        if mutation["type"] == "saveContext" {
+            if let Some(buffers) = mutation["context"]
+                .as_object_mut()
+                .and_then(|context| context.remove("recoveryBuffers"))
+            {
+                let payload = serde_json::json!({"projectId": mutation["id"], "buffers": buffers});
+                let bytes = serde_json::to_vec(&payload).map_err(|error| error.to_string())?;
+                let reference = format!("{:x}", Sha256::digest(&bytes));
+                let directory = root.join("project-contexts");
+                fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+                // Immutable payload is durable before the catalog publishes its pointer.
+                atomic_write(&directory.join(format!("{reference}.json")), &bytes)?;
+                mutation["context"]["recoveryRef"] = Value::String(reference);
+            }
+        }
+        apply(&mut next, &mutation)?;
     }
     next.revision = previous
         .revision
@@ -380,6 +441,29 @@ fn transact_with_status(root: &Path, mutations: &[Value]) -> Result<(Catalog, bo
         &root.join("project-catalog.json"),
         &serde_json::to_vec(&next).map_err(|e| e.to_string())?,
     )?;
+    // Keep references reachable from the current primary and its last-good backup.
+    // Old immutable payloads and failed-transaction orphans are now safe to remove.
+    let retained: std::collections::HashSet<_> = next
+        .saved_contexts
+        .values()
+        .chain(previous.saved_contexts.values())
+        .filter_map(|context| context.get("recoveryRef").and_then(Value::as_str))
+        .collect();
+    if let Ok(entries) = fs::read_dir(root.join("project-contexts")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path
+                .extension()
+                .is_some_and(|extension| extension == "json")
+            {
+                if let Some(reference) = path.file_stem().and_then(|name| name.to_str()) {
+                    if !retained.contains(reference) {
+                        let _ = fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+    }
     Ok((next, true))
 }
 #[cfg(test)]
@@ -396,14 +480,138 @@ pub async fn project_catalog_transaction(
         .app_data_dir()
         .map_err(|e| e.to_string())?
         .join("spec-ops");
-    let (catalog, changed) =
-        tauri::async_runtime::spawn_blocking(move || transact_with_status(&root, &mutations))
-            .await
-            .map_err(|e| e.to_string())??;
+    let owner_app = app.clone();
+    let (catalog, changed) = tauri::async_runtime::spawn_blocking(move || {
+        transact_with_owner_check(&root, &mutations, || {
+            owner_app.webview_windows().into_keys().collect()
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     if changed {
         let _ = app.emit("spec-ops/project-catalog-changed", catalog.revision);
     }
     serde_json::to_value(catalog).map_err(|e| e.to_string())
+}
+
+fn read_owners(root: &Path) -> Result<BTreeMap<String, String>, String> {
+    match fs::read(root.join("workspace-windows.json")) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map_err(|error| format!("Invalid workspace ownership: {error}")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(error) => Err(error.to_string()),
+    }
+}
+fn set_owner(
+    root: &Path,
+    project: &str,
+    owner: Option<String>,
+    expected: Option<String>,
+    check_expected: bool,
+) -> Result<(), String> {
+    fs::create_dir_all(root).map_err(|error| error.to_string())?;
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(root.join("project-catalog.lock"))
+        .map_err(|error| error.to_string())?;
+    lock.lock_exclusive().map_err(|error| error.to_string())?;
+    let project = identity(project);
+    if owner.is_some() && !load(root)?.0.projects.contains_key(&project) {
+        return Err("Project was removed from the catalog while opening. Add it again.".into());
+    }
+    let mut owners = read_owners(root)?;
+    if check_expected
+        && owners
+            .get(&project)
+            .is_some_and(|value| Some(value) != expected.as_ref())
+    {
+        return Err("Workspace ownership changed during the move.".into());
+    }
+    if let Some(owner) = owner {
+        owners.insert(project, owner);
+    } else {
+        owners.remove(&project);
+    }
+    atomic_write(
+        &root.join("workspace-windows.json"),
+        &serde_json::to_vec(&owners).map_err(|error| error.to_string())?,
+    )
+}
+#[tauri::command]
+pub async fn project_catalog_set_owner(
+    app: tauri::AppHandle,
+    root: String,
+    window_id: Option<String>,
+    expected_owner: Option<String>,
+    check_expected: bool,
+) -> Result<(), String> {
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("spec-ops");
+    tauri::async_runtime::spawn_blocking(move || {
+        set_owner(&directory, &root, window_id, expected_owner, check_expected)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let _ = app.emit("spec-ops/workspace-placement-changed", ());
+    Ok(())
+}
+
+fn read_recovery(root: &Path, id: &str, reference: &str) -> Result<Value, String> {
+    if reference.len() != 64 || !reference.bytes().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Invalid project recovery reference".into());
+    }
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(root.join("project-catalog.lock"))
+        .map_err(|error| error.to_string())?;
+    lock.lock_shared().map_err(|error| error.to_string())?;
+    let (catalog, _) = load(root)?;
+    if catalog
+        .saved_contexts
+        .get(id)
+        .and_then(|context| context.get("recoveryRef"))
+        .and_then(Value::as_str)
+        != Some(reference)
+    {
+        return Err("Project recovery context changed. Try opening again.".into());
+    }
+    let bytes = fs::read(
+        root.join("project-contexts")
+            .join(format!("{reference}.json")),
+    )
+    .map_err(|error| error.to_string())?;
+    if format!("{:x}", Sha256::digest(&bytes)) != reference {
+        return Err("Project recovery payload is damaged".into());
+    }
+    let payload: Value = serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+    if payload["projectId"].as_str() != Some(id) {
+        return Err("Project recovery identity mismatch".into());
+    }
+    Ok(payload["buffers"].clone())
+}
+#[tauri::command]
+pub async fn project_catalog_read_recovery(
+    app: tauri::AppHandle,
+    id: String,
+    reference: String,
+) -> Result<Value, String> {
+    let root = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("spec-ops");
+    tauri::async_runtime::spawn_blocking(move || read_recovery(&root, &id, &reference))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[cfg(test)]
@@ -666,5 +874,137 @@ mod tests {
         assert!(result.projects["/hidden"].hidden_from_rail);
         assert_eq!(result.folders["two"].name, "Renamed");
         assert!(result.folders["two"].order < result.folders["one"].order);
+    }
+    #[test]
+    fn recovery_payload_is_durable_and_never_returned_in_catalog() {
+        let temp = Temp::new();
+        let saved = json!({"type":"saveContext","id":"/project","context":{"savedAt":"now","snapshot":{"documents":[{"id":"doc-1","filePath":null}],"session":{}},"recoveryBuffers":{"doc-1":{"content":"draft","savedContent":"","isDirty":true}}}});
+        let catalog = transact(&temp.0, &[register("/project"), saved]).unwrap();
+        let context = &catalog.saved_contexts["/project"];
+        assert!(context.get("recoveryBuffers").is_none());
+        let reference = context["recoveryRef"].as_str().unwrap();
+        assert_eq!(
+            read_recovery(&temp.0, "/project", reference).unwrap()["doc-1"]["content"],
+            "draft"
+        );
+        fs::write(
+            temp.0
+                .join("project-contexts")
+                .join(format!("{reference}.json")),
+            b"corrupt",
+        )
+        .unwrap();
+        assert!(read_recovery(&temp.0, "/project", reference)
+            .unwrap_err()
+            .contains("damaged"));
+    }
+    #[test]
+    fn recovery_failure_keeps_previous_pointer_and_gc_retains_backup_payload() {
+        let temp = Temp::new();
+        transact(&temp.0, &[register("/project")]).unwrap();
+        for number in 0..5 {
+            transact(&temp.0, &[json!({"type":"saveContext","id":"/project","context":{"savedAt":"now","snapshot":{"documents":[],"session":{}},"recoveryBuffers":{"doc":{"content":number}}}})]).unwrap();
+        }
+        assert_eq!(
+            fs::read_dir(temp.0.join("project-contexts"))
+                .unwrap()
+                .count(),
+            2
+        );
+        let before = fs::read(temp.0.join("project-catalog.json")).unwrap();
+        fs::remove_dir_all(temp.0.join("project-contexts")).unwrap();
+        fs::write(temp.0.join("project-contexts"), b"not a directory").unwrap();
+        assert!(transact(&temp.0, &[json!({"type":"saveContext","id":"/project","context":{"savedAt":"now","snapshot":{"documents":[],"session":{}},"recoveryBuffers":{"doc":{"content":"new"}}}})]).is_err());
+        assert_eq!(
+            fs::read(temp.0.join("project-catalog.json")).unwrap(),
+            before
+        );
+    }
+    #[test]
+    fn remove_and_owner_claim_are_serialized_without_open_uncatalogued_projects() {
+        let temp = Temp::new();
+        transact(&temp.0, &[register("/project")]).unwrap();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let path = temp.0.clone();
+        let waiting = barrier.clone();
+        let claim = std::thread::spawn(move || {
+            waiting.wait();
+            set_owner(&path, "/project", Some("main".into()), None, true)
+        });
+        barrier.wait();
+        let remove = transact_with_windows(
+            &temp.0,
+            &[json!({"type":"removeProject","id":"/project"})],
+            &std::collections::HashSet::from(["main".into()]),
+        );
+        let claimed = claim.join().unwrap();
+        assert_ne!(claimed.is_ok(), remove.is_ok());
+        if claimed.is_ok() {
+            assert!(transact(&temp.0, &[])
+                .unwrap()
+                .projects
+                .contains_key("/project"));
+        }
+    }
+    #[test]
+    fn metadata_codec_rejects_embedded_file_buffers_and_discard_clears_recovery_pointer() {
+        let temp = Temp::new();
+        transact(&temp.0, &[register("/project")]).unwrap();
+        assert!(transact(&temp.0, &[json!({"type":"saveContext","id":"/project","context":{"savedAt":"now","snapshot":{"documents":[{"content":"secret"}],"session":{}}}})]).is_err());
+        let result = transact(&temp.0, &[json!({"type":"saveContext","id":"/project","context":{"savedAt":"now","snapshot":{"documents":[],"session":{}}}})]).unwrap();
+        assert!(result.saved_contexts["/project"]
+            .get("recoveryRef")
+            .is_none());
+    }
+
+    #[test]
+    fn removal_refreshes_window_liveness_after_waiting_for_the_catalog_lock() {
+        let temp = Temp::new();
+        transact(&temp.0, &[register("/project")]).unwrap();
+        let held = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(temp.0.join("project-catalog.lock"))
+            .unwrap();
+        held.lock_exclusive().unwrap();
+        let live = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let next_live = live.clone();
+        let directory = temp.0.clone();
+        let remove = std::thread::spawn(move || {
+            transact_with_owner_check(
+                &directory,
+                &[json!({"type":"removeProject","id":"/project"})],
+                || {
+                    // A separately opened lock must still be held while querying liveness.
+                    let lock = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(directory.join("project-catalog.lock"))
+                        .unwrap();
+                    assert!(lock.try_lock_exclusive().is_err());
+                    if next_live.load(Ordering::SeqCst) {
+                        std::collections::HashSet::from(["new-window".into()])
+                    } else {
+                        std::collections::HashSet::new()
+                    }
+                },
+            )
+        });
+        atomic_write(
+            &temp.0.join("workspace-windows.json"),
+            br#"{"/project":"new-window"}"#,
+        )
+        .unwrap();
+        live.store(true, Ordering::SeqCst);
+        FileExt::unlock(&held).unwrap();
+        assert!(remove
+            .join()
+            .unwrap()
+            .unwrap_err()
+            .contains("owning window"));
+        assert!(transact(&temp.0, &[])
+            .unwrap()
+            .projects
+            .contains_key("/project"));
     }
 }

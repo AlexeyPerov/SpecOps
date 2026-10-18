@@ -237,6 +237,7 @@ pub enum CancelGitCommandOutcome {
 }
 
 struct ActiveGitCommand {
+    mutating: bool,
     child: Mutex<Option<Child>>,
     cancelled: AtomicBool,
     /// Repo root this command runs in, so a terminated subprocess can clean up its
@@ -457,10 +458,11 @@ fn cleanup_stale_index_lock_if_unowned(repo_root: &Path) {
     }
 }
 
-fn register_active_git_command(
+fn register_active_git_command_with_kind(
     command_id: &str,
     repo_root: PathBuf,
     mut child: Child,
+    mutating: bool,
 ) -> Result<(), String> {
     // F41: the duplicate-id path used to call `terminate_child_process_gracefully`
     // while holding `registry.commands`, blocking every register/poll/cancel/drain
@@ -503,6 +505,7 @@ fn register_active_git_command(
     commands.insert(
         command_id.to_string(),
         ActiveGitCommand {
+            mutating,
             child: Mutex::new(Some(child)),
             cancelled: AtomicBool::new(false),
             repo_root,
@@ -510,6 +513,11 @@ fn register_active_git_command(
         },
     );
     Ok(())
+}
+
+#[cfg(test)]
+fn register_active_git_command(command_id: &str, repo_root: PathBuf, child: Child) -> Result<(), String> {
+    register_active_git_command_with_kind(command_id, repo_root, child, true)
 }
 
 fn unregister_active_git_command(command_id: &str) {
@@ -1524,7 +1532,7 @@ pub fn execute_git_with_full_options(
             }
         };
 
-        if let Err(error) = register_active_git_command(id, repo_root.to_path_buf(), child) {
+        if let Err(error) = register_active_git_command_with_kind(id, repo_root.to_path_buf(), child, !is_read_only) {
             return RunGitResponse {
                 exit_code: -1,
                 stdout: String::new(),
@@ -1814,6 +1822,41 @@ fn has_active_git_command_for_repo(repo_root: &Path) -> bool {
     commands
         .values()
         .any(|entry| entry.repo_root == repo_root)
+}
+
+/// A context may be released during read-only status checks, but not writes.
+#[tauri::command]
+pub async fn workspace_has_active_git_mutation(root: String) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        has_active_git_mutation_under(&PathBuf::from(root))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+fn has_active_git_mutation_under(root: &Path) -> Result<bool, String> {
+    let lexical = |path: &Path| {
+        let mut normalized = PathBuf::new();
+        for component in path.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    normalized.pop();
+                }
+                std::path::Component::CurDir => {}
+                value => normalized.push(value.as_os_str()),
+            }
+        }
+        normalized
+    };
+    let root = std::fs::canonicalize(root).unwrap_or_else(|_| lexical(root));
+    let commands = git_command_registry()
+        .commands
+        .lock()
+        .map_err(|_| "Git command registry is unavailable".to_string())?;
+    Ok(commands.values().any(|entry| {
+        let repo =
+            std::fs::canonicalize(&entry.repo_root).unwrap_or_else(|_| lexical(&entry.repo_root));
+        entry.mutating && (repo.starts_with(&root) || root.starts_with(&repo))
+    }))
 }
 
 /// Best-effort removal of a stale `.git/index.lock` for `repo_root`.
@@ -3122,5 +3165,31 @@ mod tests {
         cancel_git_command_by_id(&command_id);
         unregister_active_git_command(&command_id);
         let _ = fs::remove_dir_all(repo_root);
+    }
+    #[test]
+    fn workspace_close_guard_blocks_mutations_but_allows_background_reads() {
+        let _guard = registry_test_mutex().lock().unwrap();
+        let repo = create_temp_git_repo();
+        let id = format!(
+            "workspace-close-{}",
+            TEST_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        for mutating in [false, true] {
+            let child = Command::new("sleep")
+                .arg("30")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap();
+            register_active_git_command_with_kind(&id, repo.clone(), child, mutating).unwrap();
+            assert_eq!(
+                has_active_git_mutation_under(&repo.join("subfolder")).unwrap(),
+                mutating
+            );
+            assert!(!has_active_git_mutation_under(&repo.join("../different-project")).unwrap());
+            cancel_git_command_by_id(&id);
+            unregister_active_git_command(&id);
+        }
+        let _ = std::fs::remove_dir_all(repo);
     }
 }

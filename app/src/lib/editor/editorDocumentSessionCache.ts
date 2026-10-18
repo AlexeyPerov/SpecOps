@@ -64,6 +64,7 @@ export type EditorDocumentSessionCache = {
   invalidatePaneInContext: (contextId: ContextId, paneId: string) => void;
   /** Drop sessions whose documentId is not in the retained set. */
   retainDocuments: (documentIds: ReadonlySet<string>) => void;
+  retainContexts: (contextIds: ReadonlySet<ContextId>) => void;
   clear: () => void;
   size: () => number;
   maxEntries: () => number;
@@ -97,6 +98,7 @@ export function createEditorDocumentSessionCache(
   const entries = new Map<string, CacheEntry>();
   let accessClock = 0;
   let disposed = false;
+  let retainedContexts: ReadonlySet<ContextId> | null = null;
 
   function touch(entry: CacheEntry): void {
     accessClock += 1;
@@ -121,7 +123,7 @@ export function createEditorDocumentSessionCache(
   }
 
   function save(key: EditorSessionKey, state: EditorState): void {
-    if (disposed || !key.documentId) {
+    if (disposed || !key.documentId || (retainedContexts && !retainedContexts.has(key.contextId))) {
       return;
     }
     const id = sessionKeyId(key);
@@ -163,7 +165,7 @@ export function createEditorDocumentSessionCache(
   }
 
   function savePortable(key: EditorSessionKey, snapshot: PortableEditorSession): void {
-    if (disposed || !key.documentId) {
+    if (disposed || !key.documentId || (retainedContexts && !retainedContexts.has(key.contextId))) {
       return;
     }
     const entry: CacheEntry = {
@@ -216,7 +218,7 @@ export function createEditorDocumentSessionCache(
   }
 
   function invalidateSession(key: EditorSessionKey): void {
-    if (disposed || !key.documentId) {
+    if (disposed || !key.documentId || (retainedContexts && !retainedContexts.has(key.contextId))) {
       return;
     }
     entries.delete(sessionKeyId(key));
@@ -255,6 +257,11 @@ export function createEditorDocumentSessionCache(
     }
   }
 
+  function retainContexts(contextIds: ReadonlySet<ContextId>): void {
+    retainedContexts = contextIds;
+    for (const [id, entry] of entries) if (!contextIds.has(entry.key.contextId)) entries.delete(id);
+  }
+
   function clear(): void {
     disposed = true;
     entries.clear();
@@ -273,6 +280,7 @@ export function createEditorDocumentSessionCache(
     invalidatePane,
     invalidatePaneInContext,
     retainDocuments,
+    retainContexts,
     clear,
     size: () => entries.size,
     maxEntries: () => maxEntries,

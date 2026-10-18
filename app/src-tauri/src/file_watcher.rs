@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 pub const FILE_CHANGED_EVENT: &str = "spec-ops/fs/file-changed";
 
@@ -86,6 +86,8 @@ struct FileWatcherInner {
     debouncer: Option<Debouncer<notify::RecommendedWatcher, FileIdMap>>,
     /// Paths as the frontend registered them (not necessarily canonical).
     watched_paths: HashSet<String>,
+    file_paths_by_window: HashMap<String, HashSet<String>>,
+    tree_roots_by_window: HashMap<String, HashSet<String>>,
     project_tree_roots: HashSet<String>,
     /// `frontend path → canonical path` actually passed to notify.
     original_to_canonical: HashMap<String, String>,
@@ -105,6 +107,8 @@ impl FileWatcherState {
             inner: Arc::new(Mutex::new(FileWatcherInner {
                 debouncer: None,
                 watched_paths: HashSet::new(),
+                file_paths_by_window: HashMap::new(),
+                tree_roots_by_window: HashMap::new(),
                 project_tree_roots: HashSet::new(),
                 original_to_canonical: HashMap::new(),
                 canonical_to_original: Arc::new(Mutex::new(HashMap::new())),
@@ -150,11 +154,10 @@ fn path_has_ignored_component_below_roots(path: &Path, roots: &[&str]) -> bool {
     // event path. Only components strictly below it count as workspace-internal.
     let mut best_root_len = None;
     for root in roots {
-        let matches = path.as_os_str() == std::ffi::OsStr::new(root)
-            || {
-                let root_path = Path::new(root);
-                path.starts_with(root_path)
-            };
+        let matches = path.as_os_str() == std::ffi::OsStr::new(root) || {
+            let root_path = Path::new(root);
+            path.starts_with(root_path)
+        };
         if matches {
             let len = root.len();
             match best_root_len {
@@ -179,23 +182,27 @@ fn path_has_ignored_component_below_roots(path: &Path, roots: &[&str]) -> bool {
     } else {
         // Skip the separator after the root prefix, if present.
         let after = &path_str[root_len..];
-        after.strip_prefix(std::path::MAIN_SEPARATOR).unwrap_or(after)
+        after
+            .strip_prefix(std::path::MAIN_SEPARATOR)
+            .unwrap_or(after)
     };
 
-    Path::new(suffix)
-        .components()
-        .any(|component| {
-            component.as_os_str()
-                .to_str()
-                .is_some_and(name_is_ignored_dir)
-        })
+    Path::new(suffix).components().any(|component| {
+        component
+            .as_os_str()
+            .to_str()
+            .is_some_and(name_is_ignored_dir)
+    })
 }
 
 /// Rewrite a notify-emitted path so it uses the frontend-registered root prefix.
 ///
 /// Without this, a workspace rooted at `/tmp/proj` (symlink → `/private/tmp/proj`)
 /// receives events under `/private/tmp/...` that never match document paths.
-fn rewrite_emit_path(path: &Path, canonical_to_original: &HashMap<String, CanonicalEntry>) -> String {
+fn rewrite_emit_path(
+    path: &Path,
+    canonical_to_original: &HashMap<String, CanonicalEntry>,
+) -> String {
     let raw = path.to_string_lossy();
     let candidate = path
         .canonicalize()
@@ -300,14 +307,8 @@ fn compute_watcher_path_diff(
     watched_paths: &HashSet<String>,
     next_paths: &HashSet<String>,
 ) -> (Vec<String>, Vec<String>) {
-    let to_remove: Vec<String> = watched_paths
-        .difference(next_paths)
-        .cloned()
-        .collect();
-    let to_add: Vec<String> = next_paths
-        .difference(watched_paths)
-        .cloned()
-        .collect();
+    let to_remove: Vec<String> = watched_paths.difference(next_paths).cloned().collect();
+    let to_add: Vec<String> = next_paths.difference(watched_paths).cloned().collect();
     (to_remove, to_add)
 }
 
@@ -320,10 +321,7 @@ fn compute_watcher_path_diff(
 /// originals that resolve to the same file) must not be evicted while the other
 /// set still references it — otherwise the surviving watch's emitted events lose
 /// their rewrite and the frontend never sees the change.
-fn release_canonical_entry(
-    map: &mut HashMap<String, CanonicalEntry>,
-    canonical: &str,
-) -> bool {
+fn release_canonical_entry(map: &mut HashMap<String, CanonicalEntry>, canonical: &str) -> bool {
     let Some(entry) = map.get_mut(canonical) else {
         return false;
     };
@@ -448,8 +446,9 @@ fn apply_watcher_path_diff(
         // canonical target has gone away (F39). A surviving registration in the
         // other watch set still needs the watch live to receive its events.
         if evicted {
-            if let Err(error) =
-                debouncer.watcher().unwatch(PathBuf::from(&canonical).as_path())
+            if let Err(error) = debouncer
+                .watcher()
+                .unwatch(PathBuf::from(&canonical).as_path())
             {
                 log::debug!("file watcher unwatch failed for {canonical}: {error}");
             }
@@ -475,9 +474,7 @@ fn apply_watcher_path_diff(
                 // file paths (NonRecursive) skips the 10^4–10^5 stats per
                 // workspace switch that `add_root(Recursive)` performs.
                 if matches!(mode, RecursiveMode::NonRecursive) {
-                    debouncer
-                        .cache()
-                        .add_root(PathBuf::from(&canonical), mode);
+                    debouncer.cache().add_root(PathBuf::from(&canonical), mode);
                 }
                 // F38: prune heavy subdirectories at registration so notify does
                 // not install per-dir watches (or stat every entry) under
@@ -512,21 +509,30 @@ fn apply_watcher_path_diff(
 #[tauri::command(async)]
 pub async fn sync_file_watcher_paths(
     paths: Vec<String>,
+    window: WebviewWindow,
     state: State<'_, FileWatcherState>,
 ) -> Result<(), String> {
     // Clone the Arc handle out of the borrowed `State` so the blocking task is
     // `'static` and can run on the blocking-pool without escaping the lifetime
     // of the IPC reference.
+    let window_id = window.label().to_string();
+    let app_handle = window.app_handle().clone();
     let inner = Arc::clone(&state.inner);
     tauri::async_runtime::spawn_blocking(move || {
         let mut guard = inner.lock().map_err(|error| error.to_string())?;
 
+        if app_handle.get_webview_window(&window_id).is_none() {
+            return Ok(());
+        }
         ensure_debouncer(&mut guard)?;
 
         // One deref of the guard, so the disjoint `debouncer` / `watched_paths` field
         // borrows below are accepted.
         let inner = &mut *guard;
-        let next_paths: HashSet<String> = paths.into_iter().collect();
+        inner
+            .file_paths_by_window
+            .insert(window_id, paths.into_iter().collect());
+        let next_paths = union_contributions(&inner.file_paths_by_window);
         let previous = std::mem::take(&mut inner.watched_paths);
 
         let Some(debouncer) = inner.debouncer.as_mut() else {
@@ -564,21 +570,30 @@ pub async fn sync_file_watcher_paths(
 #[tauri::command(async)]
 pub async fn sync_project_tree_watcher(
     roots: Vec<String>,
+    window: WebviewWindow,
     state: State<'_, FileWatcherState>,
 ) -> Result<(), String> {
     // Clone the Arc handle out of the borrowed `State` so the blocking task is
     // `'static` and can run on the blocking-pool without escaping the lifetime
     // of the IPC reference.
+    let window_id = window.label().to_string();
+    let app_handle = window.app_handle().clone();
     let inner = Arc::clone(&state.inner);
     // Move the blocking diff onto a dedicated thread so the main thread is not
     // held while the file-ID cache walks the workspace tree.
     tauri::async_runtime::spawn_blocking(move || {
         let mut guard = inner.lock().map_err(|error| error.to_string())?;
 
+        if app_handle.get_webview_window(&window_id).is_none() {
+            return Ok(());
+        }
         ensure_debouncer(&mut guard)?;
 
         let inner = &mut *guard;
-        let next_roots: HashSet<String> = roots.into_iter().collect();
+        inner
+            .tree_roots_by_window
+            .insert(window_id, roots.into_iter().collect());
+        let next_roots = union_contributions(&inner.tree_roots_by_window);
         let previous = std::mem::take(&mut inner.project_tree_roots);
 
         let Some(debouncer) = inner.debouncer.as_mut() else {
@@ -601,6 +616,60 @@ pub async fn sync_project_tree_watcher(
     .map_err(|error| format!("project tree watcher task failed: {error}"))?
 }
 
+fn union_contributions(contributions: &HashMap<String, HashSet<String>>) -> HashSet<String> {
+    contributions
+        .values()
+        .flat_map(|paths| paths.iter().cloned())
+        .collect()
+}
+/// Closing one webview must not remove resources still owned by another window.
+pub fn window_destroyed(app: &AppHandle, label: &str) {
+    let inner = Arc::clone(&app.state::<FileWatcherState>().inner);
+    let label = label.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let Ok(mut guard) = inner.lock() else {
+            return;
+        };
+        let inner = &mut *guard;
+        inner.file_paths_by_window.remove(&label);
+        inner.tree_roots_by_window.remove(&label);
+        let files = union_contributions(&inner.file_paths_by_window);
+        let roots = union_contributions(&inner.tree_roots_by_window);
+        if let Some(debouncer) = inner.debouncer.as_mut() {
+            inner.watched_paths = apply_watcher_path_diff(
+                debouncer,
+                &inner.watched_paths,
+                &files,
+                RecursiveMode::NonRecursive,
+                &mut inner.original_to_canonical,
+                &inner.canonical_to_original,
+            );
+            inner.project_tree_roots = apply_watcher_path_diff(
+                debouncer,
+                &inner.project_tree_roots,
+                &roots,
+                RecursiveMode::Recursive,
+                &mut inner.original_to_canonical,
+                &inner.canonical_to_original,
+            );
+        }
+    });
+}
+#[tauri::command(async)]
+pub async fn get_file_watcher_diagnostics(
+    state: State<'_, FileWatcherState>,
+) -> Result<serde_json::Value, String> {
+    let shared = Arc::clone(&state.inner);
+    tauri::async_runtime::spawn_blocking(move || {
+    let inner = shared.lock().map_err(|error| error.to_string())?;
+    let mut files: Vec<_> = inner.watched_paths.iter().cloned().collect(); files.sort();
+    let mut roots: Vec<_> = inner.project_tree_roots.iter().cloned().collect(); roots.sort();
+    Ok(serde_json::json!({"filePathCount": files.len(), "filePaths": files, "projectRootCount": roots.len(), "projectRoots": roots,
+        "fileWindowCount": inner.file_paths_by_window.values().filter(|paths| !paths.is_empty()).count(),
+        "treeWindowCount": inner.tree_roots_by_window.values().filter(|paths| !paths.is_empty()).count()}))
+    }).await.map_err(|error| error.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -612,8 +681,12 @@ mod tests {
     }
 
     fn test_debouncer() -> Debouncer<notify::RecommendedWatcher, FileIdMap> {
-        new_debouncer(Duration::from_millis(200), None, |_result: DebounceEventResult| {})
-            .expect("create debouncer")
+        new_debouncer(
+            Duration::from_millis(200),
+            None,
+            |_result: DebounceEventResult| {},
+        )
+        .expect("create debouncer")
     }
 
     /// Regression: one unwatchable path used to abort the whole sync via `?` before the
@@ -897,5 +970,76 @@ mod tests {
 
         // Releasing a missing entry is a no-op (not a panic).
         assert!(!release_canonical_entry(&mut map, canonical));
+    }
+    #[test]
+    fn per_window_contributions_keep_other_window_paths_on_clear_and_close() {
+        let mut owners = HashMap::from([
+            ("first".to_string(), set(&["/first", "/shared"])),
+            ("second".to_string(), set(&["/second", "/shared"])),
+        ]);
+        assert_eq!(
+            union_contributions(&owners),
+            set(&["/first", "/second", "/shared"])
+        );
+        owners.insert("first".into(), HashSet::new());
+        assert_eq!(union_contributions(&owners), set(&["/second", "/shared"]));
+        owners.remove("first");
+        assert_eq!(union_contributions(&owners), set(&["/second", "/shared"]));
+        owners.remove("second");
+        assert!(union_contributions(&owners).is_empty());
+    }
+
+    #[test]
+    fn registered_watch_sets_release_only_the_closed_window_contribution() {
+        let directory =
+            std::env::temp_dir().join(format!("specops-watch-owners-{}", std::process::id()));
+        let first = directory.join("first");
+        let second = directory.join("second");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        let first = first.to_string_lossy().into_owned();
+        let second = second.to_string_lossy().into_owned();
+        for mode in [RecursiveMode::NonRecursive, RecursiveMode::Recursive] {
+            let mut debouncer = test_debouncer();
+            let mut originals = HashMap::new();
+            let canonical = Mutex::new(HashMap::new());
+            let mut contributions = HashMap::from([
+                ("first".to_string(), set(&[&first])),
+                ("second".to_string(), set(&[&second])),
+            ]);
+            let watched = apply_watcher_path_diff(
+                &mut debouncer,
+                &HashSet::new(),
+                &union_contributions(&contributions),
+                mode,
+                &mut originals,
+                &canonical,
+            );
+            assert_eq!(watched, set(&[&first, &second]));
+            contributions.remove("first");
+            let watched = apply_watcher_path_diff(
+                &mut debouncer,
+                &watched,
+                &union_contributions(&contributions),
+                mode,
+                &mut originals,
+                &canonical,
+            );
+            assert_eq!(watched, set(&[&second]));
+            assert_eq!(originals.len(), 1);
+            contributions.remove("second");
+            let watched = apply_watcher_path_diff(
+                &mut debouncer,
+                &watched,
+                &union_contributions(&contributions),
+                mode,
+                &mut originals,
+                &canonical,
+            );
+            assert!(watched.is_empty());
+            assert!(originals.is_empty());
+            assert!(canonical.lock().unwrap().is_empty());
+        }
+        let _ = std::fs::remove_dir_all(directory);
     }
 }

@@ -134,4 +134,14 @@ describe("createWorkspaceDirectoryCache", () => {
     const calls = readDirFn.mock.calls as unknown as [string][];
     expect(calls.filter((call) => call[0] === "/ws-backup")).toHaveLength(1);
   });
+  it('drops a closed root and does not repopulate it from an outstanding read', async () => {
+    let resolve!: (entries: never[]) => void;
+    const readDirFn = vi.fn(() => new Promise<never[]>(done => { resolve = done; }));
+    const cache = createWorkspaceDirectoryCache({readDirFn});
+    cache.retainRoots(['/closed','/open']);
+    const pending = cache.readDir('/closed');
+    cache.retainRoots(['/open']); resolve([]); await pending;
+    expect(cache.size()).toBe(0); expect(readDirFn).toHaveBeenCalledTimes(1);
+  });
+
 });

@@ -1,3 +1,4 @@
+import { checkpointWorkspaceContexts } from "./workspaceSavedContext";
 import { isWorkspaceTransferBusy } from "./workspaceTransferState";
 import { flushWorkspaceDocuments } from "./workspaceDocuments";
 import { invoke } from "@tauri-apps/api/core";
@@ -127,7 +128,10 @@ export async function confirmWindowClose(deps: WindowCloseDeps): Promise<boolean
   // Awaited, unlike the pagehide path: this is the last chance to get unsaved buffers
   // into session.json, and it needs two IPC hops (read then write) to get there.
   try {
+    const contexts = appState.getSnapshot().contexts;
     await deps.flushSession();
+    await checkpointWorkspaceContexts();
+    if (appState.getSnapshot().contexts !== contexts) throw new Error('Documents changed while closing. Try again.');
   } catch (error: unknown) {
     await logDiagnostic({
       level: "error",
@@ -136,6 +140,8 @@ export async function confirmWindowClose(deps: WindowCloseDeps): Promise<boolean
       message: "session flush on window close failed",
       metadata: { error: error instanceof Error ? error.message : String(error) },
     });
+    deps.notify(`Could not save the window session: ${String(error)}`);
+    return false;
   }
   return true;
 }

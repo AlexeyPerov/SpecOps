@@ -208,4 +208,32 @@ describe("WorkspaceManagerView", () => {
     await unmount(instance);host.remove();
   });
 
+  it('checkbox and modifier selection do not activate projects and batch actions are semantic', async () => {
+    vi.mocked(invoke).mockClear(); vi.mocked(addWorkspaceToWindow).mockClear();
+    vi.mocked(invoke).mockResolvedValue({version:1,revision:3,projects:{'/alpha':catalogProjectForRoot('/alpha'),'/beta':catalogProjectForRoot('/beta')},folders:{},savedContexts:{}});
+    const host=document.createElement('div'); document.body.appendChild(host); const onSelectWorkspace=vi.fn();
+    const instance=mount(WorkspaceManagerView,{target:host,props:{onSelectWorkspace}});
+    await vi.waitFor(()=>expect(host.querySelectorAll('tbody tr')).toHaveLength(2));
+    host.querySelector<HTMLInputElement>('input[aria-label="Select alpha"]')!.click(); await tick();
+    host.querySelectorAll('tbody tr')[1].dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true})); await tick();
+    expect(host.textContent).toContain('2 selected');
+    [...host.querySelectorAll<HTMLButtonElement>('button')].find(button=>button.textContent?.trim()==='Hide from sidebar')!.click();
+    await vi.waitFor(()=>expect(host.textContent).toContain('2 project(s) updated; 0 failed.'));
+    expect(invoke).toHaveBeenLastCalledWith('project_catalog_transaction',{mutations:[{type:'updateProject',id:'/alpha',patch:{hiddenFromRail:true}},{type:'updateProject',id:'/beta',patch:{hiddenFromRail:true}}]});
+    expect(addWorkspaceToWindow).not.toHaveBeenCalled(); expect(onSelectWorkspace).not.toHaveBeenCalled();
+    await unmount(instance);host.remove();
+  });
+  it('filters closed and local contexts independently of hidden catalog entries', async () => {
+    vi.mocked(invoke).mockResolvedValue({version:1,revision:4,projects:{'/alpha':catalogProjectForRoot('/alpha'),'/beta':{...catalogProjectForRoot('/beta'),hiddenFromRail:true}},folders:{},savedContexts:{}});
+    const host=document.createElement('div');document.body.appendChild(host);
+    const instance=mount(WorkspaceManagerView,{target:host,props:{workspaces:[makeWorkspace('ws-1','/alpha')]}});
+    await vi.waitFor(()=>expect(host.querySelectorAll('tbody tr')).toHaveLength(2));
+    const scope=host.querySelector<HTMLSelectElement>('select[aria-label="Project scope"]')!;
+    scope.value='closed';scope.dispatchEvent(new Event('change',{bubbles:true}));await tick();
+    expect(host.querySelector('tbody')?.textContent).toContain('beta');expect(host.querySelector('tbody')?.textContent).not.toContain('alpha');
+    scope.value='here';scope.dispatchEvent(new Event('change',{bubbles:true}));await tick();
+    expect(host.querySelector('tbody')?.textContent).toContain('alpha');expect(host.querySelector('tbody')?.textContent).not.toContain('beta');
+    await unmount(instance);host.remove();
+  });
+
 });

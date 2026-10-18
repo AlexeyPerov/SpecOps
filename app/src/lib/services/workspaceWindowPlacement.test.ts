@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSinglePaneLayout, type WindowSessionSnapshot } from '../domain/contracts';
 const disk = vi.hoisted(() => ({ data: undefined as string | undefined }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: async (_command: string, args: {root:string;windowId:string|null;expectedOwner:string|null;checkExpected:boolean}) => {
+  const owners = JSON.parse(disk.data ?? '{}');
+  if (args.checkExpected && owners[args.root] && owners[args.root] !== args.expectedOwner) throw new Error('Workspace ownership changed during the move.');
+  if (args.windowId) owners[args.root] = args.windowId; else delete owners[args.root];
+  disk.data = JSON.stringify(owners);
+} }));
 vi.mock('@tauri-apps/api/path', () => ({ join: async (...parts: string[]) => parts.join('/') }));
 vi.mock('@tauri-apps/plugin-fs', () => ({ readTextFile: async () => { if (disk.data === undefined) throw new Error('ENOENT'); return disk.data; } }));
 vi.mock('./appDataDir', () => ({ ensureSpecOpsDataDir: async () => '/data' }));
@@ -40,7 +46,7 @@ describe('durable workspace placement', () => {
     disk.data = JSON.stringify({'/closed':'dead-window','/other':'live','/mine':'main'});
     expect(await readLiveWorkspaceWindowOwners()).toEqual({'/other':'live','/mine':'main'});
     await setWorkspaceWindowOwner('/mine',null);
-    expect(emit).toHaveBeenCalledWith(WORKSPACE_PLACEMENT_CHANGED);
+    // Native setter publishes the placement event after its locked commit.
     expect(await readLiveWorkspaceWindowOwners()).toEqual({'/other':'live'});
   });
 

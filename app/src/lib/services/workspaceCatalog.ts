@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { normalizePathForStorage, normalizePathSync } from './diskFingerprint';
-import type { CatalogProject, ProjectCatalog, ProjectFolder, SavedProjectContext } from '../domain/projectCatalog';
+import type { CatalogProject, ProjectCatalog, ProjectFolder, SavedProjectContextWrite } from '../domain/projectCatalog';
 
 export type ProjectPatch = Partial<Omit<CatalogProject, 'id' | 'rootPath' | 'openError' | 'color' | 'icon'>> & { openError?: string | null; color?: string | null; icon?: string | null };
 export type CatalogMutation =
@@ -12,7 +12,7 @@ export type CatalogMutation =
   | { type: 'moveFolder'; id: string; beforeId?: string | null }
   | { type: 'renameFolder'; id: string; name: string }
   | { type: 'removeFolder' | 'removeProject'; id: string }
-  | { type: 'saveContext'; id: string; context: SavedProjectContext };
+  | { type: 'saveContext'; id: string; context: SavedProjectContextWrite };
 
 const emptyCatalog = (): ProjectCatalog => ({ version: 1, revision: 0, projects: {}, folders: {}, savedContexts: {} });
 let cache = emptyCatalog();
@@ -57,7 +57,7 @@ export function updateCatalogProject(root: string, patch: ProjectPatch): Promise
   return updateProjectCatalog([{ type: 'register', project: catalogProjectForRoot(root) },
     { type: 'updateProject', id: projectIdentity(root), patch }]);
 }
-export function saveCatalogProjectContext(root: string, context: SavedProjectContext): Promise<ProjectCatalog> {
+export function saveCatalogProjectContext(root: string, context: SavedProjectContextWrite): Promise<ProjectCatalog> {
   return updateProjectCatalog([{ type: 'register', project: catalogProjectForRoot(root) },
     { type: 'saveContext', id: projectIdentity(root), context }]);
 }

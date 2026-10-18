@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, untrack } from "svelte";
+  import { onDestroy, untrack, tick } from "svelte";
   import HoverTooltip from "./HoverTooltip.svelte";
   import {
     allTabs,
@@ -9,7 +9,6 @@
   import { chatSessionCountsByRoot } from "../state/chatStore";
   import {
     createWorkspaceRailDragController,
-    previewWorkspaces,
     type WorkspaceDragState,
   } from "./workspaceRailDragController";
   import {
@@ -23,7 +22,12 @@
   import NotepadIcon from "./icons/NotepadIcon.svelte";
   import AddIcon from "./icons/AddIcon.svelte";
   import ListIcon from "./icons/ListIcon.svelte";
-  import { getProjectCatalog, projectIdentity, subscribeProjectCatalog } from "../services/workspaceCatalog";
+  import { getProjectCatalog, projectIdentity, subscribeProjectCatalog, updateProjectCatalog, type CatalogMutation } from "../services/workspaceCatalog";
+  import { listen } from '@tauri-apps/api/event';
+  import { addWorkspaceToWindow } from '../services/addWorkspaceToWindow';
+  import { readLiveWorkspaceWindowOwners, WORKSPACE_PLACEMENT_CHANGED, type WorkspaceWindowOwners } from '../services/workspaceWindowPlacement';
+  import { workspaceRailSections, readRailWindowPreferences, writeRailWindowPreferences, type RailProject, type RailSection } from '../services/workspaceRailSections';
+  import { clampFixedOverlayPosition } from './clampFixedOverlayPosition';
   import { distinguishingProjectPaths, projectName, projectColor, projectIcon } from "./workspaceRailPresentation";
 
   /** A notepad tab shown in the expanded notepad card's "last opened" list. */
@@ -34,6 +38,10 @@
 
   interface Props {
     workspaces?: WorkspaceEntry[];
+    currentWindowId?: string;
+    searchQuery?: string;
+    manualOrder?: boolean;
+    onError?: (message: string) => void;
     activeContextId?: ContextId;
     /** Whether session counts are included in workspace tooltips. */
     sessionsEnabled?: boolean;
@@ -62,6 +70,10 @@
 
   let {
     workspaces = [],
+    currentWindowId = 'main',
+    searchQuery = '',
+    manualOrder = true,
+    onError = console.error,
     activeContextId = "notepad",
     sessionsEnabled = false,
     panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
@@ -122,20 +134,127 @@
     isFinishingDrag: false,
   });
 
-  const dragEnabled = $derived(workspaces.length > 1);
-  const workspacesForRender = $derived(
-    previewWorkspaces(
-      workspaces,
-      dragState.didDrag,
-      dragState.dragFromIndex,
-      dragState.dropIndex,
-    ),
-  );
-  const draggedWorkspace = $derived(
-    dragState.dragWorkspaceId
-      ? (workspaces.find((workspace) => workspace.id === dragState.dragWorkspaceId) ?? null)
-      : null,
-  );
+  let catalog = $state.raw(getProjectCatalog());
+  $effect(() => untrack(() => subscribeProjectCatalog((next) => { catalog = next; })));
+  let owners = $state.raw<WorkspaceWindowOwners>({});
+  let collapsed = $state<string[]>([]);
+  let restoredWindow = '';
+  $effect(() => {
+    const id = currentWindowId;
+    const preferences = readRailWindowPreferences(id);
+    collapsed = preferences.collapsed;
+    restoredWindow = id;
+
+  });
+  function saveRailPreferences(): void {
+    if (restoredWindow === currentWindowId) writeRailWindowPreferences(currentWindowId,
+      { collapsed, scrollTop: railWorkspacesEl?.scrollTop ?? 0 });
+  }
+  $effect(() => {
+    let disposed = false;
+    let request = 0;
+    const refresh = () => { const current = ++request; void readLiveWorkspaceWindowOwners().then(next => { if (!disposed && current === request) owners = next; }).catch(onError); };
+    refresh();
+    window.addEventListener('focus', refresh);
+    const native = '__TAURI_INTERNALS__' in window;
+    const releases = native ? Promise.all([listen(WORKSPACE_PLACEMENT_CHANGED, refresh),
+      listen('tauri://destroyed', refresh), listen('tauri://created', refresh)]) : Promise.resolve([]);
+    return () => { disposed = true; window.removeEventListener('focus', refresh); void releases.then(list => list.forEach(release => release())); };
+  });
+  const sections = $derived(workspaceRailSections(catalog, workspaces, owners, currentWindowId, searchQuery));
+  const railProjects = $derived(sections.flatMap(section => section.projects));
+  // A cold catalog read may finish after mount; restore after its rows exist.
+  $effect(() => {
+    const id = currentWindowId;
+    catalog.revision;
+    workspaces.length;
+    void tick().then(() => { if (railWorkspacesEl && restoredWindow === id) railWorkspacesEl.scrollTop = readRailWindowPreferences(id).scrollTop; });
+  });
+  function sectionCollapsed(section: RailSection): boolean { return !searchQuery.trim() && collapsed.includes(section.id); }
+  const workspacesForRender = $derived(sections.filter(section => !sectionCollapsed(section)).flatMap(section => section.projects));
+  const dragEnabled = $derived(manualOrder && !searchQuery.trim());
+  const draggedWorkspace = $derived(railProjects.find(project => project.id === dragState.dragWorkspaceId) ?? null);
+  function commit(mutations: CatalogMutation[]): void { void updateProjectCatalog(mutations).catch(error => onError(String(error))); }
+  function selectProject(project: RailProject): void {
+    if (project.contextId) onSelectContext(project.contextId);
+    else void addWorkspaceToWindow(project.rootPath).catch(error => onError(String(error)));
+    closeMenu();
+  }
+  function sectionForProject(id: string): RailSection | undefined { return sections.find(section => section.projects.some(project => project.id === id)); }
+  function moveToSection(project: RailProject, section: RailSection, beforeId: string | null = null): void {
+    commit([{ type: 'moveProject', id: project.id, ...(section.pinned ? { pinned: true } : { folderId: section.folderId, pinned: false }), beforeId }]);
+  }
+  function reorderProject(project: RailProject, direction: -1 | 1): void {
+    const section = sectionForProject(project.id); if (!section || !dragEnabled) return;
+    const index = section.projects.findIndex(entry => entry.id === project.id);
+    if (index + direction < 0 || index + direction >= section.projects.length) return;
+    const beforeId = direction < 0 ? section.projects[index - 1].id : section.projects[index + 2]?.id ?? null;
+    moveToSection(project, section, beforeId); closeMenu();
+  }
+  function dropProject(id: string, x: number, y: number): void {
+    if (!dragEnabled) return;
+    const project = railProjects.find(project => project.id === id); if (!project) return;
+    const target = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-rail-section]');
+    const section = sections.find(section => section.id === target?.dataset.railSection); if (!section) return;
+    const nodes = [...target!.querySelectorAll<HTMLElement>('[data-workspace-id]')].filter(node => node.dataset.workspaceId !== id);
+    const before = nodes.find(node => { const rect = node.getBoundingClientRect(); return y < rect.top + rect.height / 2; });
+    moveToSection(project, section, before?.dataset.workspaceId ?? null);
+  }
+  function toggleSection(section: RailSection): void {
+    collapsed = collapsed.includes(section.id) ? collapsed.filter(id => id !== section.id) : [...collapsed, section.id];
+    saveRailPreferences();
+  }
+  let menu = $state<{ project?: RailProject; section?: RailSection; x: number; y: number; projectsOnly?: boolean } | null>(null);
+  let menuEl = $state<HTMLDivElement | null>(null);
+  let menuTrigger: HTMLElement | null = null;
+  function closeMenu(): void { if (!menu) return; const trigger = menuTrigger; menu = null; void tick().then(() => trigger?.focus()); }
+  function openMenu(event: MouseEvent | KeyboardEvent, value: { project?: RailProject; section?: RailSection; projectsOnly?: boolean }): void {
+    event.preventDefault();
+    menuTrigger = event.currentTarget as HTMLElement;
+    const rect = menuTrigger.getBoundingClientRect();
+    menu = { ...value, x: event instanceof MouseEvent && event.clientX ? event.clientX : rect.right,
+      y: event instanceof MouseEvent && event.clientY ? event.clientY : rect.top };
+    void tick().then(() => menuEl?.querySelector<HTMLElement>('button,input')?.focus());
+  }
+  function windowPointerDown(event: PointerEvent): void { if (menu && !menuEl?.contains(event.target as Node)) menu = null; }
+  function menuKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') { event.preventDefault(); closeMenu(); }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+      const items = [...(menuEl?.querySelectorAll<HTMLElement>('button:not(:disabled),input') ?? [])];
+      const index = items.indexOf(document.activeElement as HTMLElement);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      event.preventDefault(); items[next]?.focus();
+    }
+  }
+  $effect(() => { if (menu && menuEl) {
+    const pos = clampFixedOverlayPosition(menu.x, menu.y, menuEl.offsetWidth, menuEl.offsetHeight);
+    menuEl.style.left = `${pos.x}px`; menuEl.style.top = `${pos.y}px`;
+  } });
+  let folderName = $state('');
+  let folderEdit = $state<{ id: string | null } | null>(null);
+  function editFolder(id: string | null): void { folderName = id ? catalog.folders[id]?.name ?? '' : ''; folderEdit = { id }; menu = null; void tick().then(() => activityRailEl?.querySelector<HTMLInputElement>('.rail-folder-form input')?.focus()); }
+  function saveFolder(): void {
+    const name = folderName.trim(); if (!folderEdit || !name) return;
+    commit(folderEdit.id ? [{ type: 'renameFolder', id: folderEdit.id, name }] :
+      [{ type: 'putFolder', folder: { id: crypto.randomUUID(), name, order: 0 } }]); folderEdit = null;
+  }
+  function reorderFolder(section: RailSection, direction: -1 | 1): void {
+    const folders = sections.filter(section => section.folderId); const index = folders.findIndex(folder => folder.id === section.id);
+    if (index + direction < 0 || index + direction >= folders.length || !section.folderId) return;
+    commit([{ type: 'moveFolder', id: section.folderId, beforeId: direction < 0 ? folders[index - 1].folderId : folders[index + 2]?.folderId ?? null }]); closeMenu();
+  }
+  let draggedFolder = $state<string | null>(null);
+  function dropFolder(event: DragEvent, section: RailSection): void {
+    event.preventDefault();
+    if (dragEnabled && draggedFolder && section.folderId && draggedFolder !== section.folderId) {
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      const folders = sections.filter(section => section.folderId);
+      const index = folders.findIndex(folder => folder.id === section.id);
+      const beforeId = event.clientY > rect.top + rect.height / 2 ? folders[index + 1]?.folderId ?? null : section.folderId;
+      commit([{ type: 'moveFolder', id: draggedFolder, beforeId }]);
+    }
+    draggedFolder = null;
+  }
   const ghostLeft = $derived(
     dragState.activityRailRect && dragState.dragWorkspaceRect
       ? dragState.dragPointerX - dragState.dragOffsetX - dragState.activityRailRect.left
@@ -148,11 +267,12 @@
   );
 
   const dragController = createWorkspaceRailDragController({
-    getWorkspaces: () => workspaces,
+    getWorkspaces: () => workspacesForRender,
     getRailWorkspacesEl: () => railWorkspacesEl,
     getActivityRailEl: () => activityRailEl,
-    onSelect: (workspaceId) => onSelectContext(workspaceId),
+    onSelect: (id) => { const project = railProjects.find(project => project.id === id); if (project) selectProject(project); },
     onReorder: (fromIndex, toIndex) => onReorderWorkspaces(fromIndex, toIndex),
+    onDrop: dropProject,
     onStateChange: (nextState) => {
       dragState = nextState;
     },
@@ -186,35 +306,27 @@
     return map;
   });
 
-  let catalog = $state.raw(getProjectCatalog());
-  $effect(() => untrack(() => subscribeProjectCatalog((next) => { catalog = next; })));
-  function workspaceName(workspace: WorkspaceEntry): string {
+  function workspaceName(workspace: RailProject): string {
     return catalog.projects[projectIdentity(workspace.rootPath)]?.name ?? projectName(workspace.rootPath);
   }
-  function workspaceInitial(workspace: WorkspaceEntry): string {
+  function workspaceInitial(workspace: RailProject): string {
     const project = catalog.projects[projectIdentity(workspace.rootPath)];
     return projectIcon(project?.icon) ?? (workspaceName(workspace).trim()[0] ?? "?").toUpperCase();
   }
-  function workspaceColor(workspace: WorkspaceEntry): string | undefined {
+  function workspaceColor(workspace: RailProject): string | undefined {
     return projectColor(catalog.projects[projectIdentity(workspace.rootPath)]?.color);
   }
-  const shortPaths = $derived(distinguishingProjectPaths(workspaces.map((workspace) => ({
+  const shortPaths = $derived(distinguishingProjectPaths(railProjects.map((workspace) => ({
     id: workspace.id, rootPath: workspace.rootPath, name: workspaceName(workspace),
   }))));
-  function workspaceDetail(workspace: WorkspaceEntry): string {
+  function workspaceDetail(workspace: RailProject): string {
     const sessions = sessionsEnabled ? ` · Sessions: ${sessionCountsByRoot.get(workspace.rootPath) ?? 0}` : "";
     return `${workspace.rootPath} · Git status not checked${sessions} · Tabs: ${tabCountsByRoot.get(workspace.rootPath) ?? 0}`;
   }
-  function workspaceKeydown(event: KeyboardEvent, workspace: WorkspaceEntry): void {
-    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-      event.preventDefault();
-      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      onRequestCloseWorkspace(workspace.id, rect.right, rect.top);
-    } else if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-      event.preventDefault();
-      const from = workspaces.findIndex((entry) => entry.id === workspace.id);
-      const to = from + (event.key === "ArrowUp" ? -1 : 1);
-      if (to >= 0 && to < workspaces.length) onReorderWorkspaces(from, to);
+  function workspaceKeydown(event: KeyboardEvent, workspace: RailProject): void {
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openMenu(event, { project: workspace });
+    else if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault(); if (dragEnabled) reorderProject(workspace, event.key === 'ArrowUp' ? -1 : 1);
     }
   }
   function resizeKeydown(event: KeyboardEvent): void {
@@ -266,6 +378,8 @@
     dragController.destroy();
   });
 </script>
+
+<svelte:window onpointerdown={windowPointerDown} onkeydown={(event) => { if (menu && event.key === "Escape") closeMenu(); }} />
 
 <aside
   class={`activity-rail${expanded ? " activity-rail-expanded" : ""}${isResizing ? " activity-rail-resizing" : ""}`}
@@ -330,8 +444,34 @@
     </HoverTooltip>
   {/if}
 
-  <div class={`rail-workspaces${expanded ? " rail-workspaces-expanded" : ""}`} bind:this={railWorkspacesEl}>
-    {#each workspacesForRender as workspace (workspace.id)}
+  {#if folderEdit}
+    <form class="rail-folder-form" onsubmit={(event) => { event.preventDefault(); saveFolder(); }}>
+      <input aria-label="Folder name" bind:value={folderName} onkeydown={(event) => { if (event.key === 'Escape') folderEdit = null; }} />
+      <button type="submit" disabled={!folderName.trim()}>Save</button><button type="button" onclick={() => folderEdit = null}>Cancel</button>
+    </form>
+  {/if}
+  <div class={`rail-workspaces${expanded ? " rail-workspaces-expanded" : ""}`} bind:this={railWorkspacesEl} onscroll={saveRailPreferences}>
+    {#each sections as section (section.id)}
+      <section class="rail-section" data-rail-section={section.id} aria-label={`${section.name}, ${section.projects.length} projects`}>
+        <div class="rail-section-heading">
+          <button class="rail-section-toggle" type="button" aria-label={`${section.name}, ${section.projects.length} projects`}
+            aria-expanded={!sectionCollapsed(section)} title={`${section.name} (${section.projects.length})`}
+            draggable={dragEnabled && !!section.folderId}
+            ondragstart={(event) => { draggedFolder = section.folderId; event.dataTransfer?.setData('text/plain', section.folderId ?? ''); }}
+            ondragend={() => draggedFolder = null}
+            ondragover={(event) => { if (dragEnabled && draggedFolder && section.folderId) event.preventDefault(); }}
+            ondrop={(event) => dropFolder(event, section)}
+            oncontextmenu={(event) => openMenu(event, { section })}
+            onkeydown={(event) => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openMenu(event, { section }); }}
+            onclick={(event) => { if (!expanded && sectionCollapsed(section)) openMenu(event, { section, projectsOnly: true }); else toggleSection(section); }}>
+            <span aria-hidden="true">{sectionCollapsed(section) ? '▸' : '▾'}</span>
+            {#if expanded}<span class="rail-section-name">{section.name}</span>{:else}<span aria-hidden="true">{section.pinned ? '★' : section.folderId ? '▣' : '·'}</span>{/if}
+            <span class="rail-section-count">{section.projects.length}</span>
+          </button>
+          {#if expanded}<button type="button" class="rail-section-more" aria-label={`Actions for ${section.name}`} onclick={(event) => openMenu(event, { section })}>…</button>{/if}
+        </div>
+        {#if !sectionCollapsed(section)}
+    {#each section.projects as workspace (workspace.id)}
       {#if dragState.didDrag && workspace.id === dragState.dragWorkspaceId}
         <span
           class="rail-workspace-placeholder"
@@ -346,27 +486,27 @@
         >
           <button
             class={expanded
-              ? `rail-workspace-card rail-workspace-row ${activeContextId === workspace.id ? "rail-workspace-card-active" : ""}`
-              : `rail-button rail-button-workspace ${activeContextId === workspace.id ? "rail-button-active" : ""}`}
+              ? `rail-workspace-card rail-workspace-row ${activeContextId === workspace.contextId ? "rail-workspace-card-active" : ""}`
+              : `rail-button rail-button-workspace ${activeContextId === workspace.contextId ? "rail-button-active" : ""}`}
             style:--project-color={workspaceColor(workspace) ?? "var(--color-accent)"}
-            data-file-drop-context={workspace.id}
+            data-file-drop-context={workspace.contextId}
             data-workspace-id={workspace.id}
             type="button"
             aria-label={`Workspace ${workspaceName(workspace)}, ${workspace.rootPath}, Git status not checked`}
-            aria-current={activeContextId === workspace.id ? "true" : undefined}
+            aria-current={activeContextId === workspace.contextId ? "true" : undefined}
             oncontextmenu={(event) => {
               event.preventDefault();
-              onRequestCloseWorkspace(workspace.id, event.clientX, event.clientY);
+              openMenu(event, { project: workspace });
             }}
             onkeydown={(event) => workspaceKeydown(event, workspace)}
             onpointerdown={(event) => {
               if (dragEnabled) dragController.pointerDown(event, workspace,
-                workspaces.findIndex((entry) => entry.id === workspace.id));
+                workspacesForRender.findIndex((entry) => entry.id === workspace.id));
             }}
             onclick={(event) => {
               // Pointer selection is committed by the drag controller; native
               // keyboard and assistive clicks have no pointer sequence.
-              if (!dragEnabled || event.detail === 0) onSelectContext(workspace.id);
+              if (!dragEnabled || event.detail === 0) selectProject(workspace);
             }}
           >
             <span class={expanded ? "rail-workspace-avatar" : "rail-workspace-initial"} aria-hidden="true">{workspaceInitial(workspace)}</span>
@@ -387,6 +527,10 @@
         </HoverTooltip>
       {/if}
     {/each}
+        {/if}
+      </section>
+    {/each}
+    {#if railProjects.length === 0}<p class="rail-empty">{searchQuery.trim() ? 'No matching projects' : 'No projects'}</p>{/if}
   </div>
 
   {#if dragState.didDrag && draggedWorkspace}
@@ -403,6 +547,7 @@
   {/if}
 
   <div class="rail-footer-stack">
+    <HoverTooltip label="Create folder"><button class="rail-button" type="button" aria-label="Create folder" onclick={() => editFolder(null)}>▣+</button></HoverTooltip>
     <HoverTooltip label="Add Workspace">
       <button
         class="rail-button rail-button-add"
@@ -442,7 +587,58 @@
   ></div>
 </aside>
 
+{#if menu}
+  <div class="rail-catalog-menu" role="menu" tabindex="-1" aria-label="Workspace organization" bind:this={menuEl}
+    style={`left:${menu.x}px;top:${menu.y}px`} onkeydown={menuKeydown}>
+    {#if menu.project}
+      {@const project = menu.project}
+      <button type="button" role="menuitem" onclick={() => selectProject(project)}>Open workspace</button>
+      <button type="button" role="menuitem" onclick={() => { commit([{ type: 'moveProject', id: project.id, pinned: !project.pinned }]); closeMenu(); }}>{project.pinned ? 'Unpin' : 'Pin'}</button>
+      <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderProject(project, -1)}>Move up</button>
+      <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderProject(project, 1)}>Move down</button>
+      <span class="rail-menu-label">Move to folder</span>
+      {#each sections.filter(section => !section.pinned) as section (section.id)}
+        <button type="button" role="menuitem" onclick={() => { commit([{ type: 'moveProject', id: project.id, folderId: section.folderId }]); closeMenu(); }}>{section.name}</button>
+      {/each}
+      <button type="button" role="menuitem" onclick={() => { commit([{ type: 'updateProject', id: project.id, patch: { hiddenFromRail: true } }]); closeMenu(); }}>Hide from sidebar</button>
+      {#if project.contextId}
+        <button type="button" role="menuitem" onclick={() => { const position = menu!; const id = project.contextId!; menu = null; onRequestCloseWorkspace(id, position.x, position.y); }}>Workspace actions…</button>
+      {/if}
+    {:else if menu.section}
+      {@const section = menu.section}
+      {#if menu.projectsOnly}
+        {#each section.projects as project (project.id)}<button type="button" role="menuitem" title={project.rootPath} onclick={() => selectProject(project)}>{project.name}</button>{/each}
+      {/if}
+      <button type="button" role="menuitem" onclick={() => { toggleSection(section); closeMenu(); }}>{sectionCollapsed(section) ? 'Expand' : 'Collapse'}</button>
+      {#if section.folderId}
+        <button type="button" role="menuitem" onclick={() => editFolder(section.folderId)}>Rename folder</button>
+        <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderFolder(section, -1)}>Move folder up</button>
+        <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderFolder(section, 1)}>Move folder down</button>
+        <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => { commit([{ type: 'moveFolder', id: section.folderId!, beforeId: null }]); closeMenu(); }}>Move folder to end</button>
+        <button type="button" role="menuitem" onclick={() => { commit([{ type: 'removeFolder', id: section.folderId! }]); closeMenu(); }}>Delete folder (keep projects)</button>
+      {/if}
+      <button type="button" role="menuitem" onclick={() => editFolder(null)}>Create folder</button>
+    {/if}
+  </div>
+{/if}
+
 <style>
+  .rail-section { width: 100%; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .activity-rail-expanded .rail-section { align-items: stretch; }
+  .rail-section-heading { display: flex; width: 100%; align-items: center; min-width: 0; }
+  .rail-section-toggle, .rail-section-more { color: var(--color-text-secondary); background: transparent; border: 0; font: inherit; font-size: 10px; cursor: pointer; }
+  .rail-section-toggle { min-width: 0; width: 100%; display: flex; align-items: center; gap: 3px; min-height: 24px; padding: 2px; }
+  .rail-section-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: left; }
+  .rail-section-count { opacity: .75; }
+  .rail-section-toggle:focus-visible, .rail-section-more:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: -2px; }
+  .rail-catalog-menu { position: fixed; z-index: 2000; display: flex; flex-direction: column; min-width: 190px; max-width: min(360px, 95vw); max-height: 90vh; overflow-y: auto; padding: 4px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-surface-1); box-shadow: var(--shadow-overlay); }
+  .rail-catalog-menu button { flex-shrink: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-primary); font: inherit; font-size: 12px; padding: 6px 8px; text-align: left; cursor: pointer; }
+  .rail-catalog-menu button:hover, .rail-catalog-menu button:focus-visible { background: var(--color-hover); outline: 2px solid var(--color-focus-ring); outline-offset: -2px; }
+  .rail-catalog-menu button:disabled { opacity: .4; cursor: default; }
+  .rail-menu-label, .rail-empty { font-size: 10px; color: var(--color-text-secondary); padding: 4px; }
+  .rail-folder-form { position: absolute; top: 40px; left: 8px; z-index: 10; min-width: 220px; max-width: 300px; padding: 8px; border: 1px solid var(--color-border-subtle); background: var(--color-surface-1); box-shadow: var(--shadow-overlay); display: flex; flex-wrap: wrap; gap: 2px; width: 100%; }
+  .rail-folder-form input { min-width: 0; width: 100%; }
+
   .activity-rail {
     position: relative;
     width: var(--activity-rail-width);

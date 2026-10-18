@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-18 17:41 MSK — Organize workspace folders and pinned projects (WS-03)
+
+- Build sidebar sections from the shared catalog: pinned first without duplicates, hidden entries override pinning, current-window contexts and available closed projects are visible, and projects owned by another live window remain outside the sidebar. Refresh ownership in bulk after committed changes and window lifecycle/focus events; ignore stale crash placements.
+- Add folder creation, rename, deletion, ordering, collapse and actual visible project counts. Remember collapse/scroll separately per window, preserve saved collapse while filtering temporarily reveals matches, and expose collapsed narrow sections through menus with full project names.
+- Support project drag moves within/between folders and into pinned, native folder drag ordering, keyboard menus and Alt+Arrow alternatives. Disable ambiguous ordering during filtering/automatic sorting. Keep project paths/window ownership unchanged; pinning remembers folder position, assigning folders preserves pinning, and deleting a folder appends its projects to unfiled in relative order.
+- Apply semantic native ordering transactions under the catalog lock so hidden entries and concurrent changes survive; update existing workspace context actions to use the same catalog order. Validation: 52 focused frontend tests, 11 native catalog tests including concurrent moves and folder deletion, zero Svelte/type diagnostics and a successful production build. Svelte autofixer reports no issues; real desktop multiwindow acceptance remains in WS-08.
+
 ## 2026-10-18 17:31 MSK — Compact workspace rows and project appearance (WS-02)
 
 - Replace expanded workspace cards with 46px rows containing a name, a short distinguishing parent path for matching names, and a Git placeholder that starts no queries. Keep full paths and optional Sessions/Tabs counts in tooltips; retain scrolling, width resizing, narrow mode, file-drop targets, context actions and pointer reordering.

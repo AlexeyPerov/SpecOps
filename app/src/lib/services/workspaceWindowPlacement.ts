@@ -1,3 +1,5 @@
+import { emit } from '@tauri-apps/api/event';
+import { getAllWebviewWindows } from '@tauri-apps/api/webviewWindow';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import { join } from '@tauri-apps/api/path';
 import { ensureSpecOpsDataDir } from './appDataDir';
@@ -5,7 +7,16 @@ import { atomicWriteTextFile } from './atomicWrite';
 import { withSessionWriteLock } from './sessionWriteLock';
 import { normalizePathSync } from './diskFingerprint';
 import type { WindowSessionSnapshot } from '../domain/contracts';
-type Placement = Record<string, string>;
+export type WorkspaceWindowOwners = Record<string, string>;
+type Placement = WorkspaceWindowOwners;
+export const WORKSPACE_PLACEMENT_CHANGED = 'spec-ops/workspace-placement-changed';
+/** Stale crash placements must not hide closed projects forever. */
+export async function readLiveWorkspaceWindowOwners(): Promise<WorkspaceWindowOwners> {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return {};
+  const [placements, windows] = await Promise.all([read(), getAllWebviewWindows()]);
+  const live = new Set(windows.map(window => window.label));
+  return Object.fromEntries(Object.entries(placements).filter(([, owner]) => live.has(owner)));
+}
 async function path(): Promise<string> { return join(await ensureSpecOpsDataDir(), 'workspace-windows.json'); }
 async function read(): Promise<Placement> {
   let raw: string;
@@ -25,6 +36,7 @@ export async function setWorkspaceWindowOwner(root: string, windowId: string | n
     if (windowId) placements[key] = windowId; else delete placements[key];
     await atomicWriteTextFile(await path(), JSON.stringify(placements));
   });
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) await emit(WORKSPACE_PLACEMENT_CHANGED).catch(console.error);
 }
 /** A committed move makes old source crash records non-authoritative. */
 export async function filterWorkspacePlacement(snapshot: WindowSessionSnapshot, windowId: string): Promise<WindowSessionSnapshot> {

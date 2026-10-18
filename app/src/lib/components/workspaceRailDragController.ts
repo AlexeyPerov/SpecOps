@@ -1,4 +1,4 @@
-import type { ContextId, WorkspaceEntry } from "../domain/contracts";
+export interface WorkspaceRailItem { id: string; rootPath: string }
 import { DRAG_THRESHOLD_PX, pointerDragDistance } from "./tabDragController";
 
 export const WORKSPACE_SCROLL_EDGE_PX = 24;
@@ -6,8 +6,8 @@ export const WORKSPACE_SCROLL_SPEED_PX = 8;
 
 export interface WorkspaceDragState {
   pointerId: number | null;
-  pressedWorkspaceId: ContextId | null;
-  dragWorkspaceId: ContextId | null;
+  pressedWorkspaceId: string | null;
+  dragWorkspaceId: string | null;
   dragFromIndex: number;
   dropIndex: number;
   dragOffsetX: number;
@@ -18,17 +18,18 @@ export interface WorkspaceDragState {
   dragPointerStartY: number;
   dragWorkspaceRect: DOMRect | null;
   activityRailRect: DOMRect | null;
-  workspaceRects: Map<ContextId, DOMRect>;
+  workspaceRects: Map<string, DOMRect>;
   didDrag: boolean;
   isFinishingDrag: boolean;
 }
 
 export interface WorkspaceRailDragControllerDeps {
-  getWorkspaces: () => WorkspaceEntry[];
+  getWorkspaces: () => WorkspaceRailItem[];
   getRailWorkspacesEl: () => HTMLDivElement | null;
   getActivityRailEl: () => HTMLElement | null;
-  onSelect: (workspaceId: ContextId) => void;
+  onSelect: (workspaceId: string) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
+  onDrop?: (workspaceId: string, pointerX: number, pointerY: number) => void;
   onStateChange: (state: WorkspaceDragState) => void;
 }
 
@@ -60,12 +61,12 @@ function cloneState(state: WorkspaceDragState): WorkspaceDragState {
   };
 }
 
-export function previewWorkspaces(
-  sourceWorkspaces: WorkspaceEntry[],
+export function previewWorkspaces<T extends WorkspaceRailItem>(
+  sourceWorkspaces: T[],
   isDragging: boolean,
   sourceIndex: number,
   targetIndex: number,
-): WorkspaceEntry[] {
+): T[] {
   if (!isDragging || sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
     return sourceWorkspaces;
   }
@@ -79,9 +80,9 @@ export function previewWorkspaces(
 }
 
 export function nextWorkspaceDropIndex(
-  workspaces: WorkspaceEntry[],
-  workspaceRects: Map<ContextId, DOMRect>,
-  dragWorkspaceId: ContextId | null,
+  workspaces: WorkspaceRailItem[],
+  workspaceRects: Map<string, DOMRect>,
+  dragWorkspaceId: string | null,
   pointerY: number,
   fallbackIndex: number,
 ): number {
@@ -211,14 +212,14 @@ export function createWorkspaceRailDragController(deps: WorkspaceRailDragControl
   }
 
   function collectWorkspaceRects(): void {
-    const next = new Map<ContextId, DOMRect>();
+    const next = new Map<string, DOMRect>();
     const railWorkspacesEl = deps.getRailWorkspacesEl();
     if (!railWorkspacesEl) {
       state.workspaceRects = next;
       return;
     }
     for (const node of railWorkspacesEl.querySelectorAll<HTMLElement>("[data-workspace-id]")) {
-      const workspaceId = node.dataset.workspaceId as ContextId | undefined;
+      const workspaceId = node.dataset.workspaceId as string | undefined;
       if (!workspaceId) {
         continue;
       }
@@ -282,9 +283,10 @@ export function createWorkspaceRailDragController(deps: WorkspaceRailDragControl
       pointerOverRail &&
       fromIndex >= 0 &&
       toIndex >= 0 &&
-      fromIndex !== toIndex
+      (fromIndex !== toIndex || deps.onDrop)
     ) {
-      deps.onReorder(fromIndex, toIndex);
+      if (deps.onDrop) deps.onDrop(activeWorkspaceId, pointerX, pointerY);
+      else deps.onReorder(fromIndex, toIndex);
     } else if (!wasDrag && activeWorkspaceId) {
       deps.onSelect(activeWorkspaceId);
     }
@@ -340,7 +342,7 @@ export function createWorkspaceRailDragController(deps: WorkspaceRailDragControl
     finishDrag(false);
   }
 
-  function pointerDown(event: PointerEvent, workspace: WorkspaceEntry, index: number): void {
+  function pointerDown(event: PointerEvent, workspace: WorkspaceRailItem, index: number): void {
     if (event.button !== 0 || state.isFinishingDrag) {
       return;
     }

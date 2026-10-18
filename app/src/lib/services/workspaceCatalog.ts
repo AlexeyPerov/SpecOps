@@ -8,6 +8,9 @@ export type CatalogMutation =
   | { type: 'register'; project: CatalogProject }
   | { type: 'updateProject'; id: string; patch: ProjectPatch }
   | { type: 'putFolder'; folder: ProjectFolder }
+  | { type: 'moveProject'; id: string; folderId?: string | null; pinned?: boolean; beforeId?: string | null }
+  | { type: 'moveFolder'; id: string; beforeId?: string | null }
+  | { type: 'renameFolder'; id: string; name: string }
   | { type: 'removeFolder' | 'removeProject'; id: string }
   | { type: 'saveContext'; id: string; context: SavedProjectContext };
 

@@ -1,3 +1,4 @@
+import { getProjectCatalog, projectIdentity, updateProjectCatalog } from './workspaceCatalog';
 import { moveWorkspaceToWindow } from "./workspaceWindowTransfer";
 import { createWorkspaceDocument, type WorkspaceDocumentKind } from "./workspaceDocuments";
 import type { ContextId } from "../domain/contracts";
@@ -96,28 +97,29 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     window.addEventListener("keydown", onWindowKeydown);
   }
 
+  function menuProjects() {
+    const menu = deps.getMenu();
+    const root = menu && deps.getWorkspaceRootPath(menu.workspaceId);
+    const project = root ? getProjectCatalog().projects[projectIdentity(root)] : undefined;
+    if (!project) return [];
+    return Object.values(getProjectCatalog().projects).filter(entry => !entry.hiddenFromRail &&
+      (project.pinned ? entry.pinned : !entry.pinned && entry.folderId === project.folderId))
+      .sort((a, b) => (project.pinned ? a.pinnedOrder - b.pinnedOrder : a.order - b.order) || a.id.localeCompare(b.id));
+  }
   function menuIndex(): number {
     const menu = deps.getMenu();
-    if (!menu) {
-      return -1;
-    }
-    return findWorkspaceIndex(deps.getWorkspaceIds(), menu.workspaceId);
+    const root = menu && deps.getWorkspaceRootPath(menu.workspaceId);
+    return root ? menuProjects().findIndex(project => project.id === projectIdentity(root)) : -1;
   }
-
+  function menuCount(): number { return menuProjects().length; }
   function move(direction: "up" | "down"): void {
-    if (!deps.getMenu()) {
-      return;
-    }
+    const projects = menuProjects();
     const index = menuIndex();
-    const targetIndex = computeWorkspaceReorderTarget(
-      index,
-      direction,
-      deps.getWorkspaceIds().length,
-    );
-    if (targetIndex === null) {
-      return;
-    }
-    appState.reorderWorkspaces(index, targetIndex);
+    if (computeWorkspaceReorderTarget(index, direction, projects.length) === null) return;
+    const project = projects[index];
+    const beforeId = direction === 'up' ? projects[index - 1].id : projects[index + 2]?.id ?? null;
+    void updateProjectCatalog([{ type: 'moveProject', id: project.id, beforeId,
+      ...(project.pinned ? { pinned: true } : { folderId: project.folderId, pinned: false }) }]).catch(error => deps.notify(String(error)));
     close();
   }
 
@@ -219,6 +221,7 @@ export function createWorkspaceContextMenuActions(deps: WorkspaceContextMenuActi
     close,
     detach,
     menuIndex,
+    menuCount,
     move,
     closeWorkspace,
     copyPath,

@@ -622,7 +622,9 @@
   }}
   activityRail={{
     show: true,
-    workspaces: railWorkspaces,
+    workspaces,
+    currentWindowId,
+    onError: notify,
     activeContextId,
     sessionsEnabled,
     panelWidthPx: normalizeActivityRailWidthPx(activityRailWidthPx),
@@ -762,7 +764,7 @@
   workspaceContextMenu={{
     menu: workspaceContextMenuMenu,
     menuIndex: workspaceContextMenuActions.menuIndex(),
-    workspaceCount: workspaces.length,
+    workspaceCount: workspaceContextMenuActions.menuCount(),
     onMoveUp: handleWorkspaceContextMenuMoveUp,
     onMoveDown: handleWorkspaceContextMenuMoveDown,
     onOpenSettings: workspaceContextMenuActions.openSettings,

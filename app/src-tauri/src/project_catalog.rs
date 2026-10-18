@@ -161,6 +161,82 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     }
     result.map_err(|e| format!("Project catalog write failed: {e}"))
 }
+fn sorted_projects(c: &Catalog, folder: Option<&str>, pinned: bool) -> Vec<String> {
+    let mut projects: Vec<_> = c
+        .projects
+        .values()
+        .filter(|p| {
+            if pinned {
+                p.pinned
+            } else {
+                p.folder_id.as_deref() == folder
+            }
+        })
+        .collect();
+    projects.sort_by(|a, b| {
+        (if pinned { a.pinned_order } else { a.order })
+            .total_cmp(&(if pinned { b.pinned_order } else { b.order }))
+            .then(a.id.cmp(&b.id))
+    });
+    projects.into_iter().map(|p| p.id.clone()).collect()
+}
+fn place_project(
+    c: &mut Catalog,
+    folder: Option<&str>,
+    pinned: bool,
+    id: &str,
+    before: Option<&str>,
+) {
+    let mut ids = sorted_projects(c, folder, pinned);
+    ids.retain(|candidate| candidate != id);
+    let index = before
+        .and_then(|before| ids.iter().position(|candidate| candidate == before))
+        .unwrap_or(ids.len());
+    ids.insert(index, id.to_string());
+    for (index, id) in ids.into_iter().enumerate() {
+        let p = c.projects.get_mut(&id).unwrap();
+        if pinned {
+            p.pinned_order = index as f64;
+        } else {
+            p.order = index as f64;
+        }
+    }
+}
+fn move_project(c: &mut Catalog, mutation: &Value, id: &str) -> Result<(), String> {
+    let project = c.projects.get_mut(id).ok_or("Project is not registered")?;
+    let old_folder = project.folder_id.clone();
+    if let Some(folder) = mutation.get("folderId") {
+        project.folder_id = if folder.is_null() {
+            None
+        } else {
+            Some(folder.as_str().ok_or("Invalid project folder")?.to_string())
+        };
+    }
+    if let Some(pinned) = mutation.get("pinned") {
+        project.pinned = pinned.as_bool().ok_or("Invalid pin state")?;
+    }
+    let pinned = project.pinned;
+    let folder = project.folder_id.clone();
+    let before = mutation.get("beforeId").and_then(Value::as_str);
+    // Folder assignment preserves pinning but appends to the new remembered folder order.
+    // Pin/unpin alone never changes that position.
+    if folder != old_folder || (!pinned && mutation.get("beforeId").is_some()) {
+        place_project(
+            c,
+            folder.as_deref(),
+            false,
+            id,
+            if pinned { None } else { before },
+        );
+    }
+    if pinned
+        && (mutation.get("pinned").and_then(Value::as_bool) == Some(true)
+            || (mutation.get("beforeId").is_some() && mutation.get("folderId").is_none()))
+    {
+        place_project(c, None, true, id, before);
+    }
+    Ok(())
+}
 fn apply(c: &mut Catalog, mutation: &Value) -> Result<(), String> {
     let kind = mutation
         .get("type")
@@ -196,17 +272,59 @@ fn apply(c: &mut Catalog, mutation: &Value) -> Result<(), String> {
             let project = serde_json::from_value(value).map_err(|e| e.to_string())?;
             c.projects.insert(id.to_string(), project);
         }
+        "moveProject" => move_project(c, mutation, id)?,
+        "moveFolder" => {
+            if !c.folders.contains_key(id) {
+                return Err("Project folder is not registered".into());
+            }
+            let mut folders: Vec<_> = c.folders.values().collect();
+            folders.sort_by(|a, b| a.order.total_cmp(&b.order).then(a.id.cmp(&b.id)));
+            let mut ids: Vec<_> = folders
+                .into_iter()
+                .filter(|f| f.id != id)
+                .map(|f| f.id.clone())
+                .collect();
+            let before = mutation.get("beforeId").and_then(Value::as_str);
+            let index = before
+                .and_then(|before| ids.iter().position(|candidate| candidate == before))
+                .unwrap_or(ids.len());
+            ids.insert(index, id.to_string());
+            for (index, id) in ids.into_iter().enumerate() {
+                c.folders.get_mut(&id).unwrap().order = index as f64;
+            }
+        }
+        "renameFolder" => {
+            c.folders
+                .get_mut(id)
+                .ok_or("Project folder is not registered")?
+                .name = mutation["name"]
+                .as_str()
+                .ok_or("Folder name required")?
+                .to_string();
+        }
         "putFolder" => {
-            let folder: Folder =
+            let mut folder: Folder =
                 serde_json::from_value(mutation["folder"].clone()).map_err(|e| e.to_string())?;
+            if !c.folders.contains_key(&folder.id) {
+                folder.order = c.folders.values().map(|f| f.order).fold(-1.0, f64::max) + 1.0;
+            }
             c.folders.insert(folder.id.clone(), folder);
         }
         "removeFolder" => {
+            let moved = sorted_projects(c, Some(id), false);
+            let mut order = c
+                .projects
+                .values()
+                .filter(|p| p.folder_id.is_none())
+                .map(|p| p.order)
+                .fold(-1.0, f64::max)
+                + 1.0;
             c.folders.remove(id);
-            for p in c.projects.values_mut() {
-                if p.folder_id.as_deref() == Some(id) {
-                    p.folder_id = None;
-                }
+            for id in moved {
+                let p = c.projects.get_mut(&id).unwrap();
+                p.folder_id = None;
+                p.order = order;
+                order += 1.0;
             }
         }
         "saveContext" => {
@@ -415,5 +533,138 @@ mod tests {
         assert_eq!(result.saved_contexts.len(), 1);
         let result = transact(&temp.0, &[json!({"type":"removeFolder", "id":"folder-a"})]).unwrap();
         assert!(result.projects["/first"].folder_id.is_none());
+    }
+    #[test]
+    fn semantic_moves_keep_hidden_entries_and_pin_folder_positions() {
+        let temp = Temp::new();
+        transact(
+            &temp.0,
+            &[
+                register("/a"),
+                register("/hidden"),
+                register("/b"),
+                register("/c"),
+                json!({"type":"putFolder","folder":{"id":"folder","name":"Folder","order":0}}),
+                json!({"type":"updateProject","id":"/hidden","patch":{"hiddenFromRail":true}}),
+                json!({"type":"moveProject","id":"/c","folderId":"folder"}),
+            ],
+        )
+        .unwrap();
+        let moved = transact(
+            &temp.0,
+            &[json!({"type":"moveProject","id":"/b","beforeId":"/a"})],
+        )
+        .unwrap();
+        assert_eq!(
+            sorted_projects(&moved, None, false),
+            vec!["/b", "/a", "/hidden"]
+        );
+        let pinned = transact(
+            &temp.0,
+            &[json!({"type":"moveProject","id":"/a","pinned":true})],
+        )
+        .unwrap();
+        assert_eq!(pinned.projects["/a"].order, moved.projects["/a"].order);
+        let unpinned = transact(
+            &temp.0,
+            &[json!({"type":"moveProject","id":"/a","pinned":false})],
+        )
+        .unwrap();
+        assert_eq!(
+            sorted_projects(&unpinned, None, false),
+            vec!["/b", "/a", "/hidden"]
+        );
+        let assigned = transact(
+            &temp.0,
+            &[
+                json!({"type":"moveProject","id":"/a","pinned":true}),
+                json!({"type":"moveProject","id":"/a","folderId":"folder"}),
+            ],
+        )
+        .unwrap();
+        assert!(assigned.projects["/a"].pinned);
+        assert_eq!(
+            sorted_projects(&assigned, Some("folder"), false),
+            vec!["/c", "/a"]
+        );
+        let unpinned = transact(
+            &temp.0,
+            &[json!({"type":"moveProject","id":"/a","pinned":false})],
+        )
+        .unwrap();
+        assert_eq!(
+            sorted_projects(&unpinned, Some("folder"), false),
+            vec!["/c", "/a"]
+        );
+        assert_eq!(unpinned.projects["/a"].root_path, "/a");
+    }
+    #[test]
+    fn deleting_folder_appends_projects_in_their_relative_order() {
+        let temp = Temp::new();
+        let result = transact(
+            &temp.0,
+            &[
+                register("/a"),
+                register("/b"),
+                register("/c"),
+                register("/d"),
+                json!({"type":"putFolder","folder":{"id":"folder","name":"Folder","order":0}}),
+                json!({"type":"moveProject","id":"/a","folderId":"folder"}),
+                json!({"type":"moveProject","id":"/c","folderId":"folder"}),
+                json!({"type":"moveProject","id":"/c","folderId":"folder","beforeId":"/a"}),
+                json!({"type":"removeFolder","id":"folder"}),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            sorted_projects(&result, None, false),
+            vec!["/b", "/d", "/c", "/a"]
+        );
+        assert_eq!(result.projects.len(), 4);
+    }
+    #[test]
+    fn concurrent_semantic_reorders_merge_membership_and_preferences() {
+        let temp = Temp::new();
+        transact(
+            &temp.0,
+            &[
+                register("/a"),
+                register("/b"),
+                register("/hidden"),
+                json!({"type":"putFolder","folder":{"id":"one","name":"One","order":0}}),
+                json!({"type":"putFolder","folder":{"id":"two","name":"Two","order":1}}),
+            ],
+        )
+        .unwrap();
+        let first = temp.0.clone();
+        let second = temp.0.clone();
+        let a = std::thread::spawn(move || {
+            transact(
+                &first,
+                &[
+                    json!({"type":"moveProject","id":"/a","folderId":"one"}),
+                    json!({"type":"moveFolder","id":"two","beforeId":"one"}),
+                ],
+            )
+            .unwrap()
+        });
+        let b = std::thread::spawn(move || {
+            transact(
+                &second,
+                &[
+                    json!({"type":"moveProject","id":"/b","folderId":"one"}),
+                    json!({"type":"renameFolder","id":"two","name":"Renamed"}),
+                    json!({"type":"updateProject","id":"/hidden","patch":{"hiddenFromRail":true}}),
+                ],
+            )
+            .unwrap()
+        });
+        a.join().unwrap();
+        b.join().unwrap();
+        let result = transact(&temp.0, &[]).unwrap();
+        assert_eq!(sorted_projects(&result, Some("one"), false).len(), 2);
+        assert!(result.projects["/hidden"].hidden_from_rail);
+        assert_eq!(result.folders["two"].name, "Renamed");
+        assert!(result.folders["two"].order < result.folders["one"].order);
     }
 }

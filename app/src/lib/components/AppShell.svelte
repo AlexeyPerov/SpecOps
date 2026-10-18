@@ -56,6 +56,8 @@
   }
 
   export interface AppShellActivityRailProps {
+    currentWindowId?: string;
+    onError?: (message: string) => void;
     show: boolean;
     workspaces: WorkspaceEntry[];
     activeContextId: ContextId;
@@ -640,6 +642,8 @@
   <div class="shell-main-row" bind:this={shellMainRowEl}>
     {#if activityRail.show && !compactNotepad}
       <ActivityRail
+        currentWindowId={activityRail.currentWindowId}
+        onError={activityRail.onError}
         workspaces={activityRail.workspaces}
         activeContextId={activityRail.activeContextId}
         sessionsEnabled={activityRail.sessionsEnabled}

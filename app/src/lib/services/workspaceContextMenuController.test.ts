@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContextId } from "../domain/contracts";
 import {
   computeWorkspaceReorderTarget,
@@ -7,6 +7,7 @@ import {
   type WorkspaceContextMenuState,
 } from "./workspaceContextMenuController";
 
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("../state/appState", () => ({
   appState: {
     switchContext: vi.fn(() => true),
@@ -27,6 +28,9 @@ vi.mock("./workspaceCloseFlow", () => ({
   closeWorkspaceWithConfirm: vi.fn().mockResolvedValue(true),
 }));
 
+import { invoke } from "@tauri-apps/api/core";
+import { catalogProjectForRoot, loadProjectCatalog, _resetProjectCatalogForTests } from "./workspaceCatalog";
+beforeEach(() => { _resetProjectCatalogForTests(); vi.mocked(invoke).mockReset(); });
 import { appState } from "../state/appState";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
 
@@ -131,4 +135,16 @@ describe("createWorkspaceContextMenuActions", () => {
 
     expect(loadProjectTreeRoot).not.toHaveBeenCalled();
   });
+  it('reorders the visible catalog section including closed entries instead of window contexts', async () => {
+    const a={...catalogProjectForRoot('/a'),order:0}, hidden={...catalogProjectForRoot('/hidden'),order:1,hiddenFromRail:true};
+    const b={...catalogProjectForRoot('/b'),order:2}, c={...catalogProjectForRoot('/c'),order:3};
+    const source={version:1,revision:1,folders:{},savedContexts:{},projects:{'/a':a,'/hidden':hidden,'/b':b,'/c':c}};
+    vi.mocked(invoke).mockResolvedValue(source); await loadProjectCatalog();
+    const {actions,getMenu}=createActions({workspaceRootPath:'/a'});
+    expect(actions.menuIndex()).toBe(0); expect(actions.menuCount()).toBe(3);
+    actions.move('down');
+    expect(invoke).toHaveBeenLastCalledWith('project_catalog_transaction',{mutations:[{type:'moveProject',id:'/a',folderId:null,pinned:false,beforeId:'/c'}]});
+    expect(appState.reorderWorkspaces).not.toHaveBeenCalled(); expect(getMenu()).toBeNull();
+  });
+
 });

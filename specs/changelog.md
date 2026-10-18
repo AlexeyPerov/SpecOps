@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-18 17:11 MSK — Plan workspace organization and navigation
+
+- Added an eight-stage plan for a persistent project catalog, compact workspace rows, folders, pinning, search and quick switching, shared Git summaries, catalog management and releasing closed-context resources. Agent activity indicators are outside the scope.
+- Defined cross-window ownership and preference rules, bounded background Git refresh, acceptance criteria and a 30-project performance comparison. Allowlisted the plan for version control; application behavior is unchanged.
+
 ## 2026-10-18 16:49 MSK — Open the local macOS installer once
 
 - Build local macOS bundles with Finder-based DMG decoration disabled so packaging does not show a temporary installer window. Keep opening the completed DMG once after a successful build. Local DMGs use the default Finder layout rather than custom icon positioning/background; published release builds are unchanged.

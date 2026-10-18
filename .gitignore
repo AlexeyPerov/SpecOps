@@ -59,6 +59,7 @@ TODO.md
 # Specs (default ignore; allowlisted paths are tracked)
 /specs/*
 !/specs/changelog.md
+!/specs/workspaces-plan.md
 !/specs/issues-18-07.md
 !/specs/issues-02-08.md
 !/specs/performance-review-03-08.md

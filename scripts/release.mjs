@@ -150,6 +150,9 @@ async function buildLocalMac(args) {
   await new Promise((resolveBuild, rejectBuild) => {
     const child = spawn('npm', args, {
       cwd: resolve(root, 'app'), stdio: ['inherit', 'pipe', 'pipe'],
+      // Skip Finder-based DMG decoration, which opens a temporary installer
+      // window. Open only the finished image below, after a successful build.
+      env: { ...process.env, CI: 'true', TAURI_BUNDLER_DMG_IGNORE_CI: 'false' },
     });
     for (const [stream, destination] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
       let pending = '';

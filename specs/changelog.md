@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-18 16:49 MSK — Open the local macOS installer once
+
+- Build local macOS bundles with Finder-based DMG decoration disabled so packaging does not show a temporary installer window. Keep opening the completed DMG once after a successful build. Local DMGs use the default Finder layout rather than custom icon positioning/background; published release builds are unchanged.
+- Extend release-helper coverage to check the packaging environment even when inherited variables request Finder decoration, and assert one mount when the same installer is reported on both output streams. All 7 release-helper tests pass; an actual local build succeeds, skips temporary Finder decoration, and mounts the finished installer.
+
 ## 2026-10-18 16:37 MSK — Refine pending-file inspection and compact note windows
 
 - Show the uncommitted history row only when the working tree has staged, unstaged, or untracked files. Select it in place to inspect staged/unstaged lists and the live diff below history; retain the draft and diff selection, hide the commit form in this inspector, preserve pending selection on refresh, and return to commit inspection when clean. Rename workspace navigation to File Status and align related action/help copy.

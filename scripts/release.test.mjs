@@ -126,20 +126,30 @@ test('local macOS build opens only reported DMGs after success and preserves Tau
   const installer = join(f.base, 'Installer with spaces.dmg');
   const calls = join(f.base, 'mounted.json');
   const forwarded = join(f.base, 'args.json');
+  const environment = join(f.base, 'environment.json');
   writeFileSync(installer, 'fixture');
   const executable = (name, body) => {
     const path = join(bin, name);
     writeFileSync(path, `#!${process.execPath}\n${body}\n`);
     chmodSync(path, 0o755);
   };
-  executable('hdiutil', `require('node:fs').writeFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)));`);
+  executable('hdiutil', `require('node:fs').appendFileSync(${JSON.stringify(calls)}, JSON.stringify(process.argv.slice(2)) + '\\n');`);
   const run = (...args) => spawnSync(process.execPath, [join(f.root, 'scripts/release.mjs'), 'build', '--local', ...args], {
-    cwd: f.base, encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    cwd: f.base, encoding: 'utf8', env: {
+      ...process.env, PATH: `${bin}:${process.env.PATH}`, CI: 'false', TAURI_BUNDLER_DMG_IGNORE_CI: 'true',
+    },
   });
   executable('npm', `require('node:fs').writeFileSync(${JSON.stringify(forwarded)}, JSON.stringify(process.argv.slice(2)));
+    require('node:fs').writeFileSync(${JSON.stringify(environment)}, JSON.stringify({
+      CI: process.env.CI, TAURI_BUNDLER_DMG_IGNORE_CI: process.env.TAURI_BUNDLER_DMG_IGNORE_CI,
+    }));
+    console.log(${JSON.stringify(installer)});
     process.stderr.write(${JSON.stringify(`    \x1b[32m${installer}\x1b[0m\n`)});`);
   ok(run('--target', 'aarch64-apple-darwin', '--bundles', 'dmg'));
-  assert.deepEqual(JSON.parse(readFileSync(calls, 'utf8')), ['attach', '-autoopen', installer]);
+  assert.deepEqual(readFileSync(calls, 'utf8').trim().split('\n').map(line => JSON.parse(line)), [
+    ['attach', '-autoopen', installer],
+  ]);
+  assert.deepEqual(JSON.parse(readFileSync(environment, 'utf8')), { CI: 'true', TAURI_BUNDLER_DMG_IGNORE_CI: 'false' });
   assert.deepEqual(JSON.parse(readFileSync(forwarded, 'utf8')), ['run', 'tauri', '--', 'build', '--target', 'aarch64-apple-darwin', '--bundles', 'dmg']);
   rmSync(calls);
   executable('npm', `console.log('Finished app bundle');`);

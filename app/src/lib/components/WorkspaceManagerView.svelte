@@ -1,13 +1,9 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { onMount } from "svelte";
   import type { ContextId, WorkspaceEntry } from "../domain/contracts";
-  import {
-    loadWorkspaceGitColumnCell,
-    subscribeWorkspaceGitColumnAutoRefresh,
-    type WorkspaceGitColumnCell,
-  } from "../git/workspaceManagerGitColumn";
+  import { formatGitColumnDisplayText } from "../git/workspaceManagerGitColumn";
+  import { subscribeWorkspaceGitSummary, refreshWorkspaceGitSummaries, type WorkspaceGitSummarySnapshot } from "../git/workspaceGitSummary";
   import { shouldLoadWorkspaceManagerGitColumn } from "../git/gitIntegrationGating";
-  import { mapWithConcurrency } from "../services/mapWithConcurrency";
   import { emptySet } from "../collections/emptyCollections";
   import { getProjectCatalog, loadProjectCatalog, projectIdentity, subscribeProjectCatalog } from '../services/workspaceCatalog';
   import { addWorkspaceToWindow } from '../services/addWorkspaceToWindow';
@@ -67,183 +63,39 @@
     } catch (error) { catalogError = String(error); }
   }
 
-  const gitRootsKey = $derived(JSON.stringify(allRows.map(row => row.rootPath)));
-
-  let gitCellsByPath = $state<Map<string, WorkspaceGitColumnCell>>(new Map());
+  let gitCellsByPath = $state<Map<string, WorkspaceGitSummarySnapshot>>(new Map());
   let gitRefreshBusy = $state(false);
-  /** Bumped on each batch load start / effect cleanup so stale writes are dropped. */
-  let gitLoadGeneration = 0;
   const showGitColumn = $derived(shouldLoadWorkspaceManagerGitColumn());
-
-  function gitErrorCell(error: unknown): WorkspaceGitColumnCell {
-    const message = error instanceof Error ? error.message : String(error);
-    return { status: "error", text: "Git error", message };
+  function isHidden(workspace: ManagerRow): boolean { return hiddenRootPaths.has(projectIdentity(workspace.rootPath)); }
+  function gitCellForWorkspace(workspace: ManagerRow): WorkspaceGitSummarySnapshot {
+    return gitCellsByPath.get(workspace.rootPath) ?? { status: "unknown", refreshing: false, summary: null, checkedAt: null, error: null };
   }
-
-  function isHidden(workspace: ManagerRow): boolean {
-    return hiddenRootPaths.has(projectIdentity(workspace.rootPath));
+  function gitCellDisplayText(cell: WorkspaceGitSummarySnapshot): string {
+    if (cell.summary) return formatGitColumnDisplayText(cell.summary);
+    if (cell.status === "loading") return "…";
+    return cell.status === "error" ? "Git error" : "—";
   }
-
-  function gitCellForWorkspace(workspace: ManagerRow): WorkspaceGitColumnCell {
-    return gitCellsByPath.get(workspace.rootPath) ?? { status: "loading" };
+  function gitCellTitle(cell: WorkspaceGitSummarySnapshot): string {
+    const details = cell.summary ? `${formatGitColumnDisplayText(cell.summary)}. Ahead/behind uses locally known upstream refs; no fetch is performed.` : cell.status === "notGit" ? "Not a Git repository" : "Git status unknown";
+    const state = cell.refreshing ? "Checking…" : cell.status === "stale" ? "Stale" : cell.status === "error" ? cell.error : "";
+    return [details, state, cell.checkedAt ? `Last checked ${new Date(cell.checkedAt).toLocaleTimeString()}` : ""].filter(Boolean).join(" · ");
   }
-
-  function gitCellDisplayText(cell: WorkspaceGitColumnCell): string {
-    if (cell.status === "ready") {
-      return cell.displayText;
-    }
-    if (cell.status === "loading") {
-      return "…";
-    }
-    return cell.text;
+  function observeGitRow(node: HTMLElement, input: { path: string; enabled: boolean; active: boolean }) {
+    let visible = false;
+    const subscription = subscribeWorkspaceGitSummary(input.path, snapshot => {
+      gitCellsByPath = new Map(gitCellsByPath).set(input.path, snapshot);
+    }, { priority: input.active ? "active" : "visible", enabled: false });
+    const update = () => subscription.setDemand({ priority: input.active ? "active" : "visible", enabled: input.enabled && visible });
+    const observer = new IntersectionObserver(entries => { visible = entries.some(entry => entry.isIntersecting); update(); });
+    observer.observe(node);
+    return { update(next: typeof input) { input = next; update(); }, destroy() { observer.disconnect(); subscription.unsubscribe(); } };
   }
-
-  function gitCellTitle(cell: WorkspaceGitColumnCell): string {
-    if (cell.status === "ready") {
-      const summary = cell.summary;
-      const branch = summary.isDetached ? `Detached HEAD at ${summary.branchName}` : summary.branchName;
-      const tracking = summary.aheadBehindError
-        ? `Could not load tracking: ${summary.aheadBehindError}`
-        : summary.aheadBehind && (summary.aheadBehind.ahead > 0 || summary.aheadBehind.behind > 0)
-          ? `${summary.aheadBehind.ahead} ahead, ${summary.aheadBehind.behind} behind`
-          : summary.aheadBehind
-            ? "Up to date with upstream"
-            : "No upstream";
-      const tree = summary.isDirty ? "Working tree has uncommitted changes" : "Working tree clean";
-      return `${branch} · ${tracking} · ${tree}`;
-    }
-    if (cell.status === "neutral") {
-      return "Not a git repository";
-    }
-    if (cell.status === "error") {
-      return cell.message;
-    }
-    return "Loading git status…";
-  }
-
-  async function loadGitCellsForWorkspaces(
-    rows: Pick<ManagerRow, 'rootPath'>[],
-    options?: { force?: boolean },
-  ): Promise<void> {
-    const generation = ++gitLoadGeneration;
-
-    if (!showGitColumn) {
-      if (generation !== gitLoadGeneration) {
-        return;
-      }
-      gitCellsByPath = new Map();
-      return;
-    }
-    if (rows.length === 0) {
-      if (generation !== gitLoadGeneration) {
-        return;
-      }
-      gitCellsByPath = new Map();
-      return;
-    }
-
-    const pending = new Map(untrack(() => gitCellsByPath));
-    for (const workspace of rows) {
-      if (!options?.force && pending.has(workspace.rootPath)) {
-        continue;
-      }
-      pending.set(workspace.rootPath, { status: "loading" });
-    }
-    gitCellsByPath = pending;
-
-    const results = new Map<string, WorkspaceGitColumnCell>();
-    try {
-      // Per-path catch so one failure does not leave the whole batch on "…".
-      // P03-08-07: bound concurrent git processes (previously Promise.all fired
-      // one load per row — up to 2N blocking subprocesses for N workspaces,
-      // which saturated the tokio pool shared with file reads). The per-repo
-      // queue still serializes same-repo work; this caps cross-repo fan-out.
-      const ordered = await mapWithConcurrency(rows, 4, async (workspace) => {
-        try {
-          const cell = await loadWorkspaceGitColumnCell(workspace.rootPath, {
-            force: options?.force,
-          });
-          return [workspace.rootPath, cell] as const;
-        } catch (error) {
-          return [workspace.rootPath, gitErrorCell(error)] as const;
-        }
-      });
-      for (const [path, cell] of ordered) {
-        results.set(path, cell);
-      }
-    } catch (error) {
-      if (generation !== gitLoadGeneration) {
-        return;
-      }
-      const next = new Map(untrack(() => gitCellsByPath));
-      for (const workspace of rows) {
-        const cell = next.get(workspace.rootPath);
-        if (!cell || cell.status === "loading") {
-          next.set(workspace.rootPath, gitErrorCell(error));
-        }
-      }
-      gitCellsByPath = next;
-      return;
-    }
-
-    if (generation !== gitLoadGeneration) {
-      return;
-    }
-
-    const next = new Map(untrack(() => gitCellsByPath));
-    for (const [path, cell] of results) {
-      next.set(path, cell);
-    }
-    gitCellsByPath = next;
-  }
-
   async function handleRefreshGitColumn(): Promise<void> {
-    if (gitRefreshBusy || rows.length === 0) {
-      return;
-    }
-
+    if (gitRefreshBusy || !rows.length) return;
     gitRefreshBusy = true;
-    try {
-      await loadGitCellsForWorkspaces(rows, { force: true });
-    } finally {
-      gitRefreshBusy = false;
-    }
+    try { await refreshWorkspaceGitSummaries(rows.map(row => row.rootPath)); }
+    finally { gitRefreshBusy = false; }
   }
-
-  async function refreshGitColumnCell(workspaceRootPath: string): Promise<void> {
-    const generation = gitLoadGeneration;
-    gitCellsByPath = new Map(gitCellsByPath).set(workspaceRootPath, { status: "loading" });
-    try {
-      const cell = await loadWorkspaceGitColumnCell(workspaceRootPath, { force: true });
-      if (generation !== gitLoadGeneration) {
-        return;
-      }
-      gitCellsByPath = new Map(gitCellsByPath).set(workspaceRootPath, cell);
-    } catch (error) {
-      if (generation !== gitLoadGeneration) {
-        return;
-      }
-      gitCellsByPath = new Map(gitCellsByPath).set(workspaceRootPath, gitErrorCell(error));
-    }
-  }
-
-  $effect(() => {
-    const paths = new Set<string>(JSON.parse(gitRootsKey));
-    return subscribeWorkspaceGitColumnAutoRefresh((workspaceRootPath) => {
-      if (!paths.has(workspaceRootPath)) {
-        return;
-      }
-      void refreshGitColumnCell(workspaceRootPath);
-    });
-  });
-
-  $effect(() => {
-    const roots: string[] = JSON.parse(gitRootsKey);
-    void loadGitCellsForWorkspaces(roots.map(rootPath => ({ rootPath })));
-    return () => {
-      gitLoadGeneration += 1;
-    };
-  });
 </script>
 
 <div class="workspace-manager-view" role="tabpanel" aria-label="Workspace Manager">
@@ -307,7 +159,7 @@
         {#each rows as workspace (workspace.id)}
           {@const hidden = isHidden(workspace)}
           {@const gitCell = gitCellForWorkspace(workspace)}
-          <tr
+          <tr use:observeGitRow={{ path: workspace.rootPath, enabled: showGitColumn, active: workspace.contextId === activeContextId }}
             class="wm-row"
             class:wm-row-active={activeContextId === workspace.contextId}
             class:wm-row-hidden={hidden}
@@ -339,8 +191,8 @@
             <td class="wm-git">
               <span
                 class="wm-git-text"
-                class:wm-git-dirty={gitCell.status === "ready" && gitCell.summary.isDirty}
-                class:wm-git-clean={gitCell.status === "ready" && !gitCell.summary.isDirty}
+                class:wm-git-dirty={gitCell.summary?.isDirty === true}
+                class:wm-git-clean={gitCell.summary !== null && !gitCell.summary.isDirty}
                 title={gitCellTitle(gitCell)}
               >
                 {gitCellDisplayText(gitCell)}

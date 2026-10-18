@@ -249,8 +249,9 @@ async function invokeRunGitOnce(
   if (options?.signal?.aborted) throw new Error("Git operation cancelled before starting.");
   if (options?.commandId) options.onStart?.(options.commandId);
   const response = await invoke<RunGitResponse>(
-    "run_git",
-    buildRunGitInvokePayload(repoRoot, args, env, options),
+    options?.summaryLease ? "workspace_git_summary_run" : "run_git",
+    { ...buildRunGitInvokePayload(repoRoot, args, env, options),
+      ...(options?.summaryLease ? { lease: options.summaryLease } : {}) },
   );
   logGitCommandSummary(repoRoot, args, response);
   return response;

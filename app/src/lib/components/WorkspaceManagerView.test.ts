@@ -2,20 +2,20 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 import { mount, unmount } from "svelte";
 import WorkspaceManagerView from "./WorkspaceManagerView.svelte";
 import type { ContextId, WorkspaceEntry } from "../domain/contracts";
-import { loadWorkspaceGitColumnCell } from "../git/workspaceManagerGitColumn";
+import { subscribeWorkspaceGitSummary } from "../git/workspaceGitSummary";
 
-// Mock the git column loader so the test never hits Tauri IPC. The view's mount
-// `$effect` calls `loadGitCellsForWorkspaces`, which reads/writes `gitCellsByPath`;
-// if those reads are tracked, the effect loops (effect_update_depth_exceeded).
-vi.mock("../git/gitIntegrationGating", () => ({
-  shouldLoadWorkspaceManagerGitColumn: vi.fn(() => true),
+vi.mock("../git/gitIntegrationGating", () => ({ shouldLoadWorkspaceManagerGitColumn: vi.fn(() => true) }));
+vi.mock("../git/workspaceGitSummary", () => ({
+  subscribeWorkspaceGitSummary: vi.fn((_path, listener) => {
+    listener({status:"notGit",refreshing:false,summary:null,checkedAt:null,error:null});
+    return {setDemand:vi.fn(),unsubscribe:vi.fn(),refresh:vi.fn()};
+  }),
+  refreshWorkspaceGitSummaries:vi.fn(async()=>{}),
 }));
-
-vi.mock("../git/workspaceManagerGitColumn", () => ({
-  loadWorkspaceGitColumnCell: vi.fn(async () => ({ status: "neutral", text: "—" })),
-  refreshWorkspaceGitColumnCells: vi.fn(async () => new Map()),
-  subscribeWorkspaceGitColumnAutoRefresh: vi.fn(() => () => {}),
-}));
+class TestIntersectionObserver {
+  observe() {} disconnect() {} unobserve() {} takeRecords() { return []; }
+}
+vi.stubGlobal("IntersectionObserver", TestIntersectionObserver);
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 vi.mock('../services/addWorkspaceToWindow', () => ({ addWorkspaceToWindow: vi.fn() }));
@@ -145,7 +145,10 @@ describe("WorkspaceManagerView", () => {
   });
 
   it("writes Git error cells when a git-column load rejects", async () => {
-    vi.mocked(loadWorkspaceGitColumnCell).mockRejectedValueOnce(new Error("boom"));
+    vi.mocked(subscribeWorkspaceGitSummary).mockImplementationOnce((_path, listener) => {
+      listener({status:"error",refreshing:false,summary:null,checkedAt:null,error:"boom"});
+      return {setDemand:vi.fn(),unsubscribe:vi.fn(),refresh:vi.fn()};
+    });
 
     const host = document.createElement("div");
     document.body.appendChild(host);
@@ -169,7 +172,7 @@ describe("WorkspaceManagerView", () => {
 
     const gitCell = host.querySelector(".wm-git-text");
     expect(gitCell?.textContent?.trim()).toBe("Git error");
-    expect(gitCell?.getAttribute("title")).toBe("boom");
+    expect(gitCell?.getAttribute("title")).toContain("boom");
 
     unmount(instance as never);
     host.remove();

@@ -6,7 +6,7 @@ import {
 } from "./gitParse";
 import { runGit, type GitCallScope } from "./gitService";
 import { createGitCommandError } from "./types";
-import type { AheadBehindCounts } from "./types";
+import type { AheadBehindCounts, CancellableGitOptions } from "./types";
 
 export type RepositoryStatusSummary = {
   branchName: string;
@@ -15,6 +15,7 @@ export type RepositoryStatusSummary = {
   /** Set when upstream exists but ahead/behind query failed (non-upstream git error). */
   aheadBehindError?: string | null;
   isDirty: boolean;
+  hasConflicts?: boolean;
   /**
    * True when the repository HEAD is unborn — `git init` ran but no commit
    * exists yet. Lets callers render their dedicated empty state instead of
@@ -32,8 +33,10 @@ export type RepositoryStatusSummary = {
 export async function queryRepositoryStatusSummary(
   repoRoot: string,
   scope: GitCallScope = "background",
+  options?: CancellableGitOptions,
 ): Promise<RepositoryStatusSummary> {
-  const response = await runGit(repoRoot, ["status", "-sb"], scope);
+  const execute = (args: string[]) => options ? runGit(repoRoot, args, scope, undefined, options) : runGit(repoRoot, args, scope);
+  const response = await execute(["status", "-sb"]);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
@@ -61,7 +64,7 @@ export async function queryRepositoryStatusSummary(
 
   let branchName = parsed.branchName;
   if (parsed.isDetached) {
-    const headResponse = await runGit(repoRoot, ["rev-parse", "--short", "HEAD"], scope);
+    const headResponse = await execute(["rev-parse", "--short", "HEAD"]);
     if (headResponse.exitCode !== 0) {
       throw createGitCommandError(headResponse);
     }
@@ -73,6 +76,7 @@ export async function queryRepositoryStatusSummary(
     .filter((line) => !line.replace(/\r$/, "").startsWith("## "))
     .join("\n");
   const isDirty = parseStatusPorcelain(porcelainStdout).length > 0;
+  const hasConflicts = porcelainStdout.split("\n").some(line => /^(DD|AU|UD|UA|DU|AA|UU) /.test(line));
 
   // An unborn HEAD (freshly init'd repo, no commits) has no upstream and no
   // ahead/behind to compute — and `parseStatusShortBranchHeader` already
@@ -85,6 +89,7 @@ export async function queryRepositoryStatusSummary(
       aheadBehind: null,
       aheadBehindError: null,
       isDirty,
+      hasConflicts,
       isUnborn: true,
     };
   }
@@ -119,6 +124,7 @@ export async function queryRepositoryStatusSummary(
     aheadBehind,
     aheadBehindError,
     isDirty,
+    hasConflicts,
     isUnborn: false,
   };
 }

@@ -46,6 +46,7 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehind: { ahead: 2, behind: 1 },
       aheadBehindError: null,
       isDirty: true,
+      hasConflicts: false,
       isUnborn: false,
     });
 
@@ -62,6 +63,7 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehind: { ahead: 0, behind: 0 },
       aheadBehindError: null,
       isDirty: false,
+      hasConflicts: false,
       isUnborn: false,
     });
   });
@@ -77,6 +79,7 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehind: null,
       aheadBehindError: null,
       isDirty: false,
+      hasConflicts: false,
       isUnborn: false,
     });
 
@@ -98,6 +101,7 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehind: null,
       aheadBehindError: null,
       isDirty: false,
+      hasConflicts: false,
       isUnborn: false,
     });
 
@@ -118,6 +122,7 @@ describe("queryRepositoryStatusSummary", () => {
       aheadBehind: null,
       aheadBehindError: null,
       isDirty: false,
+      hasConflicts: false,
       isUnborn: true,
     });
 
@@ -126,4 +131,17 @@ describe("queryRepositoryStatusSummary", () => {
     expect(runGitMock).toHaveBeenCalledTimes(1);
     expect(runGitMock).toHaveBeenCalledWith("/tmp/repo", ["status", "-sb"], "background");
   });
+  it.each(["DD", "AU", "UD", "UA", "DU", "AA", "UU"])("reports %s as an unresolved conflict without detailed diffs", async status => {
+    runGitMock.mockResolvedValue(statusResponse(`## main\n${status} conflict.txt\n`));
+    const summary = await queryRepositoryStatusSummary("/tmp/repo");
+    expect(summary).toMatchObject({hasConflicts:true,isDirty:true,aheadBehind:null});
+    expect(runGitMock).toHaveBeenCalledTimes(1);
+  });
+  it("passes one coordinator lease to detached HEAD followup", async () => {
+    runGitMock.mockResolvedValueOnce(statusResponse("## HEAD (no branch)\n")).mockResolvedValueOnce(statusResponse("abc123\n"));
+    await queryRepositoryStatusSummary("/tmp/repo", "background", {summaryLease:"lease",timeoutMs:30_000});
+    for(const call of runGitMock.mock.calls) expect(call[4]).toEqual({summaryLease:"lease",timeoutMs:30_000});
+    expect(runGitMock.mock.calls.map(call=>call[1][0])).toEqual(["status","rev-parse"]);
+  });
+
 });

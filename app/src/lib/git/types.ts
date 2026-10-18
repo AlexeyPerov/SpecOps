@@ -39,6 +39,8 @@ export interface RemoveStaleIndexLockResponse {
 
 /** Optional cancellation handle for long-running git subprocesses. */
 export interface CancellableGitOptions {
+  /** App-wide compact-summary lease; native accounting spans the subprocess lifetime. */
+  summaryLease?: string;
   /** Called inside the queue immediately before invoking a registered subprocess. */
   onStart?: (commandId: string) => void;
   /** Rechecked inside the mutation queue immediately before spawning (including retries). */

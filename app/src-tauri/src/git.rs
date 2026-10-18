@@ -1727,9 +1727,18 @@ fn commit_with_message_blocking(
 /// therefore document opens) stalled until a git command finished.
 #[tauri::command(async)]
 pub async fn run_git(request: RunGitRequest) -> Result<RunGitResponse, String> {
+    run_git_with_lifetime(request, ()).await
+}
+
+/// Keep accounting attached to the blocking runner, even if its async caller disappears.
+pub async fn run_git_with_lifetime<T: Send + 'static>(
+    request: RunGitRequest,
+    lifetime: T,
+) -> Result<RunGitResponse, String> {
     validate_git_args(&request.args)?;
     let repo_root = normalize_repo_root(&request.repo_root)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let _lifetime = lifetime;
         execute_git_with_full_options(
             &repo_root,
             &request.args,

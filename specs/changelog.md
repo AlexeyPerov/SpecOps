@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-18 18:06 MSK — Share workspace Git summaries across windows (WS-05)
+
+- Replace the Manager's batch/cache with demand subscriptions and publish each row independently. Share 60-second snapshots with explicit unknown/loading/fresh/stale/not-Git/error states, successful-check timestamps, conflict markers, force single-flight and preserved previous data after failures.
+- Coordinate four app-wide summary leases with active/visible priorities and canonical worktree identities. Resolution and compact status use the existing Git APIs, per-repository queues and native runner. Attach accounting to the blocking runner until subprocess completion/reap, retain occupied slots across unsubscribe/window destruction, reject revoked tokens, and reclaim old webview lifetimes safely.
+- Debounce invalidations for 350 ms, discard superseded generations and schedule one followup. Guard cross-window publications against reordered IPC responses; bound unused summaries and root resolutions. Gate background demand by settings, focus and visibility, settle refresh waits when consumers deactivate, and expose resource diagnostics.
+- Watch only demanded worktree markers and Git metadata, resolve `.git` files/common refs for linked trees, ignore transient lock/access noise, and release watchers when demand disappears. Existing filesystem and Git mutation events invalidate affected summaries without fetch or full-catalog polling.
+- Validation: 317 frontend files / 3186 tests, zero Svelte/type diagnostics, production build, 14 native coordinator/watcher/lifetime tests and 48 existing native Git runner tests. Include real HEAD/ref notifications, read-only status without self-invalidation, and accounting after an async caller disappears. Full desktop two-window/30-project measurement remains in WS-08.
+
 ## 2026-10-18 17:50 MSK — Search and switch workspaces (WS-04)
 
 - Share catalog-only fuzzy name/path search across the sidebar, Manager and a lazy workspace switcher. Sidebar filtering temporarily reveals collapsed folders, disables ambiguous reorder, supports both widths and restores saved collapse on Escape. Search itself performs no filesystem traversal or Git requests; Manager filtering retains its stable existing Git membership until the shared Git service stage.

@@ -4,6 +4,7 @@ mod component_manager;
 mod components;
 mod file_watcher;
 mod git;
+mod workspace_git_summary;
 mod git_askpass;
 mod handoff;
 mod native_assets;
@@ -134,6 +135,14 @@ pub fn run() {
             quit_app,
             git::git_available,
             git::run_git,
+            workspace_git_summary::workspace_git_summary_sync,
+            workspace_git_summary::workspace_git_summary_refresh,
+            workspace_git_summary::workspace_git_summary_invalidate,
+            workspace_git_summary::workspace_git_summary_complete,
+            workspace_git_summary::workspace_git_summary_run,
+            workspace_git_summary::workspace_git_summary_diagnostics,
+            workspace_git_summary::workspace_git_summary_release,
+            workspace_git_summary::workspace_git_summary_detach,
             git::respond_git_askpass,
             git::cancel_git_command,
             git::drain_git_commands,
@@ -177,6 +186,9 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
+        if let RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &event {
+            workspace_git_summary::window_destroyed(app_handle, label);
+        }
         // Both arms: `ExitRequested` covers the normal path (last window closed,
         // `AppHandle::exit`), while `Exit` is the last chance on shutdown paths that
         // skip it. `run_shutdown_cleanup` is idempotent, so running twice is fine —

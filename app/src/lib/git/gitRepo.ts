@@ -20,16 +20,13 @@ import {
   type GitNotARepositoryError,
   type ResolveRepoRootResult,
   type RunGitResponse,
+  type CancellableGitOptions,
 } from "./types";
 import { subscribeVersionControlMutations } from "./versionControlRefresh";
 
-const NOT_A_REPOSITORY_EXIT_CODE = 128;
-
 function isNotARepositoryResponse(response: RunGitResponse): boolean {
-  if (response.exitCode === NOT_A_REPOSITORY_EXIT_CODE) {
-    return true;
-  }
-  return response.stderr.toLowerCase().includes("not a git repository");
+  const message = response.stderr.toLowerCase();
+  return message.includes("not a git repository") || message.includes("must be run in a work tree");
 }
 
 /**
@@ -44,6 +41,11 @@ function isNotARepositoryResponse(response: RunGitResponse): boolean {
  */
 const repoRootCache = new Map<string, ResolveRepoRootResult>();
 let repoRootMutationHookInstalled = false;
+function cacheRepoRoot(path: string, result: ResolveRepoRootResult): void {
+  repoRootCache.delete(path);
+  repoRootCache.set(path, result);
+  while (repoRootCache.size > 128) repoRootCache.delete(repoRootCache.keys().next().value!);
+}
 
 function ensureRepoRootMutationHook(): void {
   if (repoRootMutationHookInstalled) {
@@ -77,6 +79,7 @@ export function resetResolveRepoRootCacheForTests(): void {
 export async function resolveRepoRoot(
   workspaceRootPath: string,
   scope: GitCallScope = "background",
+  options?: CancellableGitOptions,
 ): Promise<ResolveRepoRootResult> {
   ensureRepoRootMutationHook();
   const cached = repoRootCache.get(workspaceRootPath);
@@ -84,7 +87,9 @@ export async function resolveRepoRoot(
     return cached;
   }
 
-  const response = await runGit(workspaceRootPath, ["rev-parse", "--show-toplevel"], scope);
+  const response = options
+    ? await runGit(workspaceRootPath, ["rev-parse", "--show-toplevel"], scope, undefined, options)
+    : await runGit(workspaceRootPath, ["rev-parse", "--show-toplevel"], scope);
 
   if (isNotARepositoryResponse(response)) {
     const error: GitNotARepositoryError = createGitNotARepositoryError(
@@ -92,7 +97,7 @@ export async function resolveRepoRoot(
       response.stderr,
     );
     const result: ResolveRepoRootResult = { ok: false, error };
-    repoRootCache.set(workspaceRootPath, result);
+    cacheRepoRoot(workspaceRootPath, result);
     return result;
   }
 
@@ -107,12 +112,12 @@ export async function resolveRepoRoot(
       response.stderr,
     );
     const result: ResolveRepoRootResult = { ok: false, error };
-    repoRootCache.set(workspaceRootPath, result);
+    cacheRepoRoot(workspaceRootPath, result);
     return result;
   }
 
   const result: ResolveRepoRootResult = { ok: true, repoRoot };
-  repoRootCache.set(workspaceRootPath, result);
+  cacheRepoRoot(workspaceRootPath, result);
   return result;
 }
 

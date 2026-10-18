@@ -65,3 +65,12 @@ describe('queued Pull snapshot guard', () => {
     expect(invokeMock.mock.calls.map(call=>(call[1] as {request:{args:string[]}}).request.args[0])).toEqual(['checkout','rev-parse','branch']);
   });
 });
+
+describe("compact summary native accounting", () => {
+  beforeEach(() => { invokeMock.mockReset(); resetGitCommandQueueForTests(); });
+  it("uses the existing Git queue and native runner through its lease accounting wrapper", async () => {
+    invokeMock.mockResolvedValue({exitCode:0,stdout:"## main\n",stderr:"",durationMs:1});
+    await runGit("/repo", ["status","-sb"], "background", undefined, {summaryLease:"permit",timeoutMs:30_000});
+    expect(invokeMock).toHaveBeenCalledWith("workspace_git_summary_run", {request:{repoRoot:"/repo",args:["status","-sb"],timeoutMs:30_000},lease:"permit"});
+  });
+});

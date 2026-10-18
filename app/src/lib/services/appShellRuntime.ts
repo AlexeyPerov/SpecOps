@@ -1,3 +1,4 @@
+import { setWorkspaceGitSummaryWindowActive, invalidateWorkspaceGitSummary, disposeWorkspaceGitSummaryService } from "../git/workspaceGitSummary";
 import { listenWorkspaceWindowTransfers } from "./workspaceWindowTransfer";
 import { emit, emitTo, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
@@ -554,7 +555,13 @@ async function startAppShellRuntimeInner(
     await syncExternalFileWatcher(appState.getSnapshot());
   });
 
+  let summaryWindowFocused = await currentWindow.isFocused();
+  const syncSummaryActivity = () => setWorkspaceGitSummaryWindowActive(summaryWindowFocused && document.visibilityState !== "hidden");
+  syncSummaryActivity();
+  document.addEventListener("visibilitychange", syncSummaryActivity);
+  cleanupCallbacks.push(() => { document.removeEventListener("visibilitychange", syncSummaryActivity); disposeWorkspaceGitSummaryService(); });
   const unlistenFocusChanged = await currentWindow.onFocusChanged(async ({ payload }) => {
+    summaryWindowFocused = payload; syncSummaryActivity();
     if (!payload) {
       return;
     }
@@ -576,6 +583,7 @@ async function startAppShellRuntimeInner(
       if (!runtimeReady) {
         return;
       }
+      invalidateWorkspaceGitSummary(event.payload.path);
       const kind = normalizeFileWatcherKind(event.payload.kind);
       options.onFilesystemChange?.(event.payload.path, kind);
       await runWatcherExternalCheck(event.payload.path);

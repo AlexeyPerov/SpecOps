@@ -12,7 +12,7 @@ use std::{
 };
 use tauri::{Emitter, Manager};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Project {
     id: String,
@@ -27,13 +27,13 @@ struct Project {
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
 }
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 struct Folder {
     id: String,
     name: String,
     order: f64,
 }
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Catalog {
     version: u32,
@@ -428,6 +428,17 @@ fn transact_with_owner_check(
         }
         apply(&mut next, &mutation)?;
     }
+    // Idempotent requests (re-registering a known project, an unchanged patch) must
+    // not rewrite the files or make every window reload the catalog.
+    if next == previous {
+        if recovered {
+            atomic_write(
+                &root.join("project-catalog.json"),
+                &serde_json::to_vec(&previous).map_err(|e| e.to_string())?,
+            )?;
+        }
+        return Ok((previous, recovered));
+    }
     next.revision = previous
         .revision
         .checked_add(1)
@@ -646,6 +657,18 @@ mod tests {
         let result = transact(&temp.0, &[register("/project/"), register("/project")]).unwrap();
         assert_eq!(result.projects.len(), 1);
         assert_eq!(transact(&temp.0, &[]).unwrap().projects.len(), 1);
+    }
+    #[test]
+    fn unchanged_mutations_do_not_write_or_bump_revision() {
+        let temp = Temp::new();
+        let first = transact_with_status(&temp.0, &[register("/project")]).unwrap();
+        assert!(first.1);
+        let modified = fs::metadata(temp.0.join("project-catalog.json")).unwrap().modified().unwrap();
+        let patch = json!({ "type": "updateProject", "id": "/project", "patch": { "hiddenFromRail": false } });
+        let (catalog, changed) = transact_with_status(&temp.0, &[register("/project"), patch]).unwrap();
+        assert!(!changed);
+        assert_eq!(catalog.revision, first.0.revision);
+        assert_eq!(fs::metadata(temp.0.join("project-catalog.json")).unwrap().modified().unwrap(), modified);
     }
     #[test]
     fn concurrent_windows_merge_changes_under_os_lock() {

@@ -1,5 +1,5 @@
 import { validateGitRefName } from "./gitRefName";
-import { assertPullSnapshot, pullOptionArgs, queryGitOperationState, type PullOptions, type PullSnapshot } from "./gitPull";
+import { pullOptionArgs, queryGitOperationState, type PullOptions, type PullSnapshot } from "./gitPull";
 import { parseLsRemoteTags, parseRemoteVvLines } from "./gitParse";
 import { queryCurrentBranch } from "./gitRepo";
 import { runGit, runRemoteGit } from "./gitRun";
@@ -196,13 +196,13 @@ export async function pullRemote(
   options?: CancellableGitOptions & { pull?: PullOptions; expected?: PullSnapshot },
   scope: GitCallScope = "versionControl",
 ): Promise<void> {
-  if (options?.expected) await assertPullSnapshot(repoRoot, options.expected);
   if (options?.pull) {
     const state = await queryGitOperationState(repoRoot);
     if (state.kind !== 'none' || state.conflicts.length) throw new Error('Finish the current Git operation or resolve conflicts before pulling.');
   }
   const response = await runRemoteGit(repoRoot, buildPullArgs(target, options?.pull), scope, {
     ...options,
+    // Verified inside the mutation lane, after earlier queued branch mutations.
     expectedHead: options?.expected,
     operation: "pull",
   });

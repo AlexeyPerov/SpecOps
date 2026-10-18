@@ -127,23 +127,49 @@ export async function confirmWindowClose(deps: WindowCloseDeps): Promise<boolean
 
   // Awaited, unlike the pagehide path: this is the last chance to get unsaved buffers
   // into session.json, and it needs two IPC hops (read then write) to get there.
-  try {
+  // Background updates (watcher disk state, autosave) may replace contexts while the
+  // flush is in flight; repeat until a pass observes a stable snapshot.
+  for (let attempt = 1; ; attempt += 1) {
     const contexts = appState.getSnapshot().contexts;
-    await deps.flushSession();
-    await checkpointWorkspaceContexts();
-    if (appState.getSnapshot().contexts !== contexts) throw new Error('Documents changed while closing. Try again.');
-  } catch (error: unknown) {
-    await logDiagnostic({
-      level: "error",
-      source: "frontend",
-      timestamp: new Date().toISOString(),
-      message: "session flush on window close failed",
-      metadata: { error: error instanceof Error ? error.message : String(error) },
-    });
-    deps.notify(`Could not save the window session: ${String(error)}`);
-    return false;
+    try {
+      await deps.flushSession();
+    } catch (error: unknown) {
+      await logCloseFlushFailure("session flush on window close failed", error);
+      deps.notify(`Could not save the window session: ${String(error)}`);
+      return false;
+    }
+    try {
+      await checkpointWorkspaceContexts();
+    } catch (error: unknown) {
+      await logCloseFlushFailure("project checkpoint on window close failed", error);
+      // The session is saved; only the project catalog copy failed. Let the user
+      // decide instead of keeping the window open forever (e.g. a damaged catalog).
+      return requestConfirm({
+        title: "Could not save project state",
+        message: `${String(error)}\n\nClose this window anyway? Unsaved buffers of its projects may not be restored when you reopen them.`,
+        confirmLabel: "Close anyway",
+        cancelLabel: "Keep open",
+        danger: true,
+      });
+    }
+    if (appState.getSnapshot().contexts === contexts) return true;
+    if (attempt >= MAX_CLOSE_FLUSH_ATTEMPTS) {
+      deps.notify("Documents kept changing while closing. Try again.");
+      return false;
+    }
   }
-  return true;
+}
+
+const MAX_CLOSE_FLUSH_ATTEMPTS = 3;
+
+async function logCloseFlushFailure(message: string, error: unknown): Promise<void> {
+  await logDiagnostic({
+    level: "error",
+    source: "frontend",
+    timestamp: new Date().toISOString(),
+    message,
+    metadata: { error: error instanceof Error ? error.message : String(error) },
+  });
 }
 
 /**

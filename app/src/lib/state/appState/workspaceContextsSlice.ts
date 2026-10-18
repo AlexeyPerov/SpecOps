@@ -39,7 +39,7 @@ import {
   reindexIdCountersFromContexts,
 } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
-import { getProjectCatalog, projectIdentity, updateCatalogProject } from '../../services/workspaceCatalog';
+import { getProjectCatalog, projectIdentity, recordCatalogProjectUse } from '../../services/workspaceCatalog';
 import { moveArrayItem } from "./tabHelpers";
 
 type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => void;
@@ -104,7 +104,7 @@ export function createWorkspaceContextsSlice(deps: {
     if (!workspace || state.contexts.activeContextId !== contextId) return;
     activationHistory = [contextId, ...activationHistory.filter(id => id !== contextId && state.contexts.workspaces.some(entry => entry.id === id))];
     if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window && getProjectCatalog().projects[projectIdentity(workspace.rootPath)]) {
-      void updateCatalogProject(workspace.rootPath, { lastUsedAt: new Date().toISOString() }).catch(console.error);
+      recordCatalogProjectUse(workspace.rootPath);
     }
   }
   const slice = {

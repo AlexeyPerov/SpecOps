@@ -37,7 +37,7 @@
     onOpenVersionControl?: (workspaceId: ContextId) => void;
   } = $props();
 
-  let catalog = $state(getProjectCatalog());
+  let catalog = $state.raw(getProjectCatalog());
   let catalogError = $state('');
   let searchQuery = $state('');
   let owners = $state<WorkspaceWindowOwners>({});

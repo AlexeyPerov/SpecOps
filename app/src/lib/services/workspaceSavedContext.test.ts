@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appState } from '../state/appState';
 import { savedProjectContext, restoreSavedProjectContext, checkpointWorkspaceContexts } from './workspaceSavedContext';
-import { getProjectCatalog, saveCatalogProjectContext } from './workspaceCatalog';
+import { getProjectCatalog, saveCatalogProjectContexts } from './workspaceCatalog';
 import { openPath } from './fileSystem';
 import { invoke } from '@tauri-apps/api/core';
 vi.mock('./workspaceCatalog', () => ({ getProjectCatalog: vi.fn(), projectIdentity: (root: string) => root,
-  saveCatalogProjectContext: vi.fn().mockResolvedValue(undefined) }));
+  saveCatalogProjectContexts: vi.fn().mockResolvedValue(undefined), flushCatalogProjectUse: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./fileSystem', () => ({ openPath: vi.fn() }));
 vi.mock('./diskFingerprint', async original => ({ ...await original<typeof import('./diskFingerprint')>(), statDiskFingerprint: vi.fn().mockResolvedValue({mtimeMs:1,sizeBytes:1}) }));
 import { statDiskFingerprint } from './diskFingerprint';
@@ -69,9 +69,10 @@ describe('closed project restore', () => {
     const restored = await restoreSavedProjectContext('/project');
     expect(restored?.documents.find(doc => doc.filePath)?.fileMissing).toBe(true);
   });
-  it('checkpoints each open project before secondary window buffers can be removed', async () => {
+  it('checkpoints every open project in one transaction before secondary window buffers can be removed', async () => {
     context(); appState.addWorkspace('/second');
     await checkpointWorkspaceContexts();
-    expect(saveCatalogProjectContext).toHaveBeenCalledTimes(2);
+    expect(saveCatalogProjectContexts).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(saveCatalogProjectContexts).mock.calls[0][0].map(entry => entry.root)).toEqual(['/project', '/second']);
   });
 });

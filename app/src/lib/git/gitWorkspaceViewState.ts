@@ -14,7 +14,10 @@ const MAX_VIEWS = 128;
 export function readGitWorkspaceViewState(key: string | undefined): GitWorkspaceViewState | undefined { return key ? entries.get(key) : undefined; }
 export function saveGitWorkspaceViewState(key: string | undefined, value: Partial<GitWorkspaceViewState>): void {
   if (!key) return;
-  entries.set(key, { ...entries.get(key), ...value });
+  const previous = entries.get(key);
+  // Re-insert so Map order tracks recency and eviction drops the least recently used view.
+  entries.delete(key);
+  entries.set(key, { ...previous, ...value });
   if (entries.size > MAX_VIEWS) entries.delete(entries.keys().next().value!);
 }
 export function clearCommittedGitDraft(key: string | undefined, draft: string): void {

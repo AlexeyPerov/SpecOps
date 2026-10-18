@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 const EVENT: &str = "spec-ops/workspace-git-summary";
 const LIMIT: usize = 4;
@@ -417,49 +417,77 @@ fn publish(app: &AppHandle, state: &mut Coordinator) -> Value {
     payload
 }
 
+/// Layout discovery, watcher (re)registration and coordinator locking do file-system
+/// work; keep all of it off the main thread that sync Tauri commands would use.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
-pub fn workspace_git_summary_sync(
+pub async fn workspace_git_summary_sync(
     app: AppHandle,
     window: WebviewWindow,
     demands: Vec<Demand>,
     active: bool,
-) -> Value {
-    let mut state = coordinator().lock().unwrap();
-    let mut next = Vec::new();
-    for demand in demands {
-        let layout = layout(&demand.root_path);
-        let key = key(&layout);
-        let running = state.running(&key);
-        let entry = state
-            .entries
-            .entry(key.clone())
-            .or_insert_with(|| Entry::new(layout.clone()));
-        entry.layout = layout;
-        entry.touched = now();
-        if entry.needs_read() && !running && !entry.debounce {
-            entry.pending = true;
+) -> Result<Value, String> {
+    let label = window.label().to_string();
+    blocking(move || {
+        // Resolve layouts before taking the shared coordinator lock.
+        let resolved: Vec<_> = demands
+            .into_iter()
+            .map(|demand| (layout(&demand.root_path), demand))
+            .collect();
+        let mut state = coordinator().lock().unwrap();
+        // A sync queued by a closing webview must not resurrect its demands after
+        // `window_destroyed`; checked under the lock that destruction also takes.
+        if app.get_webview_window(&label).is_none() {
+            return state.payload(Vec::new());
         }
-        next.push((demand.root_path, key, demand.priority.min(1)));
-    }
-    state.demands.insert(window.label().to_string(), next);
-    if active { state.inactive_windows.remove(window.label()); } else { state.inactive_windows.insert(window.label().to_string()); }
-    state.sync_watchers(&app);
-    publish(&app, &mut state)
+        let mut next = Vec::new();
+        for (layout, demand) in resolved {
+            let key = key(&layout);
+            let running = state.running(&key);
+            let entry = state
+                .entries
+                .entry(key.clone())
+                .or_insert_with(|| Entry::new(layout.clone()));
+            entry.layout = layout;
+            entry.touched = now();
+            if entry.needs_read() && !running && !entry.debounce {
+                entry.pending = true;
+            }
+            next.push((demand.root_path, key, demand.priority.min(1)));
+        }
+        state.demands.insert(label.clone(), next);
+        if active {
+            state.inactive_windows.remove(&label);
+        } else {
+            state.inactive_windows.insert(label);
+        }
+        state.sync_watchers(&app);
+        publish(&app, &mut state)
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn workspace_git_summary_refresh(app: AppHandle, paths: Vec<String>) -> Value {
-    let mut state = coordinator().lock().unwrap();
-    for path in paths {
-        let key = key(&layout(&path));
-        if state.running(&key) {
-            continue;
-        } // Force bypasses TTL, never single-flight.
-        if let Some(entry) = state.entries.get_mut(&key) {
-            entry.pending = true;
+pub async fn workspace_git_summary_refresh(app: AppHandle, paths: Vec<String>) -> Result<Value, String> {
+    blocking(move || {
+        let keys: Vec<_> = paths.iter().map(|path| key(&layout(path))).collect();
+        let mut state = coordinator().lock().unwrap();
+        for key in keys {
+            if state.running(&key) {
+                continue;
+            } // Force bypasses TTL, never single-flight.
+            if let Some(entry) = state.entries.get_mut(&key) {
+                entry.pending = true;
+            }
         }
-    }
-    publish(&app, &mut state)
+        publish(&app, &mut state)
+    })
+    .await
 }
 
 fn invalidate_keys(app: &AppHandle, keys: Vec<String>) {
@@ -476,14 +504,25 @@ fn invalidate_keys(app: &AppHandle, keys: Vec<String>) {
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(350)).await;
-            let mut state = coordinator().lock().unwrap();
-            if let Some(entry) = state.entries.get_mut(&key) {
-                entry.layout = layout(&entry.layout.root.to_string_lossy());
-                entry.debounce = false;
-                entry.pending = true;
-            }
-            state.sync_watchers(&app);
-            publish(&app, &mut state);
+            let _ = blocking(move || {
+                let root = {
+                    let state = coordinator().lock().unwrap();
+                    state.entries.get(&key).map(|entry| entry.layout.root.clone())
+                };
+                // Rediscover .git outside the lock; it may have been created or replaced.
+                let refreshed = root.map(|root| layout(&root.to_string_lossy()));
+                let mut state = coordinator().lock().unwrap();
+                if let Some(entry) = state.entries.get_mut(&key) {
+                    if let Some(layout) = refreshed {
+                        entry.layout = layout;
+                    }
+                    entry.debounce = false;
+                    entry.pending = true;
+                }
+                state.sync_watchers(&app);
+                publish(&app, &mut state);
+            })
+            .await;
         });
     }
     state.publication += 1;
@@ -510,25 +549,53 @@ fn metadata_changed(app: &AppHandle, paths: &[PathBuf]) {
     };
     invalidate_keys(app, keys);
 }
+/// Canonical form of a possibly deleted path: resolve the deepest existing ancestor
+/// and re-append the missing tail, so symlinked or differently cased roots match.
+fn canonical_lenient(path: &Path) -> PathBuf {
+    let mut missing = Vec::new();
+    let mut current = path;
+    loop {
+        if let Ok(resolved) = current.canonicalize() {
+            return missing.iter().rev().fold(resolved, |acc, part| acc.join(part));
+        }
+        match (current.parent(), current.file_name()) {
+            (Some(parent), Some(name)) => {
+                missing.push(name.to_os_string());
+                current = parent;
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
+}
+fn path_affects_root(path: &Path, root: &Path) -> bool {
+    path.starts_with(root) || root.starts_with(path)
+}
 #[tauri::command]
-pub fn workspace_git_summary_invalidate(app: AppHandle, path: String) {
-    let keys = {
-        let state = coordinator().lock().unwrap();
-        state
-            .entries
-            .iter()
-            .filter(|(_, entry)| {
-                Path::new(&path).starts_with(&entry.layout.root)
-                    || entry.layout.root.starts_with(&path)
-            })
-            .map(|(key, _)| key.clone())
-            .collect()
-    };
-    invalidate_keys(&app, keys);
+pub async fn workspace_git_summary_invalidate(app: AppHandle, path: String) -> Result<(), String> {
+    blocking(move || {
+        // Watcher events use the frontend-registered prefix; layout roots are canonical.
+        let raw = PathBuf::from(&path);
+        let resolved = canonical_lenient(&raw);
+        let keys = {
+            let state = coordinator().lock().unwrap();
+            state
+                .entries
+                .iter()
+                .filter(|(_, entry)| {
+                    path_affects_root(&raw, &entry.layout.root)
+                        || path_affects_root(&resolved, &entry.layout.root)
+                })
+                .map(|(key, _)| key.clone())
+                .collect()
+        };
+        invalidate_keys(&app, keys);
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn workspace_git_summary_complete(
+#[allow(clippy::too_many_arguments)]
+pub async fn workspace_git_summary_complete(
     app: AppHandle,
     window: WebviewWindow,
     lease: String,
@@ -538,20 +605,24 @@ pub fn workspace_git_summary_complete(
     not_git: bool,
     deferred: Option<bool>,
 ) -> Result<Value, String> {
-    let mut state = coordinator().lock().unwrap();
-    if deferred.unwrap_or(false) || state.inactive_windows.contains(window.label()) {
-        // An owner lost focus between two commands. Do not cache the partial read.
-        if let Some(active) = state.leases.get(&lease) {
-            let key = active.grant.key.clone();
-            if let Some(entry) = state.entries.get_mut(&key) {
-                entry.revision += 1;
+    let label = window.label().to_string();
+    blocking(move || {
+        let mut state = coordinator().lock().unwrap();
+        if deferred.unwrap_or(false) || state.inactive_windows.contains(&label) {
+            // An owner lost focus between two commands. Do not cache the partial read.
+            if let Some(active) = state.leases.get(&lease) {
+                let key = active.grant.key.clone();
+                if let Some(entry) = state.entries.get_mut(&key) {
+                    entry.revision += 1;
+                }
             }
+            // Demand and metadata watches survive blur; only the sync command
+            // changes activity, so a late reply cannot undo a newer focus event.
         }
-        // Demand and metadata watches survive blur; only the sync command
-        // changes activity, so a late reply cannot undo a newer focus event.
-    }
-    state.finish(window.label(), &lease, revision, summary, error, not_git)?;
-    Ok(publish(&app, &mut state))
+        state.finish(&label, &lease, revision, summary, error, not_git)?;
+        Ok(publish(&app, &mut state))
+    })
+    .await?
 }
 
 /// Accounting lives inside the existing blocking runner, including timeout/reap.
@@ -579,23 +650,33 @@ pub async fn workspace_git_summary_run(
     }
     git::run_git_with_lifetime(request, CommandGuard { app, lease }).await
 }
-pub fn window_destroyed(app: &AppHandle, window: &str) {
+fn drop_window_blocking(app: &AppHandle, window: &str) {
     let mut state = coordinator().lock().unwrap();
     state.drop_window(window);
     state.sync_watchers(app);
     publish(app, &mut state);
 }
-#[tauri::command]
-pub fn workspace_git_summary_detach(app: AppHandle, window: WebviewWindow) {
-    window_destroyed(&app, window.label());
+/// Called from the event loop; watcher teardown runs on the blocking pool.
+pub fn window_destroyed(app: &AppHandle, window: &str) {
+    let app = app.clone();
+    let window = window.to_string();
+    tauri::async_runtime::spawn_blocking(move || drop_window_blocking(&app, &window));
 }
 #[tauri::command]
-pub fn workspace_git_summary_release(path: String) {
-    let mut state = coordinator().lock().unwrap();
-    let key = key(&layout(&path));
-    if !state.demanded(&key) && !state.running(&key) {
-        state.entries.remove(&key);
-    }
+pub async fn workspace_git_summary_detach(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    let label = window.label().to_string();
+    blocking(move || drop_window_blocking(&app, &label)).await
+}
+#[tauri::command]
+pub async fn workspace_git_summary_release(path: String) -> Result<(), String> {
+    blocking(move || {
+        let key = key(&layout(&path));
+        let mut state = coordinator().lock().unwrap();
+        if !state.demanded(&key) && !state.running(&key) {
+            state.entries.remove(&key);
+        }
+    })
+    .await
 }
 #[tauri::command]
 pub fn workspace_git_summary_diagnostics() -> Value {
@@ -615,6 +696,21 @@ mod tests {
             git_dir: None,
             common_dir: None,
         })
+    }
+    #[cfg(unix)]
+    #[test]
+    fn invalidation_paths_resolve_symlinked_roots_and_deleted_files() {
+        let base = std::env::temp_dir().join(format!("specops-invalidate-{}-{}", std::process::id(), now()));
+        let real = base.join("real");
+        std::fs::create_dir_all(real.join("src")).unwrap();
+        let link = base.join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let root = canonical(&real);
+        let deleted = link.join("src/removed.txt");
+        assert!(!path_affects_root(&deleted, &root));
+        assert!(path_affects_root(&canonical_lenient(&deleted), &root));
+        assert_eq!(canonical_lenient(&deleted), root.join("src/removed.txt"));
+        std::fs::remove_dir_all(base).unwrap();
     }
     #[test]
     fn windows_share_four_leases_and_active_priority() {

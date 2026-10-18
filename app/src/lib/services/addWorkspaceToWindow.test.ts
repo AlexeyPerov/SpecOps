@@ -12,12 +12,13 @@ vi.mock('./workspaceCatalog', async importOriginal => ({
   registerCatalogProjects: vi.fn().mockResolvedValue(undefined),
   loadProjectCatalog: vi.fn().mockResolvedValue(undefined),
   updateCatalogProject: vi.fn().mockResolvedValue(undefined),
+  recordCatalogProjectUse: vi.fn(),
   getProjectCatalog: vi.fn(() => ({ projects: {}, savedContexts: {} })),
 }));
 import { isWorkspaceLifecycleActive, resetWorkspaceLifecycleForTests } from './workspaceLifecycle';
 import { addWorkspaceToWindow } from './addWorkspaceToWindow';
 import { appState } from '../state/appState';
-import { registerCatalogProjects, updateCatalogProject, getProjectCatalog, catalogProjectForRoot } from './workspaceCatalog';
+import { registerCatalogProjects, updateCatalogProject, getProjectCatalog, catalogProjectForRoot, recordCatalogProjectUse } from './workspaceCatalog';
 import { focusExistingWorkspaceWindow } from './workspaceWindowTransfer';
 import { setWorkspaceWindowOwner } from './workspaceWindowPlacement';
 import { ensureWorkspaceReadAccess } from './fileSystem';
@@ -116,7 +117,7 @@ describe('catalog workspace opening', () => {
     await addWorkspaceToWindow('/project');
     expect(appState.getSnapshot().contexts.activeContextId).toBe(id);
     expect(updateCatalogProject).toHaveBeenCalledWith('/project', { openError: null });
-    expect(updateCatalogProject).toHaveBeenCalledWith('/project', { lastUsedAt: expect.any(String) });
+    expect(recordCatalogProjectUse).toHaveBeenCalledWith('/project');
   });
   it('focuses the concurrent winner after a claim race', async () => {
     vi.mocked(focusExistingWorkspaceWindow).mockResolvedValueOnce(false).mockResolvedValueOnce(true);

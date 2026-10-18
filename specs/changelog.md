@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-18 23:15 MSK — Fix review findings in workspace close, catalog and Git summaries
+
+- Window close no longer gets stuck: a failed project-catalog checkpoint (for example a damaged catalog without a valid backup) asks whether to close anyway instead of always vetoing, and a contexts change during the flush retries the flush (up to three passes) instead of failing at once. A failed session flush still keeps the window open.
+- Checkpoint all open projects in one catalog transaction. Coalesce workspace recency (`lastUsedAt`) updates into one delayed batch that skips removed projects and is flushed before checkpoints. The native catalog no longer rewrites files, bumps the revision or broadcasts a change for no-op mutation batches.
+- Share one deeply frozen committed catalog snapshot instead of deep-cloning it on every read. Restored documents get mutable copies of saved metadata.
+- Run Git summary sync/refresh/invalidate/complete/release/detach and window teardown on the blocking pool instead of the main thread. Resolve repository layouts outside the coordinator lock, including the debounced re-discovery. Ignore summary syncs from already destroyed windows so they cannot leave demands and metadata watches behind. Match invalidation paths after resolving symlinks and case through the deepest existing ancestor, so edits under symlinked roots refresh summaries.
+- Remove the redundant pre-queue pull snapshot check; the check inside the mutation lane remains. Keep Git view-state eviction in least-recently-used order.
+- Validation: 323 frontend files / 3250 passing tests, Svelte check with zero errors and warnings, and all native library tests passing, including new tests for no-op catalog transactions, symlinked invalidation paths, close retry/confirm, batched recency and view-state eviction. Native desktop acceptance was not rerun.
+
 ## 2026-10-18 20:13 MSK — Add global documents and grouped task books
 
 - Add Global Tasks and Global Notes beside Notepad in both sidebar widths. Open singleton document views without a workspace and share global contents across windows; keep creation explicit and workspace documents independent.

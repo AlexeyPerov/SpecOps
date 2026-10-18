@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { ContextSnapshot, DocumentState } from '../domain/contracts';
 import type { ProjectRecoveryBuffers, SavedProjectContext, SavedProjectContextWrite } from '../domain/projectCatalog';
-import { getProjectCatalog, projectIdentity, saveCatalogProjectContext } from './workspaceCatalog';
+import { flushCatalogProjectUse, getProjectCatalog, projectIdentity, saveCatalogProjectContexts } from './workspaceCatalog';
 import { openPath } from './fileSystem';
 import { documentWithOpenedFilePayload } from '../state/appState/documentHelpers';
 import { applyLargeFileConfirmGateOnRestore } from './sessionDocumentPersistence';
@@ -22,9 +22,12 @@ export function savedProjectContext(snapshot: ContextSnapshot, mode: 'close' | '
 }
 
 export async function checkpointWorkspaceContexts(): Promise<void> {
-  for (const workspace of appState.getSnapshot().contexts.workspaces) {
-    await saveCatalogProjectContext(workspace.rootPath, savedProjectContext(workspace.snapshot, 'window'));
-  }
+  // Pending recency is best effort and must not block the recovery checkpoint.
+  await flushCatalogProjectUse().catch(() => {});
+  const workspaces = appState.getSnapshot().contexts.workspaces;
+  if (!workspaces.length) return;
+  await saveCatalogProjectContexts(workspaces.map(workspace =>
+    ({ root: workspace.rootPath, context: savedProjectContext(workspace.snapshot, 'window') })));
 }
 
 export async function restoreSavedProjectContext(root: string): Promise<ContextSnapshot | null> {
@@ -35,7 +38,8 @@ export async function restoreSavedProjectContext(root: string): Promise<ContextS
   const missing = (error: unknown) => /no such file|not found|os error 2|cannot find the path/i.test(String(error));
   const documents: DocumentState[] = [];
   for (const metadata of saved.snapshot.documents) {
-    let doc: DocumentState = { ...metadata, content: '', savedContent: '', isDirty: false };
+    // Catalog snapshots are frozen; the restored document must own mutable copies.
+    let doc: DocumentState = { ...structuredClone(metadata), content: '', savedContent: '', isDirty: false };
     const buffer = recovery[metadata.id];
     if (buffer) doc = { ...doc, ...buffer };
     if (doc.filePath) {

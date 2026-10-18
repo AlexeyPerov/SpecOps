@@ -15,20 +15,30 @@ export type CatalogMutation =
   | { type: 'saveContext'; id: string; context: SavedProjectContextWrite };
 
 const emptyCatalog = (): ProjectCatalog => ({ version: 1, revision: 0, projects: {}, folders: {}, savedContexts: {} });
-let cache = emptyCatalog();
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+let cache = deepFreeze(emptyCatalog());
 const subscribers = new Set<(catalog: ProjectCatalog) => void>();
 export const projectIdentity = normalizePathSync;
-/** Detached snapshots prevent callers from changing the shared cache before commit. */
-export function getProjectCatalog(): ProjectCatalog { return structuredClone(cache); }
+/**
+ * The committed catalog is deeply frozen, so callers share it without copying and
+ * cannot change it before commit; derive new values instead of mutating.
+ */
+export function getProjectCatalog(): ProjectCatalog { return cache; }
 function publish(next: ProjectCatalog): ProjectCatalog {
   // A cross-window event/read can finish before the earlier local invoke.
   if (next.revision >= cache.revision) {
-    cache = structuredClone(next);
+    cache = deepFreeze(next);
     for (const subscriber of subscribers) {
-      try { subscriber(getProjectCatalog()); } catch (error) { console.error(error); }
+      try { subscriber(cache); } catch (error) { console.error(error); }
     }
   }
-  return getProjectCatalog();
+  return cache;
 }
 export async function updateProjectCatalog(mutations: CatalogMutation[]): Promise<ProjectCatalog> {
   return publish(await invoke<ProjectCatalog>('project_catalog_transaction', { mutations }));
@@ -58,7 +68,33 @@ export function updateCatalogProject(root: string, patch: ProjectPatch): Promise
     { type: 'updateProject', id: projectIdentity(root), patch }]);
 }
 export function saveCatalogProjectContext(root: string, context: SavedProjectContextWrite): Promise<ProjectCatalog> {
-  return updateProjectCatalog([{ type: 'register', project: catalogProjectForRoot(root) },
-    { type: 'saveContext', id: projectIdentity(root), context }]);
+  return saveCatalogProjectContexts([{ root, context }]);
 }
-export function _resetProjectCatalogForTests(): void { cache = emptyCatalog(); subscribers.clear(); }
+/** One transaction for many projects: a single catalog write and change event. */
+export function saveCatalogProjectContexts(entries: { root: string; context: SavedProjectContextWrite }[]): Promise<ProjectCatalog> {
+  return updateProjectCatalog(entries.flatMap(({ root, context }): CatalogMutation[] => [
+    { type: 'register', project: catalogProjectForRoot(root) },
+    { type: 'saveContext', id: projectIdentity(root), context }]));
+}
+const PROJECT_USE_FLUSH_MS = 1500;
+const pendingProjectUse = new Map<string, string>();
+let projectUseTimer: ReturnType<typeof setTimeout> | undefined;
+/** Coalesce recency updates: a burst of workspace switches costs one catalog write. */
+export function recordCatalogProjectUse(root: string, at = new Date().toISOString()): void {
+  pendingProjectUse.set(projectIdentity(root), at);
+  projectUseTimer ??= setTimeout(() => { void flushCatalogProjectUse().catch(console.error); }, PROJECT_USE_FLUSH_MS);
+}
+export async function flushCatalogProjectUse(): Promise<void> {
+  if (projectUseTimer) clearTimeout(projectUseTimer);
+  projectUseTimer = undefined;
+  // Projects removed meanwhile are skipped so one stale id cannot fail the batch.
+  const mutations: CatalogMutation[] = [...pendingProjectUse].filter(([id]) => cache.projects[id])
+    .map(([id, lastUsedAt]) => ({ type: 'updateProject', id, patch: { lastUsedAt } }));
+  pendingProjectUse.clear();
+  if (mutations.length) await updateProjectCatalog(mutations);
+}
+export function _resetProjectCatalogForTests(): void {
+  cache = deepFreeze(emptyCatalog()); subscribers.clear();
+  if (projectUseTimer) clearTimeout(projectUseTimer);
+  projectUseTimer = undefined; pendingProjectUse.clear();
+}

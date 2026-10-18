@@ -497,7 +497,7 @@
     <SettingsView />
   {:else if isThemesViewActive}
     <ThemesView />
-  {:else if (activeViewTabKind === "workspace-tasks" || activeViewTabKind === "workspace-notes") && workspaceRootPath}
+  {:else if (activeViewTabKind === "workspace-tasks" || activeViewTabKind === "workspace-notes")}
     {#key `${workspaceRootPath}:${activeViewTabKind}`}
       <WorkspaceDocumentView root={workspaceRootPath} kind={activeViewTabKind === "workspace-tasks" ? "tasks" : "notes"} {paneId} {contextId} {notify} />
     {/key}

@@ -27,7 +27,7 @@
       if (sourceFiles.every((file) => file.content === null)) { error = "There are no documents to move in the selected location."; return; }
       const destinationFiles = await Promise.all((["tasks", "notes"] as const).map((kind) => loadWorkspaceDocument(workspace, kind, target, true)));
       const replace = destinationFiles.some((file, index) => file.content !== null && sourceFiles[index].content !== null);
-      if (!(await requestConfirm({ title: "Move workspace documents", message: `Move existing Tasks and Notes to ${target === "project" ? "hidden files in the project" : "SpecOps storage"}?${replace ? " Existing destination documents will be replaced." : ""}`, confirmLabel: "Move documents", danger: replace }))) return;
+      if (!(await requestConfirm({ title: "Move workspace documents", message: `Move existing Tasks and Notes to ${target === "project" ? "the .specops folder in the project" : "SpecOps storage"}?${replace ? " Existing destination documents will be replaced." : ""}`, confirmLabel: "Move documents", danger: replace }))) return;
       error = (await transferWorkspaceDocuments(workspace, target, replace)) ?? "";
       storage = target;
     } catch (cause) { error = String(cause); }
@@ -40,10 +40,10 @@
   <label>Storage
     <select value={storage} disabled={!root || busy} onchange={(event) => { const next = event.currentTarget.value as WorkspaceDocumentStorage; event.currentTarget.value = storage; void select(next); }}>
       <option value="app">SpecOps data (default)</option>
-      <option value="project">Hidden files in project root</option>
+      <option value="project">.specops folder in project root</option>
     </select>
   </label>
-  <p>{storage === "project" ? ".spec-ops-tasks.md and .spec-ops-notes.md" : "Separate tasks.md and notes.md files in SpecOps workspace storage."}</p>
+  <p>{storage === "project" ? ".specops/tasks.json and .specops/notes.md" : "Separate tasks.json and notes.md files in SpecOps workspace storage."}</p>
   <button type="button" class="btn btn-secondary" disabled={!root || busy} onclick={() => { void transfer(); }}>Move existing documents to {storage === "app" ? "project" : "SpecOps"}…</button>
   {#if error}<p class="error" role="alert">{error}</p>{/if}
 </section>

@@ -21,6 +21,7 @@
     normalizeActivityRailWidthPx,
   } from "../services/panelLayout";
   import { startPointerDrag } from "./pointerDrag";
+  import { appState } from "../state/appState";
   import NotepadIcon from "./icons/NotepadIcon.svelte";
   import AddIcon from "./icons/AddIcon.svelte";
   import ListIcon from "./icons/ListIcon.svelte";
@@ -516,6 +517,15 @@
     </HoverTooltip>
   {/if}
 
+  {#each ["tasks", "notes"] as kind (kind)}
+    <HoverTooltip label={kind === "tasks" ? "Global Tasks" : "Global Notes"}>
+      <button type="button" class={expanded ? "global-document-link" : "rail-button"} aria-label={kind === "tasks" ? "Global Tasks" : "Global Notes"}
+        onclick={() => { onSelectContext("notepad"); if (appState.getSnapshot().contexts.activeContextId !== "notepad") return; appState.openOrFocusViewTab(kind === "tasks" ? "workspace-tasks" : "workspace-notes"); }}>
+        <span aria-hidden="true">{kind === "tasks" ? "☑" : "▤"}</span>{#if expanded}<span>{kind === "tasks" ? "Global Tasks" : "Global Notes"}</span>{/if}
+      </button>
+    </HoverTooltip>
+  {/each}
+
   {#if !expanded}<button type="button" class="rail-button" aria-label="Search workspaces" title="Search workspaces" onclick={() => { railSearchOpen = !railSearchOpen; void tick().then(() => railSearchInput?.focus()); }}>⌕</button>{/if}
   {#if expanded || railSearchOpen}
     <input bind:this={railSearchInput} class="rail-search" class:rail-search-compact={!expanded} aria-label="Search workspaces" placeholder="Search name or path…" bind:value={searchQuery}
@@ -712,6 +722,8 @@
 {/if}
 
 <style>
+  .global-document-link { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; color: var(--color-text-primary); background: transparent; border: 0; border-radius: 5px; cursor: pointer; text-align: left; font: inherit; }
+  .global-document-link:hover { background: var(--color-hover); }
   .rail-project-entry { position: relative; width: 100%; flex-shrink: 0; }
   .rail-git-action { position: absolute; right: 0; top: 0; padding: 0; width: 16px; height: 16px; font-size: 11px; border: 0; border-radius: 3px; background: var(--color-surface-1); color: var(--color-text-secondary); cursor: pointer; }
   .rail-git-action:focus-visible { outline: 2px solid var(--color-focus-ring); }

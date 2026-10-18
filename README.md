@@ -12,6 +12,9 @@ and **workspace sessions** for coding-agent runtimes (dev preview). Built with
   multi-cursor, code folding, Markdown outline; find/replace with regex, whole-word,
   and case matching in-file and across the project
 - **Markdown** preview and edit
+- **[Tasks and Notes](specs/workspace-tools.md)** — one task book and Markdown note per workspace, plus global documents shared across windows;
+  groups, named task lists, completion, ordering, moves, deletion undo, search/status filters and Markdown copying;
+  application storage by default or `.specops/tasks.json` and `.specops/notes.md` inside a project
 - **Folders as workspaces** — multi-root activity rail
 - **Project panel** — file tree, drag-and-drop move, context menu (new/rename/delete), live refresh, tabs, show/hide hidden files
 - **Version Control** — per-workspace git tab with a persistent branch/tag/remote/stash tree, ref history, changes and fetch/pull/push via system `git`

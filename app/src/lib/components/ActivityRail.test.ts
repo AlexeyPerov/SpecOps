@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { tick } from "svelte";
 import { writable } from "svelte/store";
+import { appState } from "../state/appState";
+import type { ContextId } from "../domain/contracts";
 import ActivityRail from "./ActivityRail.svelte";
 import { mountComponent } from "./_testComponentMount";
 import { createSinglePaneLayout, type WorkspaceEntry } from "../domain/contracts";
@@ -28,6 +30,30 @@ function workspace(index: number, rootPath: string): WorkspaceEntry {
 }
 beforeEach(() => { _resetProjectCatalogForTests(); vi.mocked(invoke).mockReset(); localStorage.clear(); vi.mocked(readLiveWorkspaceWindowOwners).mockResolvedValue({}); vi.mocked(addWorkspaceToWindow).mockClear(); vi.mocked(invoke).mockResolvedValue({version:1, revision:1, projects:{}, folders:{}, savedContexts:{}}); });
 describe("ActivityRail", () => {
+  it.each([48, 240])('opens global document tabs from either rail width (%s)', async (width) => {
+    const snapshot = appState.getSnapshot();
+    let active: ContextId = 'ws-9';
+    const read = vi.spyOn(appState, 'getSnapshot').mockImplementation(() => ({ ...snapshot, contexts: { ...snapshot.contexts, activeContextId: active } }));
+    const open = vi.spyOn(appState, 'openOrFocusViewTab').mockImplementation(() => {});
+    const select = vi.fn((id: ContextId) => { active = id; });
+    try {
+      const { host } = mountComponent(ActivityRail, { panelWidthPx: width, onSelectContext: select }); await tick();
+      host.querySelector<HTMLButtonElement>('[aria-label="Global Tasks"]')!.click();
+      expect(select).toHaveBeenCalledWith('notepad'); expect(open).toHaveBeenLastCalledWith('workspace-tasks');
+      host.querySelector<HTMLButtonElement>('[aria-label="Global Notes"]')!.click();
+      expect(open).toHaveBeenLastCalledWith('workspace-notes');
+    } finally { read.mockRestore(); open.mockRestore(); }
+  });
+  it('does not open a document in the wrong scope if context switching is blocked', async () => {
+    const snapshot = appState.getSnapshot();
+    const read = vi.spyOn(appState, 'getSnapshot').mockReturnValue({ ...snapshot, contexts: { ...snapshot.contexts, activeContextId: 'ws-9' } });
+    const open = vi.spyOn(appState, 'openOrFocusViewTab').mockImplementation(() => {});
+    try {
+      const { host } = mountComponent(ActivityRail, { onSelectContext: () => {} }); await tick();
+      host.querySelector<HTMLButtonElement>('[aria-label="Global Tasks"]')!.click();
+      expect(open).not.toHaveBeenCalled();
+    } finally { read.mockRestore(); open.mockRestore(); }
+  });
   it('temporarily reveals collapsed matches and restores collapse on Escape without Git or catalog writes', async () => {
     const project = { ...catalogProjectForRoot('/team/hidden-app'), folderId: 'team' };
     vi.mocked(invoke).mockResolvedValue({ version:1, revision:1, projects:{[project.id]:project}, folders:{team:{id:'team',name:'Team',order:0}}, savedContexts:{} });

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-18 20:13 MSK — Add global documents and grouped task books
+
+- Add Global Tasks and Global Notes beside Notepad in both sidebar widths. Open singleton document views without a workspace and share global contents across windows; keep creation explicit and workspace documents independent.
+- Replace flat Markdown tasks with a validated version-1 JSON task book containing stable group/list/task IDs. Support names/text, completion, one level of groups, ungrouped lists, manual order, list/task moves, list search and completion filters, last-deletion undo, and copying the complete book as Markdown. Removing a group keeps its lists; removing a list removes only its tasks. Notes retain editable Markdown and sanitized preview.
+- Store workspace documents in application data by default or `.specops/tasks.json` and `.specops/notes.md`; global documents always use their own application-data directory. Preserve atomic compare-before-write saves, explicit current-format storage transfers and close-time flushes. Do not migrate previous filenames or Markdown task data.
+- Publish native save events to refresh cached copies across windows, reread external changes on focus/Refresh, retain dirty contents on conflicts/read failures, reject invalid task JSON before publication, and guard late reads against newer saves. Keep task selection/drafts through background rereads, reset view state on storage changes, and respect blocked context switches when opening global tabs.
+- Track and update the workspace-tools behavior/JSON-format documentation and README. Validation: 322 frontend files / 3247 passing tests, Svelte/type checks with zero errors and warnings, successful production frontend build, and 162 passing native library tests with one existing ignored probe. Browser component acceptance covers create/complete/delete/undo and light/dark narrow layouts without horizontal overflow; full native-window UI acceptance was not rerun for this change.
+
 ## 2026-10-18 19:55 MSK — Validate the 30-project workspace lifecycle (WS-08)
 
 - Add reproducible disposable fixtures, isolated profile seeders, portable native evidence helpers, screenshots and raw before/after measurements in `specs/workspaces-evidence`. Preserve original/instrumented baseline provenance, failed/contaminated runs, exact sample counts, machine/build context and measurement limits.

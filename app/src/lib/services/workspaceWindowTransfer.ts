@@ -1,3 +1,4 @@
+import { invalidateDocumentMarkdownHtml } from './appShellDocumentView';
 import { markWorkspaceLifecycleActive } from './workspaceLifecycle';
 import { flushWorkspaceChatPersistence } from "./chatPersistence";
 import { emitTo, listen } from '@tauri-apps/api/event';
@@ -108,6 +109,7 @@ export async function moveWorkspaceToWindow(workspaceId: ContextId, newWindow: b
     }
     markWorkspaceOutgoing(root, true);
     appState.closeWorkspace(workspaceId);
+    for (const doc of entry.snapshot.documents) invalidateDocumentMarkdownHtml(doc.id);
     chatStore.evictWorkspace(root);
     await syncOpenFileRegistryForWindow(source, appState.getSnapshot());
     await flushSessionPersistence(appState.getSnapshot(), source);

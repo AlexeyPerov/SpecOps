@@ -1,0 +1,13 @@
+
+> spec-ops@0.3.0 test
+> vitest run src/lib/services/sessionDocumentPersistence.test.ts src/lib/services/workspaceSavedContext.test.ts src/lib/services/addWorkspaceToWindow.test.ts src/lib/services/workspaceCloseFlow.test.ts src/lib/services/workspaceWindowTransfer.test.ts
+
+
+ RUN  v4.1.9 /Users/alexeyperov/Projects/spec-ops/app
+
+
+ Test Files  5 passed (5)
+      Tests  54 passed (54)
+   Start at  19:18:35
+   Duration  1.46s (transform 1.72s, setup 121ms, import 2.22s, tests 318ms, environment 2.73s)
+

@@ -1,0 +1,218 @@
+   Compiling objc2-exception-helper v0.1.1
+   Compiling ring v0.17.14
+   Compiling spec-ops v0.3.0 (/Users/alexeyperov/Projects/spec-ops/app/src-tauri)
+   Compiling objc2 v0.6.4
+   Compiling rustls v0.23.45
+   Compiling objc2-core-foundation v0.3.2
+   Compiling block2 v0.6.2
+   Compiling dispatch2 v0.3.1
+   Compiling rustls-webpki v0.103.15
+   Compiling objc2-foundation v0.3.2
+   Compiling objc2-core-video v0.3.2
+   Compiling objc2-core-graphics v0.3.2
+   Compiling objc2-core-text v0.3.2
+   Compiling tokio-rustls v0.26.6
+   Compiling hyper-rustls v0.27.10
+   Compiling reqwest v0.12.28
+   Compiling objc2-quartz-core v0.3.2
+   Compiling objc2-core-data v0.3.2
+   Compiling objc2-cloud-kit v0.3.2
+   Compiling objc2-core-image v0.3.2
+   Compiling objc2-app-kit v0.3.2
+   Compiling objc2-web-kit v0.3.2
+   Compiling tao v0.35.2
+   Compiling muda v0.19.1
+   Compiling window-vibrancy v0.6.0
+   Compiling rfd v0.16.0
+   Compiling wry v0.55.1
+   Compiling tauri-runtime v2.11.2
+   Compiling tauri-runtime-wry v2.11.2
+   Compiling tauri v2.11.2
+   Compiling tauri-plugin-fs v2.5.1
+   Compiling tauri-plugin-log v2.8.0
+   Compiling tauri-plugin-opener v2.5.4
+   Compiling tauri-plugin-dialog v2.7.1
+warning: unused variable: `had_invalid_utf8`
+    --> src/git.rs:1999:20
+     |
+1999 |         let (text, had_invalid_utf8) =
+     |                    ^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_had_invalid_utf8`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `resolve_opencode_binary` is never used
+  --> src/native_assets.rs:22:15
+   |
+22 | pub(crate) fn resolve_opencode_binary(app: &AppHandle) -> Result<PathBuf, String> {
+   |               ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `spec-ops` (lib test) generated 2 warnings (run `cargo fix --lib -p spec-ops --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 32.38s
+     Running unittests src/lib.rs (target/debug/deps/app_lib-503c135b28a2acf7)
+
+running 160 tests
+test agent_host::tests::blocked_stdin_does_not_block_status_or_stop ... ok
+test agent_host::tests::crash_loop_breaker_engages_after_threshold ... ok
+test agent_host::tests::crash_loop_window_expires ... ok
+test agent_host::tests::forwarded_notification_carries_supervised_generation ... ok
+test agent_host::tests::generation_pinned_request_never_reaches_replacement_host ... ok
+test agent_host::tests::grandchild_is_not_orphaned ... ok
+test agent_host::tests::host_crash_surfaces_error_and_is_recoverable ... ok
+test agent_host::tests::host_generation_holds_all_verified_leases_until_stop_and_crash_cleanup ... ok
+test agent_host::tests::ignored_shutdown_is_force_killed ... ok
+test agent_host::tests::liveness_poll_after_crash_kills_term_resistant_descendants ... ok
+test agent_host::tests::pending_request_resolves_once ... ok
+test agent_host::tests::read_bounded_line_short_lines ... ok
+test agent_host::tests::read_bounded_line_truncates_runaway ... ok
+test agent_host::tests::real_host_keeps_owned_process_and_cleanup_after_signed_revocation_but_blocks_new_component_work ... ok
+test agent_host::tests::real_host_lifecycle_and_clean_shutdown ... ok
+test agent_host::tests::replacing_child_retires_generation ... ok
+test agent_host::tests::request_ids_are_monotonic ... ok
+test agent_host::tests::simultaneous_starts_reuse_one_generation ... ok
+test agent_host::tests::stale_reader_cannot_touch_new_generation ... ok
+test agent_host::tests::timed_out_request_is_removed ... ok
+test component_catalog::tests::archive_identity_and_revocation_rehearsal ... ok
+test component_catalog::tests::expiry_replay_equivocation_and_offline_boundaries ... ok
+test component_catalog::tests::native_authentication_all_five_and_production_is_unavailable ... ok
+test component_catalog::tests::reviewed_key_overlap_rotates_catalog_signer_and_preserves_retained_manifest_verification ... ok
+test component_catalog::tests::tampering_unknown_key_manifest_identity_and_endpoint_fail ... ok
+test component_manager::tests::actual_accounting_cache_staging_ownership_group_removal_and_retention_budget ... ok
+test component_manager::tests::actual_remote_metadata_transport_is_bounded_credential_free_and_production_endpoint_absent ... ok
+test component_manager::tests::all_five_signed_native_installs_receipts_and_atomic_recovery ... ok
+test component_manager::tests::async_job_cancel_generation_dedup_and_shutdown ... ok
+test component_manager::tests::bounded_ustar_record_padding_accepts_real_writer_and_rejects_extra_tail ... ok
+test component_manager::tests::confirmed_owned_finite_plans_and_stale_requests ... ok
+test component_manager::tests::crash_boundaries_keep_old_ready_and_never_select_partial ... ok
+test component_manager::tests::cross_process_lock_child ... ok
+test component_manager::tests::durable_interruption_snapshot_and_recovery_keeps_old_selection ... ok
+test component_manager::tests::fd_relative_store_mutations_reject_symlink_hardlink_permissions_and_concurrent_substitution ... ok
+test component_manager::tests::immutable_receipts_complete_hashes_and_private_symlink_rejection ... ok
+test component_manager::tests::independent_agents_reuse_node_and_failed_sibling_preserves_healthy_software ... ok
+test component_manager::tests::kernel_lock_stale_owner_runtime_lease_and_safe_diagnostics ... ok
+test component_manager::tests::low_disk_and_explicit_retry_budget_prevent_unowned_jobs ... ok
+test component_manager::tests::network_faults_never_activate_or_disclose_credentials ... ok
+test component_manager::tests::probe_pin_and_output_bounds_fail_closed ... ok
+test component_manager::tests::process_death_releases_lock_inode_without_stale_owner_guessing ... ok
+test component_manager::tests::real_candidate_native_installer_managed_probe ... ignored, Requires explicit real finite candidates, test-only catalog server and CI-built managed probe
+test component_manager::tests::signed_revocation_replay_cached_offline_and_lease_launch_revalidation_fail_closed ... ok
+test component_manager::tests::signed_updates_preserve_leased_identity_require_review_and_allow_only_known_store_rollback ... ok
+test component_manager::tests::strict_archive_links_traversal_special_duplicates_target_and_hash ... ok
+test components::tests::bounded_events_cannot_include_raw_errors_or_credentials ... ok
+test components::tests::exact_versions_and_dependency_rejection ... ok
+test components::tests::five_complete_contract_fixtures ... ok
+test components::tests::leases_dependents_and_native_store_rollback ... ok
+test components::tests::receipts_and_private_storage_separation ... ok
+test components::tests::strict_schema_and_target ... ok
+test components::tests::traversal_collision_and_archive_limits ... ok
+test file_watcher::tests::apply_diff_keeps_going_past_a_failing_path ... ok
+test file_watcher::tests::apply_diff_recursive_multi_root_keeps_existing_roots ... ok
+test file_watcher::tests::canonical_entry_refcount_keeps_entry_until_last_release ... ok
+test file_watcher::tests::diff_empty_to_paths_adds_all ... ok
+test file_watcher::tests::diff_partial_update ... ok
+test file_watcher::tests::diff_paths_to_empty_removes_all ... ok
+test file_watcher::tests::diff_unchanged_set_has_no_changes ... ok
+test file_watcher::tests::file_change_kind_maps_from_event_kind ... ok
+test file_watcher::tests::file_changed_payload_serializes_path_and_kind ... ok
+test file_watcher::tests::ignored_filter_is_root_aware ... ok
+test file_watcher::tests::per_window_contributions_keep_other_window_paths_on_clear_and_close ... ok
+test file_watcher::tests::registered_watch_sets_release_only_the_closed_window_contribution ... ok
+test file_watcher::tests::rewrite_emit_path_swaps_canonical_prefix ... ok
+test git::tests::build_effective_git_env_sets_optional_locks_for_read_only ... ok
+test git::tests::cancel_git_command_after_completion_returns_not_found ... ok
+test git::tests::cancel_git_command_removes_stale_index_lock_for_its_repo ... ok
+test git::tests::cancel_git_command_returns_not_found_for_blank_id ... ok
+test git::tests::cancel_git_command_returns_not_found_for_unknown_id ... ok
+test git::tests::cancel_git_command_terminates_in_flight_process ... ok
+test git::tests::drain_all_active_git_commands_terminates_children_and_clears_registry ... ok
+test git::tests::duplicate_command_id_does_not_unregister_in_flight_command ... ok
+test git::tests::exact_push_and_tracking_run_against_temporary_bare_remote ... ok
+test git::tests::git_available_response_has_expected_shape_when_git_installed ... ok
+test git::tests::git_available_tauri_command_matches_probe ... ok
+test git::tests::git_commit_with_message_creates_commit_in_temp_repo ... ok
+test git::tests::git_commit_with_message_rejects_empty_message ... ok
+test git::tests::git_message_file_arg_uses_forward_slashes_on_windows_style_paths ... ok
+test git::tests::is_read_only_git_args_classifies_reads_and_writes ... ok
+test git::tests::native_spawn_counter_counts_success_and_excludes_failed_creation ... ok
+test git::tests::pull_without_commit_continues_without_an_editor_in_temp_repositories ... ok
+test git::tests::read_limited_stream_accepts_within_limit ... ok
+test git::tests::read_limited_stream_flags_non_utf8_without_polluting_content ... ok
+test git::tests::read_limited_stream_never_splits_multibyte_char ... ok
+test git::tests::read_limited_stream_truncates_oversize_and_drains_to_eof ... ok
+test git::tests::registered_command_drains_large_output_without_deadlock ... ok
+test git::tests::remove_stale_index_lock_refuses_when_a_command_is_active_for_the_repo ... ok
+test git::tests::remove_stale_index_lock_removes_an_orphaned_lock ... ok
+test git::tests::remove_stale_index_lock_reports_absent_when_no_lock_exists ... ok
+test git::tests::resolve_git_binary_uses_path_git_when_available ... ok
+test git::tests::run_git_add_paths_with_spaces_and_non_ascii_as_single_argv ... ok
+test git::tests::run_git_non_zero_exit_returns_stderr_without_panicking ... ok
+test git::tests::run_git_not_a_repository_returns_exit_code_128 ... ok
+test git::tests::run_git_preserves_args_with_spaces_as_single_argv ... ok
+test git::tests::run_git_rejects_disallowed_subcommand ... ok
+test git::tests::run_git_rejects_duplicate_command_ids ... ok
+test git::tests::run_git_rejects_empty_repo_root ... ok
+test git::tests::run_git_rejects_nonexistent_repo_root ... ok
+test git::tests::run_git_rejects_relative_repo_root ... ok
+test git::tests::run_git_rev_parse_nested_subdirectory_resolves_repo_root ... ok
+test git::tests::run_git_status_succeeds_in_temp_repo ... ok
+test git::tests::run_git_strips_env_vars_outside_the_allowlist ... ok
+test git::tests::run_git_timeout_terminates_in_flight_process ... ok
+test git::tests::sanitize_git_env_accepts_the_ssh_commands_the_app_builds ... ok
+test git::tests::sanitize_git_env_keeps_only_allowlisted_keys_and_values ... ok
+test git::tests::sanitize_git_env_rejects_weaponized_ssh_command ... ok
+test git::tests::truncate_bytes_to_utf8_boundary_keeps_complete_chars ... ok
+test git::tests::validate_git_args_allows_ordinary_commands ... ok
+test git::tests::validate_git_args_rejects_option_level_exec_vectors ... ok
+test git::tests::validate_git_args_restricts_config_to_identity_keys ... ok
+test git::tests::validate_git_args_restricts_remote_to_listing ... ok
+test git::tests::validates_exact_push_and_local_tracking_contract ... ok
+test git::tests::validates_pull_and_recovery_forms ... ok
+test git::tests::workspace_close_guard_blocks_mutations_but_allows_background_reads ... ok
+test git_askpass::tests::parse_host_hint_extracts_https_host ... ok
+test git_askpass::tests::parse_input_kind_detects_username_and_password ... ok
+test git_askpass::tests::wait_for_prompt_continues_when_response_file_already_consumed ... ok
+test handoff::tests::excludes_private_traversal_binary_and_bounds ... ok
+test native_assets::tests::installed_candidates_never_search_checkout_or_path ... ok
+test project_catalog::tests::concurrent_semantic_reorders_merge_membership_and_preferences ... ok
+test project_catalog::tests::concurrent_windows_merge_changes_under_os_lock ... ok
+test project_catalog::tests::deleting_folder_appends_projects_in_their_relative_order ... ok
+test project_catalog::tests::failed_write_preserves_last_whole_catalog ... ok
+test project_catalog::tests::invalid_multi_update_is_not_partially_committed ... ok
+test project_catalog::tests::lock_failure_never_degrades_into_unlocked_writes ... ok
+test project_catalog::tests::metadata_codec_rejects_embedded_file_buffers_and_discard_clears_recovery_pointer ... ok
+test project_catalog::tests::persists_and_deduplicates_normalized_identity ... ok
+test project_catalog::tests::recovers_valid_backup_and_keeps_it_during_next_write ... ok
+test project_catalog::tests::recovery_failure_keeps_previous_pointer_and_gc_retains_backup_payload ... ok
+test project_catalog::tests::recovery_payload_is_durable_and_never_returned_in_catalog ... ok
+test project_catalog::tests::rejects_corruption_without_valid_backup_and_never_overwrites ... ok
+test project_catalog::tests::removal_refreshes_window_liveness_after_waiting_for_the_catalog_lock ... ok
+test project_catalog::tests::remove_and_owner_claim_are_serialized_without_open_uncatalogued_projects ... ok
+test project_catalog::tests::semantic_moves_keep_hidden_entries_and_pin_folder_positions ... ok
+test project_catalog::tests::shared_preferences_appearance_folders_and_context_round_trip ... ok
+test project_move::tests::rename_never_overwrites ... ok
+test project_move::tests::replacement_failure_restores_destination ... ok
+test project_move::tests::verified_cross_volume_folder_copy_preserves_hidden_files_and_links ... ok
+test session_fs::tests::atomic_write_creates_and_replaces ... ok
+test session_fs::tests::validate_rejects_traversal_components ... ok
+test workspace_documents::tests::compare_before_write_and_lazy_creation ... ok
+test workspace_git_summary::tests::cache_evicts_only_undemanded_entries ... ok
+test workspace_git_summary::tests::destroy_before_first_subprocess_reassigns_and_old_lease_cannot_start ... ok
+test workspace_git_summary::tests::destroy_revokes_future_commands_but_keeps_slot_until_native_runner_finishes ... ok
+test workspace_git_summary::tests::dropping_async_caller_keeps_accounting_until_blocking_runner_exits ... ok
+test workspace_git_summary::tests::dropping_demand_retains_running_process_and_releases_all_watch_targets ... ok
+test workspace_git_summary::tests::duplicate_demand_shares_one_lease ... ok
+test workspace_git_summary::tests::force_and_repeated_consumers_cannot_duplicate_running_check ... ok
+test workspace_git_summary::tests::fresh_cache_skips_checks_and_ttl_alone_never_queues ... ok
+test workspace_git_summary::tests::git_file_resolves_linked_metadata_and_subpaths ... ok
+test workspace_git_summary::tests::inactive_demand_keeps_metadata_invalidation_without_scheduling_reads ... ok
+test workspace_git_summary::tests::invalidation_during_read_rejects_old_answer_and_schedules_one_followup ... ok
+test workspace_git_summary::tests::lifetime_counters_ignore_rejected_starts_and_duplicate_completion ... ok
+test workspace_git_summary::tests::lifetime_peak_counters_cover_four_windows_and_survive_demand_removal ... ok
+test workspace_git_summary::tests::real_metadata_watcher_observes_head_and_common_refs_without_tree_recursion ... ok
+test workspace_git_summary::tests::real_status_reads_do_not_self_invalidate_metadata_watchers ... ok
+test workspace_git_summary::tests::stale_error_retains_last_summary_and_success_time ... ok
+test workspace_git_summary::tests::windows_share_four_leases_and_active_priority ... ok
+
+test result: ok. 159 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 26.99s
+

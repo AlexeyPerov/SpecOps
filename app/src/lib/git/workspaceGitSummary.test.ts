@@ -34,17 +34,25 @@ describe("workspace summary consumer service",()=>{
     const a=subscribeWorkspaceGitSummary("/repo",vi.fn(),{priority:"visible"});
     const b=subscribeWorkspaceGitSummary("/repo",vi.fn(),{priority:"active"});
     await flush();
-    expect(invoke).toHaveBeenCalledWith("workspace_git_summary_sync",{demands:[{rootPath:"/repo",priority:0}]});
+    expect(invoke).toHaveBeenCalledWith("workspace_git_summary_sync",{demands:[{rootPath:"/repo",priority:0}],active:true});
     expect(resolveRepoRoot).not.toHaveBeenCalled();
     a.unsubscribe();b.unsubscribe();hidden.unsubscribe();await flush();
-    expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[]});
+    expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[],active:true});
   });
   it("does no reading while unfocused or background Git is forbidden",async()=>{
     subscribeWorkspaceGitSummary("/repo",vi.fn());await flush();
-    expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[]});
+    expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[{rootPath:"/repo",priority:1}],active:false});
     vi.mocked(isBackgroundGitAllowedInApp).mockReturnValue(false);setWorkspaceGitSummaryWindowActive(true);await flush();
-    expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[]});
+    expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[],active:true});
     expect(resolveRepoRoot).not.toHaveBeenCalled();
+  });
+  it("retains passive metadata demand on blur and reuses it when focus returns",async()=>{
+    setWorkspaceGitSummaryWindowActive(true);subscribeWorkspaceGitSummary("/repo",vi.fn());await flush();
+    setWorkspaceGitSummaryWindowActive(false);await flush();
+    expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[{rootPath:"/repo",priority:1}],active:false});
+    expect(resolveRepoRoot).not.toHaveBeenCalled();
+    setWorkspaceGitSummaryWindowActive(true);await flush();
+    expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[{rootPath:"/repo",priority:1}],active:true});
   });
   it("coalesces repeated native grants and passes the same lease through resolution and status",async()=>{
     setWorkspaceGitSummaryWindowActive(true);subscribeWorkspaceGitSummary("/repo",vi.fn());await flush();
@@ -81,7 +89,7 @@ describe("workspace summary consumer service",()=>{
     if(mode==="dispose")disposeWorkspaceGitSummaryService();
     await refresh;await flush();expect(done).toBe(true);
     if (mode === "dispose") expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_detach");
-    else expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[]});
+    else expect(invoke).toHaveBeenLastCalledWith("workspace_git_summary_sync",{demands:[],active:mode!=="blur"});
   });
   it("marks TTL expiry stale without starting another read",async()=>{
     vi.useFakeTimers();setWorkspaceGitSummaryWindowActive(true);subscribeWorkspaceGitSummary("/repo",vi.fn());await flush();

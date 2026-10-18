@@ -3,6 +3,15 @@ import { workspaceGitSummaryPresentation as present } from './workspaceGitSummar
 import type { WorkspaceGitSummarySnapshot } from './workspaceGitSummary';
 const empty: WorkspaceGitSummarySnapshot = {status:'unknown',summary:null,checkedAt:null,error:null,refreshing:false};
 describe('workspace Git summary presentation',()=>{
+  it('reuses immutable presentations while new revisions update state and successful-check time',()=>{
+    const first={...empty,status:'fresh' as const,checkedAt:123};
+    const before=present(first);
+    expect(present(first)).toBe(before);
+    const after=present({...first,status:'stale',checkedAt:86_400_123});
+    expect(after).not.toBe(before);
+    expect(after.detail).toContain('Stale');
+    expect(before.detail).toContain(new Date(first.checkedAt).toLocaleTimeString());
+  });
   it('distinguishes every initial/no-result state in text and narrow marks',()=>{
     const unknown=present(empty),loading=present({...empty,status:'loading',refreshing:true}),notGit=present({...empty,status:'notGit'}),error=present({...empty,status:'error',error:'read failed'});
     expect(new Set([unknown.text,loading.text,notGit.text,error.text]).size).toBe(4);

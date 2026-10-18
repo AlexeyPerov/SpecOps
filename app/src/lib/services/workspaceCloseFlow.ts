@@ -150,12 +150,14 @@ async function finishClose(workspaceId: ContextId, notify: (message: string) => 
   if (!entry) return false;
   const root = normalizePathSync(entry.rootPath);
   const chat = chatStore.getWorkspaceSessionsState(root);
+  const chatRevision = chatStore.getSnapshot().workspaces[root];
   const validate = async () => {
     await assertNoNativeWorkspaceMutation(entry.rootPath);
+    if (!discard && appState.getWorkspaceDirtyDocuments(workspaceId).length) throw new Error('Workspace changed while saving. Review unsaved changes and close again.');
     if (!workspaceDocumentsSettled(root)) throw new Error('Workspace notes or tasks changed while closing. Try again.');
     const reason = workspaceCloseBlockedReason(workspaceId);
     if (reason) throw new Error(reason);
-    if (appState.getSnapshot().contexts.workspaces.find(workspace => workspace.id === workspaceId)?.snapshot !== entry.snapshot || chatStore.getWorkspaceSessionsState(root) !== chat) {
+    if (appState.getSnapshot().contexts.workspaces.find(workspace => workspace.id === workspaceId)?.snapshot !== entry.snapshot || chatStore.getSnapshot().workspaces[root] !== chatRevision) {
       throw new Error('Workspace activity changed while closing. Try again.');
     }
   };
@@ -179,7 +181,7 @@ async function finishClose(workspaceId: ContextId, notify: (message: string) => 
       activeContextId: state.contexts.activeContextId === workspaceId ? workspaces[0]?.id ?? 'notepad' : state.contexts.activeContextId } }, windowId);
     await validate();
     const blocked = workspaceCloseBlockedReason(workspaceId);
-    if (blocked || appState.getSnapshot().contexts.workspaces.find(workspace => workspace.id === workspaceId)?.snapshot !== entry.snapshot || chatStore.getWorkspaceSessionsState(root) !== chat || !workspaceDocumentsSettled(root)) throw new Error(blocked ?? 'Workspace changed while closing. Try again.');
+    if (blocked || (!discard && appState.getWorkspaceDirtyDocuments(workspaceId).length) || appState.getSnapshot().contexts.workspaces.find(workspace => workspace.id === workspaceId)?.snapshot !== entry.snapshot || chatStore.getSnapshot().workspaces[root] !== chatRevision || !workspaceDocumentsSettled(root)) throw new Error(blocked ?? 'Workspace changed while closing. Try again.');
     const closed = appState.closeWorkspace(workspaceId);
     removed = closed;
     successor = appState.getSnapshot().contexts.activeContextId;

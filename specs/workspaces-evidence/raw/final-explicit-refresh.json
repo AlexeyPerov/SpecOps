@@ -1,0 +1,1063 @@
+{
+  "samples": [
+    {
+      "nativeFocused": true,
+      "visibility": "visible",
+      "documentFocused": false,
+      "navigationError": null,
+      "theme": "dark",
+      "background": "rgb(26, 27, 29)",
+      "uiFontSize": "13px",
+      "openContexts": [
+        {
+          "id": "ws-1",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project"
+        },
+        {
+          "id": "ws-2",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        },
+        {
+          "id": "ws-3",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03"
+        },
+        {
+          "id": "ws-4",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04"
+        },
+        {
+          "id": "ws-5",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-05"
+        },
+        {
+          "id": "ws-6",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-06"
+        },
+        {
+          "id": "ws-7",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/shared-project"
+        },
+        {
+          "id": "ws-8",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-08"
+        },
+        {
+          "id": "ws-9",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/long-path-segment-for-disambiguation/long-project-name-for-workspace-layout-8"
+        },
+        {
+          "id": "ws-10",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-10"
+        },
+        {
+          "id": "ws-11",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-11"
+        },
+        {
+          "id": "ws-12",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-12"
+        },
+        {
+          "id": "ws-13",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/shared-project"
+        },
+        {
+          "id": "ws-14",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-14"
+        },
+        {
+          "id": "ws-15",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-15"
+        },
+        {
+          "id": "ws-16",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-16"
+        },
+        {
+          "id": "ws-17",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-17"
+        },
+        {
+          "id": "ws-18",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-18"
+        },
+        {
+          "id": "ws-19",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/shared-project"
+        },
+        {
+          "id": "ws-20",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-20"
+        },
+        {
+          "id": "ws-21",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-21"
+        },
+        {
+          "id": "ws-22",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-22"
+        },
+        {
+          "id": "ws-23",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-23"
+        },
+        {
+          "id": "ws-24",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-24"
+        },
+        {
+          "id": "ws-25",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/shared-project"
+        },
+        {
+          "id": "ws-26",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-26"
+        },
+        {
+          "id": "ws-27",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-27"
+        },
+        {
+          "id": "ws-28",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-28"
+        },
+        {
+          "id": "ws-29",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-29"
+        },
+        {
+          "id": "ws-30",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-30"
+        }
+      ],
+      "activeContextId": "notepad",
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "★ project-08",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "★ project-15",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "★ project-22",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "★ project-29",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-03",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "project-04",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-05",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-06",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "project-10",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-11",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-12",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-14",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-16",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-17",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-18",
+          "state": "In this window",
+          "git": "main · clean · ◷ Stale"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-20",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-21",
+          "state": "In this window",
+          "git": "main · clean · ◷ Stale"
+        },
+        {
+          "name": "project-23",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-24",
+          "state": "In this window",
+          "git": "main · conflicts · ◷ Stale"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "detached @ 3d0f8ca · clean · ◷ Stale"
+        },
+        {
+          "name": "project-26",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-27",
+          "state": "In this window",
+          "git": "Not a Git repository"
+        },
+        {
+          "name": "project-28",
+          "state": "In this window",
+          "git": "linked-fixture · clean · ◷ Stale"
+        },
+        {
+          "name": "project-30",
+          "state": "In this window· Unavailable",
+          "git": "Git error"
+        }
+      ],
+      "label": "final-all30-display-states",
+      "at": "2026-10-18T16:55:28.815Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "folderNames": [
+        "Group 1",
+        "Group 2",
+        "Group 3",
+        "Group 4",
+        "Group 5"
+      ],
+      "catalogProjects": 30,
+      "savedContexts": 0,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 30,
+        "commandsFinished": 149,
+        "commandsStarted": 149,
+        "gitProcessesStarted": 151,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "nativeFocused": true,
+      "visibility": "visible",
+      "documentFocused": false,
+      "navigationError": null,
+      "theme": "dark",
+      "background": "rgb(26, 27, 29)",
+      "uiFontSize": "13px",
+      "openContexts": [
+        {
+          "id": "ws-1",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project"
+        },
+        {
+          "id": "ws-2",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        },
+        {
+          "id": "ws-3",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03"
+        },
+        {
+          "id": "ws-4",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04"
+        },
+        {
+          "id": "ws-5",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-05"
+        },
+        {
+          "id": "ws-6",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-06"
+        },
+        {
+          "id": "ws-7",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/shared-project"
+        },
+        {
+          "id": "ws-8",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-08"
+        },
+        {
+          "id": "ws-9",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/long-path-segment-for-disambiguation/long-project-name-for-workspace-layout-8"
+        },
+        {
+          "id": "ws-10",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-10"
+        },
+        {
+          "id": "ws-11",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-11"
+        },
+        {
+          "id": "ws-12",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-12"
+        },
+        {
+          "id": "ws-13",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/shared-project"
+        },
+        {
+          "id": "ws-14",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-14"
+        },
+        {
+          "id": "ws-15",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-15"
+        },
+        {
+          "id": "ws-16",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-16"
+        },
+        {
+          "id": "ws-17",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-17"
+        },
+        {
+          "id": "ws-18",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-18"
+        },
+        {
+          "id": "ws-19",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/shared-project"
+        },
+        {
+          "id": "ws-20",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-20"
+        },
+        {
+          "id": "ws-21",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-21"
+        },
+        {
+          "id": "ws-22",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-22"
+        },
+        {
+          "id": "ws-23",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-23"
+        },
+        {
+          "id": "ws-24",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-24"
+        },
+        {
+          "id": "ws-25",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/shared-project"
+        },
+        {
+          "id": "ws-26",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-26"
+        },
+        {
+          "id": "ws-27",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-27"
+        },
+        {
+          "id": "ws-28",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-28"
+        },
+        {
+          "id": "ws-29",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-29"
+        },
+        {
+          "id": "ws-30",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-30"
+        }
+      ],
+      "activeContextId": "notepad",
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "★ project-08",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "★ project-15",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "★ project-22",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "★ project-29",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-03",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "project-04",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-05",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-06",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "project-10",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-11",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-12",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-14",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-16",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-17",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-18",
+          "state": "In this window",
+          "git": "main · clean · ◷ Stale"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-20",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-21",
+          "state": "In this window",
+          "git": "main · clean · ◷ Stale"
+        },
+        {
+          "name": "project-23",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-24",
+          "state": "In this window",
+          "git": "main · conflicts · ◷ Stale"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "detached @ 3d0f8ca · clean · ◷ Stale"
+        },
+        {
+          "name": "project-26",
+          "state": "In this window",
+          "git": "main · dirty · ◷ Stale"
+        },
+        {
+          "name": "project-27",
+          "state": "In this window",
+          "git": "Not a Git repository"
+        },
+        {
+          "name": "project-28",
+          "state": "In this window",
+          "git": "linked-fixture · clean · ◷ Stale"
+        },
+        {
+          "name": "project-30",
+          "state": "In this window· Unavailable",
+          "git": "Git error"
+        }
+      ],
+      "label": "before-explicit-all30-refresh",
+      "at": "2026-10-18T16:55:46.246Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "folderNames": [
+        "Group 1",
+        "Group 2",
+        "Group 3",
+        "Group 4",
+        "Group 5"
+      ],
+      "catalogProjects": 30,
+      "savedContexts": 0,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 30,
+        "commandsFinished": 149,
+        "commandsStarted": 149,
+        "gitProcessesStarted": 151,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "nativeFocused": true,
+      "visibility": "visible",
+      "documentFocused": false,
+      "navigationError": null,
+      "theme": "dark",
+      "background": "rgb(26, 27, 29)",
+      "uiFontSize": "13px",
+      "openContexts": [
+        {
+          "id": "ws-1",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project"
+        },
+        {
+          "id": "ws-2",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        },
+        {
+          "id": "ws-3",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03"
+        },
+        {
+          "id": "ws-4",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04"
+        },
+        {
+          "id": "ws-5",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-05"
+        },
+        {
+          "id": "ws-6",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-06"
+        },
+        {
+          "id": "ws-7",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/shared-project"
+        },
+        {
+          "id": "ws-8",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-08"
+        },
+        {
+          "id": "ws-9",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/long-path-segment-for-disambiguation/long-project-name-for-workspace-layout-8"
+        },
+        {
+          "id": "ws-10",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-10"
+        },
+        {
+          "id": "ws-11",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-11"
+        },
+        {
+          "id": "ws-12",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-2/projects/project-12"
+        },
+        {
+          "id": "ws-13",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/shared-project"
+        },
+        {
+          "id": "ws-14",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-14"
+        },
+        {
+          "id": "ws-15",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-15"
+        },
+        {
+          "id": "ws-16",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-16"
+        },
+        {
+          "id": "ws-17",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-17"
+        },
+        {
+          "id": "ws-18",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-3/projects/project-18"
+        },
+        {
+          "id": "ws-19",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/shared-project"
+        },
+        {
+          "id": "ws-20",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-20"
+        },
+        {
+          "id": "ws-21",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-21"
+        },
+        {
+          "id": "ws-22",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-22"
+        },
+        {
+          "id": "ws-23",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-23"
+        },
+        {
+          "id": "ws-24",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-4/projects/project-24"
+        },
+        {
+          "id": "ws-25",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/shared-project"
+        },
+        {
+          "id": "ws-26",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-26"
+        },
+        {
+          "id": "ws-27",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-27"
+        },
+        {
+          "id": "ws-28",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-28"
+        },
+        {
+          "id": "ws-29",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-29"
+        },
+        {
+          "id": "ws-30",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-5/projects/project-30"
+        }
+      ],
+      "activeContextId": "notepad",
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "★ project-08",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "★ project-15",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "★ project-22",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "★ project-29",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-03",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "project-04",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-05",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-06",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "project-10",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-11",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-12",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-14",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-16",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-17",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-18",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-20",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-21",
+          "state": "In this window",
+          "git": "main · clean"
+        },
+        {
+          "name": "project-23",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-24",
+          "state": "In this window",
+          "git": "main · conflicts"
+        },
+        {
+          "name": "shared-project",
+          "state": "In this window",
+          "git": "detached @ 3d0f8ca · clean"
+        },
+        {
+          "name": "project-26",
+          "state": "In this window",
+          "git": "main · dirty"
+        },
+        {
+          "name": "project-27",
+          "state": "In this window",
+          "git": "Not a Git repository"
+        },
+        {
+          "name": "project-28",
+          "state": "In this window",
+          "git": "linked-fixture · clean"
+        },
+        {
+          "name": "project-30",
+          "state": "In this window· Unavailable",
+          "git": "Git error"
+        }
+      ],
+      "label": "explicit-all30-refresh-settled",
+      "at": "2026-10-18T16:55:49.266Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "folderNames": [
+        "Group 1",
+        "Group 2",
+        "Group 3",
+        "Group 4",
+        "Group 5"
+      ],
+      "catalogProjects": 30,
+      "savedContexts": 0,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 30,
+        "commandsFinished": 208,
+        "commandsStarted": 208,
+        "gitProcessesStarted": 209,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    }
+  ],
+  "search": [],
+  "errors": [],
+  "windowId": "main"
+}

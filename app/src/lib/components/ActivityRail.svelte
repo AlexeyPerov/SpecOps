@@ -740,6 +740,7 @@
 
   .activity-rail {
     position: relative;
+    min-height: 0;
     width: var(--activity-rail-width);
     border-right: 1px solid var(--color-border-subtle);
     background: var(--color-surface-1);

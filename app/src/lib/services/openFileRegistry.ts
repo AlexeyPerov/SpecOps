@@ -430,6 +430,7 @@ export async function releaseAllOpenFilesForWindow(windowId: string): Promise<vo
     if (read.kind !== "snapshot") {
       if (read.kind === "unreadable") {
         await logAbortedUpdate(windowId, read.reason);
+        throw new Error(`Open-file ownership is unavailable: ${read.reason}`);
       }
       return;
     }

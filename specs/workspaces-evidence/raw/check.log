@@ -1,0 +1,8 @@
+
+> spec-ops@0.3.0 check
+> svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+
+Loading svelte-check in workspace: /Users/alexeyperov/Projects/spec-ops/app
+Getting Svelte diagnostics...
+
+svelte-check found 0 errors and 0 warnings

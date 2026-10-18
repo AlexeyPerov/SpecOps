@@ -7,9 +7,10 @@ import { invoke } from '@tauri-apps/api/core';
 vi.mock('./workspaceCatalog', () => ({ getProjectCatalog: vi.fn(), projectIdentity: (root: string) => root,
   saveCatalogProjectContext: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./fileSystem', () => ({ openPath: vi.fn() }));
-vi.mock('./sessionDocumentPersistence', () => ({ applyLargeFileConfirmGateOnRestore: vi.fn(async doc => doc) }));
+vi.mock('./diskFingerprint', async original => ({ ...await original<typeof import('./diskFingerprint')>(), statDiskFingerprint: vi.fn().mockResolvedValue({mtimeMs:1,sizeBytes:1}) }));
+import { statDiskFingerprint } from './diskFingerprint';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
-beforeEach(() => { appState.resetAppState(); vi.clearAllMocks(); });
+beforeEach(() => { appState.resetAppState(); vi.clearAllMocks(); vi.mocked(statDiskFingerprint).mockResolvedValue({mtimeMs:1,sizeBytes:1}); });
 function context() {
   appState.addWorkspace('/project'); appState.openFileInTab('/project/a.txt', 'old file');
   appState.openOrFocusViewTab('workspace-notes');
@@ -39,6 +40,27 @@ describe('closed project restore', () => {
     const restored = await restoreSavedProjectContext('/project');
     expect(restored?.documents.every(doc => doc.content === 'recovery' && doc.isDirty)).toBe(true);
     expect(openPath).not.toHaveBeenCalled();
+  });
+  it('preserves recovered dirty file buffers when the current disk file is very large', async () => {
+    const snapshot = context();
+    const file = snapshot.documents.find(doc => doc.filePath)!;
+    file.content = 'unsaved recovered text'; file.isDirty = true;
+    const saved = savedProjectContext(snapshot, 'window');
+    vi.mocked(getProjectCatalog).mockReturnValue({ savedContexts: { '/project': { ...saved, recoveryRef:'pointer' } } } as never);
+    vi.mocked(invoke).mockResolvedValue(saved.recoveryBuffers);
+    vi.mocked(statDiskFingerprint).mockResolvedValue({mtimeMs:9,sizeBytes:100_000_000});
+    const restored = await restoreSavedProjectContext('/project');
+    expect(restored?.documents.find(doc => doc.filePath)).toMatchObject({content:'unsaved recovered text',savedContent:'old file',isDirty:true,contentKind:'text'});
+    expect(openPath).not.toHaveBeenCalled();
+  });
+  it('clears stale missing metadata and adopts a recreated empty file BOM and line endings', async () => {
+    const snapshot = context();
+    const file = snapshot.documents.find(doc => doc.filePath)!; file.fileMissing = true; file.hasBom = false;
+    const saved = savedProjectContext(snapshot, 'discard');
+    vi.mocked(getProjectCatalog).mockReturnValue({ savedContexts: { '/project': saved } } as never);
+    vi.mocked(openPath).mockResolvedValue({path:'/project/a.txt',content:'',contentKind:'text',lineEnding:'crlf',hasBom:true,fingerprint:{mtimeMs:2,sizeBytes:3}} as never);
+    const restored = await restoreSavedProjectContext('/project');
+    expect(restored?.documents.find(doc => doc.filePath)).toMatchObject({content:'',savedContent:'',fileMissing:false,hasBom:true,lineEnding:'crlf',diskFingerprint:{mtimeMs:2,sizeBytes:3}});
   });
   it('keeps missing file tabs and marks them unavailable', async () => {
     const saved = savedProjectContext(context(), 'discard');

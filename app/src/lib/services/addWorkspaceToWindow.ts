@@ -11,8 +11,20 @@ import { appState } from '../state/appState';
 import { focusExistingWorkspaceWindow } from './workspaceWindowTransfer';
 import { markWorkspaceOutgoing, setWorkspaceWindowOwner, workspaceWindowOwner } from './workspaceWindowPlacement';
 import type { ContextId } from '../domain/contracts';
+const opening = new Map<string, Promise<ContextId | null>>();
+/** One pending open per normalized root also covers asynchronous saved-context restore. */
+export function addWorkspaceToWindow(root: string): Promise<ContextId | null> {
+  const key = normalizePathSync(root);
+  const existing = opening.get(key);
+  if (existing) return existing;
+  const pending = openWorkspace(root);
+  opening.set(key, pending);
+  const release = () => { if (opening.get(key) === pending) opening.delete(key); };
+  void pending.then(release, release);
+  return pending;
+}
 /** Opening an existing workspace activates its owning window. */
-export async function addWorkspaceToWindow(root: string): Promise<ContextId | null> {
+async function openWorkspace(root: string): Promise<ContextId | null> {
   if (workspaceContextIsClosing(root)) throw new Error('Workspace is still closing. Try opening it again after the operation finishes.');
   if ((typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) && await focusExistingWorkspaceWindow(root)) return null;
   const native = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -38,8 +50,9 @@ export async function addWorkspaceToWindow(root: string): Promise<ContextId | nu
   const id = restored ? appState.adoptWorkspace({ id: 'ws-0', rootPath: root, snapshot: restored }, windowId, { deferActivation: true })
     : appState.addWorkspace(root, { deferActivation: true });
   if (!id) return null;
+  let claimed = false;
   try {
-    if ((typeof window !== "undefined" && "__TAURI_INTERNALS__" in window)) await setWorkspaceWindowOwner(root, getCurrentWebviewWindow().label, oldOwner ?? null);
+    if (native) { await setWorkspaceWindowOwner(root, windowId, oldOwner ?? null); claimed = true; }
     if (getProjectCatalog().projects[projectIdentity(root)]?.openError) await updateCatalogProject(root, { openError: null });
     if (restored) {
       const entry = appState.getSnapshot().contexts.workspaces.find(workspace => workspace.id === id)!;
@@ -53,7 +66,7 @@ export async function addWorkspaceToWindow(root: string): Promise<ContextId | nu
     markWorkspaceOutgoing(root, false);
     return id;
   } catch (error) { appState.closeWorkspace(id, { deferActivation: true }); appState.switchContext(previousContextId);
-    if (native) await setWorkspaceWindowOwner(root, oldOwner ?? null, getCurrentWebviewWindow().label).catch(() => {});
+    if (native && claimed) await setWorkspaceWindowOwner(root, oldOwner ?? null, windowId).catch(() => {});
     if (restored) await syncOpenFileRegistryForWindow(windowId, appState.getSnapshot()).catch(() => {});
     if (native && await focusExistingWorkspaceWindow(root).catch(() => false)) return null;
     await updateCatalogProject(root, { openError: String(error) }).catch(() => {});

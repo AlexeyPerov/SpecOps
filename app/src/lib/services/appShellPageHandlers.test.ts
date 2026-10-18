@@ -12,7 +12,10 @@ import {
 } from "./appShellPageHandlers";
 import { scheduleTabExternalCheck } from "./externalFileChanges";
 import { confirmLargeFileOpen } from "./openFileGate";
+import { releaseAllOpenFilesForWindow } from "./openFileRegistry";
 import { openActivePath } from "./openActivePath";
+
+vi.mock("./openFileRegistry", () => ({ releaseAllOpenFilesForWindow: vi.fn(async () => {}) }));
 
 vi.mock("./externalFileChanges", () => ({
   scheduleTabExternalCheck: vi.fn(() => "scheduled"),
@@ -100,6 +103,32 @@ function activeFileTabIdByPath(path: string): string {
 }
 
 describe("setupAppShellMount", () => {
+  it('awaits file-claim release after confirmation and before destroying the window', async () => {
+    let finish!: () => void;
+    vi.mocked(releaseAllOpenFilesForWindow).mockImplementationOnce(() => new Promise<void>(resolve => {finish=resolve;}));
+    nativeWindow.destroy.mockClear();
+    const deps=createMountDeps({getCurrentWebviewWindowLabel:()=> 'secondary'});
+    const unmount=setupAppShellMount(deps);
+    const closing=nativeWindow.close!({preventDefault:vi.fn()});
+    await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));
+    expect(deps.confirmWindowClose).toHaveBeenCalled();
+    expect(releaseAllOpenFilesForWindow).toHaveBeenCalledWith('secondary');
+    expect(nativeWindow.destroy).not.toHaveBeenCalled();
+    finish();await closing;
+    expect(nativeWindow.destroy).toHaveBeenCalledTimes(1);unmount();
+  });
+  it('keeps the window and restart entry when releasing claims fails', async () => {
+    vi.mocked(releaseAllOpenFilesForWindow).mockRejectedValueOnce(new Error('disk full'));nativeWindow.destroy.mockClear();
+    const remove=vi.fn();const deps=createMountDeps({getCurrentWebviewWindowLabel:()=> 'secondary',removeWindowSessionEntry:remove});
+    const unmount=setupAppShellMount(deps);await nativeWindow.close!({preventDefault:vi.fn()});
+    expect(nativeWindow.destroy).not.toHaveBeenCalled();expect(remove).not.toHaveBeenCalled();expect(deps.notify).toHaveBeenCalledWith(expect.stringContaining('Window remains open'));unmount();
+  });
+  it('keeps file claims when window close is canceled by persistence or the user', async () => {
+    vi.mocked(releaseAllOpenFilesForWindow).mockClear();nativeWindow.destroy.mockClear();
+    const unmount=setupAppShellMount(createMountDeps({confirmWindowClose:vi.fn(async()=>false)}));
+    await nativeWindow.close!({preventDefault:vi.fn()});
+    expect(releaseAllOpenFilesForWindow).not.toHaveBeenCalled();expect(nativeWindow.destroy).not.toHaveBeenCalled();unmount();
+  });
   afterEach(() => {
     vi.restoreAllMocks();
   });

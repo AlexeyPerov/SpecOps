@@ -122,7 +122,7 @@ async function start(): Promise<void> {
   return startPromise;
 }
 function demands(): { rootPath: string; priority: number }[] {
-  if (!windowActive || !isBackgroundGitAllowedInApp()) return [];
+  if (!isBackgroundGitAllowedInApp()) return [];
   const paths = new Map<string, number>();
   for (const consumer of consumers) {
     if (consumer.demand.enabled === false) continue;
@@ -142,7 +142,7 @@ function scheduleSync(): void {
       if (disposed || scheduledLifetime !== lifetime) return;
       await start();
       if (disposed || scheduledLifetime !== lifetime) return;
-      const payload = await invoke<Payload>("workspace_git_summary_sync", { demands: demands() });
+      const payload = await invoke<Payload>("workspace_git_summary_sync", { demands: demands(), active: windowActive });
       if (scheduledLifetime === lifetime) accept(payload);
     }).catch(cause => {
       for (const consumer of consumers) publish(consumer.path, { ...getWorkspaceGitSummarySnapshot(consumer.path), status: "error", refreshing: false, error: formatGitErrorPrimaryMessage(cause) });

@@ -1,0 +1,52 @@
+
+> spec-ops@0.3.0 test
+> vitest run
+
+
+ RUN  v4.1.9 /Users/alexeyperov/Projects/spec-ops/app
+
+ ❯ src/lib/components/GitHistoryPanel.test.ts (9 tests | 1 failed) 6050ms
+     × windows large row sets and scales the graph geometry when density changes 5450ms
+ ❯ src/lib/editor/markdownFoldBoundaries.test.ts (10 tests | 1 failed) 289ms
+     × hides the fold gutter via CSS without removing fold state 57ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/editor/markdownFoldBoundaries.test.ts > fold extension lifecycle > hides the fold gutter via CSS without removing fold state
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/lib/editor/markdownFoldBoundaries.test.ts:120:28
+    118|     });
+    119|     view.dispatch({ selection: { anchor: 0 } });
+    120|     expect(foldCode(view)).toBe(true);
+       |                            ^
+    121|     expect(foldedRanges(view.state).size).toBeGreaterThan(0);
+    122|     view.dispatch({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/lib/components/GitHistoryPanel.test.ts > mounted history table > windows large row sets and scales the graph geometry when density changes
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/lib/components/GitHistoryPanel.test.ts:57:3
+     55|     root.set('/new'); await settle(); resolve([commit(999)]); await se…
+     56|   });
+     57|   it('windows large row sets and scales the graph geometry when densit…
+       |   ^
+     58|     const all=Array.from({length:5000},(_,i)=>commit(i+1));
+     59|     vi.mocked(queryCommits).mockImplementation(async (_root, options) …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 320 passed (322)
+      Tests  2 failed | 3224 passed (3226)
+   Start at  19:35:07
+   Duration  49.20s (transform 29.47s, setup 5.93s, import 106.19s, tests 105.43s, environment 270.40s)
+

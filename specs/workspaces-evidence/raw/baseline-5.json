@@ -1,0 +1,180 @@
+{
+  "contextCount": 5,
+  "nativePerformance": [
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "register-listeners",
+      "durationMs": 13,
+      "windowId": "main",
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "load-settings",
+      "durationMs": 17,
+      "windowId": "main",
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "mark-window-active",
+      "durationMs": 22,
+      "windowId": "main",
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "workspace.sessionLoad",
+      "durationMs": 0,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "sessionCount": 0,
+      "hydratedThreadCount": 0,
+      "deferredThreadCount": 0,
+      "indexDurationMs": 0,
+      "threadsDurationMs": 0,
+      "incremental": true,
+      "cacheHit": true,
+      "validationDeferred": false
+    },
+    {
+      "kind": "perf",
+      "metric": "workspace.restore",
+      "durationMs": 2,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "sessionCount": 0,
+      "loadSessionsDurationMs": 2,
+      "prioritySessionCount": 0,
+      "preferCachedIndex": true,
+      "focusedSessionTab": false
+    },
+    {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 4,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "projectTree.rootLoad",
+      "durationMs": 6,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project"
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "restore-session",
+      "durationMs": 94,
+      "windowId": "main",
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "workspace.sessionLoad",
+      "durationMs": 0,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "sessionCount": 0,
+      "hydratedThreadCount": 0,
+      "deferredThreadCount": 0,
+      "indexDurationMs": 0,
+      "threadsDurationMs": 0,
+      "incremental": true,
+      "cacheHit": true,
+      "validationDeferred": false
+    },
+    {
+      "kind": "perf",
+      "metric": "workspace.restore",
+      "durationMs": 0,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "sessionCount": 0,
+      "loadSessionsDurationMs": 0,
+      "prioritySessionCount": 0,
+      "preferCachedIndex": true,
+      "focusedSessionTab": false
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "restore-chat-scope",
+      "durationMs": 1,
+      "windowId": "main",
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.total",
+      "durationMs": 138,
+      "windowId": "main"
+    },
+    {
+      "kind": "perf",
+      "metric": "projectTree.rootLoad",
+      "durationMs": 2,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project"
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "load-project-tree",
+      "durationMs": 2,
+      "windowId": "main",
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "startup-external-checks-priority",
+      "durationMs": 1,
+      "priorityCount": 1,
+      "deferredCount": 0,
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "startup-external-checks",
+      "durationMs": 2,
+      "windowId": "main",
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "sync-file-watcher",
+      "durationMs": 2,
+      "windowId": "main",
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "restore-other-windows",
+      "durationMs": 9,
+      "windowId": "main",
+      "ok": true
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.total",
+      "durationMs": 156,
+      "windowId": "main"
+    },
+    {
+      "kind": "perf",
+      "metric": "startup.phase",
+      "label": "initialize-app-menu",
+      "durationMs": 64,
+      "windowId": "main",
+      "ok": true
+    }
+  ],
+  "nativeProcess": [
+    "82451  92640 /private/tmp/specops-workspaces-baseline/SpecOps Workspaces Baseline.app/Contents/MacOS/spec-ops"
+  ]
+}

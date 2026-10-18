@@ -1,3 +1,4 @@
+import * as documentView from './appShellDocumentView';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 const bus = vi.hoisted(() => ({ windowId: 'main', listeners: new Map<string, (event: { payload: any }) => any>(), remote: undefined as ((target: string, event: string, payload: any) => Promise<void>) | undefined, owner: undefined as string | undefined }));
 const hooks = vi.hoisted(() => ({ flush: vi.fn(async () => {}), placement: vi.fn(async (_root: string, owner: string) => { bus.owner = owner; }), claim: vi.fn(async () => null), resume: vi.fn(), dispose: vi.fn(), detach: vi.fn(() => [] as any[]), descriptors: vi.fn(() => [] as any[]) }));
@@ -29,6 +30,7 @@ describe('workspace window transactions', () => {
   it('keeps the source workspace and dirty buffer until destination commit is acknowledged', async () => {
     const id = appState.addWorkspace('/source')!;
     const source = appState.getSnapshot().contexts.workspaces[0];
+    const invalidate = vi.spyOn(documentView,'invalidateDocumentMarkdownHtml');
     source.snapshot.documents[0].content = 'unsaved'; source.snapshot.documents[0].isDirty = true;
     let moved: any;
     bus.remote = async (_target, event, request) => {
@@ -42,6 +44,7 @@ describe('workspace window transactions', () => {
     const notify = vi.fn();
     await moveWorkspaceToWindow(id, true, notify);
     expect(moved.snapshot.documents[0].content).toBe('unsaved');
+    expect(invalidate).toHaveBeenCalledWith(source.snapshot.documents[0].id);
     expect(appState.getWorkspaceRoot(id)).toBeNull();
     expect(notify).toHaveBeenCalledWith('Workspace moved.');
   });

@@ -1,7 +1,13 @@
 import type { WorkspaceGitSummarySnapshot } from "./workspaceGitSummary";
 import { formatGitColumnDisplayText } from "./workspaceManagerGitColumn";
 
-export function workspaceGitSummaryPresentation(cell: WorkspaceGitSummarySnapshot): { text: string; mark: string; detail: string } {
+type Presentation = { text: string; mark: string; detail: string };
+const presentations = new WeakMap<WorkspaceGitSummarySnapshot, Presentation>();
+const checkTimeFormat = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "numeric", second: "numeric" });
+
+export function workspaceGitSummaryPresentation(cell: WorkspaceGitSummarySnapshot): Presentation {
+  const cached = presentations.get(cell);
+  if (cached) return cached;
   const state = {
     unknown: "Git not checked", loading: "Checking Git…", fresh: "Fresh",
     stale: "Stale", notGit: "Not a Git repository", error: "Git error",
@@ -17,7 +23,9 @@ export function workspaceGitSummaryPresentation(cell: WorkspaceGitSummarySnapsho
   if (summary?.hasConflicts) details.push("Working tree has merge conflicts");
   if (cell.refreshing) details.push("Checking Git; previous result retained");
   if (cell.error) details.push(cell.error);
-  if (cell.checkedAt !== null) details.push(`Last successful check ${new Date(cell.checkedAt).toLocaleTimeString()}`);
+  if (cell.checkedAt !== null) details.push(`Last successful check ${checkTimeFormat.format(cell.checkedAt)}`);
   details.push("Ahead/behind uses locally known upstream refs; no fetch is performed.");
-  return { text, mark, detail: details.join(" · ") };
+  const result = { text, mark, detail: details.join(" · ") };
+  presentations.set(cell, result);
+  return result;
 }

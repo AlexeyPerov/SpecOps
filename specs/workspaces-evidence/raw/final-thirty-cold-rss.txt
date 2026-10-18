@@ -1,0 +1,1 @@
+63773 121376 /Users/alexeyperov/Projects/spec-ops/app/src-tauri/target/debug/bundle/macos/SpecOps Workspaces Acceptance.app/Contents/MacOS/spec-ops

@@ -1,0 +1,142 @@
+[
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:31.260Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 3,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  },
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:31.837Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 2,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  },
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:32.379Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 3,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  },
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:32.927Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 2,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  },
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:33.510Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 3,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  },
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:34.077Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 2,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  },
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:34.624Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 3,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  },
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:35.217Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 3,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  },
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:35.774Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 3,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  },
+  {
+    "source": "frontend",
+    "timestamp": "2026-10-18T16:45:36.357Z",
+    "metadata": {
+      "kind": "perf",
+      "metric": "workspace.switchRestore",
+      "durationMs": 4,
+      "workspaceRoot": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "isSessionTabActive": false,
+      "preferCachedIndex": true,
+      "ok": true
+    },
+    "message": "workspace switch restore complete"
+  }
+]

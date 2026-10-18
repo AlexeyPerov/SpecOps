@@ -1,0 +1,13 @@
+
+> spec-ops@0.3.0 test
+> vitest run --maxWorkers=4
+
+
+ RUN  v4.1.9 /Users/alexeyperov/Projects/spec-ops/app
+
+
+ Test Files  322 passed (322)
+      Tests  3230 passed (3230)
+   Start at  19:40:36
+   Duration  75.70s (transform 14.73s, setup 2.73s, import 44.25s, tests 78.12s, environment 142.56s)
+

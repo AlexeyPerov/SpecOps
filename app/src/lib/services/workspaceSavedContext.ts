@@ -39,13 +39,14 @@ export async function restoreSavedProjectContext(root: string): Promise<ContextS
     const buffer = recovery[metadata.id];
     if (buffer) doc = { ...doc, ...buffer };
     if (doc.filePath) {
-      doc = await applyLargeFileConfirmGateOnRestore(doc, appState.getSnapshot().settings.externalFiles.maxOpenWithoutConfirmBytes, missing);
+      doc = await applyLargeFileConfirmGateOnRestore(doc, appState.getSnapshot().settings.externalFiles.maxOpenWithoutConfirmBytes, missing, !!buffer);
       if (!buffer && doc.contentKind !== 'large_pending') {
         try {
           const opened = await openPath(metadata.filePath!);
           doc = documentWithOpenedFilePayload(doc, opened.path, opened.content, opened.contentKind,
             { lineEnding: opened.lineEnding, hasBom: opened.hasBom });
-          doc.diskFingerprint = opened.fingerprint;
+          doc = { ...doc, diskFingerprint: opened.fingerprint, fileMissing: false,
+            lineEnding: opened.lineEnding ?? "lf", hasBom: opened.hasBom ?? false };
         } catch (error) {
           if (!missing(error)) throw error;
           doc = { ...doc, fileMissing: true };

@@ -60,6 +60,8 @@ TODO.md
 /specs/*
 !/specs/changelog.md
 !/specs/workspaces-plan.md
+!/specs/workspaces-evidence/
+!/specs/workspaces-evidence/**
 !/specs/issues-18-07.md
 !/specs/issues-02-08.md
 !/specs/performance-review-03-08.md

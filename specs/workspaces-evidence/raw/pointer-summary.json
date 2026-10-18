@@ -1,0 +1,51 @@
+{
+  "baseline": {
+    "runs": [
+      {
+        "attempts": 45,
+        "activated": 44,
+        "timeouts": 1,
+        "p95Ms": 35
+      },
+      {
+        "attempts": 44,
+        "activated": 44,
+        "timeouts": 0,
+        "p95Ms": 31.000000000007276
+      },
+      {
+        "attempts": 44,
+        "activated": 44,
+        "timeouts": 0,
+        "p95Ms": 31
+      }
+    ],
+    "allThreeP95Ms": 31.999999999985448,
+    "matchedRunsTwoAndThreeP95Ms": 31
+  },
+  "current": {
+    "runs": [
+      {
+        "attempts": 45,
+        "activated": 45,
+        "timeouts": 0,
+        "p95Ms": 41
+      },
+      {
+        "attempts": 44,
+        "activated": 44,
+        "timeouts": 0,
+        "p95Ms": 33
+      },
+      {
+        "attempts": 44,
+        "activated": 44,
+        "timeouts": 0,
+        "p95Ms": 32
+      }
+    ],
+    "allThreeP95Ms": 33.99999999998545,
+    "matchedRunsTwoAndThreeP95Ms": 33
+  },
+  "matchedChangePercent": 6.451612903225801
+}

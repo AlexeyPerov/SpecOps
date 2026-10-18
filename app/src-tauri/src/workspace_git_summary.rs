@@ -3,7 +3,7 @@ use crate::git::{self, RunGitRequest, RunGitResponse};
 use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -143,9 +143,14 @@ struct Lease {
 struct Coordinator {
     entries: HashMap<String, Entry>,
     demands: HashMap<String, Vec<(String, String, u8)>>,
+    inactive_windows: HashSet<String>,
     leases: HashMap<String, Lease>,
     sequence: u64,
     publication: u64,
+    commands_started: u64,
+    commands_finished: u64,
+    max_active_commands: usize,
+    max_active_leases: usize,
     watcher: Option<notify::RecommendedWatcher>,
     watched: HashMap<PathBuf, bool>,
 }
@@ -155,6 +160,7 @@ fn coordinator() -> &'static Mutex<Coordinator> {
 }
 impl Coordinator {
     fn begin_command(&mut self, lease: &str, window: &str) -> Result<(), String> {
+        if self.inactive_windows.contains(window) { return Err("Inactive summary window".into()); }
         let active = self.leases.get_mut(lease).ok_or("Expired summary lease")?;
         if active.revoked || active.grant.window != window {
             return Err("Revoked summary lease".into());
@@ -163,11 +169,18 @@ impl Coordinator {
             return Err("Summary lease already has a subprocess".into());
         }
         active.commands += 1;
+        self.commands_started += 1;
+        self.max_active_commands = self
+            .max_active_commands
+            .max(self.leases.values().map(|lease| lease.commands).sum());
         Ok(())
     }
     fn end_command(&mut self, lease: &str) {
         if let Some(active) = self.leases.get_mut(lease) {
-            active.commands = active.commands.saturating_sub(1);
+            if active.commands > 0 {
+                self.commands_finished += 1;
+                active.commands -= 1;
+            }
             if active.commands == 0 && active.revoked {
                 let key = active.grant.key.clone();
                 self.leases.remove(lease);
@@ -179,6 +192,7 @@ impl Coordinator {
     }
     fn drop_window(&mut self, window: &str) {
         self.demands.remove(window);
+        self.inactive_windows.remove(window);
         let mut orphaned = Vec::new();
         self.leases.retain(|_, active| {
             if active.grant.window != window {
@@ -251,8 +265,8 @@ impl Coordinator {
                         (window.clone(), root.clone(), key.clone(), *priority)
                     })
                 })
-                .filter(|(_, _, key, _)| {
-                    self.entries
+                .filter(|(window, _, key, _)| {
+                    !self.inactive_windows.contains(window) && self.entries
                         .get(key)
                         .is_some_and(|entry| entry.pending && !entry.debounce)
                         && !self.running(key)
@@ -283,6 +297,7 @@ impl Coordinator {
                     revoked: false,
                 },
             );
+            self.max_active_leases = self.max_active_leases.max(self.leases.len());
             grants.push(grant);
         }
         grants
@@ -407,6 +422,7 @@ pub fn workspace_git_summary_sync(
     app: AppHandle,
     window: WebviewWindow,
     demands: Vec<Demand>,
+    active: bool,
 ) -> Value {
     let mut state = coordinator().lock().unwrap();
     let mut next = Vec::new();
@@ -426,6 +442,7 @@ pub fn workspace_git_summary_sync(
         next.push((demand.root_path, key, demand.priority.min(1)));
     }
     state.demands.insert(window.label().to_string(), next);
+    if active { state.inactive_windows.remove(window.label()); } else { state.inactive_windows.insert(window.label().to_string()); }
     state.sync_watchers(&app);
     publish(&app, &mut state)
 }
@@ -522,7 +539,7 @@ pub fn workspace_git_summary_complete(
     deferred: Option<bool>,
 ) -> Result<Value, String> {
     let mut state = coordinator().lock().unwrap();
-    if deferred.unwrap_or(false) {
+    if deferred.unwrap_or(false) || state.inactive_windows.contains(window.label()) {
         // An owner lost focus between two commands. Do not cache the partial read.
         if let Some(active) = state.leases.get(&lease) {
             let key = active.grant.key.clone();
@@ -530,8 +547,8 @@ pub fn workspace_git_summary_complete(
                 entry.revision += 1;
             }
         }
-        state.demands.remove(window.label());
-        state.sync_watchers(&app);
+        // Demand and metadata watches survive blur; only the sync command
+        // changes activity, so a late reply cannot undo a newer focus event.
     }
     state.finish(window.label(), &lease, revision, summary, error, not_git)?;
     Ok(publish(&app, &mut state))
@@ -583,7 +600,9 @@ pub fn workspace_git_summary_release(path: String) {
 #[tauri::command]
 pub fn workspace_git_summary_diagnostics() -> Value {
     let state = coordinator().lock().unwrap();
-    json!({"activeLeases":state.leases.len(),"activeCommands":state.leases.values().map(|lease| lease.commands).sum::<usize>(),
+    json!({"gitProcessesStarted":git::git_processes_started(),"activeLeases":state.leases.len(),"activeCommands":state.leases.values().map(|lease| lease.commands).sum::<usize>(),
+        "commandsStarted":state.commands_started,"commandsFinished":state.commands_finished,
+        "maxActiveCommands":state.max_active_commands,"maxActiveLeases":state.max_active_leases,
         "queuedEntries":state.entries.values().filter(|entry|entry.pending).count(),"watchTargets":state.watched.len(),"cacheEntries":state.entries.len()})
 }
 
@@ -690,6 +709,75 @@ mod tests {
             .insert("a".into(), vec![("/repo".into(), "/repo".into(), 1)]);
         let grant = state.schedule().remove(0);
         (state, grant)
+    }
+    #[test]
+    fn inactive_demand_keeps_metadata_invalidation_without_scheduling_reads() {
+        let mut state = Coordinator::default();
+        let mut pending = entry("/repo"); pending.pending = true;
+        state.entries.insert("/repo".into(), pending);
+        state.demands.insert("window".into(), vec![("/repo".into(), "/repo".into(), 0)]);
+        state.inactive_windows.insert("window".into());
+        assert!(state.demanded("/repo"));
+        assert!(state.schedule().is_empty());
+        state.entries.get_mut("/repo").unwrap().revision += 1;
+        state.inactive_windows.remove("window");
+        let grant = state.schedule().remove(0);
+        assert_eq!(grant.revision, 1);
+        state.inactive_windows.insert("window".into());
+        assert!(state.begin_command(&grant.lease, "window").is_err());
+        assert_eq!(state.commands_started, 0);
+        state.drop_window("window");
+        assert!(!state.demanded("/repo"));
+        assert!(state.inactive_windows.is_empty());
+    }
+    #[test]
+    fn lifetime_counters_ignore_rejected_starts_and_duplicate_completion() {
+        let (mut state, grant) = demanded_state();
+        assert!(state.begin_command(&grant.lease, "other").is_err());
+        assert_eq!(state.commands_started, 0);
+        state.begin_command(&grant.lease, "a").unwrap();
+        assert!(state.begin_command(&grant.lease, "a").is_err());
+        state.drop_window("a");
+        assert_eq!(state.commands_started, 1);
+        assert_eq!(state.commands_finished, 0);
+        assert_eq!(state.max_active_commands, 1);
+        assert_eq!(state.max_active_leases, 1);
+        state.end_command(&grant.lease);
+        state.end_command(&grant.lease);
+        assert_eq!(state.commands_finished, 1);
+        assert!(state.leases.is_empty());
+    }
+    #[test]
+    fn lifetime_peak_counters_cover_four_windows_and_survive_demand_removal() {
+        let mut state = Coordinator::default();
+        for index in 0..8 {
+            let root = format!("/repo{index}");
+            let mut entry = entry(&root);
+            entry.pending = true;
+            state.entries.insert(root.clone(), entry);
+            state
+                .demands
+                .insert(format!("window{index}"), vec![(root.clone(), root, 1)]);
+        }
+        let grants = state.schedule();
+        assert_eq!(grants.len(), 4);
+        for grant in &grants {
+            state.begin_command(&grant.lease, &grant.window).unwrap();
+        }
+        assert_eq!(state.max_active_commands, 4);
+        assert_eq!(state.max_active_leases, 4);
+        for grant in &grants {
+            state.drop_window(&grant.window);
+        }
+        assert!(state.schedule().is_empty());
+        assert_eq!(state.commands_finished, 0);
+        for grant in &grants {
+            state.end_command(&grant.lease);
+        }
+        assert_eq!(state.commands_started, 4);
+        assert_eq!(state.commands_finished, 4);
+        assert_eq!(state.schedule().len(), 4);
+        assert_eq!(state.max_active_leases, 4);
     }
     #[test]
     fn force_and_repeated_consumers_cannot_duplicate_running_check() {

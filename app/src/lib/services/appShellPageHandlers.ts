@@ -20,6 +20,7 @@ import {
   type OpenPathActivationOptions,
 } from "./openActivePath";
 import { openDroppedPath } from "./openDroppedPath";
+import { releaseAllOpenFilesForWindow } from "./openFileRegistry";
 import { normalizePathSync } from "./diskFingerprint";
 import { logDiagnostic } from "./logging";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
@@ -486,9 +487,11 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     try {
       const mayClose = await deps.confirmWindowClose();
       if (mayClose) {
+        const label = deps.getCurrentWebviewWindowLabel();
+        try { await releaseAllOpenFilesForWindow(label); }
+        catch (error) { deps.notify(`Could not release open files. Window remains open: ${getErrorMessage(error)}`); return; }
         closeConfirmed = true;
         // Explicit close removes a secondary window from the next app launch.
-        const label = deps.getCurrentWebviewWindowLabel();
         if (label !== "main" && deps.removeWindowSessionEntry) {
           try {
             await deps.removeWindowSessionEntry(label);

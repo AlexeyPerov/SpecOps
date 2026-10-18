@@ -1,0 +1,13 @@
+
+> spec-ops@0.3.0 test
+> vitest run src/lib/services/appShellPageHandlers.test.ts src/lib/services/openFileRegistry.test.ts
+
+
+ RUN  v4.1.9 /Users/alexeyperov/Projects/spec-ops/app
+
+
+ Test Files  2 passed (2)
+      Tests  30 passed (30)
+   Start at  19:39:26
+   Duration  2.28s (transform 1.61s, setup 59ms, import 1.99s, tests 107ms, environment 1.20s)
+

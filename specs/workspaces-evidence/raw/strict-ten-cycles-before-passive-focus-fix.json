@@ -1,0 +1,4496 @@
+{
+  "samples": [
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycles-baseline-zero",
+      "at": "2026-10-18T15:57:22.634Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 0,
+      "git": {
+        "activeCommands": 1,
+        "activeLeases": 1,
+        "cacheEntries": 15,
+        "commandsFinished": 28,
+        "commandsStarted": 29,
+        "gitProcessesStarted": 30,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-0-open",
+      "at": "2026-10-18T15:57:22.939Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 0,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-0-closed",
+      "at": "2026-10-18T15:57:23.358Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-1-open",
+      "at": "2026-10-18T15:57:23.584Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-1-closed",
+      "at": "2026-10-18T15:57:23.975Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-2-open",
+      "at": "2026-10-18T15:57:24.187Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-2-closed",
+      "at": "2026-10-18T15:57:24.579Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-3-open",
+      "at": "2026-10-18T15:57:24.773Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-3-closed",
+      "at": "2026-10-18T15:57:25.055Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-4-open",
+      "at": "2026-10-18T15:57:25.278Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-4-closed",
+      "at": "2026-10-18T15:57:25.561Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-5-open",
+      "at": "2026-10-18T15:57:25.720Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-5-closed",
+      "at": "2026-10-18T15:57:26.009Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-6-open",
+      "at": "2026-10-18T15:57:26.206Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-6-closed",
+      "at": "2026-10-18T15:57:26.493Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-7-open",
+      "at": "2026-10-18T15:57:26.693Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-7-closed",
+      "at": "2026-10-18T15:57:26.979Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-8-open",
+      "at": "2026-10-18T15:57:27.171Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-8-closed",
+      "at": "2026-10-18T15:57:27.461Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "In this window"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-9-open",
+      "at": "2026-10-18T15:57:27.654Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "top": 0,
+        "right": 0,
+        "bottom": 0,
+        "left": 0
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycle-9-closed",
+      "at": "2026-10-18T15:57:27.945Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "Closed"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "exact-cycles-complete",
+      "at": "2026-10-18T15:57:27.951Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 30,
+        "commandsStarted": 30,
+        "gitProcessesStarted": 32,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 0,
+        "projectRoots": [],
+        "treeWindowCount": 0
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "In another window (window-mve0fizi-gp9a8y7e)"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "main-before-owned-project-selection",
+      "at": "2026-10-18T16:01:30.825Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 26,
+      "visibleRailRows": 13,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 114,
+        "commandsStarted": 114,
+        "gitProcessesStarted": 118,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 45
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03"
+        ],
+        "treeWindowCount": 1
+      }
+    },
+    {
+      "openContexts": [],
+      "managerStates": [
+        {
+          "name": "★ shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-08",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-15",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-22",
+          "state": "Closed"
+        },
+        {
+          "name": "★ project-29",
+          "state": "Closed"
+        },
+        {
+          "name": "project-02",
+          "state": "Closed"
+        },
+        {
+          "name": "project-03",
+          "state": "In another window (window-mve0fizi-gp9a8y7e)"
+        },
+        {
+          "name": "project-04",
+          "state": "Closed"
+        },
+        {
+          "name": "project-05",
+          "state": "Closed"
+        },
+        {
+          "name": "project-06",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "long-project-name-for-workspace-layout-8",
+          "state": "Closed"
+        },
+        {
+          "name": "project-10",
+          "state": "Closed"
+        },
+        {
+          "name": "project-11",
+          "state": "Closed"
+        },
+        {
+          "name": "project-12",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-14",
+          "state": "Closed"
+        },
+        {
+          "name": "project-16",
+          "state": "Closed"
+        },
+        {
+          "name": "project-17",
+          "state": "Closed"
+        },
+        {
+          "name": "project-18",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-20",
+          "state": "Closed"
+        },
+        {
+          "name": "project-21",
+          "state": "Closed"
+        },
+        {
+          "name": "project-23",
+          "state": "Closed"
+        },
+        {
+          "name": "project-24",
+          "state": "Closed"
+        },
+        {
+          "name": "shared-project",
+          "state": "Closed"
+        },
+        {
+          "name": "project-26",
+          "state": "Closed"
+        },
+        {
+          "name": "project-27",
+          "state": "Closed"
+        },
+        {
+          "name": "project-28",
+          "state": "Closed"
+        },
+        {
+          "name": "project-30",
+          "state": "Closed· Unavailable"
+        }
+      ],
+      "label": "main-after-owned-project-selection",
+      "at": "2026-10-18T16:01:30.881Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": {
+        "x": 257,
+        "y": 71,
+        "width": 526,
+        "height": 917,
+        "top": 71,
+        "right": 783,
+        "bottom": 988,
+        "left": 257
+      },
+      "renderedRailRows": 26,
+      "visibleRailRows": 13,
+      "catalogProjects": 30,
+      "savedContexts": 1,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 15,
+        "commandsFinished": 114,
+        "commandsStarted": 114,
+        "gitProcessesStarted": 118,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 0,
+        "watchTargets": 3
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 1,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03"
+        ],
+        "treeWindowCount": 1
+      }
+    }
+  ],
+  "search": [],
+  "errors": [],
+  "windowId": "main",
+  "ownerFocused": true
+}

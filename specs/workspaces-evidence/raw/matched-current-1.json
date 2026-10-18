@@ -1,0 +1,639 @@
+{
+  "viewport": [
+    800,
+    520
+  ],
+  "dpr": 2,
+  "samples": [
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 70,
+      "firstTwoFramesMs": 70,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:52.766Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 44,
+      "firstTwoFramesMs": 44,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:53.294Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 41,
+      "firstTwoFramesMs": 41,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:53.853Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 32,
+      "firstTwoFramesMs": 32,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:54.426Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 29,
+      "firstTwoFramesMs": 29,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:54.993Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 21.999999999996362,
+      "firstTwoFramesMs": 21.999999999996362,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:55.547Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 23,
+      "firstTwoFramesMs": 23,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:56.114Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 27.000000000003638,
+      "firstTwoFramesMs": 27.000000000003638,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:56.676Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 28,
+      "firstTwoFramesMs": 28,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:57.226Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 29,
+      "firstTwoFramesMs": 29,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:57.776Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 19.999999999996362,
+      "firstTwoFramesMs": 19.999999999996362,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:58.326Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 25,
+      "firstTwoFramesMs": 25,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:58.876Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 28,
+      "firstTwoFramesMs": 28,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:59.426Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 30.000000000003638,
+      "firstTwoFramesMs": 30.000000000003638,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:43:59.993Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 27,
+      "firstTwoFramesMs": 27,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:00.543Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 24.000000000003638,
+      "firstTwoFramesMs": 24.000000000003638,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:01.089Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 36,
+      "firstTwoFramesMs": 36,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:01.658Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 30,
+      "firstTwoFramesMs": 30,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:02.193Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 29,
+      "firstTwoFramesMs": 29,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:02.743Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 26,
+      "firstTwoFramesMs": 26,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:03.293Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 29,
+      "firstTwoFramesMs": 29,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:03.843Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 21.999999999996362,
+      "firstTwoFramesMs": 21.999999999996362,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:04.396Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 25,
+      "firstTwoFramesMs": 25,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:04.943Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 31,
+      "firstTwoFramesMs": 31,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:05.510Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 20,
+      "firstTwoFramesMs": 20,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:06.046Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 28,
+      "firstTwoFramesMs": 28,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:06.610Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 30,
+      "firstTwoFramesMs": 30,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:07.177Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 28.000000000007276,
+      "firstTwoFramesMs": 28.000000000007276,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:07.727Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 23,
+      "firstTwoFramesMs": 23,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:08.279Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 29,
+      "firstTwoFramesMs": 29,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:08.860Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 22,
+      "firstTwoFramesMs": 22,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:09.431Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 21.000000000007276,
+      "firstTwoFramesMs": 21.000000000007276,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:09.980Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 27,
+      "firstTwoFramesMs": 27,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:10.569Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 31,
+      "firstTwoFramesMs": 31,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:11.144Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 17,
+      "firstTwoFramesMs": 17,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:11.694Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 28,
+      "firstTwoFramesMs": 28,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:12.277Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18.000000000007276,
+      "firstTwoFramesMs": 18.000000000007276,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:12.861Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 31,
+      "firstTwoFramesMs": 31,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:13.427Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 19,
+      "firstTwoFramesMs": 19,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:13.979Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 23,
+      "firstTwoFramesMs": 23,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:14.545Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 30,
+      "firstTwoFramesMs": 30,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:15.127Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 21,
+      "firstTwoFramesMs": 20.000000000007276,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:15.663Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 20.999999999992724,
+      "firstTwoFramesMs": 20.999999999992724,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:16.248Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 21,
+      "firstTwoFramesMs": 21,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:16.827Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "previousContextId": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 15.999999999992724,
+      "firstTwoFramesMs": 15.999999999992724,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:44:17.377Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    }
+  ]
+}

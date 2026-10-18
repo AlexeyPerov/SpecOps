@@ -266,6 +266,7 @@ describe("applyLargeFileConfirmGateOnRestore", () => {
     statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 2, sizeBytes: limit + 100 });
     const doc = baseDocument({
       filePath: "/tmp/big.txt",
+      isDirty: false,
       content: "loaded before relaunch",
       savedContent: "loaded before relaunch",
       contentKind: "text",
@@ -282,6 +283,12 @@ describe("applyLargeFileConfirmGateOnRestore", () => {
     });
   });
 
+  it("keeps dirty restart recovery when the disk file has grown beyond the limit", async () => {
+    statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 9, sizeBytes: 100_000_000 });
+    const doc = baseDocument({ filePath: '/tmp/dirty.txt', content: 'unsaved recovery', savedContent: 'old saved', isDirty: true, contentKind: 'text' });
+    const result = await applyLargeFileConfirmGateOnRestore(doc, 1024, () => false);
+    expect(result).toMatchObject({ content: 'unsaved recovery', savedContent: 'old saved', isDirty: true, contentKind: 'text' });
+  });
   it("leaves documents within the limit unchanged", async () => {
     const limit = 1024 * 1024;
     statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 2, sizeBytes: 512 });

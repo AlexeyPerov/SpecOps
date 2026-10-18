@@ -1,0 +1,16 @@
+{
+  "machine": {
+    "model": "Apple M2 Max",
+    "memoryGiB": 32,
+    "os": "macOS 14.4 (23E214)",
+    "architecture": "arm64"
+  },
+  "baselineCommit": "102efe9f8b37a5539d8e6487aa3f8e2df03c8c35",
+  "finalSource": "974a256 plus WS-08 commit changes",
+  "frontend": "production",
+  "native": "debug",
+  "executableSha256": {
+    "originalBaseline": "7ff5067cb0d3df5798fce027e5d92add979fff916124228f8959aa915d9f37e6",
+    "final": "509b633c2f42e65b595866b9f6e6770c2ae66b6641d7e30e1b7a331a09860b96"
+  }
+}

@@ -541,6 +541,10 @@ describe("syncOpenFileRegistryForWindow", () => {
 });
 
 describe("releaseAllOpenFilesForWindow", () => {
+  it('rejects unreadable ownership without allowing a close to treat it as released', async () => {
+    sessionMock.readTextFile.mockRejectedValueOnce(new Error('EACCES'));
+    await expect(releaseAllOpenFilesForWindow('win-a')).rejects.toThrow('Open-file ownership is unavailable');
+  });
   it("removes only entries owned by the given window", async () => {
     setRegistryStore({
       "/tmp/a.txt": { windowId: "win-a", documentId: "doc-1" },

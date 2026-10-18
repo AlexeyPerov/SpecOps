@@ -1,0 +1,60 @@
+{
+  "viewport": [
+    800,
+    1020
+  ],
+  "dpr": 2,
+  "railWidth": 240,
+  "rows": 30,
+  "dom": 430,
+  "managerPaintMs": 100,
+  "managerRows": 30,
+  "navigation": [
+    {
+      "domContentLoaded": 13.000000000000002,
+      "load": 170
+    }
+  ],
+  "discardedSyntheticClickPaintMs": [
+    7,
+    32,
+    34,
+    32.000000000007276,
+    33.999999999992724,
+    34,
+    34,
+    32,
+    33,
+    34,
+    33,
+    33,
+    34,
+    34,
+    32,
+    37,
+    34,
+    30,
+    35.000000000007276,
+    30.999999999992724
+  ],
+  "discardReason": "element.click() does not activate draggable rail rows in baseline; these samples are not switch timings.",
+  "nativeSwitchRestoreMs": [
+    1,
+    1,
+    2,
+    2,
+    2
+  ],
+  "nativeStartup": [
+    {
+      "message": "app shell runtime ready",
+      "durationMs": 176
+    },
+    {
+      "message": "app shell initialized",
+      "durationMs": 195
+    }
+  ],
+  "nativeMainProcessRssKiB": 133280,
+  "nativeStartupNote": "Read from initial live native log before logger rotation; summarized in BASELINE.md."
+}

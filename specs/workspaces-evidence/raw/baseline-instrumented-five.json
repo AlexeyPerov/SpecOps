@@ -1,0 +1,38 @@
+[
+  {
+    "label": "baseline-five-cold",
+    "at": "2026-10-18T16:07:13.949Z",
+    "viewport": [
+      800,
+      1020
+    ],
+    "theme": "dark",
+    "background": "rgb(26, 27, 29)",
+    "uiFontSize": "13px",
+    "filePathCount": 0,
+    "gitProcessesStarted": 3,
+    "projectRootCount": 5,
+    "projectRoots": [
+      "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+      "/private/tmp/specops-workspaces-fixture/group-1/projects/project-05",
+      "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+      "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project",
+      "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03"
+    ]
+  },
+  {
+    "label": "baseline-five-manager",
+    "at": "2026-10-18T16:08:09.921Z",
+    "viewport": [
+      800,
+      1020
+    ],
+    "theme": "dark",
+    "background": "rgb(26, 27, 29)",
+    "uiFontSize": "13px",
+    "filePathCount": 0,
+    "gitProcessesStarted": 13,
+    "projectRootCount": 0,
+    "projectRoots": []
+  }
+]

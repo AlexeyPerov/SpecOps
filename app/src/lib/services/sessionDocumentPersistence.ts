@@ -112,6 +112,7 @@ export async function applyLargeFileConfirmGateOnRestore(
   documentState: DocumentState,
   maxOpenWithoutConfirmBytes: number,
   isFileMissingError: (error: unknown) => boolean,
+  preserveRecoveredContent = false,
 ): Promise<DocumentState> {
   if (!documentState.filePath) {
     return documentState;
@@ -119,7 +120,7 @@ export async function applyLargeFileConfirmGateOnRestore(
   try {
     const fingerprint = await statDiskFingerprint(documentState.filePath);
     if (
-      shouldGateFileOpenBySize(
+      !documentState.isDirty && !preserveRecoveredContent && shouldGateFileOpenBySize(
         documentState.filePath,
         fingerprint.sizeBytes,
         maxOpenWithoutConfirmBytes,
@@ -135,7 +136,7 @@ export async function applyLargeFileConfirmGateOnRestore(
         fileMissing: false,
       };
     }
-    return documentState;
+    return documentState.fileMissing ? { ...documentState, fileMissing: false } : documentState;
   } catch (error: unknown) {
     if (isFileMissingError(error)) {
       return { ...documentState, fileMissing: true };

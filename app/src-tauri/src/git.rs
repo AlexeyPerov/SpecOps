@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -96,6 +96,23 @@ const DENIED_GIT_ARG_PREFIXES: &[&str] = &[
 ];
 
 static GIT_EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
+// Count successful native Git child creation, including availability probes.
+static GIT_PROCESSES_STARTED: AtomicU64 = AtomicU64::new(0);
+pub(crate) fn git_processes_started() -> u64 {
+    GIT_PROCESSES_STARTED.load(Ordering::Relaxed)
+}
+fn spawn_tracked_git(command: &mut Command) -> std::io::Result<Child> {
+    spawn_with_counter(command, &GIT_PROCESSES_STARTED)
+}
+fn spawn_with_counter(command: &mut Command, counter: &AtomicU64) -> std::io::Result<Child> {
+    let child = command.spawn()?;
+    counter.fetch_add(1, Ordering::Relaxed);
+    Ok(child)
+}
+fn tracked_git_output(command: &mut Command) -> std::io::Result<std::process::Output> {
+    spawn_tracked_git(command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()))?.wait_with_output()
+}
+
 
 fn git_executable() -> &'static Path {
     GIT_EXECUTABLE.get_or_init(resolve_git_binary)
@@ -120,7 +137,7 @@ fn resolve_git_binary() -> PathBuf {
 }
 
 fn git_version_probe(binary: PathBuf) -> Option<String> {
-    match Command::new(&binary).arg("--version").output() {
+    match tracked_git_output(Command::new(&binary).arg("--version")) {
         Ok(output) if output.status.success() => {
             Some(decode_utf8(&output.stdout).trim().to_string())
         }
@@ -1252,8 +1269,7 @@ fn run_command_with_limited_output(
     mut command: Command,
     timeout_ms: Option<u64>,
 ) -> Result<LimitedCommandOutput, String> {
-    let mut child = command
-        .spawn()
+    let mut child = spawn_tracked_git(&mut command)
         .map_err(|error| format!("Failed to spawn git: {error}"))?;
     let readers = spawn_output_readers(&mut child);
     let status = match timeout_ms {
@@ -1310,7 +1326,7 @@ fn run_command_with_limited_output(
 /// Probe whether `git` is installed and readable from PATH (with Windows fallbacks).
 pub fn probe_git_available() -> GitAvailableResponse {
     let binary = git_executable();
-    match Command::new(binary).arg("--version").output() {
+    match tracked_git_output(Command::new(binary).arg("--version")) {
         Ok(output) if output.status.success() => {
             let version = decode_utf8(&output.stdout).trim().to_string();
             GitAvailableResponse {
@@ -1518,7 +1534,7 @@ pub fn execute_git_with_full_options(
 
     if let Some(id) = normalized_command_id.as_deref() {
         let mut command = build_git_command(repo_root, args, &effective_env);
-        let child = match command.spawn() {
+        let child = match spawn_tracked_git(&mut command) {
             Ok(child) => child,
             Err(error) => {
                 return RunGitResponse {
@@ -1926,6 +1942,18 @@ mod tests {
     use std::io::Cursor;
     use std::process::Command as StdCommand;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn native_spawn_counter_counts_success_and_excludes_failed_creation() {
+        let counter = AtomicU64::new(0);
+        assert!(spawn_with_counter(&mut Command::new("/specops-nonexistent-git-fixture"), &counter).is_err());
+        assert_eq!(counter.load(Ordering::Relaxed), 0);
+        let mut command = Command::new(GIT_BINARY);
+        command.arg("--version").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        let output = spawn_with_counter(&mut command, &counter).unwrap().wait_with_output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(counter.load(Ordering::Relaxed), 1);
+    }
 
     #[test]
     fn read_limited_stream_truncates_oversize_and_drains_to_eof() {

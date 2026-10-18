@@ -1,0 +1,1 @@
+ 6158  95664 /Users/alexeyperov/Projects/spec-ops/app/src-tauri/target/debug/bundle/macos/SpecOps Workspaces Baseline Instrumented.app/Contents/MacOS/spec-ops

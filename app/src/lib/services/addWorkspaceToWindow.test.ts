@@ -1,3 +1,5 @@
+vi.mock('./workspaceSavedContext', () => ({restoreSavedProjectContext:vi.fn().mockResolvedValue(null)}));
+import { restoreSavedProjectContext } from './workspaceSavedContext';
 import { setWorkspaceContextClosing } from './workspaceContextTransition';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@tauri-apps/api/webviewWindow', () => ({ getCurrentWebviewWindow: () => ({ label: 'current' }) }));
@@ -21,7 +23,7 @@ import { setWorkspaceWindowOwner } from './workspaceWindowPlacement';
 import { ensureWorkspaceReadAccess } from './fileSystem';
 import { stat } from '@tauri-apps/plugin-fs';
 beforeEach(() => {
-  vi.clearAllMocks(); appState.resetAppState(); resetWorkspaceLifecycleForTests();
+  vi.clearAllMocks(); vi.mocked(restoreSavedProjectContext).mockReset().mockResolvedValue(null); appState.resetAppState(); resetWorkspaceLifecycleForTests();
   vi.stubGlobal('window', { __TAURI_INTERNALS__: {} });
   vi.mocked(focusExistingWorkspaceWindow).mockResolvedValue(false);
   vi.mocked(setWorkspaceWindowOwner).mockResolvedValue(undefined);
@@ -38,6 +40,19 @@ describe('catalog workspace opening', () => {
     expect(registerCatalogProjects).toHaveBeenCalledWith(['/project']);
     expect(isWorkspaceLifecycleActive()).toBe(true);
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
+  });
+  it('coalesces concurrent normalized-root saved-context restores into one owned context', async () => {
+    const snapshot = structuredClone(appState.getWindowSessionSnapshot().notepad);
+    let release!: (value: NonNullable<Awaited<ReturnType<typeof restoreSavedProjectContext>>>) => void;
+    vi.mocked(restoreSavedProjectContext).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const first = addWorkspaceToWindow('/project'), second = addWorkspaceToWindow('/project/');
+    expect(first).toBe(second);
+    await vi.waitFor(() => expect(restoreSavedProjectContext).toHaveBeenCalledTimes(1));
+    release(snapshot);
+    const [a,b] = await Promise.all([first,second]);
+    expect(a).toBe(b); expect(a).toMatch(/^ws-/);
+    expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
+    expect(setWorkspaceWindowOwner).toHaveBeenCalledTimes(1);
   });
   it('focuses an occupied window without creating a competing context', async () => {
     vi.mocked(focusExistingWorkspaceWindow).mockResolvedValue(true);
@@ -109,6 +124,8 @@ describe('catalog workspace opening', () => {
     expect(await addWorkspaceToWindow('/project')).toBeNull();
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(0);
     expect(updateCatalogProject).not.toHaveBeenCalled();
+    expect(setWorkspaceWindowOwner).toHaveBeenCalledTimes(1);
+    expect(setWorkspaceWindowOwner).not.toHaveBeenCalledWith('/project',null,'current');
   });
   it('does not reopen a root while its close is still committing', async () => {
     setWorkspaceContextClosing('/project',true);

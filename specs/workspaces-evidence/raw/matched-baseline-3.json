@@ -1,0 +1,652 @@
+{
+  "viewport": [
+    800,
+    520
+  ],
+  "dpr": 2,
+  "samples": [
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 25,
+      "firstTwoFramesMs": 25,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:50.881Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 31,
+      "firstTwoFramesMs": 31,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:51.397Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18,
+      "firstTwoFramesMs": 18,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:51.914Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 25.999999999985448,
+      "firstTwoFramesMs": 25.999999999985448,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:52.447Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 28,
+      "firstTwoFramesMs": 28,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:53.015Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 31,
+      "firstTwoFramesMs": 31,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:53.547Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 27,
+      "firstTwoFramesMs": 27,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:54.097Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 31,
+      "firstTwoFramesMs": 31,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:54.647Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 30,
+      "firstTwoFramesMs": 30,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:55.181Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 19.999999999985448,
+      "firstTwoFramesMs": 19.999999999985448,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:55.697Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 30,
+      "firstTwoFramesMs": 30,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:56.247Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 19,
+      "firstTwoFramesMs": 19,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:56.781Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 31.999999999985448,
+      "firstTwoFramesMs": 31.999999999985448,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:57.314Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18,
+      "firstTwoFramesMs": 18,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:57.831Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 19,
+      "firstTwoFramesMs": 19,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:58.364Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 28,
+      "firstTwoFramesMs": 28,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:58.897Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 29,
+      "firstTwoFramesMs": 29,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:59.414Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18,
+      "firstTwoFramesMs": 18,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:47:59.930Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 19,
+      "firstTwoFramesMs": 19,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:00.463Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 19,
+      "firstTwoFramesMs": 19,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:00.981Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18,
+      "firstTwoFramesMs": 18,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:01.514Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 16.999999999985448,
+      "firstTwoFramesMs": 16.999999999985448,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:02.049Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 20,
+      "firstTwoFramesMs": 20,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:02.580Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 26,
+      "firstTwoFramesMs": 26,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:03.114Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 30,
+      "firstTwoFramesMs": 30,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:03.647Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 26,
+      "firstTwoFramesMs": 26,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:04.164Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 27,
+      "firstTwoFramesMs": 27,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:04.697Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 17,
+      "firstTwoFramesMs": 17,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:05.214Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 30,
+      "firstTwoFramesMs": 30,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:05.747Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 14,
+      "firstTwoFramesMs": 14,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:06.247Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 17,
+      "firstTwoFramesMs": 17,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:06.780Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 28,
+      "firstTwoFramesMs": 28,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:07.314Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18.999999999985448,
+      "firstTwoFramesMs": 18.999999999985448,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:07.831Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 29,
+      "firstTwoFramesMs": 29,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:08.381Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 20,
+      "firstTwoFramesMs": 20,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:08.897Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 19.000000000014552,
+      "firstTwoFramesMs": 19.000000000014552,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:09.431Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18,
+      "firstTwoFramesMs": 18,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:09.964Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18,
+      "firstTwoFramesMs": 18,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:10.496Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 30,
+      "firstTwoFramesMs": 30,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:11.031Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18,
+      "firstTwoFramesMs": 18,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:11.547Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 29,
+      "firstTwoFramesMs": 29,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:12.081Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-3",
+      "previousContextId": "ws-2",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 17,
+      "firstTwoFramesMs": 17,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:12.581Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-4",
+      "previousContextId": "ws-3",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 18,
+      "firstTwoFramesMs": 18,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:13.114Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-1",
+      "previousContextId": "ws-4",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 28,
+      "firstTwoFramesMs": 28,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:13.631Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    },
+    {
+      "id": "ws-2",
+      "previousContextId": "ws-1",
+      "viewport": [
+        800,
+        1020
+      ],
+      "ms": 17,
+      "firstTwoFramesMs": 17,
+      "selected": true,
+      "timeout": false,
+      "at": "2026-10-18T16:48:14.148Z",
+      "className": "rail-button rail-button-workspace rail-button-active svelte-ysfaov"
+    }
+  ],
+  "theme": "dark",
+  "background": "rgb(26, 27, 29)",
+  "font": "13px",
+  "rail": {
+    "x": 0,
+    "y": 32,
+    "width": 64,
+    "height": 463,
+    "top": 32,
+    "right": 64,
+    "bottom": 495,
+    "left": 0
+  }
+}

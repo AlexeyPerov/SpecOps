@@ -1,0 +1,102 @@
+{
+  "samples": [
+    {
+      "navigationError": null,
+      "theme": "dark",
+      "background": "rgb(26, 27, 29)",
+      "uiFontSize": "13px",
+      "openContexts": [
+        {
+          "id": "ws-1",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project"
+        },
+        {
+          "id": "ws-2",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02"
+        },
+        {
+          "id": "ws-3",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03"
+        },
+        {
+          "id": "ws-4",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04"
+        },
+        {
+          "id": "ws-5",
+          "rootPath": "/private/tmp/specops-workspaces-fixture/group-1/projects/project-05"
+        }
+      ],
+      "activeContextId": "ws-1",
+      "managerStates": [],
+      "label": "five-open-cold-final",
+      "at": "2026-10-18T16:11:24.274Z",
+      "viewport": [
+        800,
+        1020
+      ],
+      "dpr": 2,
+      "rail": {
+        "x": 0,
+        "y": 32,
+        "width": 240,
+        "height": 963,
+        "top": 32,
+        "right": 240,
+        "bottom": 995,
+        "left": 0
+      },
+      "list": {
+        "x": 4,
+        "y": 122,
+        "width": 231,
+        "height": 709,
+        "top": 122,
+        "right": 235,
+        "bottom": 831,
+        "left": 4
+      },
+      "manager": null,
+      "renderedRailRows": 27,
+      "visibleRailRows": 14,
+      "folderNames": [
+        "Group 1",
+        "Group 2",
+        "Group 3",
+        "Group 4",
+        "Group 5"
+      ],
+      "catalogProjects": 30,
+      "savedContexts": 0,
+      "git": {
+        "activeCommands": 0,
+        "activeLeases": 0,
+        "cacheEntries": 18,
+        "commandsFinished": 28,
+        "commandsStarted": 28,
+        "gitProcessesStarted": 31,
+        "maxActiveCommands": 4,
+        "maxActiveLeases": 4,
+        "queuedEntries": 4,
+        "watchTargets": 42
+      },
+      "files": {
+        "filePathCount": 0,
+        "filePaths": [],
+        "fileWindowCount": 0,
+        "projectRootCount": 5,
+        "projectRoots": [
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-02",
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-03",
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-04",
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/project-05",
+          "/private/tmp/specops-workspaces-fixture/group-1/projects/shared-project"
+        ],
+        "treeWindowCount": 1
+      }
+    }
+  ],
+  "search": [],
+  "errors": [],
+  "windowId": "main"
+}

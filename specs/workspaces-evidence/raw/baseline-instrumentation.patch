@@ -1,0 +1,91 @@
+--- git.rs
++++ git.rs
+@@ -6,7 +6,7 @@
+ use std::os::unix::fs::OpenOptionsExt;
+ use std::path::{Path, PathBuf};
+ use std::process::{Child, Command, Stdio};
+-use std::sync::atomic::{AtomicBool, Ordering};
++use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+ use std::sync::{Mutex, OnceLock};
+ use std::thread::JoinHandle;
+ use std::time::{Duration, Instant};
+@@ -96,6 +96,17 @@
+ ];
+ 
+ static GIT_EXECUTABLE: OnceLock<PathBuf> = OnceLock::new();
++static GIT_PROCESSES_STARTED: AtomicU64 = AtomicU64::new(0);
++pub(crate) fn git_processes_started() -> u64 { GIT_PROCESSES_STARTED.load(Ordering::Relaxed) }
++fn spawn_tracked_git(command: &mut Command) -> std::io::Result<Child> {
++    let child = command.spawn()?;
++    GIT_PROCESSES_STARTED.fetch_add(1, Ordering::Relaxed);
++    Ok(child)
++}
++fn tracked_git_output(command: &mut Command) -> std::io::Result<std::process::Output> {
++    spawn_tracked_git(command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()))?.wait_with_output()
++}
++
+ 
+ fn git_executable() -> &'static Path {
+     GIT_EXECUTABLE.get_or_init(resolve_git_binary)
+@@ -120,7 +131,7 @@
+ }
+ 
+ fn git_version_probe(binary: PathBuf) -> Option<String> {
+-    match Command::new(&binary).arg("--version").output() {
++    match tracked_git_output(Command::new(&binary).arg("--version")) {
+         Ok(output) if output.status.success() => {
+             Some(decode_utf8(&output.stdout).trim().to_string())
+         }
+@@ -1244,8 +1255,7 @@
+     mut command: Command,
+     timeout_ms: Option<u64>,
+ ) -> Result<LimitedCommandOutput, String> {
+-    let mut child = command
+-        .spawn()
++    let mut child = spawn_tracked_git(&mut command)
+         .map_err(|error| format!("Failed to spawn git: {error}"))?;
+     let readers = spawn_output_readers(&mut child);
+     let status = match timeout_ms {
+@@ -1302,7 +1312,7 @@
+ /// Probe whether `git` is installed and readable from PATH (with Windows fallbacks).
+ pub fn probe_git_available() -> GitAvailableResponse {
+     let binary = git_executable();
+-    match Command::new(binary).arg("--version").output() {
++    match tracked_git_output(Command::new(binary).arg("--version")) {
+         Ok(output) if output.status.success() => {
+             let version = decode_utf8(&output.stdout).trim().to_string();
+             GitAvailableResponse {
+@@ -1510,7 +1520,7 @@
+ 
+     if let Some(id) = normalized_command_id.as_deref() {
+         let mut command = build_git_command(repo_root, args, &effective_env);
+-        let child = match command.spawn() {
++        let child = match spawn_tracked_git(&mut command) {
+             Ok(child) => child,
+             Err(error) => {
+                 return RunGitResponse {
+--- file_watcher.rs
++++ file_watcher.rs
+@@ -899,3 +899,12 @@
+         assert!(!release_canonical_entry(&mut map, canonical));
+     }
+ }
++
++#[tauri::command(async)]
++pub async fn workspace_acceptance_diagnostics(state: State<'_, FileWatcherState>) -> Result<serde_json::Value, String> {
++    let shared = Arc::clone(&state.inner);
++    tauri::async_runtime::spawn_blocking(move || {
++        let inner = shared.lock().map_err(|error|error.to_string())?;
++        Ok(serde_json::json!({"gitProcessesStarted":crate::git::git_processes_started(),"filePathCount":inner.watched_paths.len(),"projectRootCount":inner.project_tree_roots.len(),"projectRoots":inner.project_tree_roots.iter().collect::<Vec<_>>()}))
++    }).await.map_err(|error|error.to_string())?
++}
+--- lib.rs
++++ lib.rs
+@@ -140,6 +140,7 @@
+             git::remove_stale_index_lock,
+             file_watcher::sync_file_watcher_paths,
+             file_watcher::sync_project_tree_watcher,
++            file_watcher::workspace_acceptance_diagnostics,
+             session_fs::session_fs_supported,
+             session_fs::session_fs_mkdir,
+             session_fs::session_fs_stat_mtime_ms,

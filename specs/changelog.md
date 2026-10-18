@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-18 19:55 MSK — Validate the 30-project workspace lifecycle (WS-08)
+
+- Add reproducible disposable fixtures, isolated profile seeders, portable native evidence helpers, screenshots and raw before/after measurements in `specs/workspaces-evidence`. Preserve original/instrumented baseline provenance, failed/contaminated runs, exact sample counts, machine/build context and measurement limits.
+- Bound the rail's flex height so offscreen catalog rows do not request Git. Retain passive narrow metadata watches while blurred, pause subprocess scheduling and refresh invalidated fresh entries on focus. Count actual native Git child creation and guarded summary lifetimes/peaks with parallel-safe tests.
+- Fix populated-chat close revision checks, concurrent same-root restored opens/ownership rollback, dirty recovery surviving large-file gates, recreated-file missing/BOM metadata, Save all edits during close awaits and transferred preview-cache release. Await file-claim release before window destruction; canceled/failed cleanup keeps the window and restart entry usable.
+- Reuse immutable Git presentations and a shared time formatter after measured native WebKit render costs. Matched idle pointer runs 2+3 meet the scoped target: p95 31→33 ms, 88 transitions each (+6.45%); all three runs and the baseline first-focus timeout remain in the report. This measures release→two frames for five Untitled contexts, not heavy document restore.
+- Native checks cover 30 closed/5 open/30 open records, two windows/owner focus/file reuse, restart/reread, Cancel/Discard, ten close/reopen cycles, external checkout while blurred within TTL, 301 filesystem writes and bounded rail/Manager geometry at multiple widths/125% scale. Search p95 is 23 ms over 40 correct results with zero added Git children after warming; shared guarded peak is four. Startup and one native RSS sample increased; record limits and the existing isolated-profile favorites capability error.
+- Validation: 322 frontend files / 3230 passing tests with four workers, Svelte/types 0 errors and warnings, production frontend/native debug bundle, 159 passing serial native library tests and one existing ignored probe. Preserve an earlier unconstrained run's two unrelated timing failures and the subsequent complete passing run; rail Svelte autofixer has no issues.
+
 ## 2026-10-18 18:35 MSK — Manage the full project catalog and release closed contexts (WS-07)
 
 - Add Manager scopes for all/current-window/other-window/closed/hidden projects, search and name/recent/manual sorting, folder/pinning/open-state columns, checkbox/modifier/range selection and semantic atomic folder/pin/visibility batches. Show individual failures and successful counts without activating selected projects; retain the shared visible-row Git service.

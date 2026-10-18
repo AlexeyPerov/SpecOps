@@ -201,6 +201,31 @@ describe("closeWorkspaceWithConfirm — Save all writes to disk", () => {
       hasBom: false,
     });
   });
+  it('keeps edits to an already saved file while another Save all write is pending', async () => {
+    const id = appState.addWorkspace('/tmp/save-race')!;
+    appState.openFileInTab('/tmp/save-race/a.txt','a'); const first = appState.findDocumentIdByPath('/tmp/save-race/a.txt')!;
+    appState.openFileInTab('/tmp/save-race/b.txt','b'); const second = appState.findDocumentIdByPath('/tmp/save-race/b.txt')!;
+    appState.setDocumentContent(first,'a edited'); appState.setDocumentContent(second,'b edited');
+    let release!: (value: {mtimeMs:number;sizeBytes:number}) => void;
+    saveFileMock.mockImplementation(({path}) => path.endsWith('/b.txt') ? new Promise(resolve => {release = resolve;}) : Promise.resolve({mtimeMs:1,sizeBytes:8}));
+    setConfirmResult(true);
+    const pending = closeWorkspaceWithConfirm(id,vi.fn());
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    appState.setDocumentContent(first,'new edit after a was saved'); release({mtimeMs:1,sizeBytes:8});
+    expect(await pending).toBe(false);
+    expect(appState.getWorkspaceRoot(id)).toBe('/tmp/save-race');
+    expect(appState.getActiveDocuments().find(doc=>doc.id===first)?.content).toBe('new edit after a was saved');
+    expect(saveCatalogProjectContext).not.toHaveBeenCalled();
+  });
+  it('closes an idle workspace whose loaded chat state is exposed through detached snapshots', async () => {
+    const root = '/tmp/loaded-chat';
+    const id = appState.addWorkspace(root)!;
+    chatStore.adoptWorkspaceState(root, { activeSessionId: null, sessionIndex: [], threadsBySessionId: {}, runtimeBySessionId: {} });
+    expect(chatStore.getWorkspaceSessionsState(root)).not.toBe(chatStore.getWorkspaceSessionsState(root));
+    expect(await closeWorkspaceWithConfirm(id, vi.fn())).toBe(true);
+    expect(appState.getWorkspaceRoot(id)).toBeNull();
+    expect(vi.mocked(saveCatalogProjectContext)).toHaveBeenCalled();
+  });
   it('does not release buffers when the catalog checkpoint fails', async () => {
     const id = appState.addWorkspace('/tmp/catalog-fail')!;
     vi.mocked(saveCatalogProjectContext).mockRejectedValueOnce(new Error('disk full'));

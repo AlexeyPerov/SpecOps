@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-21 18:43 MSK — Expand a workspace folder after its first incoming move
+
+- After a successful sidebar context-menu or drag-and-drop move, expand the destination folder when the moved workspace is its only visible member. Count members without the search filter and persist expansion for the current window. Preserve collapse state for populated folders and failed moves.
+- Validation: all 19 activity-rail component tests pass, covering both sidebar widths, menu and pointer moves, persisted expansion, occupied folders and save failure. Svelte/type checks have zero errors and warnings; Svelte autofixer reports no issues; production frontend and native app builds pass. Update the installed app with the new build.
+
 ## 2026-10-21 18:38 MSK — Remove build annotation and unused native resolver warnings
 
 - Let Svelte compile type-only TypeScript directly instead of preprocessing component scripts with esbuild. This prevents misplaced pure annotations in removed effects and rewritten expressions, eliminating the Rollup annotation and associated sourcemap diagnostics while retaining style preprocessing.

@@ -242,7 +242,9 @@
   const workspacesForRender = $derived(sections.filter(section => !sectionCollapsed(section)).flatMap(section => section.projects));
   const dragEnabled = $derived(manualOrder && !searchQuery.trim());
   const draggedWorkspace = $derived(railProjects.find(project => project.id === dragState.dragWorkspaceId) ?? null);
-  function commit(mutations: CatalogMutation[]): void { void updateOpenWorkspaceCatalog(workspaces, mutations).catch(error => onError(String(error))); }
+  function commit(mutations: CatalogMutation[]) {
+    return updateOpenWorkspaceCatalog(workspaces, mutations).catch(error => { onError(String(error)); return null; });
+  }
   function selectProject(project: RailProject): void {
     if (project.contextId) onSelectContext(project.contextId);
     else void addWorkspaceToWindow(project.rootPath).catch(error => onError(String(error)));
@@ -250,7 +252,15 @@
   }
   function sectionForProject(id: string): RailSection | undefined { return sections.find(section => section.projects.some(project => project.id === id)); }
   function moveToSection(project: RailProject, section: RailSection, beforeId: string | null = null): void {
-    commit([{ type: 'moveProject', id: project.id, ...(section.pinned ? { pinned: true } : { folderId: section.folderId, pinned: false }), beforeId }]);
+    const windowId = currentWindowId;
+    const movedToFolder = !!section.folderId && sectionForProject(project.id)?.id !== section.id;
+    void commit([{ type: 'moveProject', id: project.id, ...(section.pinned ? { pinned: true } : { folderId: section.folderId, pinned: false }), beforeId }]).then(next => {
+      if (!next || !movedToFolder || currentWindowId !== windowId || !collapsed.includes(section.id)) return;
+      const destination = workspaceRailSections(next, workspaces, owners, windowId).find(entry => entry.id === section.id);
+      if (destination?.projects.length !== 1 || destination.projects[0].id !== project.id) return;
+      collapsed = collapsed.filter(id => id !== section.id);
+      saveRailPreferences();
+    });
   }
   function reorderProject(project: RailProject, direction: -1 | 1): void {
     const section = sectionForProject(project.id); if (!section || !dragEnabled) return;

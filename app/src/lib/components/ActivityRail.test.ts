@@ -249,9 +249,36 @@ describe("ActivityRail", () => {
     expect(getProjectCatalog().projects['/pinned']).toMatchObject({ folderId: 'two', pinned: false });
     expect(second.getAttribute('aria-label')).toBe('Second folder, 1 projects');
     expect(host.querySelector('[data-rail-section="pinned"]')?.getAttribute('aria-label')).toBe('Pinned, 0 projects');
-    second.querySelector<HTMLButtonElement>('.rail-section-toggle')!.click(); await tick();
-    if (width === 48) expect(document.querySelector('[role=menu]')?.textContent).toContain('pinned');
-    else expect(second.querySelector('[data-workspace-id="/pinned"]')).not.toBeNull();
+    await vi.waitFor(() => expect(second.querySelector('.rail-section-toggle')?.getAttribute('aria-expanded')).toBe('true'));
+    expect(second.querySelector('[data-workspace-id="/pinned"]')).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem('spec-ops:workspace-rail:main')!).collapsed).not.toContain('folder:two');
+  });
+  it.each(['empty', 'occupied', 'failed'] as const)('opens a destination folder only when the committed move leaves its sole workspace (%s)', async (scenario) => {
+    await groupedCatalog();
+    const folder = scenario === 'occupied' ? 'one' : 'two';
+    localStorage.setItem('spec-ops:workspace-rail:main', JSON.stringify({ collapsed: [`folder:${folder}`], scrollTop: 0 }));
+    const onError = vi.fn();
+    vi.mocked(invoke).mockImplementation(async (_command, args) => {
+      if (scenario === 'failed') throw new Error('Disk full');
+      const next = structuredClone(getProjectCatalog());
+      for (const mutation of (args as { mutations: CatalogMutation[] }).mutations) {
+        if (mutation.type === 'moveProject') Object.assign(next.projects[mutation.id], { folderId: mutation.folderId, pinned: mutation.pinned });
+      }
+      next.revision++; return next;
+    });
+    const { host, unmount } = mountComponent(ActivityRail, { panelWidthPx: 240, onError }); await tick();
+    host.querySelector('[data-workspace-id="/pinned"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true })); await tick();
+    [...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')].find(button => button.textContent === (folder === 'one' ? 'First folder' : 'Second folder'))!.click();
+    await tick(); await tick(); await tick();
+    const destination = host.querySelector(`[data-rail-section="folder:${folder}"]`)!;
+    expect(destination.querySelector('.rail-section-toggle')?.getAttribute('aria-expanded')).toBe(scenario === 'empty' ? 'true' : 'false');
+    if (scenario === 'failed') expect(onError).toHaveBeenCalledWith('Error: Disk full');
+    if (scenario === 'empty') {
+      expect(destination.querySelector('[data-workspace-id="/pinned"]')).not.toBeNull();
+      unmount();
+      const remounted = mountComponent(ActivityRail, { panelWidthPx: 240 }); await tick();
+      expect(remounted.host.querySelector('[data-rail-section="folder:two"] .rail-section-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    }
   });
   it('offers keyboard folder rename/delete/order and disables ambiguous ordering during search', async () => {
     await groupedCatalog();

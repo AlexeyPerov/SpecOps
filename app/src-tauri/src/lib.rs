@@ -7,7 +7,6 @@ mod git;
 mod workspace_git_summary;
 mod git_askpass;
 mod handoff;
-mod native_assets;
 mod session_fs;
 mod project_move;
 mod project_catalog;

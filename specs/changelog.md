@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-21 18:38 MSK — Remove build annotation and unused native resolver warnings
+
+- Let Svelte compile type-only TypeScript directly instead of preprocessing component scripts with esbuild. This prevents misplaced pure annotations in removed effects and rewritten expressions, eliminating the Rollup annotation and associated sourcemap diagnostics while retaining style preprocessing.
+- Remove the unused bundled-runtime path resolver and its module registration; native runtime launch already uses the component manager.
+- Validation: production frontend build passes without annotation or sourcemap warnings; Svelte/type checks report zero errors and warnings; all 333 frontend test files / 3347 tests pass; native `cargo check --release` passes without warnings. The pre-existing frontend chunk-size advisory remains.
+
 ## 2026-10-21 18:25 MSK — Register restored workspaces before catalog organization
 
 - Reproduce the folder-move failure in the installed native app: session-restored workspace rows were projected into the sidebar while the persistent catalog contained no projects, so both menu and drag operations failed with “Project is not registered”.

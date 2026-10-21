@@ -7,7 +7,9 @@ import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
-  preprocess: vitePreprocess({ script: true }),
+  // Svelte handles type-only TypeScript directly. Preprocessing scripts with
+  // esbuild adds pure annotations that can survive after Svelte removes effects.
+  preprocess: vitePreprocess(),
   kit: {
     adapter: adapter({
       fallback: "index.html",

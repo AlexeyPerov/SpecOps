@@ -19,7 +19,7 @@ describe('catalog management', () => {
   });
   it('applies semantic folder assignment atomically and reports stale selections individually', async () => {
     const result = await applyCatalogBatch(['/a','/b','/gone'],{type:'folder',folderId:null});
-    expect(updateProjectCatalog).toHaveBeenCalledExactlyOnceWith([{type:'moveProject',id:'/a',folderId:null},{type:'moveProject',id:'/b',folderId:null}]);
+    expect(updateProjectCatalog).toHaveBeenCalledExactlyOnceWith([{type:'moveProject',id:'/a',folderId:null,pinned:false},{type:'moveProject',id:'/b',folderId:null,pinned:false}]);
     expect(result.succeeded).toEqual(['/a','/b']); expect(result.errors[0].id).toBe('/gone');
   });
   it('does not report success when the native transaction fails', async () => {

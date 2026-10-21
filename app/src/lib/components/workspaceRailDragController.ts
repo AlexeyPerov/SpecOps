@@ -332,6 +332,8 @@ export function createWorkspaceRailDragController(deps: WorkspaceRailDragControl
     if (state.pointerId === null || event.pointerId !== state.pointerId) {
       return;
     }
+    state.dragPointerX = event.clientX;
+    state.dragPointerY = event.clientY;
     finishDrag(true);
   }
 

@@ -518,10 +518,10 @@
   {/if}
 
   {#each ["tasks", "notes"] as kind (kind)}
-    <HoverTooltip label={kind === "tasks" ? "Global Tasks" : "Global Notes"}>
-      <button type="button" class={expanded ? "global-document-link" : "rail-button"} aria-label={kind === "tasks" ? "Global Tasks" : "Global Notes"}
+    <HoverTooltip label={kind === "tasks" ? "Tasks" : "Notes"}>
+      <button type="button" class={expanded ? "global-document-link" : "rail-button"} aria-label={kind === "tasks" ? "Tasks" : "Notes"}
         onclick={() => { onSelectContext("notepad"); if (appState.getSnapshot().contexts.activeContextId !== "notepad") return; appState.openOrFocusViewTab(kind === "tasks" ? "workspace-tasks" : "workspace-notes"); }}>
-        <span aria-hidden="true">{kind === "tasks" ? "☑" : "▤"}</span>{#if expanded}<span>{kind === "tasks" ? "Global Tasks" : "Global Notes"}</span>{/if}
+        <span aria-hidden="true">{kind === "tasks" ? "☑" : "▤"}</span>{#if expanded}<span>{kind === "tasks" ? "Tasks" : "Notes"}</span>{/if}
       </button>
     </HoverTooltip>
   {/each}
@@ -563,13 +563,7 @@
         </div>
         {#if !sectionCollapsed(section)}
     {#each section.projects as workspace (workspace.id)}
-      {#if dragState.didDrag && workspace.id === dragState.dragWorkspaceId}
-        <span
-          class="rail-workspace-placeholder"
-          style={`width:${dragState.dragWorkspaceRect?.width ?? 32}px; height:${dragState.dragWorkspaceRect?.height ?? 32}px;`}
-        ></span>
-      {:else}
-        <div class="rail-project-entry" use:observeGitRow={workspace.rootPath}>
+        <div class="rail-project-entry" class:rail-project-dragging={dragState.didDrag && workspace.id === dragState.dragWorkspaceId} use:observeGitRow={workspace.rootPath}>
         <HoverTooltip
           label={workspaceName(workspace)}
           detail={workspaceDetail(workspace)}
@@ -620,7 +614,6 @@
         <button class="rail-git-action" type="button" aria-label={`Version Control for ${workspaceName(workspace)}`}
           title={`Version Control — ${gitFor(workspace.rootPath).detail}`} onclick={() => void openProjectVersionControl(workspace)}>⎇</button>
         </div>
-      {/if}
     {/each}
         {/if}
       </section>
@@ -697,7 +690,7 @@
       <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderProject(project, 1)}>Move down</button>
       <span class="rail-menu-label">Move to folder</span>
       {#each sections.filter(section => !section.pinned) as section (section.id)}
-        <button type="button" role="menuitem" onclick={() => { commit([{ type: 'moveProject', id: project.id, folderId: section.folderId }]); closeMenu(); }}>{section.name}</button>
+        <button type="button" role="menuitem" onclick={() => { moveToSection(project, section); closeMenu(); }}>{section.name}</button>
       {/each}
       <button type="button" role="menuitem" onclick={() => { commit([{ type: 'updateProject', id: project.id, patch: { hiddenFromRail: true } }]); closeMenu(); }}>Hide from sidebar</button>
       {#if project.contextId}
@@ -734,6 +727,7 @@
   .rail-search { width: calc(100% - 12px); margin: 6px; min-width: 0; padding: 5px; background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); }
   .rail-search-compact { width: 220px; position: absolute; z-index: 20; left: 44px; top: 45px; }
   .rail-empty { padding: 8px; font-size: 12px; color: var(--color-text-secondary); }
+  .rail-project-dragging { opacity: 0.35; }
   .rail-section { width: 100%; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .activity-rail-expanded .rail-section { align-items: stretch; }
   .rail-section-heading { display: flex; width: 100%; align-items: center; min-width: 0; }
@@ -803,10 +797,6 @@
   .rail-workspaces-expanded {
     align-items: stretch;
     gap: 2px;
-  }
-
-  .rail-workspace-placeholder {
-    flex-shrink: 0;
   }
 
   .rail-button {

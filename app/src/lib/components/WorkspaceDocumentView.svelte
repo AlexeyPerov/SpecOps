@@ -4,11 +4,12 @@
   import { renderDocumentMarkdown } from "../services/markdownImageSrc";
   import DOMPurify from "dompurify";
   import { subscribeWorkspacePreferences } from "../services/workspacePreferences";
-  import { documentStorage, createWorkspaceDocument, refreshDocument, workspaceDocumentsRevision, workspaceDocumentSnapshot, loadWorkspaceDocument, editWorkspaceDocument, saveWorkspaceDocument, reloadWorkspaceDocument, type WorkspaceDocumentKind } from "../services/workspaceDocuments";
+  import { documentStorage, refreshDocument, workspaceDocumentsRevision, workspaceDocumentSnapshot, loadWorkspaceDocument, editWorkspaceDocument, saveWorkspaceDocument, reloadWorkspaceDocument, type WorkspaceDocumentKind } from "../services/workspaceDocuments";
+  import { emptyTaskBook, serializeTaskBook } from "../services/workspaceTasks";
   import TaskBookView from "./TaskBookView.svelte";
   import { requestConfirm } from "../services/confirmDialogUi";
   let { root, kind, paneId, contextId, notify }: { root: string | null; kind: WorkspaceDocumentKind; paneId: string; contextId: import("../domain/contracts").ContextId; notify: (message: string) => void } = $props();
-  let mode = $state<"content" | "source">("content");
+  let mode = $state<"content" | "source" | null>(null);
   let storageRevision = $state(0);
   $effect(() => {
     const workspace = root;
@@ -25,10 +26,14 @@
   const record = $derived.by(() => { void $workspaceDocumentsRevision; void storageRevision; return workspaceDocumentSnapshot(root, kind); });
   // Service records are mutable; a fresh view snapshot propagates every revision.
   const recordView = $derived.by(() => { void $workspaceDocumentsRevision; return record ? { ...record } : null; });
-  const content = $derived(recordView?.content ?? "");
-  const html = $derived(kind === "notes" && mode === "content" ? DOMPurify.sanitize(renderDocumentMarkdown(content, recordView?.path ?? null)) : "");
-  function edit(next: string): void { if (record) editWorkspaceDocument(record, next); }
-  async function create(): Promise<void> { try { await createWorkspaceDocument(root, kind); } catch (error) { notify(String(error)); } }
+  const content = $derived(recordView?.content ?? (kind === "tasks" ? serializeTaskBook(emptyTaskBook()) : ""));
+  const displayMode = $derived(mode ?? (recordView?.content === null ? "source" : "content"));
+  const html = $derived(kind === "notes" && displayMode === "content" ? DOMPurify.sanitize(renderDocumentMarkdown(content, recordView?.path ?? null)) : "");
+  function edit(next: string): void {
+    if (!record || next === content) return;
+    if (kind === "notes" && record.content === null) mode = "source";
+    editWorkspaceDocument(record, next);
+  }
   function refresh(): void { if (record) void refreshDocument(record).catch((error) => notify(String(error))); }
   async function resolveConflict(discard: boolean): Promise<void> {
     if (!record) return;
@@ -39,12 +44,12 @@
 <svelte:window onfocus={refresh} />
 <div class="workspace-document">
   <header>
-    <strong title={root ?? "Shared across all windows"}>{root === null ? "Global" : "Workspace"} {kind === "tasks" ? "Tasks" : "Notes"}</strong>
+    <strong title={root ?? "Shared across all windows"}>{root === null ? "" : "Workspace "}{kind === "tasks" ? "Tasks" : "Notes"}</strong>
     {#if kind === "notes"}
-      <button class="btn btn-sm btn-ghost" type="button" aria-pressed={mode === "content"} onclick={() => mode = "content"}>Preview</button>
-      <button class="btn btn-sm btn-ghost" type="button" aria-pressed={mode === "source"} onclick={() => mode = "source"}>Edit</button>
+      <button class="btn btn-sm btn-ghost" type="button" aria-pressed={displayMode === "content"} onclick={() => mode = "content"}>Preview</button>
+      <button class="btn btn-sm btn-ghost" type="button" aria-pressed={displayMode === "source"} onclick={() => mode = "source"}>Edit</button>
     {/if}
-    <small>{recordView?.error ? "Not saved" : recordView?.loading ? "Loading…" : recordView?.saving || recordView?.content !== recordView?.saved ? "Saving…" : recordView?.content === null ? "Not created" : "Saved"}</small>
+    <small>{recordView?.error ? "Not saved" : recordView?.loading ? "Loading…" : recordView?.saving || recordView?.content !== recordView?.saved ? "Saving…" : recordView?.content === null ? "Empty" : "Saved"}</small>
     <button class="btn btn-sm btn-ghost" type="button" onclick={refresh}>Refresh</button>
     <button class="btn btn-sm btn-ghost" type="button" onclick={() => { if (record) void saveWorkspaceDocument(record).catch((error) => notify(String(error))); }}>Save</button>
   </header>
@@ -54,9 +59,8 @@
       <button class="btn btn-sm" type="button" onclick={() => { void resolveConflict(false); }}>Keep local contents</button>
     </div>
   {/if}
-  {#if !recordView || (recordView.loading && recordView.content === null)}<p>Loading…</p>
-  {:else if recordView.content === null}<div class="empty"><p>This document has not been created in the selected storage location.</p><button class="btn btn-sm" type="button" onclick={() => { void create(); }}>Create {kind === "tasks" ? "Tasks" : "Notes"}</button></div>
-  {:else if kind === "notes" && mode === "source"}
+  {#if !recordView || (recordView.loading && !recordView.path)}<p>Loading…</p>
+  {:else if kind === "notes" && displayMode === "source"}
     <EditorSurface {content} documentId={`workspace-${kind}`} {paneId} {contextId} language="markdown" wrapLines={true} onDocumentDirty={edit} onStatusMessage={notify} />
   {:else if kind === "tasks"}
     {#key recordView.path}<TaskBookView {content} onchange={edit} {notify} />{/key}
@@ -68,6 +72,6 @@
   .workspace-document { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--color-border-subtle); }
   small { margin-left: auto; color: var(--color-text-secondary); }
-  .empty, .preview { padding: 16px; overflow: auto; }
+  .preview { padding: 16px; overflow: auto; }
   .error { color: var(--color-danger); padding: 12px; overflow-wrap: anywhere; }
 </style>

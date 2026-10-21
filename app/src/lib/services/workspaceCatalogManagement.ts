@@ -38,7 +38,7 @@ export async function applyCatalogBatch(ids: string[], action: CatalogBatchActio
   for (const id of new Set(ids)) {
     if (!catalog.projects[id]) { result.errors.push({ id, message: 'Project is no longer in the catalog.' }); continue; }
     if (action.type === 'folder' && action.folderId && !catalog.folders[action.folderId]) { result.errors.push({ id, message: 'Folder is no longer available.' }); continue; }
-    mutations.push(action.type === 'folder' ? { type: 'moveProject', id, folderId: action.folderId }
+    mutations.push(action.type === 'folder' ? { type: 'moveProject', id, folderId: action.folderId, pinned: false }
       : action.type === 'pin' ? { type: 'moveProject', id, pinned: action.value }
         : { type: 'updateProject', id, patch: { hiddenFromRail: action.value } });
   }

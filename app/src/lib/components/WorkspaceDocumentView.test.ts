@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, unmount, tick } from 'svelte';
-const document = vi.hoisted(() => ({ record: { root: '/project', kind: 'tasks', storage: 'app', path: '/data/tasks.json', content: '# Tasks\n- [ ] First\n- [x] Second\n', saved: '', loading: false, saving: false, error: null }, edit: vi.fn() }));
+import { EditorView } from '@codemirror/view';
+vi.mock('../editor/editorWorkbenchContext', async () => {
+  const { createEditorWorkbenchRuntime } = await import('../editor/editorWorkbenchRuntime');
+  return { getEditorWorkbenchRuntime: () => createEditorWorkbenchRuntime({ getActiveContextId: () => 'notepad', getActivePaneId: () => 'pane-1', getActiveDocumentId: () => 'workspace-notes' }) };
+});
+vi.mock('../editor/editorDocumentSessionContext', async () => {
+  const { createEditorDocumentSessionCache } = await import('../editor/editorDocumentSessionCache');
+  return { getEditorDocumentSessionCache: () => createEditorDocumentSessionCache() };
+});
+const document = vi.hoisted(() => ({ record: { root: '/project', kind: 'tasks', storage: 'app', path: '/data/tasks.json', content: null as string | null, saved: '', loading: false, saving: false, error: null }, edit: vi.fn() }));
 vi.mock('../services/workspacePreferences', async () => ({ ...await vi.importActual('../services/workspacePreferences'), getWorkspaceDocumentStorage: () => 'app', subscribeWorkspacePreferences: (listener: () => void) => { listener(); return () => {}; } }));
 vi.mock('../services/workspaceDocuments', async () => {
   const { writable } = await import('svelte/store'); const revision = writable(0);
@@ -21,6 +30,34 @@ async function render(kind: 'tasks' | 'notes', root: string | null = '/project')
   await tick();
 }
 describe('workspace document views', () => {
+  it('opens missing Tasks as an editable empty book and commits only a submitted edit', async () => {
+    document.record.content = null; document.edit.mockClear();
+    await render('tasks', null);
+    expect(target.querySelector('header strong')?.textContent).toBe('Tasks');
+    const input = target.querySelector<HTMLInputElement>('[aria-label="New list"]')!;
+    input.value = 'First list'; input.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+    expect(document.edit).not.toHaveBeenCalled();
+    document.record.loading = true; workspaceDocumentsRevision.update(value => value + 1); await tick();
+    expect(target.querySelector('[aria-label="New list"]')).toBe(input);
+    document.record.loading = false; workspaceDocumentsRevision.update(value => value + 1); await tick();
+    input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await tick();
+    expect(JSON.parse(document.record.content!).lists[0].title).toBe('First list');
+    expect(document.edit).toHaveBeenCalledTimes(1);
+  });
+  it('opens missing Notes in the editor, keeps it mounted after first input and permits preview', async () => {
+    document.record.content = null; document.edit.mockClear();
+    await render('notes', null);
+    expect(target.querySelector('header strong')?.textContent).toBe('Notes');
+    const editor = target.querySelector<HTMLElement>('.cm-editor')!;
+    expect(editor).not.toBeNull(); expect(document.edit).not.toHaveBeenCalled();
+    expect([...target.querySelectorAll('button')].find(button => button.textContent === 'Edit')?.getAttribute('aria-pressed')).toBe('true');
+    const view = EditorView.findFromDOM(editor)!;
+    view.dispatch({ changes: { from: 0, insert: 'First note' } }); await tick();
+    expect(document.edit).toHaveBeenCalledWith('First note');
+    expect(target.querySelector('.cm-editor')).toBe(editor);
+    [...target.querySelectorAll('button')].find(button => button.textContent === 'Preview')!.click(); await tick();
+    expect(target.querySelector('.preview')?.textContent).toContain('First note');
+  });
   it('updates completion and order in structured tasks', async () => {
     const book: TaskBook = { version: 1, groups: [], lists: [{ id: 'list', title: 'Work', groupId: null }], tasks: [
       { id: 'a', listId: 'list', text: 'First', completed: false }, { id: 'b', listId: 'list', text: 'Second', completed: true },
@@ -29,29 +66,29 @@ describe('workspace document views', () => {
     await render('tasks');
     const first = target.querySelector<HTMLInputElement>('input[type=checkbox]')!;
     first.checked = true; first.dispatchEvent(new Event('change', { bubbles: true })); await tick();
-    expect(JSON.parse(document.record.content).tasks[0].completed).toBe(true);
+    expect(JSON.parse(document.record.content!).tasks[0].completed).toBe(true);
     target.querySelector<HTMLButtonElement>('button[aria-label="Move task down"]')!.click(); await tick();
-    expect(JSON.parse(document.record.content).tasks.map((task: { id: string }) => task.id)).toEqual(['b', 'a']);
+    expect(JSON.parse(document.record.content!).tasks.map((task: { id: string }) => task.id)).toEqual(['b', 'a']);
   });
   it('creates groups, lists and tasks and undoes list deletion with its contents', async () => {
     document.record.content = serializeTaskBook({ version: 1, groups: [], lists: [], tasks: [] });
     await render('tasks', null);
-    expect(target.querySelector('header strong')?.textContent).toBe('Global Tasks');
+    expect(target.querySelector('header strong')?.textContent).toBe('Tasks');
     async function submit(label: string, value: string) {
       const input = target.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
       input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); await tick();
       input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await tick();
     }
     await submit('New group', 'Release');
-    const group = JSON.parse(document.record.content).groups[0];
+    const group = JSON.parse(document.record.content!).groups[0];
     const select = target.querySelector<HTMLSelectElement>('[aria-label="Group for new list"]')!;
     select.value = group.id; select.dispatchEvent(new Event('change', { bubbles: true })); await tick();
     await submit('New list', 'Checks');
     await submit('New task', 'Verify build');
     const before = document.record.content;
-    expect(JSON.parse(before).lists[0].groupId).toBe(group.id);
+    expect(JSON.parse(before!).lists[0].groupId).toBe(group.id);
     [...target.querySelectorAll('button')].find(button => button.textContent === 'Delete list')!.click(); await tick();
-    expect(JSON.parse(document.record.content).tasks).toEqual([]);
+    expect(JSON.parse(document.record.content!).tasks).toEqual([]);
     [...target.querySelectorAll('button')].find(button => button.textContent === 'Undo deletion')!.click(); await tick();
     expect(document.record.content).toBe(before);
     expect(target.querySelector<HTMLInputElement>('[aria-label="Task text"]')?.value).toBe('Verify build');
@@ -67,7 +104,7 @@ describe('workspace document views', () => {
     filter.value = 'all'; filter.dispatchEvent(new Event('change', { bubbles: true })); await tick();
     const move = target.querySelector<HTMLSelectElement>('[aria-label="List for Ship"]')!;
     move.value = 'b'; move.dispatchEvent(new Event('change', { bubbles: true })); await tick();
-    expect(JSON.parse(document.record.content).tasks[0]).toMatchObject({ id: 't', listId: 'b' });
+    expect(JSON.parse(document.record.content!).tasks[0]).toMatchObject({ id: 't', listId: 'b' });
     expect(target.querySelector('[aria-label="Task text"]')).toBeNull();
   });
   it('keeps the selected list and input draft during a clean background reread', async () => {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-21 13:58 MSK — Fix workspace folder moves and lazy Tasks/Notes editing
+
+- Make Move to folder in the sidebar and workspace-manager batch actions unpin selected projects, matching drag-and-drop so moved projects appear in the destination folder. Retain the captured workspace row throughout a drag and resolve drops from pointer-release coordinates.
+- Rename the shared sidebar links and document headings to Tasks and Notes. Open missing documents as an editable empty task book or Markdown editor, creating files only after the first committed change. Keep unsubmitted drafts through background refreshes and the notes editor mounted after the first input; viewing or saving an untouched empty document creates no file.
+- Validation: all 333 frontend test files / 3345 tests pass, including regressions for both sidebar widths, collapsed-folder drops, release coordinates, first edits and lazy storage. Svelte/type checks report zero errors and warnings; production frontend build passes. Browser component acceptance confirms context-menu and pointer-drag moves with catalog I/O stubbed; the installed native app was not rebuilt or replaced.
+
 ## 2026-10-21 13:39 MSK — Restore project context-menu creation
 
 - Activate New File and New Folder on click, closing the menu before opening the inline name field. Avoid starting a draft during pointer-down focus handling and support ordinary button activation.

@@ -24,6 +24,22 @@ describe("workspace document storage", () => {
     expect(io.files.get("/lazy/app/tasks")).toBe(serializeTaskBook(emptyTaskBook()));
     expect(io.files.has("/lazy/app/notes")).toBe(false);
   });
+  it.each([null, '/lazy-first-edit'])('creates Tasks on the first edit with a missing-file expectation (%s)', async (root) => {
+    const record = await loadWorkspaceDocument(root, 'tasks');
+    await flushWorkspaceDocuments(root ?? undefined);
+    expect(io.files.size).toBe(0);
+    const content = serializeTaskBook({ ...emptyTaskBook(), lists: [{ id: 'first', title: 'First', groupId: null }] });
+    editWorkspaceDocument(record, content);
+    expect(record.saved).toBeNull();
+    await flushWorkspaceDocuments(root ?? undefined);
+    expect(io.files.get(`${root}/app/tasks`)).toBe(content);
+  });
+  it('creates missing Notes from the first text edit without inserting a heading', async () => {
+    const record = await loadWorkspaceDocument('/lazy-note', 'notes');
+    editWorkspaceDocument(record, 'First note');
+    await flushWorkspaceDocuments('/lazy-note');
+    expect(io.files.get('/lazy-note/app/notes')).toBe('First note');
+  });
   it("preserves edits after save failures and retries during an awaited flush", async () => {
     await createWorkspaceDocument("/failure", "notes");
     const record = await loadWorkspaceDocument("/failure", "notes");

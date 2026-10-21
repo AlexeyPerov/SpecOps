@@ -6,7 +6,7 @@ import type { ContextId } from "../domain/contracts";
 import ActivityRail from "./ActivityRail.svelte";
 import { mountComponent } from "./_testComponentMount";
 import { createSinglePaneLayout, type WorkspaceEntry } from "../domain/contracts";
-import { _resetProjectCatalogForTests, catalogProjectForRoot, loadProjectCatalog, updateCatalogProject } from "../services/workspaceCatalog";
+import { _resetProjectCatalogForTests, catalogProjectForRoot, loadProjectCatalog, getProjectCatalog, updateCatalogProject, type CatalogMutation } from "../services/workspaceCatalog";
 import { addWorkspaceToWindow } from "../services/addWorkspaceToWindow";
 import { readLiveWorkspaceWindowOwners } from "../services/workspaceWindowPlacement";
 import { invoke } from "@tauri-apps/api/core";
@@ -38,9 +38,9 @@ describe("ActivityRail", () => {
     const select = vi.fn((id: ContextId) => { active = id; });
     try {
       const { host } = mountComponent(ActivityRail, { panelWidthPx: width, onSelectContext: select }); await tick();
-      host.querySelector<HTMLButtonElement>('[aria-label="Global Tasks"]')!.click();
+      host.querySelector<HTMLButtonElement>('[aria-label="Tasks"]')!.click();
       expect(select).toHaveBeenCalledWith('notepad'); expect(open).toHaveBeenLastCalledWith('workspace-tasks');
-      host.querySelector<HTMLButtonElement>('[aria-label="Global Notes"]')!.click();
+      host.querySelector<HTMLButtonElement>('[aria-label="Notes"]')!.click();
       expect(open).toHaveBeenLastCalledWith('workspace-notes');
     } finally { read.mockRestore(); open.mockRestore(); }
   });
@@ -50,7 +50,7 @@ describe("ActivityRail", () => {
     const open = vi.spyOn(appState, 'openOrFocusViewTab').mockImplementation(() => {});
     try {
       const { host } = mountComponent(ActivityRail, { onSelectContext: () => {} }); await tick();
-      host.querySelector<HTMLButtonElement>('[aria-label="Global Tasks"]')!.click();
+      host.querySelector<HTMLButtonElement>('[aria-label="Tasks"]')!.click();
       expect(open).not.toHaveBeenCalled();
     } finally { read.mockRestore(); open.mockRestore(); }
   });
@@ -194,7 +194,7 @@ describe("ActivityRail", () => {
     const cleared=mountComponent(ActivityRail,{panelWidthPx:240,currentWindowId:'main'}); await tick();
     expect(cleared.host.querySelector('[data-workspace-id="/normal"]')).toBeNull();
   });
-  it('exposes collapsed narrow projects through a keyboard menu and keeps folder assignment independent of pinning', async () => {
+  it('exposes collapsed narrow projects through a keyboard menu and moves pinned projects out of Pinned when assigning a folder', async () => {
     await groupedCatalog(); localStorage.setItem('spec-ops:workspace-rail:main',JSON.stringify({collapsed:['folder:one'],scrollTop:0}));
     const {host}=mountComponent(ActivityRail,{panelWidthPx:48}); await tick();
     host.querySelector<HTMLButtonElement>('[data-rail-section="folder:one"] .rail-section-toggle')!.click(); await tick();
@@ -204,7 +204,48 @@ describe("ActivityRail", () => {
     const row=host.querySelector<HTMLButtonElement>('[data-workspace-id="/pinned"]')!;
     row.dispatchEvent(new KeyboardEvent('keydown',{key:'F10',shiftKey:true,bubbles:true})); await tick();
     [...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')].find(button=>button.textContent==='Second folder')!.click();
-    expect(invoke).toHaveBeenLastCalledWith('project_catalog_transaction',{mutations:[{type:'moveProject',id:'/pinned',folderId:'two'}]});
+    expect(invoke).toHaveBeenLastCalledWith('project_catalog_transaction',{mutations:[{type:'moveProject',id:'/pinned',folderId:'two',pinned:false,beforeId:null}]});
+  });
+  it.each([48, 240])('keeps the captured row mounted and drops at the release position into a collapsed folder (%s)', async (width) => {
+    await groupedCatalog();
+    localStorage.setItem('spec-ops:workspace-rail:main', JSON.stringify({ collapsed: ['folder:two'], scrollTop: 0 }));
+    vi.mocked(invoke).mockImplementation(async (_command, args) => {
+      const next = structuredClone(getProjectCatalog());
+      for (const mutation of (args as { mutations: CatalogMutation[] }).mutations) {
+        if (mutation.type === 'moveProject') Object.assign(next.projects[mutation.id], {
+          folderId: mutation.folderId, pinned: mutation.pinned,
+        });
+      }
+      next.revision++;
+      return next;
+    });
+    const { host } = mountComponent(ActivityRail, { panelWidthPx: width }); await tick();
+    const rect = (top: number, height: number) => ({ left: 0, right: width, top, bottom: top + height, width, height, x: 0, y: top, toJSON: () => ({}) });
+    host.querySelector<HTMLElement>('.rail-workspaces')!.getBoundingClientRect = () => rect(0, 400);
+    host.querySelector<HTMLElement>('.activity-rail')!.getBoundingClientRect = () => rect(0, 400);
+    for (const node of host.querySelectorAll<HTMLElement>('[data-workspace-id]')) node.hasPointerCapture = () => false;
+    const row = host.querySelector<HTMLButtonElement>('[data-workspace-id="/pinned"]')!;
+    row.getBoundingClientRect = () => rect(0, 40);
+    row.setPointerCapture = vi.fn(); row.hasPointerCapture = () => false;
+    const first = host.querySelector<HTMLElement>('[data-rail-section="folder:one"]')!;
+    const second = host.querySelector<HTMLElement>('[data-rail-section="folder:two"]')!;
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: (_x: number, y: number) => y < 200 ? first : second });
+    const pointer = (type: string, y: number) => {
+      const event = new MouseEvent(type, { clientX: 20, clientY: y, button: 0, bubbles: true });
+      Object.defineProperty(event, 'pointerId', { value: 1 }); return event;
+    };
+    row.dispatchEvent(pointer('pointerdown', 20));
+    window.dispatchEvent(pointer('pointermove', 130));
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve())); await tick();
+    expect(host.querySelector('[data-workspace-id="/pinned"]')).toBe(row);
+    expect(row.closest('.rail-project-dragging')).not.toBeNull();
+    window.dispatchEvent(pointer('pointerup', 260)); await tick(); await tick();
+    expect(getProjectCatalog().projects['/pinned']).toMatchObject({ folderId: 'two', pinned: false });
+    expect(second.getAttribute('aria-label')).toBe('Second folder, 1 projects');
+    expect(host.querySelector('[data-rail-section="pinned"]')?.getAttribute('aria-label')).toBe('Pinned, 0 projects');
+    second.querySelector<HTMLButtonElement>('.rail-section-toggle')!.click(); await tick();
+    if (width === 48) expect(document.querySelector('[role=menu]')?.textContent).toContain('pinned');
+    else expect(second.querySelector('[data-workspace-id="/pinned"]')).not.toBeNull();
   });
   it('offers keyboard folder rename/delete/order and disables ambiguous ordering during search', async () => {
     await groupedCatalog();

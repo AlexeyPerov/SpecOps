@@ -1,3 +1,4 @@
+import { recoverProjectTreeWatcher, disposeProjectTreeWatcherSync } from "./appShellEffects";
 import { setWorkspaceGitSummaryWindowActive, invalidateWorkspaceGitSummary, disposeWorkspaceGitSummaryService } from "../git/workspaceGitSummary";
 import { listenWorkspaceWindowTransfers } from "./workspaceWindowTransfer";
 import { emit, emitTo, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/api/event";
@@ -63,6 +64,7 @@ import {
   FILE_CHANGED_EVENT,
   syncFileWatcherPaths,
   syncProjectTreeWatcher,
+  FILE_WATCHER_ERROR_EVENT,
   type FileWatcherEventKind,
 } from "./fileWatcher";
 import { selectTabForNormalizedPath } from "./openFileGate";
@@ -576,6 +578,13 @@ async function startAppShellRuntimeInner(
     }
   });
   cleanupCallbacks.push(unlistenFocusChanged);
+
+  const unlistenWatcherError = await listen(FILE_WATCHER_ERROR_EVENT, () => {
+    if (!runtimeReady) return;
+    recoverProjectTreeWatcher();
+    void options.revalidateProjectTree?.();
+  });
+  cleanupCallbacks.push(unlistenWatcherError, disposeProjectTreeWatcherSync);
 
   const unlistenFileChanged = await listen<{ path: string; kind?: string }>(
     FILE_CHANGED_EVENT,

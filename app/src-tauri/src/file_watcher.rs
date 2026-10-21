@@ -2,9 +2,12 @@ use notify::{EventKind, RecursiveMode, Watcher};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+
+pub const FILE_WATCHER_ERROR_EVENT: &str = "spec-ops/fs/watcher-error";
 
 pub const FILE_CHANGED_EVENT: &str = "spec-ops/fs/file-changed";
 
@@ -76,6 +79,21 @@ struct CanonicalEntry {
     refcount: usize,
 }
 
+#[derive(Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WatcherHealth {
+    last_error: Option<String>,
+    last_event_at: Option<u64>,
+    last_tree_sync_at: Option<u64>,
+}
+
+fn timestamp_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 pub struct FileWatcherState {
     /// `Arc` so an async command can clone the handle into a `spawn_blocking`
     /// task without borrowing the non-`'static` Tauri `State` reference (F43).
@@ -99,6 +117,8 @@ struct FileWatcherInner {
     /// only evicted once the last registrant is removed (F39).
     canonical_to_original: Arc<Mutex<HashMap<String, CanonicalEntry>>>,
     app_handle: Option<AppHandle>,
+    restart_requested: Arc<AtomicBool>,
+    health: Arc<Mutex<WatcherHealth>>,
 }
 
 impl FileWatcherState {
@@ -113,6 +133,8 @@ impl FileWatcherState {
                 original_to_canonical: HashMap::new(),
                 canonical_to_original: Arc::new(Mutex::new(HashMap::new())),
                 app_handle: None,
+                restart_requested: Arc::new(AtomicBool::new(false)),
+                health: Arc::new(Mutex::new(WatcherHealth::default())),
             })),
         }
     }
@@ -235,7 +257,35 @@ fn rewrite_emit_path(
     raw.into_owned()
 }
 
+fn event_path_for_frontend(path: &Path, map: &HashMap<String, CanonicalEntry>) -> Option<String> {
+    let canonical_roots: Vec<&str> = map.keys().map(String::as_str).collect();
+    if path_has_ignored_component_below_roots(path, &canonical_roots) {
+        return None;
+    }
+    let rewritten = rewrite_emit_path(path, map);
+    let original_roots: Vec<&str> = map.values().map(|entry| entry.original.as_str()).collect();
+    if path_has_ignored_component_below_roots(Path::new(&rewritten), &original_roots) {
+        return None;
+    }
+    Some(rewritten)
+}
+
+fn discard_failed_debouncer(inner: &mut FileWatcherInner) {
+    if inner.restart_requested.swap(false, Ordering::AcqRel) {
+        // The callback never locks `inner`, so stopping its worker here cannot
+        // deadlock. Keep window contributions and rebuild their actual watches.
+        inner.debouncer.take();
+        inner.watched_paths.clear();
+        inner.project_tree_roots.clear();
+        inner.original_to_canonical.clear();
+        if let Ok(mut map) = inner.canonical_to_original.lock() {
+            map.clear();
+        }
+    }
+}
+
 fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
+    discard_failed_debouncer(inner);
     if inner.debouncer.is_some() {
         return Ok(());
     }
@@ -245,46 +295,54 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
         .clone()
         .ok_or_else(|| "File watcher app handle is not initialized".to_string())?;
     let canonical_to_original = Arc::clone(&inner.canonical_to_original);
+    let restart_requested = Arc::clone(&inner.restart_requested);
+    let health = Arc::clone(&inner.health);
 
     let debouncer = new_debouncer(
         Duration::from_millis(200),
         None,
         move |result: DebounceEventResult| {
-            let Ok(events) = result else {
-                return;
+            let events = match result {
+                Ok(events) => events,
+                Err(errors) => {
+                    let message = errors
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join("; ");
+                    log::warn!("file watcher event failure: {message}");
+                    if let Ok(mut health) = health.lock() {
+                        health.last_error = Some(message);
+                    }
+                    if !restart_requested.swap(true, Ordering::AcqRel) {
+                        let _ = app_handle.emit(FILE_WATCHER_ERROR_EVENT, ());
+                    }
+                    return;
+                }
             };
 
-            let (rewrite_map, canonical_roots) = canonical_to_original
+            let rewrite_map = canonical_to_original
                 .lock()
-                .map(|guard| {
-                    // Clone the keys out of the lock scope so the borrows do not
-                    // outlive the guard. The map is cloned for rewriting anyway;
-                    // the root strings are reused only for the read-only filter.
-                    let roots: Vec<String> = guard.keys().cloned().collect();
-                    (guard.clone(), roots)
-                })
+                .map(|guard| guard.clone())
                 .unwrap_or_default();
-            let canonical_roots_refs: Vec<&str> =
-                canonical_roots.iter().map(String::as_str).collect();
-
             for event in events {
+                // An overflow can carry no paths. Ask the frontend to reconcile
+                // the tree and re-arm watches rather than treating it as a no-op.
+                if event.need_rescan() {
+                    if let Ok(mut health) = health.lock() {
+                        health.last_error = Some("Filesystem events require a rescan".to_string());
+                    }
+                    if !restart_requested.swap(true, Ordering::AcqRel) {
+                        let _ = app_handle.emit(FILE_WATCHER_ERROR_EVENT, ());
+                    }
+                }
                 let kind = FileChangeKind::from(event.kind);
                 for path in &event.paths {
-                    // F37: filter ignored components only below a registered root,
-                    // so a workspace path that happens to contain `build`/`dist`/
-                    // `target`/`.git`/`.venv` is not silently dropped.
-                    if path_has_ignored_component_below_roots(path, &canonical_roots_refs) {
+                    let Some(path_str) = event_path_for_frontend(path, &rewrite_map) else {
                         continue;
-                    }
-                    let path_str = rewrite_emit_path(path, &rewrite_map);
-                    // Re-check after rewrite in case the original (frontend) form
-                    // still contains an ignored segment below a root that the
-                    // canonical path did not (symlink-prefix divergence).
-                    if path_has_ignored_component_below_roots(
-                        Path::new(&path_str),
-                        &canonical_roots_refs,
-                    ) {
-                        continue;
+                    };
+                    if let Ok(mut health) = health.lock() {
+                        health.last_event_at = Some(timestamp_millis());
                     }
                     let _ = app_handle.emit(
                         FILE_CHANGED_EVENT,
@@ -300,6 +358,7 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
     .map_err(|error| error.to_string())?;
 
     inner.debouncer = Some(debouncer);
+    reconcile_registered_paths(inner);
     Ok(())
 }
 
@@ -498,6 +557,31 @@ fn apply_watcher_path_diff(
     watched
 }
 
+/// Reconcile both consumers after watcher recovery, preserving all windows.
+fn reconcile_registered_paths(inner: &mut FileWatcherInner) {
+    let files = union_contributions(&inner.file_paths_by_window);
+    let roots = union_contributions(&inner.tree_roots_by_window);
+    let Some(debouncer) = inner.debouncer.as_mut() else {
+        return;
+    };
+    inner.watched_paths = apply_watcher_path_diff(
+        debouncer,
+        &inner.watched_paths,
+        &files,
+        RecursiveMode::NonRecursive,
+        &mut inner.original_to_canonical,
+        &inner.canonical_to_original,
+    );
+    inner.project_tree_roots = apply_watcher_path_diff(
+        debouncer,
+        &inner.project_tree_roots,
+        &roots,
+        RecursiveMode::Recursive,
+        &mut inner.original_to_canonical,
+        &inner.canonical_to_original,
+    );
+}
+
 /// Sync the set of individually-watched file paths.
 ///
 /// Marked `async` (F43): `watch()`/`unwatch()` are blocking calls, and on macOS
@@ -610,10 +694,33 @@ pub async fn sync_project_tree_watcher(
             &inner.canonical_to_original,
         );
         inner.project_tree_roots = next_watched;
-        Ok(())
+        record_tree_registration_result(inner, &next_roots)
     })
     .await
     .map_err(|error| format!("project tree watcher task failed: {error}"))?
+}
+
+fn record_tree_registration_result(
+    inner: &FileWatcherInner,
+    requested: &HashSet<String>,
+) -> Result<(), String> {
+    let mut missing: Vec<_> = requested
+        .difference(&inner.project_tree_roots)
+        .cloned()
+        .collect();
+    missing.sort();
+    if !missing.is_empty() {
+        let message = format!("Could not watch project roots: {}", missing.join(", "));
+        if let Ok(mut health) = inner.health.lock() {
+            health.last_error = Some(message.clone());
+        }
+        return Err(message);
+    }
+    if let Ok(mut health) = inner.health.lock() {
+        health.last_error = None;
+        health.last_tree_sync_at = Some(timestamp_millis());
+    }
+    Ok(())
 }
 
 fn union_contributions(contributions: &HashMap<String, HashSet<String>>) -> HashSet<String> {
@@ -666,7 +773,10 @@ pub async fn get_file_watcher_diagnostics(
     let mut roots: Vec<_> = inner.project_tree_roots.iter().cloned().collect(); roots.sort();
     Ok(serde_json::json!({"filePathCount": files.len(), "filePaths": files, "projectRootCount": roots.len(), "projectRoots": roots,
         "fileWindowCount": inner.file_paths_by_window.values().filter(|paths| !paths.is_empty()).count(),
-        "treeWindowCount": inner.tree_roots_by_window.values().filter(|paths| !paths.is_empty()).count()}))
+        "treeWindowCount": inner.tree_roots_by_window.values().filter(|paths| !paths.is_empty()).count(),
+        "requestedProjectRoots": union_contributions(&inner.tree_roots_by_window),
+        "restartRequested": inner.restart_requested.load(Ordering::Acquire),
+        "health": inner.health.lock().ok().map(|health| serde_json::to_value(&*health).unwrap_or_default())}))
     }).await.map_err(|error| error.to_string())?
 }
 
@@ -922,6 +1032,143 @@ mod tests {
             Path::new("/elsewhere/.git/config"),
             &proj_root,
         ));
+    }
+
+    #[test]
+    fn frontend_event_paths_validate_each_root_spelling_and_ignore_heavy_dirs() {
+        let mut map = HashMap::new();
+        register_canonical_entry(&mut map, "/private/tmp/proj", "/tmp/proj");
+        assert_eq!(
+            event_path_for_frontend(Path::new("/private/tmp/proj/new.txt"), &map),
+            Some("/tmp/proj/new.txt".into())
+        );
+        assert_eq!(
+            event_path_for_frontend(Path::new("/private/tmp/proj/node_modules/x"), &map),
+            None
+        );
+        assert_eq!(
+            event_path_for_frontend(Path::new("/unrelated/new.txt"), &map),
+            None
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recursive_watch_delivers_new_file_under_symlinked_root() {
+        let directory =
+            std::env::temp_dir().join(format!("specops-watch-live-{}", std::process::id()));
+        std::fs::create_dir_all(directory.join("actual")).unwrap();
+        std::os::unix::fs::symlink(directory.join("actual"), directory.join("alias")).unwrap();
+        let root = directory.join("alias").to_string_lossy().into_owned();
+        let map = Arc::new(Mutex::new(HashMap::new()));
+        let callback_map = Arc::clone(&map);
+        let (send, receive) = std::sync::mpsc::channel();
+        let mut debouncer = new_debouncer(
+            Duration::from_millis(200),
+            None,
+            move |result: DebounceEventResult| {
+                if let Ok(events) = result {
+                    let map = callback_map.lock().unwrap();
+                    for event in events {
+                        for path in &event.paths {
+                            if let Some(path) = event_path_for_frontend(path, &map) {
+                                let _ = send.send(path);
+                            }
+                        }
+                    }
+                }
+            },
+        )
+        .unwrap();
+        let watched = apply_watcher_path_diff(
+            &mut debouncer,
+            &HashSet::new(),
+            &set(&[&root]),
+            RecursiveMode::Recursive,
+            &mut HashMap::new(),
+            &map,
+        );
+        assert_eq!(watched, set(&[&root]));
+        let expected = format!("{root}/new.txt");
+        std::fs::write(&expected, "new file").unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            let path = receive
+                .recv_timeout(remaining)
+                .expect("new file event must reach the frontend using its registered root");
+            if path == expected {
+                break;
+            }
+        }
+        drop(debouncer);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn watcher_recovery_restores_document_and_tree_watches_from_all_windows() {
+        let directory =
+            std::env::temp_dir().join(format!("specops-watch-recovery-{}", std::process::id()));
+        std::fs::create_dir_all(directory.join("first")).unwrap();
+        std::fs::create_dir_all(directory.join("second")).unwrap();
+        let document = directory.join("first/note.txt");
+        std::fs::write(&document, "test").unwrap();
+        let first = directory.join("first").to_string_lossy().into_owned();
+        let second = directory.join("second").to_string_lossy().into_owned();
+        let document = document.to_string_lossy().into_owned();
+        let state = FileWatcherState::new();
+        {
+            let mut inner = state.inner.lock().unwrap();
+            inner.debouncer = Some(test_debouncer());
+            inner
+                .file_paths_by_window
+                .insert("first".into(), set(&[&document]));
+            inner
+                .tree_roots_by_window
+                .insert("first".into(), set(&[&first]));
+            inner
+                .tree_roots_by_window
+                .insert("second".into(), set(&[&second]));
+            reconcile_registered_paths(&mut inner);
+            inner.restart_requested.store(true, Ordering::Release);
+            discard_failed_debouncer(&mut inner);
+            assert!(inner.debouncer.is_none());
+            assert!(inner.project_tree_roots.is_empty());
+            assert!(inner.watched_paths.is_empty());
+            assert!(inner.canonical_to_original.lock().unwrap().is_empty());
+            inner.debouncer = Some(test_debouncer());
+            reconcile_registered_paths(&mut inner);
+            assert_eq!(inner.project_tree_roots, set(&[&first, &second]));
+            assert_eq!(inner.watched_paths, set(&[&document]));
+            assert_eq!(inner.canonical_to_original.lock().unwrap().len(), 3);
+        }
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn missing_tree_root_reports_failure_and_retries_after_it_appears() {
+        let directory =
+            std::env::temp_dir().join(format!("specops-watch-retry-{}", std::process::id()));
+        let root = directory.join("missing").to_string_lossy().into_owned();
+        let state = FileWatcherState::new();
+        {
+            let mut inner = state.inner.lock().unwrap();
+            inner.debouncer = Some(test_debouncer());
+            inner
+                .tree_roots_by_window
+                .insert("first".into(), set(&[&root]));
+            reconcile_registered_paths(&mut inner);
+            assert!(record_tree_registration_result(&inner, &set(&[&root])).is_err());
+            assert!(inner.health.lock().unwrap().last_error.is_some());
+            std::fs::create_dir_all(&root).unwrap();
+            reconcile_registered_paths(&mut inner);
+            assert!(record_tree_registration_result(&inner, &set(&[&root])).is_ok());
+            assert!(inner.health.lock().unwrap().last_error.is_none());
+            assert!(inner.health.lock().unwrap().last_tree_sync_at.is_some());
+        }
+        drop(state);
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

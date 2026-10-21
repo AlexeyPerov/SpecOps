@@ -354,6 +354,7 @@
   );
 
   onDestroy(() => {
+    projectTreeController.retainRoots([]);
     editorWorkbench.dispose();
     editorSessionCache.clear();
     editorTools.dispose();

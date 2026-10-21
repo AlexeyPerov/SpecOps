@@ -134,25 +134,31 @@ describe("P7 optimization regression guardrails", () => {
       expect(syncWatcher).toHaveBeenCalledWith(["/repo"]);
     });
 
-    it("reloads once per workspace-root transition only", () => {
+    it("reloads once per workspace-root transition only", async () => {
       const loadProjectTreeRoot = vi.fn(async () => {});
 
+      await Promise.resolve();
       syncProjectTreeWatcherEffect(
         makeTreeInput({ loadProjectTreeRoot, activeWorkspaceRoot: "/repo-a" }),
       );
+      await Promise.resolve();
       syncProjectTreeWatcherEffect(
         makeTreeInput({ loadProjectTreeRoot, activeWorkspaceRoot: "/repo-a" }),
       );
+      await Promise.resolve();
       syncProjectTreeWatcherEffect(
         makeTreeInput({ loadProjectTreeRoot, activeWorkspaceRoot: "/repo-b" }),
       );
+      await Promise.resolve();
       syncProjectTreeWatcherEffect(
         makeTreeInput({ loadProjectTreeRoot, activeWorkspaceRoot: "/repo-b" }),
       );
+      await Promise.resolve();
       syncProjectTreeWatcherEffect(
         makeTreeInput({ loadProjectTreeRoot, activeWorkspaceRoot: "/repo-a" }),
       );
 
+      await Promise.resolve();
       expect(loadProjectTreeRoot).toHaveBeenCalledTimes(3);
       expect(syncWatcher).toHaveBeenNthCalledWith(1, ["/repo-a"]);
       expect(syncWatcher).toHaveBeenNthCalledWith(2, ["/repo-b"]);

@@ -143,7 +143,7 @@ describe("syncProjectTreeWatcherEffect", () => {
     await Promise.resolve();
 
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(2);
-    expect(revalidateProjectTree).toHaveBeenCalledTimes(2);
+    expect(revalidateProjectTree).toHaveBeenCalledTimes(3);
   });
 
   it("does not reload when only tab/session context would have re-run the effect", () => {
@@ -158,30 +158,37 @@ describe("syncProjectTreeWatcherEffect", () => {
     expect(syncWatcher).toHaveBeenCalledTimes(1);
   });
 
-  it("reloads exactly once when the workspace root changes", () => {
+  it("reloads exactly once when the workspace root changes", async () => {
     const loadProjectTreeRoot = vi.fn(async () => {});
 
+    await Promise.resolve();
     syncProjectTreeWatcherEffect(makeInput({ loadProjectTreeRoot, activeWorkspaceRoot: "/repo-a" }));
+    await Promise.resolve();
     syncProjectTreeWatcherEffect(makeInput({ loadProjectTreeRoot, activeWorkspaceRoot: "/repo-b" }));
+    await Promise.resolve();
     syncProjectTreeWatcherEffect(makeInput({ loadProjectTreeRoot, activeWorkspaceRoot: "/repo-b" }));
 
+    await Promise.resolve();
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(2);
     expect(syncWatcher).toHaveBeenNthCalledWith(1, ["/repo-a"]);
     expect(syncWatcher).toHaveBeenNthCalledWith(2, ["/repo-b"]);
   });
 
-  it("clears watcher when leaving workspace", () => {
+  it("clears watcher when leaving workspace", async () => {
     const loadProjectTreeRoot = vi.fn(async () => {});
     const clearFilesystemChangeDebounce = vi.fn();
 
+    await Promise.resolve();
     syncProjectTreeWatcherEffect(
       makeInput({ loadProjectTreeRoot, clearFilesystemChangeDebounce }),
     );
     // Re-running for the same workspace is a no-op.
+    await Promise.resolve();
     syncProjectTreeWatcherEffect(
       makeInput({ loadProjectTreeRoot, clearFilesystemChangeDebounce }),
     );
     // Leaving the workspace clears the watcher and the filesystem debounce.
+    await Promise.resolve();
     syncProjectTreeWatcherEffect(
       makeInput({
         loadProjectTreeRoot,
@@ -190,6 +197,7 @@ describe("syncProjectTreeWatcherEffect", () => {
       }),
     );
 
+    await Promise.resolve();
     expect(loadProjectTreeRoot).toHaveBeenCalledTimes(1);
     expect(clearFilesystemChangeDebounce).toHaveBeenCalledTimes(1);
     expect(syncWatcher).toHaveBeenNthCalledWith(1, ["/repo"]);
@@ -272,9 +280,10 @@ describe("syncProjectTreeWatcherEffect", () => {
     expect(syncWatcher).toHaveBeenCalledTimes(1);
   });
 
-  it("diffs the watcher set when a root is added or removed", () => {
+  it("diffs the watcher set when a root is added or removed", async () => {
     const loadProjectTreeRoot = vi.fn(async () => {});
 
+    await Promise.resolve();
     syncProjectTreeWatcherEffect(
       makeInput({
         loadProjectTreeRoot,
@@ -282,6 +291,7 @@ describe("syncProjectTreeWatcherEffect", () => {
         openWorkspaceRoots: ["/repo-a"],
       }),
     );
+    await Promise.resolve();
     syncProjectTreeWatcherEffect(
       makeInput({
         loadProjectTreeRoot,
@@ -289,6 +299,7 @@ describe("syncProjectTreeWatcherEffect", () => {
         openWorkspaceRoots: ["/repo-a", "/repo-b"],
       }),
     );
+    await Promise.resolve();
     syncProjectTreeWatcherEffect(
       makeInput({
         loadProjectTreeRoot,
@@ -297,6 +308,7 @@ describe("syncProjectTreeWatcherEffect", () => {
       }),
     );
 
+    await Promise.resolve();
     expect(syncWatcher).toHaveBeenCalledTimes(3);
     expect(syncWatcher).toHaveBeenNthCalledWith(1, ["/repo-a"]);
     expect(syncWatcher).toHaveBeenNthCalledWith(2, ["/repo-a", "/repo-b"]);

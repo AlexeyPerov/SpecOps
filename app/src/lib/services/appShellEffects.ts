@@ -27,6 +27,7 @@ import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { normalizePathSync } from "./diskFingerprint";
 import { syncProjectTreeWatcher } from "./fileWatcher";
+import { createProjectTreeWatcherSync } from "./projectTreeWatcherSync";
 import type { createProjectTreeController } from "./projectTreeController";
 
 type ProjectTreeController = ReturnType<typeof createProjectTreeController>;
@@ -295,8 +296,8 @@ export interface SyncProjectTreeWatcherEffectInput {
    * Quiet revalidation of the tree that a workspace switch just brought up.
    * Entering a workspace served from the controller's in-memory cache shows a
    * snapshot taken when it was last active, so it is re-listed in the
-   * background; a cold load is already authoritative and the controller's own
-   * throttle drops the redundant pass.
+   * background. After a cold load the controller coalesces trailing checks to
+   * cover changes between the first read and watcher registration.
    */
   revalidateProjectTree?: () => Promise<void>;
 }
@@ -306,6 +307,26 @@ export interface SyncProjectTreeWatcherEffectInput {
  * watcher sync runs when entering an active workspace with runtimeReady.
  * Tab/session churn that re-invokes this effect is a no-op.
  */
+const projectTreeWatcherSync = createProjectTreeWatcherSync({
+  sync: (roots) => syncProjectTreeWatcher(roots),
+  onError: (error) => {
+    void logDiagnostic({
+      level: "warn",
+      source: "frontend",
+      timestamp: new Date().toISOString(),
+      message: "project tree watcher registration failed; retry scheduled",
+      metadata: { error: String(error) },
+    });
+  },
+});
+export function recoverProjectTreeWatcher(): void {
+  projectTreeWatcherSync.recover();
+}
+export function disposeProjectTreeWatcherSync(): void {
+  projectTreeWatcherSync.dispose();
+  lastProjectTreeWatcherKey = null;
+  lastProjectTreeRootKey = null;
+}
 let lastProjectTreeRootKey: string | null = null;
 let lastProjectTreeWatcherKey: string | null = null;
 
@@ -329,7 +350,7 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
       // Left workspace entirely — allow a fresh root load on next entry.
       lastProjectTreeRootKey = null;
     }
-    void syncProjectTreeWatcher([]);
+    projectTreeWatcherSync.request([]);
     projectTreeController.clearFilesystemChangeDebounce();
     return;
   }
@@ -338,8 +359,8 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
   if (rootKey !== lastProjectTreeRootKey) {
     lastProjectTreeRootKey = rootKey;
     void loadProjectTreeRoot().then(() => {
-      // Only meaningful when the root came back from the controller cache; a
-      // cold load seeds the revalidation throttle, so this resolves to a no-op.
+      // Cached roots need reconciliation; after a cold load the controller
+      // coalesces this with the check after watcher registration.
       void revalidateProjectTree?.();
     });
   }
@@ -355,7 +376,7 @@ export function syncProjectTreeWatcherEffect(input: SyncProjectTreeWatcherEffect
     const watcherKey = allRoots.join("\0");
     if (lastProjectTreeWatcherKey !== watcherKey) {
       lastProjectTreeWatcherKey = watcherKey;
-      void syncProjectTreeWatcher(allRoots);
+      projectTreeWatcherSync.request(allRoots, () => { void revalidateProjectTree?.(); });
     }
   }
 }
@@ -406,6 +427,7 @@ let pendingActiveFileExpandRequest:
 let lastAppliedActiveFileExpandKey: string | null = null;
 
 export function resetAppShellEffectsForTests(): void {
+  disposeProjectTreeWatcherSync();
   if (activeFileTreeExpandTimer) {
     clearTimeout(activeFileTreeExpandTimer);
     activeFileTreeExpandTimer = null;

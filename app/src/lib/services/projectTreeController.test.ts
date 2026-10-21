@@ -557,33 +557,32 @@ describe("createProjectTreeController", () => {
     expect(reported).toEqual([{ root: "/repo", paths: [] }]);
   });
 
-  it("skips the debounced filesystem-change reload for dirs just reloaded", async () => {
-    // After an in-app move, the mutation path does an authoritative targeted
-    // reload and then emits a filesystem change; the OS watcher emits the same.
-    // Both schedule the 400ms debounced flush, which must NOT re-render dirs
-    // that were just reloaded (the "project tree refreshes itself" jank).
+  it("rechecks duplicate notifications without republishing unchanged listings", async () => {
     vi.useFakeTimers();
     try {
       const loadDirectoryChildrenFn = vi.fn(async (_root: string, dir: string) => {
         if (dir === "/repo") return [makeNode("src", "/repo/src", "directory")];
         return [makeNode("file.ts", "/repo/src/file.ts", "file")];
       });
-      const controller = createProjectTreeController(() => {}, { loadDirectoryChildrenFn });
+      const publish = vi.fn();
+      const controller = createProjectTreeController(publish, { loadDirectoryChildrenFn });
       await controller.loadProjectTreeRoot({ workspaceRoot: "/repo", isSessionTabActive: false });
       await controller.handleToggleProjectTreeDirectory("/repo", "/repo/src");
       await controller.reloadDirectories("/repo", ["/repo", "/repo/src"]);
       loadDirectoryChildrenFn.mockClear();
+      publish.mockClear();
 
       controller.handleFilesystemChange("/repo", "/repo/src/file.ts");
       await vi.advanceTimersByTimeAsync(400);
 
-      expect(loadDirectoryChildrenFn).not.toHaveBeenCalled();
+      expect(loadDirectoryChildrenFn).toHaveBeenCalledTimes(2);
+      expect(publish).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("reloads dirs via the debounced flush once the freshness cooldown elapses", async () => {
+  it("reloads dirs after a later external change", async () => {
     vi.useFakeTimers();
     try {
       let version = 0;
@@ -597,8 +596,7 @@ describe("createProjectTreeController", () => {
       await controller.reloadDirectories("/repo", ["/repo", "/repo/src"]);
       loadDirectoryChildrenFn.mockClear();
 
-      // Advance past the 500ms freshness cooldown so the dirs are no longer
-      // considered just-reloaded, then emit a fresh external change.
+      // A later independent change also triggers an authoritative re-read.
       await vi.advanceTimersByTimeAsync(600);
       version = 1;
       controller.handleFilesystemChange("/repo", "/repo/src/file.ts");

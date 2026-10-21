@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export const FILE_WATCHER_ERROR_EVENT = "spec-ops/fs/watcher-error";
+
 export const FILE_CHANGED_EVENT = "spec-ops/fs/file-changed";
 
 /**

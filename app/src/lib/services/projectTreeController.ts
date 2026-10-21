@@ -109,15 +109,8 @@ export function expandedAncestorPathsForFile(
 }
 
 const FILESYSTEM_CHANGE_DEBOUNCE_MS = 400;
-/**
- * Cooldown during which a directory just reloaded authoritatively (e.g. by the
- * immediate post-mutation `reloadDirectories`) is treated as fresh and skipped
- * by the debounced filesystem-change flush. The in-app mutation path and the OS
- * file watcher both emit a change for the same renamed path; without this guard
- * the watcher's ~400ms-later flush would reload dirs that were just reloaded,
- * causing the project tree to visibly re-render a second time after a drag-drop.
- */
-const RELOAD_FRESH_COOLDOWN_MS = 500;
+/** Maximum time a busy workspace can postpone a filesystem flush. */
+const FILESYSTEM_CHANGE_MAX_WAIT_MS = 1000;
 
 /**
  * Minimum gap between two automatic revalidation passes (window focus,
@@ -233,6 +226,13 @@ export function createProjectTreeController(
   deps: ProjectTreeControllerDeps = {},
 ): {
   getState: () => ProjectTreeControllerState;
+  getDiagnostics: () => {
+    workspaceRoot: string | null;
+    lastReadAt: number | null;
+    lastError: string | null;
+    pendingDirectoryCount: number;
+    refreshInFlight: boolean;
+  };
   collapseAll: () => void;
   setShowHidden: (next: boolean) => void;
   loadProjectTreeRoot: (options: LoadProjectTreeRootOptions) => Promise<void>;
@@ -274,47 +274,24 @@ export function createProjectTreeController(
   let rootLoadGeneration = 0;
   let filesystemChangeTimer: ReturnType<typeof setTimeout> | null = null;
   const pendingFilesystemDirs = new Set<string>();
-  /**
-   * Normalized directory path → timestamp of its most recent authoritative
-   * reload. Used to suppress the debounced filesystem-change flush from
-   * re-reloading directories that were just refreshed by an in-app mutation
-   * (see {@link RELOAD_FRESH_COOLDOWN_MS}).
-   */
-  const recentlyReloadedDirs = new Map<string, number>();
+  let filesystemBatchStartedAt: number | null = null;
+  let filesystemFlushRun: symbol | null = null;
+  let filesystemRetryDelay = 1000;
   const maxCachedRoots = Math.max(1, deps.maxCachedRoots ?? 6);
-
-  const markDirsFresh = (dirs: readonly string[]): void => {
-    const now = Date.now();
-    for (const dir of dirs) {
-      recentlyReloadedDirs.set(dir, now);
-    }
+  // Each directory read owns a version. A slower, older read cannot undo a
+  // more recent watcher/manual/focus read of the same directory.
+  const directoryReadVersions = new Map<string, number>();
+  const beginDirectoryRead = (path: string): number => {
+    const key = normalizePathForComparison(path);
+    const version = (directoryReadVersions.get(key) ?? 0) + 1;
+    directoryReadVersions.set(key, version);
+    return version;
   };
+  const isCurrentDirectoryRead = (path: string, version: number): boolean =>
+    directoryReadVersions.get(normalizePathForComparison(path)) === version;
+  let lastTreeReadAt: number | null = null;
+  let lastTreeError: string | null = null;
 
-  /**
-   * Drops directories whose most recent authoritative reload is still within
-   * the freshness cooldown, so the debounced watcher flush does not undo (and
-   * re-render) work an in-app mutation just completed. Stale entries are pruned.
-   * Returns the directories that should still be reloaded.
-   */
-  const filterFreshDirs = (dirs: readonly string[]): string[] => {
-    const now = Date.now();
-    const stale: string[] = [];
-    for (const dir of dirs) {
-      const reloadedAt = recentlyReloadedDirs.get(dir);
-      if (reloadedAt !== undefined && now - reloadedAt < RELOAD_FRESH_COOLDOWN_MS) {
-        continue;
-      }
-      stale.push(dir);
-    }
-    if (recentlyReloadedDirs.size > 64) {
-      for (const [dir, reloadedAt] of recentlyReloadedDirs) {
-        if (now - reloadedAt >= RELOAD_FRESH_COOLDOWN_MS) {
-          recentlyReloadedDirs.delete(dir);
-        }
-      }
-    }
-    return stale;
-  };
   /**
    * Last reported sorted signature of `state.expandedPaths` for the loaded
    * workspace. Reset to `null` whenever the loaded root changes so each
@@ -409,13 +386,34 @@ export function createProjectTreeController(
     state = createInitialState(state.showHidden);
     lastLoadedWorkspaceRoot = null;
     lastLoadedWorkspaceRootDisplay = null;
-    recentlyReloadedDirs.clear();
+    clearFilesystemChangeDebounce();
+    directoryReadVersions.clear();
+    revalidationRuns.clear();
+    lastTreeReadAt = null;
+    lastTreeError = null;
     lastExpandedSignature = null;
     suppressNextExpandedPathsPublish = false;
     publish();
   };
 
-  let revalidateInFlight = false;
+  const revalidationRuns = new Set<symbol>();
+  let revalidateTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingRevalidation: string | null = null;
+  const cancelScheduledRevalidation = (): void => {
+    if (revalidateTimer !== null) clearTimeout(revalidateTimer);
+    revalidateTimer = null;
+    pendingRevalidation = null;
+  };
+  const scheduleRevalidation = (root: string): void => {
+    pendingRevalidation = root;
+    if (revalidationRuns.size > 0 || revalidateTimer !== null) return;
+    revalidateTimer = setTimeout(() => {
+      revalidateTimer = null;
+      const pending = pendingRevalidation;
+      pendingRevalidation = null;
+      if (pending) void revalidateProjectTree(pending);
+    }, Math.max(0, REVALIDATE_MIN_INTERVAL_MS - (Date.now() - lastRevalidateAt)));
+  };
   let lastRevalidateAt = 0;
 
   const loadProjectTreeChildren = async (
@@ -430,21 +428,32 @@ export function createProjectTreeController(
       return;
     }
     const loadGeneration = rootLoadGeneration;
-    state = {
-      ...state,
-      loadingPaths: new Set([...state.loadingPaths, directoryPath]),
-    };
-    publish();
+    const readVersion = beginDirectoryRead(directoryPath);
+    const showHiddenAtStart = state.showHidden;
+    const alreadyLoaded = state.childrenByPath.has(directoryPath);
+    if (!alreadyLoaded) {
+      state = {
+        ...state,
+        loadingPaths: new Set([...state.loadingPaths, directoryPath]),
+      };
+      publish();
+    }
     try {
       const children = await loadChildren(workspaceRoot, directoryPath, {
-        showHidden: state.showHidden,
+        showHidden: showHiddenAtStart,
       });
       if (
         loadGeneration !== rootLoadGeneration ||
-        lastLoadedWorkspaceRoot !== normalizedRoot
+        lastLoadedWorkspaceRoot !== normalizedRoot ||
+        !isCurrentDirectoryRead(directoryPath, readVersion) ||
+        state.showHidden !== showHiddenAtStart
       ) {
         return;
       }
+      lastTreeReadAt = Date.now();
+      lastTreeError = null;
+      const current = state.childrenByPath.get(directoryPath);
+      if (current && listingSignature(current) === listingSignature(children) && !state.loadingPaths.has(directoryPath)) return;
       const nextChildren = new Map(state.childrenByPath);
       nextChildren.set(directoryPath, children);
       const nextLoading = new Set(state.loadingPaths);
@@ -458,10 +467,13 @@ export function createProjectTreeController(
     } catch (error) {
       if (
         loadGeneration !== rootLoadGeneration ||
-        lastLoadedWorkspaceRoot !== normalizedRoot
+        lastLoadedWorkspaceRoot !== normalizedRoot ||
+        !isCurrentDirectoryRead(directoryPath, readVersion) ||
+        state.showHidden !== showHiddenAtStart
       ) {
         return;
       }
+      lastTreeError = String(error);
       const nextLoading = new Set(state.loadingPaths);
       nextLoading.delete(directoryPath);
       state = {
@@ -498,6 +510,11 @@ export function createProjectTreeController(
       return;
     }
 
+    clearFilesystemChangeDebounce();
+    directoryReadVersions.clear();
+    revalidationRuns.clear();
+    lastTreeReadAt = null;
+    lastTreeError = null;
     cacheActiveState();
     // We are loading a different root (or force-reloading): reset so the new
     // root's first publish reports its own expansion to the change callback
@@ -541,23 +558,24 @@ export function createProjectTreeController(
       lastLoadedWorkspaceRootDisplay = null;
       publish();
     }
+    const readVersion = beginDirectoryRead(workspaceRoot);
     const rootNodes = await loadChildren(workspaceRoot, workspaceRoot, {
       showHidden: state.showHidden,
     });
     // A newer switch/reset won the race — discard this result.
-    if (loadGeneration !== rootLoadGeneration) {
+    if (loadGeneration !== rootLoadGeneration || !isCurrentDirectoryRead(workspaceRoot, readVersion)) {
       return;
     }
+    lastTreeReadAt = Date.now();
+    lastTreeError = null;
     state = {
       ...state,
       rootNodes,
     };
     lastLoadedWorkspaceRoot = normalizedWorkspaceRoot;
     lastLoadedWorkspaceRootDisplay = normalizeDisplayPath(workspaceRoot);
-    // This listing came straight off disk, so the revalidation that follows a
-    // workspace switch has nothing to add: seed the throttle window as if a
-    // pass had just run. Entering a workspace served from the in-memory cache
-    // leaves the window open, which is exactly when revalidation is useful.
+    // Defer the next automatic check after this initial read; events still
+    // trigger targeted updates immediately.
     lastRevalidateAt = Date.now();
     publish();
 
@@ -589,12 +607,9 @@ export function createProjectTreeController(
       return;
     }
     const key = normalizePathForComparison(directoryPath);
-    // Just reloaded (in-app mutation, watcher flush) — that listing is current.
-    if (filterFreshDirs([key]).length === 0) {
-      return;
-    }
     const loadGeneration = rootLoadGeneration;
     const showHiddenAtStart = state.showHidden;
+    const readVersion = beginDirectoryRead(directoryPath);
     invalidateDirectoryCache?.([key]);
     let children: ProjectTreeNode[];
     try {
@@ -607,7 +622,8 @@ export function createProjectTreeController(
     if (
       loadGeneration !== rootLoadGeneration ||
       lastLoadedWorkspaceRoot !== normalizedRoot ||
-      state.showHidden !== showHiddenAtStart
+      state.showHidden !== showHiddenAtStart ||
+      !isCurrentDirectoryRead(directoryPath, readVersion)
     ) {
       return;
     }
@@ -615,7 +631,8 @@ export function createProjectTreeController(
     if (!current || listingSignature(current) === listingSignature(children)) {
       return;
     }
-    markDirsFresh([key]);
+    lastTreeReadAt = Date.now();
+    lastTreeError = null;
     const nextChildren = new Map(state.childrenByPath);
     nextChildren.set(directoryPath, children);
     state = {
@@ -668,7 +685,7 @@ export function createProjectTreeController(
       return;
     }
     const normalizedRoot = normalizePathForComparison(workspaceRoot);
-    if (lastLoadedWorkspaceRoot === normalizedRoot && state.rootNodes.length > 0) {
+    if (lastLoadedWorkspaceRoot === normalizedRoot) {
       // Manual refresh of the loaded tree is a *forced revalidation*, not a
       // rebuild: dropping `childrenByPath` first collapsed every row, which
       // re-rendered the whole panel and let the scroll container clamp
@@ -717,20 +734,21 @@ export function createProjectTreeController(
     const normalizedRoot = normalizePathForComparison(workspaceRoot);
     // Only the loaded tree can be revalidated in place; a root that is only in
     // the LRU cache is revalidated when it is next entered.
-    if (lastLoadedWorkspaceRoot !== normalizedRoot || state.rootNodes.length === 0) {
+    if (lastLoadedWorkspaceRoot !== normalizedRoot) {
       return false;
     }
-    // A forced pass (manual refresh, hidden-files toggle) is never dropped for
-    // an automatic one already running: both apply against the state as it is
-    // after their own listings resolve, so the later apply simply wins.
-    if (revalidateInFlight && !options.force) {
+    if (revalidationRuns.size > 0 && !options.force) {
+      scheduleRevalidation(workspaceRoot);
       return false;
     }
     const startedAt = Date.now();
     if (!options.force && startedAt - lastRevalidateAt < REVALIDATE_MIN_INTERVAL_MS) {
+      scheduleRevalidation(workspaceRoot);
       return false;
     }
-    revalidateInFlight = true;
+    cancelScheduledRevalidation();
+    const run = Symbol();
+    revalidationRuns.add(run);
     lastRevalidateAt = startedAt;
     const loadGeneration = rootLoadGeneration;
     const showHiddenAtStart = state.showHidden;
@@ -746,7 +764,9 @@ export function createProjectTreeController(
     const normalizedTargets = [
       ...new Set(targets.map((path) => normalizePathForComparison(path))),
     ];
+    let readError: string | null = null;
     try {
+      const readVersions = targets.map(beginDirectoryRead);
       invalidateDirectoryCache?.(normalizedTargets);
       const listings = await mapWithConcurrency(
         targets,
@@ -756,7 +776,8 @@ export function createProjectTreeController(
             return await loadChildren(workspaceRoot, directoryPath, {
               showHidden: showHiddenAtStart,
             });
-          } catch {
+          } catch (error) {
+            readError = String(error);
             // A directory that vanished or became unreadable between listings
             // is left untouched; the watcher's own change event drops it from
             // the parent listing.
@@ -775,11 +796,15 @@ export function createProjectTreeController(
       }
       let nextRootNodes: ProjectTreeNode[] | null = null;
       let nextChildren: Map<string, ProjectTreeNode[]> | null = null;
+      let nextLoading: Set<string> | null = null;
       for (const [index, directoryPath] of targets.entries()) {
         const children = listings[index];
-        if (!children) {
-          continue;
+        if (!isCurrentDirectoryRead(directoryPath, readVersions[index])) continue;
+        if (state.loadingPaths.has(directoryPath)) {
+          nextLoading ??= new Set(state.loadingPaths);
+          nextLoading.delete(directoryPath);
         }
+        if (!children) continue;
         if (index === 0) {
           if (listingSignature(children) !== listingSignature(state.rootNodes)) {
             nextRootNodes = children;
@@ -793,21 +818,22 @@ export function createProjectTreeController(
         nextChildren ??= new Map(state.childrenByPath);
         nextChildren.set(directoryPath, children);
       }
-      if (!nextRootNodes && !nextChildren) {
+      if (listings.some(listing => listing !== null)) lastTreeReadAt = Date.now();
+      lastTreeError = readError;
+      if (!nextRootNodes && !nextChildren && !nextLoading) {
         return false;
       }
-      // These listings are authoritative as of now: keep the debounced watcher
-      // flush from reloading them again a moment later.
-      markDirsFresh(normalizedTargets);
       state = {
         ...state,
         ...(nextRootNodes ? { rootNodes: nextRootNodes } : {}),
         ...(nextChildren ? { childrenByPath: nextChildren } : {}),
+        ...(nextLoading ? { loadingPaths: nextLoading } : {}),
       };
       publish();
       return true;
     } finally {
-      revalidateInFlight = false;
+      revalidationRuns.delete(run);
+      if (pendingRevalidation) scheduleRevalidation(pendingRevalidation);
     }
   };
 
@@ -983,13 +1009,6 @@ export function createProjectTreeController(
       }
     }
     const unique = [...spellingByKey.keys()];
-    // Record these directories as freshly reloaded so the debounced
-    // filesystem-change flush (which fires ~400ms later for the same paths via
-    // both the in-app notify and the OS watcher) does not re-render them.
-    markDirsFresh(unique);
-    // This is an authoritative re-read: drop the shared cached listings first,
-    // or the reload just re-reads the very listing the change invalidated and
-    // concludes that nothing moved.
     invalidateDirectoryCache?.(unique);
     if (spellingByKey.has(normalizedRoot)) {
       // Capture the generation before the await so a workspace switch (or a
@@ -998,20 +1017,24 @@ export function createProjectTreeController(
       // non-root branch gets the same protection from `loadProjectTreeChildren`.
       const loadGeneration = rootLoadGeneration;
       const showHiddenAtSchedule = state.showHidden;
+      const readVersion = beginDirectoryRead(rootPath);
       const rootNodes = await loadChildren(rootPath, rootPath, {
         showHidden: showHiddenAtSchedule,
       });
       if (
         loadGeneration !== rootLoadGeneration ||
-        lastLoadedWorkspaceRoot !== normalizedRoot
+        lastLoadedWorkspaceRoot !== normalizedRoot ||
+        state.showHidden !== showHiddenAtSchedule ||
+        !isCurrentDirectoryRead(rootPath, readVersion)
       ) {
         return;
       }
-      state = {
-        ...state,
-        rootNodes,
-      };
-      publish();
+      lastTreeReadAt = Date.now();
+      lastTreeError = null;
+      if (listingSignature(rootNodes) !== listingSignature(state.rootNodes)) {
+        state = { ...state, rootNodes };
+        publish();
+      }
     }
     for (const [key, spelling] of spellingByKey) {
       if (key === normalizedRoot) {
@@ -1020,21 +1043,72 @@ export function createProjectTreeController(
       if (!isPathInsideRoot(key, normalizedRoot)) {
         continue;
       }
-      await loadProjectTreeChildren(rootPath, treeDirectoryPath(key, spelling));
+      const directoryPath = treeDirectoryPath(key, spelling);
+      // Walk through known parents too: removing an ancestor can leave cached
+      // descendant listings behind until the next expansion.
+      let ancestor = directoryPath;
+      let missing = false;
+      while (normalizePathForComparison(ancestor) !== normalizedRoot && isPathInsideRoot(ancestor, normalizedRoot)) {
+        const parent = parentDirectoryPath(ancestor);
+        const siblings = normalizePathForComparison(parent) === normalizedRoot
+          ? state.rootNodes
+          : state.childrenByPath.get(treeDirectoryPath(normalizePathForComparison(parent), parent));
+        const ancestorKey = normalizePathForComparison(ancestor);
+        if (siblings && !siblings.some(node => node.kind === "directory" && normalizePathForComparison(node.path) === ancestorKey)) {
+          missing = true;
+          break;
+        }
+        ancestor = parent;
+      }
+      if (missing) continue;
+      await loadProjectTreeChildren(rootPath, directoryPath);
     }
   };
 
-  const flushFilesystemChanges = async (workspaceRoot: string | null): Promise<void> => {
-    if (!workspaceRoot || pendingFilesystemDirs.size === 0) {
-      pendingFilesystemDirs.clear();
-      return;
-    }
-    const dirs = filterFreshDirs([...pendingFilesystemDirs]);
+  const scheduleFilesystemFlush = (root: string, retryDelay?: number): void => {
+    if (filesystemFlushRun !== null) return;
+    if (filesystemChangeTimer !== null) clearTimeout(filesystemChangeTimer);
+    filesystemBatchStartedAt ??= Date.now();
+    const delay = retryDelay ?? Math.min(
+      FILESYSTEM_CHANGE_DEBOUNCE_MS,
+      Math.max(0, FILESYSTEM_CHANGE_MAX_WAIT_MS - (Date.now() - filesystemBatchStartedAt)),
+    );
+    filesystemChangeTimer = setTimeout(() => {
+      filesystemChangeTimer = null;
+      filesystemBatchStartedAt = null;
+      void flushFilesystemChanges(root);
+    }, delay);
+  };
+
+  const flushFilesystemChanges = async (workspaceRoot: string): Promise<void> => {
+    if (workspaceRoot !== lastLoadedWorkspaceRoot || pendingFilesystemDirs.size === 0) return;
+    const dirs = [...pendingFilesystemDirs];
     pendingFilesystemDirs.clear();
-    if (dirs.length === 0) {
-      return;
+    const run = Symbol();
+    const generation = rootLoadGeneration;
+    filesystemFlushRun = run;
+    let retryDelay: number | undefined;
+    try {
+      await reloadDirectories(workspaceRoot, dirs);
+      filesystemRetryDelay = 1000;
+    } catch (error) {
+      if (generation !== rootLoadGeneration) return;
+      lastTreeError = String(error);
+      retryDelay = filesystemRetryDelay;
+      filesystemRetryDelay = Math.min(filesystemRetryDelay * 2, 30000);
+      // Keep failed reads dirty; a temporary filesystem error must not consume
+      // the only notification for a new file.
+      if (workspaceRoot === lastLoadedWorkspaceRoot) {
+        for (const dir of dirs) pendingFilesystemDirs.add(dir);
+      }
+    } finally {
+      if (filesystemFlushRun === run) {
+        filesystemFlushRun = null;
+        if (pendingFilesystemDirs.size > 0 && lastLoadedWorkspaceRoot) {
+          scheduleFilesystemFlush(lastLoadedWorkspaceRoot, retryDelay);
+        }
+      }
     }
-    await reloadDirectories(workspaceRoot, dirs);
   };
 
   const handleFilesystemChange = (workspaceRoot: string | null, changedPath: string): void => {
@@ -1082,13 +1156,7 @@ export function createProjectTreeController(
       pendingFilesystemDirs.add(dir);
     }
     pendingFilesystemDirs.add(normalizedRoot);
-    if (filesystemChangeTimer) {
-      clearTimeout(filesystemChangeTimer);
-    }
-    filesystemChangeTimer = setTimeout(() => {
-      filesystemChangeTimer = null;
-      void flushFilesystemChanges(targetRoot);
-    }, FILESYSTEM_CHANGE_DEBOUNCE_MS);
+    scheduleFilesystemFlush(targetRoot);
   };
 
   const clearFilesystemChangeDebounce = (): void => {
@@ -1097,12 +1165,23 @@ export function createProjectTreeController(
       filesystemChangeTimer = null;
     }
     pendingFilesystemDirs.clear();
+    filesystemBatchStartedAt = null;
+    filesystemFlushRun = null;
+    filesystemRetryDelay = 1000;
+    cancelScheduledRevalidation();
   };
 
   publish();
 
   return {
     getState: () => cloneState(state),
+    getDiagnostics: () => ({
+      workspaceRoot: lastLoadedWorkspaceRootDisplay,
+      lastReadAt: lastTreeReadAt,
+      lastError: lastTreeError,
+      pendingDirectoryCount: pendingFilesystemDirs.size,
+      refreshInFlight: filesystemFlushRun !== null || revalidationRuns.size > 0,
+    }),
     setShowHidden: (next: boolean) => {
       if (state.showHidden === next) {
         return;

@@ -110,6 +110,13 @@ describe('catalog workspace opening', () => {
     expect(appState.getSnapshot().contexts.activeContextId).toBe(id);
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
   });
+  it('registers an already-open session workspace before activating it', async () => {
+    const id = appState.addWorkspace('/restored')!; appState.switchContext('notepad');
+    expect(await addWorkspaceToWindow('/restored')).toBeNull();
+    expect(registerCatalogProjects).toHaveBeenCalledWith(['/restored']);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(id);
+    expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
+  });
   it('clears a recovered local path error before successfully activating it', async () => {
     const id = appState.addWorkspace('/project')!; appState.switchContext('notepad');
     const project = { ...catalogProjectForRoot('/project'), openError: 'missing' };

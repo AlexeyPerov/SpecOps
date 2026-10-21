@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { normalizePathForStorage, normalizePathSync } from './diskFingerprint';
+import type { WorkspaceEntry } from '../domain/contracts';
 import type { CatalogProject, ProjectCatalog, ProjectFolder, SavedProjectContextWrite } from '../domain/projectCatalog';
 
 export type ProjectPatch = Partial<Omit<CatalogProject, 'id' | 'rootPath' | 'openError' | 'color' | 'icon'>> & { openError?: string | null; color?: string | null; icon?: string | null };
@@ -42,6 +43,13 @@ function publish(next: ProjectCatalog): ProjectCatalog {
 }
 export async function updateProjectCatalog(mutations: CatalogMutation[]): Promise<ProjectCatalog> {
   return publish(await invoke<ProjectCatalog>('project_catalog_transaction', { mutations }));
+}
+/** Live session rows can be shown before registration finishes; organize them in the same transaction. */
+export function updateOpenWorkspaceCatalog(workspaces: readonly Pick<WorkspaceEntry, 'rootPath'>[], mutations: CatalogMutation[]): Promise<ProjectCatalog> {
+  const roots = new Map(workspaces.map(workspace => [projectIdentity(workspace.rootPath), workspace.rootPath]));
+  const registrations: CatalogMutation[] = [...roots].filter(([id]) => !cache.projects[id])
+    .map(([, root]) => ({ type: 'register', project: catalogProjectForRoot(root) }));
+  return updateProjectCatalog([...registrations, ...mutations]);
 }
 export function loadProjectCatalog(): Promise<ProjectCatalog> { return updateProjectCatalog([]); }
 export function subscribeProjectCatalog(subscriber: (catalog: ProjectCatalog) => void): () => void {

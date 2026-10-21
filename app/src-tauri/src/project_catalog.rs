@@ -659,6 +659,32 @@ mod tests {
         assert_eq!(transact(&temp.0, &[]).unwrap().projects.len(), 1);
     }
     #[test]
+    fn organizing_restored_workspaces_registers_missing_rows_atomically() {
+        let temp = Temp::new();
+        transact(
+            &temp.0,
+            &[json!({"type":"putFolder","folder":{"id":"target","name":"Target","order":0}})],
+        )
+        .unwrap();
+        let movement = json!({"type":"moveProject","id":"/restored","folderId":"target","pinned":false,"beforeId":null});
+        assert!(transact(&temp.0, &[movement.clone()])
+            .unwrap_err()
+            .contains("Project is not registered"));
+        let moved = transact(&temp.0, &[register("/restored"), movement]).unwrap();
+        assert_eq!(
+            moved.projects["/restored"].folder_id.as_deref(),
+            Some("target")
+        );
+        assert_eq!(
+            transact(&temp.0, &[]).unwrap().projects["/restored"],
+            moved.projects["/restored"]
+        );
+        // Registering all live roots again leaves existing organization intact.
+        let restored = transact(&temp.0, &[register("/restored"), register("/second")]).unwrap();
+        assert_eq!(restored.projects["/restored"], moved.projects["/restored"]);
+        assert_eq!(restored.projects.len(), 2);
+    }
+    #[test]
     fn unchanged_mutations_do_not_write_or_bump_revision() {
         let temp = Temp::new();
         let first = transact_with_status(&temp.0, &[register("/project")]).unwrap();

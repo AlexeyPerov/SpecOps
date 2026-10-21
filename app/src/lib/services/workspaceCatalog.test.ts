@@ -4,7 +4,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() =
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { _resetProjectCatalogForTests, catalogProjectForRoot, getProjectCatalog, listenProjectCatalogChanges,
-  loadProjectCatalog, recordCatalogProjectUse, registerCatalogProjects, subscribeProjectCatalog, updateCatalogProject } from './workspaceCatalog';
+  loadProjectCatalog, updateOpenWorkspaceCatalog, recordCatalogProjectUse, registerCatalogProjects, subscribeProjectCatalog, updateCatalogProject } from './workspaceCatalog';
 const response = (revision: number) => ({ version: 1, revision, projects: {}, folders: {}, savedContexts: {} });
 beforeEach(() => { _resetProjectCatalogForTests(); vi.mocked(invoke).mockReset(); });
 describe('project catalog frontend', () => {
@@ -39,6 +39,19 @@ describe('project catalog frontend', () => {
     expect(invoke).toHaveBeenCalledWith('project_catalog_transaction', { mutations: [
       { type: 'register', project: catalogProjectForRoot('/a/') },
       { type: 'register', project: catalogProjectForRoot('/b') },
+    ] });
+  });
+  it('registers missing live workspace rows and moves them atomically in a sparse catalog', async () => {
+    const known = { ...catalogProjectForRoot('/known'), name: 'Custom name', folderId: 'kept', pinned: true };
+    vi.mocked(invoke).mockResolvedValueOnce({ ...response(1), projects: { '/known': known } });
+    await loadProjectCatalog();
+    vi.mocked(invoke).mockClear().mockResolvedValue(response(2));
+    await updateOpenWorkspaceCatalog([{ rootPath: '/restored' }, { rootPath: '/restored/' }, { rootPath: '/known' }], [
+      { type: 'moveProject', id: '/restored', folderId: 'destination', pinned: false },
+    ]);
+    expect(invoke).toHaveBeenCalledExactlyOnceWith('project_catalog_transaction', { mutations: [
+      { type: 'register', project: catalogProjectForRoot('/restored/') },
+      { type: 'moveProject', id: '/restored', folderId: 'destination', pinned: false },
     ] });
   });
   it('supports clearing optional appearance settings', async () => {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-21 18:25 MSK — Register restored workspaces before catalog organization
+
+- Reproduce the folder-move failure in the installed native app: session-restored workspace rows were projected into the sidebar while the persistent catalog contained no projects, so both menu and drag operations failed with “Project is not registered”.
+- Register every open workspace after session restoration and before runtime readiness. Register already-open paths when reopening them, and include missing live workspace registrations in the same sidebar transaction as organization actions, preserving existing catalog preferences and folder membership.
+- Validation: all 333 frontend test files / 3347 tests pass; all 18 native catalog tests pass, including a real-filesystem sparse-catalog reproduction and atomic registration/move regression. Svelte/type checks have zero errors and warnings; production frontend and native app builds pass. In an isolated native app seeded with two session workspaces and an empty project catalog, verify automatic registration, a context-menu move, a pointer-drag move and persisted destination membership after relaunch, without mocked catalog I/O. Update the installed SpecOps app and verify real menu and drag moves there as well; restore the checked workspace to its original folder afterward.
+
 ## 2026-10-21 13:58 MSK — Fix workspace folder moves and lazy Tasks/Notes editing
 
 - Make Move to folder in the sidebar and workspace-manager batch actions unpin selected projects, matching drag-and-drop so moved projects appear in the destination folder. Retain the captured workspace row throughout a drag and resolve drops from pointer-release coordinates.

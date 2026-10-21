@@ -25,7 +25,7 @@
   import NotepadIcon from "./icons/NotepadIcon.svelte";
   import AddIcon from "./icons/AddIcon.svelte";
   import ListIcon from "./icons/ListIcon.svelte";
-  import { getProjectCatalog, projectIdentity, subscribeProjectCatalog, updateProjectCatalog, type CatalogMutation } from "../services/workspaceCatalog";
+  import { getProjectCatalog, projectIdentity, subscribeProjectCatalog, updateOpenWorkspaceCatalog, type CatalogMutation } from "../services/workspaceCatalog";
   import { listen } from '@tauri-apps/api/event';
   import { addWorkspaceToWindow } from '../services/addWorkspaceToWindow';
   import { readLiveWorkspaceWindowOwners, WORKSPACE_PLACEMENT_CHANGED, type WorkspaceWindowOwners } from '../services/workspaceWindowPlacement';
@@ -242,7 +242,7 @@
   const workspacesForRender = $derived(sections.filter(section => !sectionCollapsed(section)).flatMap(section => section.projects));
   const dragEnabled = $derived(manualOrder && !searchQuery.trim());
   const draggedWorkspace = $derived(railProjects.find(project => project.id === dragState.dragWorkspaceId) ?? null);
-  function commit(mutations: CatalogMutation[]): void { void updateProjectCatalog(mutations).catch(error => onError(String(error))); }
+  function commit(mutations: CatalogMutation[]): void { void updateOpenWorkspaceCatalog(workspaces, mutations).catch(error => onError(String(error))); }
   function selectProject(project: RailProject): void {
     if (project.contextId) onSelectContext(project.contextId);
     else void addWorkspaceToWindow(project.rootPath).catch(error => onError(String(error)));

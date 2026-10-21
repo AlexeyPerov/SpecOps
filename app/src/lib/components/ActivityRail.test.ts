@@ -100,7 +100,10 @@ describe("ActivityRail", () => {
     [...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')].find(button => button.textContent === 'Workspace actions…')!.click();
     expect(onRequestCloseWorkspace).toHaveBeenCalledWith("ws-1", 0, 0);
     row.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true }));
-    expect(invoke).toHaveBeenCalledWith('project_catalog_transaction', { mutations: [{ type:'moveProject', id:'/one', folderId:null, pinned:false, beforeId:null }] });
+    expect(invoke).toHaveBeenCalledWith('project_catalog_transaction', { mutations: [
+      ...['/one', '/two'].map(root => ({ type: 'register', project: catalogProjectForRoot(root) })),
+      { type:'moveProject', id:'/one', folderId:null, pinned:false, beforeId:null },
+    ] });
   });
   it("keeps pointer selection and drag reorder without a duplicate click activation", async () => {
     const onSelectContext = vi.fn(), onReorderWorkspaces = vi.fn();
@@ -126,7 +129,10 @@ describe("ActivityRail", () => {
     Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => rows[2] });
     rows[0].dispatchEvent(pointer("pointerdown", 20)); window.dispatchEvent(pointer("pointermove", 150));
     window.dispatchEvent(pointer("pointerup", 150));
-    expect(invoke).toHaveBeenCalledWith('project_catalog_transaction', { mutations: [{ type:'moveProject', id:'/one', folderId:null, pinned:false, beforeId:null }] });
+    expect(invoke).toHaveBeenCalledWith('project_catalog_transaction', { mutations: [
+      ...['/one', '/two', '/three'].map(root => ({ type: 'register', project: catalogProjectForRoot(root) })),
+      { type:'moveProject', id:'/one', folderId:null, pinned:false, beforeId:null },
+    ] });
     expect(onSelectContext).toHaveBeenCalledTimes(1);
   });
   it("keeps compact textual accessible names and keyboard resizing", async () => {

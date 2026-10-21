@@ -72,6 +72,7 @@ import { normalizePathSync } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { readConsoleHeightPreference } from "./consoleTabPrefs";
 import { externalFileWatcherSyncKey, truncateWatchedPaths, watchedPathsFromState } from "./appShellHelpers";
+import { registerCatalogProjects } from "./workspaceCatalog";
 import { loadWorkspacePreferences, listenWorkspacePreferenceChanges } from "./workspacePreferences";
 import { openDroppedPath } from "./openDroppedPath";
 import type {
@@ -486,6 +487,10 @@ async function startAppShellRuntimeInner(
       }
     }
     options.notify("Session restored.");
+  });
+
+  await runSafeStartupPhase("register-open-workspaces", async () => {
+    await registerCatalogProjects(appState.getSnapshot().contexts.workspaces.map(workspace => workspace.rootPath));
   });
 
   await runSafeStartupPhase("restore-chat-scope", async () => {

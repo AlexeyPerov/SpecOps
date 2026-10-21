@@ -32,11 +32,11 @@ async function openWorkspace(root: string): Promise<ContextId | null> {
   try {
     if (native && await ensureWorkspaceReadAccess(root) === 'blocked') throw new Error('Workspace path is inaccessible. Check permissions and try again.');
     if (native && !(await stat(root)).isDirectory) throw new Error('Workspace directory is unavailable.');
+    await registerCatalogProjects([root]);
     if (existing) {
       if (getProjectCatalog().projects[projectIdentity(root)]?.openError) await updateCatalogProject(root, { openError: null });
       appState.switchContext(existing.id); markWorkspaceLifecycleActive(); return null;
     }
-    await registerCatalogProjects([root]);
   } catch (error) {
     // A failed new path is never registered; an existing catalog entry retains its error.
     await loadProjectCatalog().catch(() => {});

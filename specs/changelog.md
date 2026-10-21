@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-21 13:39 MSK — Restore project context-menu creation
+
+- Activate New File and New Folder on click, closing the menu before opening the inline name field. Avoid starting a draft during pointer-down focus handling and support ordinary button activation.
+- Add component regressions for both creation actions, checking menu dismissal, input focus, the destination path and Enter submission.
+- Validation: 23 focused component/file-operation tests pass; Svelte/type checks report zero errors and warnings, and the production frontend build passes. Browser component acceptance confirms both name fields receive focus and submit to the requested parent; filesystem callbacks were stubbed for this UI check. Reproduced the missing name field in the installed desktop app before the fix; the installed bundle has not been replaced.
+
 ## 2026-10-21 09:35 MSK — Make project tree auto-refresh reliable
 
 - Bound filesystem-event batching to one second under continuous writes. Keep notifications arriving during reads for a followup pass, replace the freshness cooldown with listing comparisons, and avoid republishing unchanged roots and children.

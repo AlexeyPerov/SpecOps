@@ -61,3 +61,32 @@ it("selects a range without activating files and copies all relative paths in tr
   await tick();
   expect(clipboard).toHaveBeenCalledWith("a\nb\nc");
 });
+
+it.each([
+  ["New File…", "New file name", "onNewFile", "draft.txt"],
+  ["New Folder…", "New folder name", "onNewFolder", "Draft Folder"],
+] as const)("creates an entry through %s in the root context menu", async (menuLabel, inputLabel, handler, name) => {
+  favorites.entries = [];
+  const create = vi.fn().mockResolvedValue(true);
+  const { host } = mountComponent(ProjectPanel, {
+    workspaceRoot: "/users/alexeyperov/documents/notes",
+    [handler]: create,
+  });
+  flushSync();
+  host.querySelector(".project-panel-body")!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+  flushSync();
+  [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    .find((button) => button.textContent?.trim() === menuLabel)!.click();
+  flushSync();
+  await tick();
+  const input = host.querySelector<HTMLInputElement>(`input[aria-label="${inputLabel}"]`);
+  expect(input).not.toBeNull();
+  expect(document.activeElement).toBe(input);
+  expect(host.querySelector('[role="menu"]')).toBeNull();
+  input!.value = name;
+  input!.dispatchEvent(new Event("input", { bubbles: true }));
+  input!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await tick(); await tick(); flushSync();
+  expect(create).toHaveBeenCalledWith("/users/alexeyperov/documents/notes", name);
+  expect(host.querySelector(`input[aria-label="${inputLabel}"]`)).toBeNull();
+});

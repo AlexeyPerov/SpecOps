@@ -196,10 +196,11 @@
         class="project-tree-context-item"
         type="button"
         role="menuitem"
-        onpointerdown={(event) => {
+        onclick={(event) => {
           event.stopPropagation();
-          onNewFile(parentDirPath);
+          const parent = parentDirPath;
           closeContextMenu();
+          onNewFile(parent);
         }}
       >
         New File…
@@ -208,10 +209,11 @@
         class="project-tree-context-item"
         type="button"
         role="menuitem"
-        onpointerdown={(event) => {
+        onclick={(event) => {
           event.stopPropagation();
-          onNewFolder(parentDirPath);
+          const parent = parentDirPath;
           closeContextMenu();
+          onNewFolder(parent);
         }}
       >
         New Folder…

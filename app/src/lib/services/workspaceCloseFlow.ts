@@ -13,6 +13,7 @@ import { invalidateDocumentMarkdownHtml } from './appShellDocumentView';
 import { setWorkspaceWindowOwner } from "./workspaceWindowPlacement";
 import { flushWorkspaceDocuments } from "./workspaceDocuments";
 import type { ContextId, DocumentState } from "../domain/contracts";
+import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { requestConfirm } from "./confirmDialogUi";
@@ -128,7 +129,7 @@ export async function saveAllDirtyDocumentsToDisk(
       });
     }
     const state = appState.getSnapshot();
-    const context = workspaceId === 'notepad' ? state.contexts.notepad : state.contexts.workspaces.find(entry => entry.id === workspaceId)?.snapshot;
+    const context = [...state.contexts.tabGroups, ...state.contexts.workspaces].find(entry => entry.id === workspaceId)?.snapshot;
     const current = context?.documents.find(entry => entry.id === doc.id);
     if (!current || current.content !== doc.content) throw new Error('Document changed while saving. Review the changes and close again.');
     appState.markDocumentSavedForContext(workspaceId, doc.id, targetPath, doc.content);
@@ -178,7 +179,7 @@ async function finishClose(workspaceId: ContextId, notify: (message: string) => 
     const state = appState.getSnapshot();
     const workspaces = state.contexts.workspaces.filter(workspace => workspace.id !== workspaceId);
     await flushSessionPersistence({ ...state, contexts: { ...state.contexts, workspaces,
-      activeContextId: state.contexts.activeContextId === workspaceId ? workspaces[0]?.id ?? 'notepad' : state.contexts.activeContextId } }, windowId);
+      activeContextId: state.contexts.activeContextId === workspaceId ? workspaces[0]?.id ?? DEFAULT_TAB_GROUP_ID : state.contexts.activeContextId } }, windowId);
     await validate();
     const blocked = workspaceCloseBlockedReason(workspaceId);
     if (blocked || (!discard && appState.getWorkspaceDirtyDocuments(workspaceId).length) || appState.getSnapshot().contexts.workspaces.find(workspace => workspace.id === workspaceId)?.snapshot !== entry.snapshot || chatStore.getSnapshot().workspaces[root] !== chatRevision || !workspaceDocumentsSettled(root)) throw new Error(blocked ?? 'Workspace changed while closing. Try again.');

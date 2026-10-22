@@ -24,7 +24,7 @@ describe("editor composition — per-pane search compartments", () => {
 
   it("keeps independent search highlight compartments across panes", () => {
     const workbench = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-a",
     });
@@ -44,7 +44,7 @@ describe("editor composition — per-pane search compartments", () => {
       controller.update({
         content: "alpha beta alpha",
         documentId,
-        contextId: "notepad",
+        contextId: "tabs-default",
         paneId,
         scrollTop: 0,
         wrapLines: false,

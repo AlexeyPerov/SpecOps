@@ -28,7 +28,7 @@ import { runWithRecentFilesBatch } from "../../services/recentFilesSync";
 import { logDiagnostic } from "../../services/logging";
 import { isFileContextRestricted, runOpenInActiveContext } from "../../services/fileContextPolicy";
 import { isPathUnderRoot } from "../../services/workspacePaths";
-import { handoffSavedFileToNotepad } from "../../services/savedFileHandoff";
+import { handoffSavedFileToTabGroup } from "../../services/savedFileHandoff";
 import type { CommandContext } from "./types";
 
 export async function handleFileOpenAllInFolder(context: CommandContext): Promise<void> {
@@ -182,7 +182,7 @@ export async function handleFileSaveAs(context: CommandContext): Promise<void> {
   const previousPath = doc.filePath;
   const sourceTabId = selected.id;
   if (savedOutsideWorkspace && isFileContextRestricted()) {
-    await handoffSavedFileToNotepad({
+    await handoffSavedFileToTabGroup({
       sourceTabId,
       sourceDocumentId: doc.id,
       previousPath,

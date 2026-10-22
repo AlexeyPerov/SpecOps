@@ -43,7 +43,7 @@ describe('catalog workspace opening', () => {
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
   });
   it('coalesces concurrent normalized-root saved-context restores into one owned context', async () => {
-    const snapshot = structuredClone(appState.getWindowSessionSnapshot().notepad);
+    const snapshot = structuredClone(appState.getWindowSessionSnapshot().tabGroups[0].snapshot);
     let release!: (value: NonNullable<Awaited<ReturnType<typeof restoreSavedProjectContext>>>) => void;
     vi.mocked(restoreSavedProjectContext).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
     const first = addWorkspaceToWindow('/project'), second = addWorkspaceToWindow('/project/');
@@ -82,10 +82,10 @@ describe('catalog workspace opening', () => {
     expect(vi.mocked(updateCatalogProject).mock.calls.some(([,patch]) => 'lastUsedAt' in patch)).toBe(false);
   });
   it('refuses to activate an inaccessible existing local context', async () => {
-    const id = appState.addWorkspace('/project')!; appState.switchContext('notepad');
+    const id = appState.addWorkspace('/project')!; appState.switchContext('tabs-default');
     vi.mocked(stat).mockRejectedValueOnce(new Error('missing'));
     await expect(addWorkspaceToWindow('/project')).rejects.toThrow('missing');
-    expect(appState.getSnapshot().contexts.activeContextId).toBe('notepad');
+    expect(appState.getSnapshot().contexts.activeContextId).toBe('tabs-default');
     expect(appState.getWorkspaceActivationHistory()).toEqual([id]);
   });
   it('keeps previously registered unavailable projects with an explanatory error', async () => {
@@ -105,20 +105,20 @@ describe('catalog workspace opening', () => {
   });
   it('activates a local duplicate without creating a second context', async () => {
     const id = appState.addWorkspace('/project/')!;
-    appState.switchContext('notepad');
+    appState.switchContext('tabs-default');
     expect(await addWorkspaceToWindow('/project')).toBeNull();
     expect(appState.getSnapshot().contexts.activeContextId).toBe(id);
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
   });
   it('registers an already-open session workspace before activating it', async () => {
-    const id = appState.addWorkspace('/restored')!; appState.switchContext('notepad');
+    const id = appState.addWorkspace('/restored')!; appState.switchContext('tabs-default');
     expect(await addWorkspaceToWindow('/restored')).toBeNull();
     expect(registerCatalogProjects).toHaveBeenCalledWith(['/restored']);
     expect(appState.getSnapshot().contexts.activeContextId).toBe(id);
     expect(appState.getSnapshot().contexts.workspaces).toHaveLength(1);
   });
   it('clears a recovered local path error before successfully activating it', async () => {
-    const id = appState.addWorkspace('/project')!; appState.switchContext('notepad');
+    const id = appState.addWorkspace('/project')!; appState.switchContext('tabs-default');
     const project = { ...catalogProjectForRoot('/project'), openError: 'missing' };
     vi.mocked(getProjectCatalog).mockReturnValue({ projects: { [project.id]: project } } as never);
     await addWorkspaceToWindow('/project');

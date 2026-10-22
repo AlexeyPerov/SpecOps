@@ -1,5 +1,5 @@
 import { appState } from "../state/appState";
-import type { ContextId } from "../domain/contracts";
+import type { ContextId, ContextSnapshot } from "../domain/contracts";
 import { allTabs, isFileTab, normalizeTabState } from "../domain/contracts";
 import {
   normalizePathForStorage,
@@ -37,7 +37,7 @@ function basename(path: string): string {
 /**
  * Find the workspace id whose root matches `workspaceRoot`, regardless of
  * whether it is the active context. Relocation side effects must target the
- * owning workspace even when another workspace (or the notepad) is active.
+ * owning workspace even when another workspace (or a tab group) is active.
  */
 function findWorkspaceIdByRoot(workspaceRoot: string): ContextId | null {
   const normalizedRoot = normalizePathSync(workspaceRoot);
@@ -181,14 +181,8 @@ export function closeTabsForDeletedDocumentsUnderPath(
 
 export function findFileTabIdForDocument(documentId: string): string | null {
   const snapshot = appState.getSnapshot();
-  for (const tab of allTabs(snapshot.contexts.notepad.session.editorLayout)) {
-    const normalized = normalizeTabState(tab);
-    if (isFileTab(normalized) && normalized.documentId === documentId) {
-      return normalized.id;
-    }
-  }
-  for (const workspace of snapshot.contexts.workspaces) {
-    for (const tab of allTabs(workspace.snapshot.session.editorLayout)) {
+  for (const context of [...snapshot.contexts.tabGroups, ...snapshot.contexts.workspaces]) {
+    for (const tab of allTabs(context.snapshot.session.editorLayout)) {
       const normalized = normalizeTabState(tab);
       if (isFileTab(normalized) && normalized.documentId === documentId) {
         return normalized.id;
@@ -201,7 +195,7 @@ export function findFileTabIdForDocument(documentId: string): string | null {
 /** Update matching buffers in every context, including files moved outside their project. */
 export async function syncOpenDocumentsAfterRelocation(oldPath: string, newPath: string, windowId: string): Promise<void> {
   const state = appState.getSnapshot();
-  const contexts = [{ id: "notepad" as ContextId, snapshot: state.contexts.notepad }, ...state.contexts.workspaces];
+  const contexts: { id: ContextId; snapshot: ContextSnapshot }[] = [...state.contexts.tabGroups, ...state.contexts.workspaces];
   for (const context of contexts) {
     for (const document of context.snapshot.documents) {
       if (!document.filePath || !isPathEqualOrUnder(oldPath, document.filePath)) continue;

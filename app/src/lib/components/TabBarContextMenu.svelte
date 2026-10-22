@@ -169,7 +169,7 @@
   const contextMenuCanCloseTabsToRight = $derived(canCloseTabsToRight(openTabs, contextMenuTab));
   const contextMenuCanCloseMissingFileTabs = $derived(canCloseMissingFileTabs(openTabs, documents));
   const contextMenuCanOpenInNewWindow = $derived(
-    canOpenTabInNewWindow(contextMenuTab, appState.isNotepadActive()),
+    canOpenTabInNewWindow(contextMenuTab, appState.isTabGroupActive()),
   );
   const contextMenuCanOpenNearby = $derived(canOpenNearbyFiles(contextMenuTabDoc));
   const contextMenuCanCopyPath = $derived(canCopyTabPath(contextMenuTabDoc));

@@ -107,7 +107,7 @@ describe("CodeMirror fixture characterization", () => {
     // M0.3 target: selection and undo history belong to the document, not the pane.
     const sessionCache = createEditorDocumentSessionCache();
     const workbench = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-1",
       getActiveDocumentId: () => "doc-a",
     });
@@ -123,7 +123,7 @@ describe("CodeMirror fixture characterization", () => {
     controller.update({
       content: "document-a",
       documentId: "doc-a",
-      contextId: "notepad",
+      contextId: "tabs-default",
       paneId: "pane-1",
       scrollTop: 0,
       wrapLines: false,
@@ -151,7 +151,7 @@ describe("CodeMirror fixture characterization", () => {
     controller.update({
       content: "document-b",
       documentId: "doc-b",
-      contextId: "notepad",
+      contextId: "tabs-default",
       paneId: "pane-1",
       scrollTop: 0,
       wrapLines: false,
@@ -172,7 +172,7 @@ describe("CodeMirror fixture characterization", () => {
     controller.update({
       content: "document-a-edited",
       documentId: "doc-a",
-      contextId: "notepad",
+      contextId: "tabs-default",
       paneId: "pane-1",
       scrollTop: 0,
       wrapLines: false,

@@ -13,7 +13,7 @@ import {
 import { applyWindowBounds, readWindowBounds } from "./windowBounds";
 import { updateLastActiveWindow } from "./sessionManager";
 import type { AppDomainState, WindowBounds } from "../domain/contracts";
-import { NOTEPAD_CONTEXT_ID } from "../state/appState/contextHelpers";
+import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
 import { createSinglePaneLayout } from "../domain/contracts";
 
 vi.mock("@tauri-apps/api/event", () => ({
@@ -78,8 +78,8 @@ function installWebviewWindowMock(handlers: WindowHandlers = {}): void {
 function snapshotWithBounds(bounds: WindowBounds | null): AppDomainState {
   return {
     contexts: {
-      activeContextId: NOTEPAD_CONTEXT_ID,
-      notepad: {
+      activeContextId: DEFAULT_TAB_GROUP_ID,
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [],
         session: {
           editorLayout: createSinglePaneLayout([], null),
@@ -87,7 +87,7 @@ function snapshotWithBounds(bounds: WindowBounds | null): AppDomainState {
           lastActiveWindowId: "main",
           windowBounds: bounds,
         },
-      },
+      } }],
 
       workspaces: [],
     },

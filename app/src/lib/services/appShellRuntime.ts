@@ -5,6 +5,7 @@ import { emit, emitTo, listen, TauriEvent, type UnlistenFn } from "@tauri-apps/a
 import { invoke } from "@tauri-apps/api/core";
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { AppCommandId, AppDomainState, ContextId } from "../domain/contracts";
+import { defaultTabGroupSnapshot } from "../domain/contracts";
 import { appState, setThemeSaveErrorNotifier } from "../state/appState";
 import { subscribeSystemColorScheme } from "../state/appState/themeController";
 import { applyFontSettingsToDom } from "../state/appState/fontSettingsSlice";
@@ -546,7 +547,7 @@ async function startAppShellRuntimeInner(
       if (!live.has(label)) {
         const restored = await restoreWindowSession(label);
         const snapshot = restored?.snapshot;
-        const context = snapshot?.workspaces.find(workspace => workspace.id === snapshot.activeContextId)?.snapshot ?? snapshot?.notepad;
+        const context = snapshot?.workspaces.find(workspace => workspace.id === snapshot.activeContextId)?.snapshot ?? (snapshot ? defaultTabGroupSnapshot(snapshot) : undefined);
         await createNewWindowWithTransfer(appState.getSnapshot(), null, { label, bounds: context?.session.windowBounds, activate: false });
       }
     }

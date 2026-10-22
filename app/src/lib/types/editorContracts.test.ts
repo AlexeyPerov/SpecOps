@@ -17,7 +17,7 @@ import { SELECT_NEXT_OCCURRENCE_BINDING_DECISION } from "../types/editor";
 describe("editor host contracts", () => {
   it("accepts a typed host with grouped domain actions and capability reporting", () => {
     const identity: EditorHostIdentity = {
-      contextId: "notepad",
+      contextId: "tabs-default",
       paneId: "pane-1",
       documentId: "doc-1",
       generation: 1,

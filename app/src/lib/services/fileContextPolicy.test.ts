@@ -29,13 +29,13 @@ describe("runOpenInActiveContext", () => {
       ran = true;
     });
     expect(ran).toBe(true);
-    expect(appState.isNotepadActive()).toBe(false);
+    expect(appState.isTabGroupActive()).toBe(false);
   });
 
   it("switches to notepad when restricted", async () => {
     appState.addWorkspace("/tmp/workspace");
     appState.setRestrictFilesToContext(true);
     await runOpenInActiveContext(async () => {});
-    expect(appState.isNotepadActive()).toBe(true);
+    expect(appState.isTabGroupActive()).toBe(true);
   });
 });

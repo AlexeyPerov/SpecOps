@@ -93,7 +93,7 @@ function makeHost(
 describe("MarkdownOutlinePanel", () => {
   it("renders headings from the matching active host", async () => {
     const editorHost = makeHost(
-      { contextId: "notepad", paneId: "pane-a", documentId: "doc-1", generation: 1 },
+      { contextId: "tabs-default", paneId: "pane-a", documentId: "doc-1", generation: 1 },
       [heading("Intro")],
     );
     const { host } = mountComponent(MarkdownOutlinePanel, {
@@ -109,7 +109,7 @@ describe("MarkdownOutlinePanel", () => {
 
   it("does not publish headings when host document id mismatches the pane selection", async () => {
     const staleHost = makeHost(
-      { contextId: "notepad", paneId: "pane-a", documentId: "doc-1", generation: 1 },
+      { contextId: "tabs-default", paneId: "pane-a", documentId: "doc-1", generation: 1 },
       [heading("Stale")],
     );
     const { host } = mountComponent(MarkdownOutlinePanel, {

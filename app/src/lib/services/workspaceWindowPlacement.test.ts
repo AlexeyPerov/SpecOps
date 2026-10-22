@@ -17,7 +17,7 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({ getAllWebviewWindows: vi.fn().
 import { emit } from '@tauri-apps/api/event';
 import { readLiveWorkspaceWindowOwners, WORKSPACE_PLACEMENT_CHANGED, filterWorkspacePlacement, setWorkspaceWindowOwner, workspaceWindowOwner } from './workspaceWindowPlacement';
 const context = () => ({ documents: [], session: { editorLayout: createSinglePaneLayout([], null), lastActiveWindowId: 'source', windowBounds: null } });
-const snapshot = (): WindowSessionSnapshot => ({ activeContextId: 'ws-1', notepad: context(), workspaces: [{ id: 'ws-1', rootPath: '/moved', snapshot: context() }, { id: 'ws-2', rootPath: '/remaining', snapshot: context() }], editorPreferences: { zoomPercent: 100, wrapLines: true } });
+const snapshot = (): WindowSessionSnapshot => ({ activeContextId: 'ws-1', tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: context() }], workspaces: [{ id: 'ws-1', rootPath: '/moved', snapshot: context() }, { id: 'ws-2', rootPath: '/remaining', snapshot: context() }], editorPreferences: { zoomPercent: 100, wrapLines: true } });
 beforeEach(() => { disk.data = undefined; vi.mocked(emit).mockClear(); });
 afterEach(() => { delete (window as unknown as Record<string,unknown>).__TAURI_INTERNALS__; });
 describe('durable workspace placement', () => {

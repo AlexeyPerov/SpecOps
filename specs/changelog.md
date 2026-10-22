@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-22 23:36 MSK — Replace the window Notepad context with a tab group list
+
+- App state: each window keeps an ordered `tabGroups` list instead of a single `notepad` context snapshot. The default group (`tabs-default`, named "Tabs") is always first and is the window's fallback context: files opened outside the active workspace, the Workspace Manager, saved files moved out of a workspace and closing the last workspace all land in it, as Notepad did. Context lookups, patches, cross-context document search, tab transfers, session-tab cleanup, Git view gating and editor cache retention walk every tab group. `isNotepadActive` becomes `isTabGroupActive`, and the outside-path helpers and the workspace migration of an open file are renamed to match. There is still one group per window, so the sidebar and editor behave as before.
+- Session: window snapshots, navigation records, per-document buffer files and the registry dedupe store `tabGroups`; restore keeps the stored order after the default group and recreates the default group if it is missing. Window snapshots in the previous format (with `notepad` and without `tabGroups`) are not restored, and no migration is provided, so the first launch after this change opens windows with a fresh default group.
+- Specs: new `specs/tab-groups-and-documents.md` describes the plan to make tab groups, Tasks and Notes sidebar entities (per-window tab groups with an undeletable default group; app-wide Tasks and Notes documents) in five phases; this change is phase 1.
+- Validation: all 3359 frontend tests pass, including new regressions for default-group ordering, restoring a missing default group, switching and editing a second group, and skipping previous-format snapshots. Svelte/type checks report zero errors and warnings. The app was not run.
+
 ## 2026-10-22 23:24 MSK — Flatten the sidebar workspace context menu
 
 - Sidebar: right-clicking a workspace opens one flat menu again instead of a catalog menu with a nested "Workspace actions…" submenu. It combines the former workspace menu (Settings, Open in Separate Window, Move to Window…, Open/Create Tasks and Notes, Version Control, Copy Path, Close Workspace) with Hide from Sidebar. Projects not open in this window show Open Workspace, Version Control, Copy Path and Hide from Sidebar. The menu keeps arrow-key navigation, Escape, viewport clamping and tooltip suppression.

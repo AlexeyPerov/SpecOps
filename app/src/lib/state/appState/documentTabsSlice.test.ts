@@ -36,7 +36,7 @@ describe("appState tabs and selection", () => {
 
     const snapshot = appState.getSnapshot();
     expect(snapshot.contexts.activeContextId).toBe(workspaceId);
-    expect(snapshot.contexts.notepad.documents.some((doc) => doc.id === documentId)).toBe(false);
+    expect(snapshot.contexts.tabGroups[0].snapshot.documents.some((doc) => doc.id === documentId)).toBe(false);
     const workspace = snapshot.contexts.workspaces.find((entry) => entry.id === workspaceId)!;
     expect(workspace.snapshot.documents.some((doc) => doc.id === documentId)).toBe(true);
     expect(allTabs(workspace.snapshot.session.editorLayout).some(
@@ -306,10 +306,10 @@ describe("appState tabs and selection", () => {
 
     appState.applyWindowSession({
       ...appState.getWindowSessionSnapshot(),
-      notepad: {
-        ...appState.getWindowSessionSnapshot().notepad,
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+        ...appState.getWindowSessionSnapshot().tabGroups[0].snapshot,
         session: {
-          ...appState.getWindowSessionSnapshot().notepad.session,
+          ...appState.getWindowSessionSnapshot().tabGroups[0].snapshot.session,
           editorLayout: createSinglePaneLayout(
             [
               createFileTab("tab-1", "doc-1"),
@@ -320,7 +320,7 @@ describe("appState tabs and selection", () => {
             "tab-4",
           ),
         },
-      },
+      } }],
     });
 
     const closed = appState.closeOtherTabs("tab-2", () => true);
@@ -351,10 +351,10 @@ describe("appState tabs and selection", () => {
 
     appState.applyWindowSession({
       ...appState.getWindowSessionSnapshot(),
-      notepad: {
-        ...appState.getWindowSessionSnapshot().notepad,
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+        ...appState.getWindowSessionSnapshot().tabGroups[0].snapshot,
         session: {
-          ...appState.getWindowSessionSnapshot().notepad.session,
+          ...appState.getWindowSessionSnapshot().tabGroups[0].snapshot.session,
           editorLayout: createSinglePaneLayout(
             [
               createFileTab("tab-1", "doc-1"),
@@ -366,7 +366,7 @@ describe("appState tabs and selection", () => {
             "tab-3",
           ),
         },
-      },
+      } }],
     });
 
     const closed = appState.closeTabsToLeft("tab-4", () => true);
@@ -388,10 +388,10 @@ describe("appState tabs and selection", () => {
 
     appState.applyWindowSession({
       ...appState.getWindowSessionSnapshot(),
-      notepad: {
-        ...appState.getWindowSessionSnapshot().notepad,
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+        ...appState.getWindowSessionSnapshot().tabGroups[0].snapshot,
         session: {
-          ...appState.getWindowSessionSnapshot().notepad.session,
+          ...appState.getWindowSessionSnapshot().tabGroups[0].snapshot.session,
           editorLayout: createSinglePaneLayout(
             [
               createFileTab("tab-1", "doc-1"),
@@ -403,7 +403,7 @@ describe("appState tabs and selection", () => {
             "tab-3",
           ),
         },
-      },
+      } }],
     });
 
     const closed = appState.closeTabsToRight("tab-2", () => true);
@@ -424,15 +424,15 @@ describe("appState tabs and selection", () => {
     const currentSnapshot = appState.getWindowSessionSnapshot();
     appState.applyWindowSession({
       ...currentSnapshot,
-      notepad: {
-        ...currentSnapshot.notepad,
-        documents: currentSnapshot.notepad.documents.map((doc) =>
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+        ...currentSnapshot.tabGroups[0].snapshot,
+        documents: currentSnapshot.tabGroups[0].snapshot.documents.map((doc) =>
           doc.id === "doc-2" || doc.id === "doc-3"
             ? { ...doc, fileMissing: true }
             : doc,
         ),
         session: {
-          ...currentSnapshot.notepad.session,
+          ...currentSnapshot.tabGroups[0].snapshot.session,
           editorLayout: createSinglePaneLayout(
             [
               createFileTab("tab-1", "doc-1"),
@@ -442,7 +442,7 @@ describe("appState tabs and selection", () => {
             "tab-2",
           ),
         },
-      },
+      } }],
     });
 
     const closed = appState.closeMissingFileTabs();
@@ -477,10 +477,10 @@ describe("appState tabs and selection", () => {
     const currentSnapshot = appState.getWindowSessionSnapshot();
     appState.applyWindowSession({
       ...currentSnapshot,
-      notepad: {
-        ...currentSnapshot.notepad,
-        documents: currentSnapshot.notepad.documents.map((doc) => ({ ...doc, fileMissing: true })),
-      },
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+        ...currentSnapshot.tabGroups[0].snapshot,
+        documents: currentSnapshot.tabGroups[0].snapshot.documents.map((doc) => ({ ...doc, fileMissing: true })),
+      } }],
     });
 
     const closed = appState.closeMissingFileTabs();

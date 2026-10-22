@@ -54,7 +54,7 @@ describe("openAndStoreFile", () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: "/tmp/huge.txt",
-      switchedToNotepad: false,
+      switchedToTabGroup: false,
     });
     const fingerprint = { mtimeMs: 1, sizeBytes: limit + 1, contentHash: "huge" };
 
@@ -80,7 +80,7 @@ describe("openAndStoreFile", () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: "/tmp/ok.txt",
-      switchedToNotepad: false,
+      switchedToTabGroup: false,
     });
     const fingerprint = { mtimeMs: 1, sizeBytes: 128, contentHash: "ok" };
 

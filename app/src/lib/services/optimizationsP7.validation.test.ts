@@ -58,8 +58,8 @@ function domainState(overrides: {
   };
   return {
     contexts: {
-      activeContextId: "notepad",
-      notepad: snapshot,
+      activeContextId: "tabs-default",
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: snapshot }],
 
       workspaces: [],
     },

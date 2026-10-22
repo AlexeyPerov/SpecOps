@@ -1,6 +1,7 @@
 import { markWorkspaceLifecycleActive } from './workspaceLifecycle';
 import { stat } from '@tauri-apps/plugin-fs';
 import { appState } from '../state/appState';
+import { isTabGroupId } from '../domain/contracts';
 import { ensureWorkspaceReadAccess } from './fileSystem';
 import { workspaceWasMovedOut } from './workspaceWindowPlacement';
 
@@ -8,8 +9,8 @@ import { workspaceWasMovedOut } from './workspaceWindowPlacement';
 export async function activatePreviousWorkspace(notify: (message: string) => void): Promise<void> {
   const history = appState.getWorkspaceActivationHistory();
   const active = appState.getSnapshot().contexts.activeContextId;
-  // Manager opens in Notepad; it must preserve the same previous project.
-  const candidates = history.filter((id, index) => id !== active && !(active === 'notepad' && index === 0));
+  // Manager opens in the default tab group; it must preserve the same previous project.
+  const candidates = history.filter((id, index) => id !== active && !(isTabGroupId(active) && index === 0));
   for (const id of candidates) {
     const workspace = appState.getSnapshot().contexts.workspaces.find(entry => entry.id === id);
     if (!workspace || workspaceWasMovedOut(workspace.rootPath)) continue;

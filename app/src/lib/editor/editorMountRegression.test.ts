@@ -23,7 +23,7 @@ describe("editor mount regressions", () => {
     parent = document.createElement("div");
     document.body.appendChild(parent);
     const workbench = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-1",
       getActiveDocumentId: () => "doc-1",
     });
@@ -37,7 +37,7 @@ describe("editor mount regressions", () => {
     controller.update({
       content,
       documentId: "doc-1",
-      contextId: "notepad",
+      contextId: "tabs-default",
       paneId: "pane-1",
       scrollTop: 0,
       wrapLines: false,
@@ -75,7 +75,7 @@ describe("editor mount regressions", () => {
     c.update({
       content: "x = 1\n",
       documentId: "doc-1",
-      contextId: "notepad",
+      contextId: "tabs-default",
       paneId: "pane-1",
       scrollTop: 0,
       wrapLines: false,

@@ -1,11 +1,12 @@
 import type { DiskFingerprint } from "../domain/contracts";
+import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { findDocumentContext } from "../state/appState/contextHelpers";
 import { claimOpenFile, renameOpenFileRegistry } from "./openFileRegistry";
 
 /**
- * Moves a saved workspace file that is outside its workspace into Notepad.
- * The replacement Notepad document is the source of truth for disk and
+ * Moves a saved workspace file that is outside its workspace into a tab group.
+ * The replacement tab group document is the source of truth for disk and
  * registry state because closing the workspace tab prunes its document.
  *
  * Mid-write keystrokes (C2): the caller passes the `writtenContent` that
@@ -14,7 +15,7 @@ import { claimOpenFile, renameOpenFileRegistry } from "./openFileRegistry";
  * `writtenContent` preserves any edits made during the write — the transferred
  * buffer starts dirty rather than silently reverting them and being marked clean.
  */
-export async function handoffSavedFileToNotepad({
+export async function handoffSavedFileToTabGroup({
   sourceTabId,
   sourceDocumentId,
   previousPath,
@@ -44,7 +45,7 @@ export async function handoffSavedFileToNotepad({
   const liveContent = currentDoc?.content ?? content;
 
   appState.closeTabForce(sourceTabId);
-  appState.switchContext("notepad");
+  appState.switchContext(DEFAULT_TAB_GROUP_ID);
   const documentId = appState.openTransferredTab({
     filePath,
     content: liveContent,

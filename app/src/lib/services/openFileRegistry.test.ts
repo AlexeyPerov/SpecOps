@@ -71,7 +71,7 @@ beforeEach(() => {
 });
 
 function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowSessionSnapshot {
-  const notepad: WindowSessionSnapshot["notepad"] = {
+  const snapshot: WindowSessionSnapshot["tabGroups"][number]["snapshot"] = {
     documents: [
       {
         id: "doc-1",
@@ -118,8 +118,8 @@ function baseWindowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): Win
     },
   };
   return {
-    activeContextId: "notepad",
-    notepad,
+    activeContextId: "tabs-default",
+    tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot }],
     workspaces: [],
     editorPreferences: {
       zoomPercent: 100,
@@ -258,8 +258,8 @@ describe("syncOpenFileRegistryForWindow", () => {
   it("replaces only the target window entries with current saved tabs", async () => {
     const state: AppDomainState = {
       contexts: {
-        activeContextId: "notepad",
-        notepad: {
+        activeContextId: "tabs-default",
+        tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
           documents: [
             {
               id: "doc-1",
@@ -284,7 +284,7 @@ describe("syncOpenFileRegistryForWindow", () => {
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
-        },
+        } }],
         workspaces: [],
       },
       settings: {
@@ -322,7 +322,7 @@ describe("syncOpenFileRegistryForWindow", () => {
     const state: AppDomainState = {
       contexts: {
         activeContextId: "ws-1",
-        notepad: {
+        tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
           documents: [
             {
               id: "doc-n",
@@ -347,7 +347,7 @@ describe("syncOpenFileRegistryForWindow", () => {
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
-        },
+        } }],
         workspaces: [
           {
             id: "ws-1",
@@ -426,8 +426,8 @@ describe("syncOpenFileRegistryForWindow", () => {
     };
     const state: AppDomainState = {
       contexts: {
-        activeContextId: "notepad",
-        notepad: {
+        activeContextId: "tabs-default",
+        tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
           documents: [
             {
               id: "doc-1",
@@ -503,7 +503,7 @@ describe("syncOpenFileRegistryForWindow", () => {
             lastActiveWindowId: "win-a",
             windowBounds: null,
           },
-        },
+        } }],
         workspaces: [],
       },
       settings: {
@@ -603,9 +603,9 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
     const { registry: nextRegistry, snapshot: nextSnapshot } =
       applyRegistryDedupeToWindowSnapshot(registry, "win-a", snapshot);
 
-    expect(getSessionTabs(nextSnapshot.notepad.session).map((tab) => tab.id)).toEqual(["tab-2"]);
-    expect(getSessionSelectedTabId(nextSnapshot.notepad.session)).toBe("tab-2");
-    expect(nextSnapshot.notepad.documents.map((doc) => doc.id)).toEqual(["doc-2"]);
+    expect(getSessionTabs(nextSnapshot.tabGroups[0].snapshot.session).map((tab) => tab.id)).toEqual(["tab-2"]);
+    expect(getSessionSelectedTabId(nextSnapshot.tabGroups[0].snapshot.session)).toBe("tab-2");
+    expect(nextSnapshot.tabGroups[0].snapshot.documents.map((doc) => doc.id)).toEqual(["doc-2"]);
     expect(nextRegistry["/tmp/shared.txt"]).toEqual({ windowId: "win-b", documentId: "doc-9" });
   });
 
@@ -616,7 +616,7 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
     const { registry: nextRegistry, snapshot: nextSnapshot } =
       applyRegistryDedupeToWindowSnapshot(registry, "win-a", snapshot);
 
-    expect(getSessionTabs(nextSnapshot.notepad.session)).toHaveLength(2);
+    expect(getSessionTabs(nextSnapshot.tabGroups[0].snapshot.session)).toHaveLength(2);
     expect(nextRegistry["/tmp/shared.txt"]).toEqual({ windowId: "win-a", documentId: "doc-1" });
   });
 
@@ -633,7 +633,7 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
       activePaneId: "pane-1",
     };
     const snapshot = baseWindowSnapshot({
-      notepad: {
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [
           {
             id: "doc-1",
@@ -709,11 +709,11 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
           lastActiveWindowId: "win-a",
           windowBounds: null,
         },
-      },
+      } }],
     });
 
     const { snapshot: nextSnapshot } = applyRegistryDedupeToWindowSnapshot({}, "win-a", snapshot);
-    const restored = nextSnapshot.notepad.session.editorLayout;
+    const restored = nextSnapshot.tabGroups[0].snapshot.session.editorLayout;
 
     expect(restored.panes).toHaveLength(4);
     expect(restored.panes.map((pane) => pane.tabs.map((tab) => tab.id))).toEqual([
@@ -722,7 +722,7 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
       ["tab-3"],
       ["tab-4"],
     ]);
-    expect(nextSnapshot.notepad.documents.map((doc) => doc.id)).toEqual([
+    expect(nextSnapshot.tabGroups[0].snapshot.documents.map((doc) => doc.id)).toEqual([
       "doc-1",
       "doc-2",
       "doc-3",
@@ -745,7 +745,7 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
       activePaneId: "pane-1",
     };
     const snapshot = baseWindowSnapshot({
-      notepad: {
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [
           {
             id: "doc-1",
@@ -804,7 +804,7 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
           lastActiveWindowId: "win-a",
           windowBounds: null,
         },
-      },
+      } }],
     });
     const registry: OpenFileRegistry = {
       "/tmp/shared.txt": { windowId: "win-b", documentId: "doc-9" },
@@ -815,11 +815,11 @@ describe("applyRegistryDedupeToWindowSnapshot", () => {
       "win-a",
       snapshot,
     );
-    const restored = nextSnapshot.notepad.session.editorLayout;
+    const restored = nextSnapshot.tabGroups[0].snapshot.session.editorLayout;
 
     expect(restored.panes[0].tabs.map((tab) => tab.id)).toEqual(["tab-1"]);
     expect(restored.panes[1].tabs.map((tab) => tab.id)).toEqual(["tab-3"]);
     expect(restored.panes[1].selectedTabId).toBe("tab-3");
-    expect(nextSnapshot.notepad.documents.map((doc) => doc.id)).toEqual(["doc-1", "doc-3"]);
+    expect(nextSnapshot.tabGroups[0].snapshot.documents.map((doc) => doc.id)).toEqual(["doc-1", "doc-3"]);
   });
 });

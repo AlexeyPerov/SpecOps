@@ -232,7 +232,7 @@ export function nextSelectedTabAfterBulkClose(
   return recomputeSelectedTabId(previousTabs, remainingTabs, previousSelectedTabId, preferredTabId);
 }
 
-/** Remove every view tab of the given kind from one workspace/notepad/chat context. */
+/** Remove every view tab of the given kind from one workspace/tab group/chat context. */
 export function closeViewTabsInContext(
   ctx: ContextSnapshot,
   view: ViewTabState["view"],
@@ -319,22 +319,18 @@ export function closeSessionTabsInContext(ctx: ContextSnapshot): ContextSnapshot
 }
 
 /**
- * Close every session tab across all contexts (workspaces, notepad, chat-http).
+ * Close every session tab across all contexts (workspaces, tab groups, chat-http).
  * Used when the workspace-sessions beta is switched off so no orphan session
  * tabs remain. Walks every context for robustness, even though session tabs
  * today only live in workspace contexts.
  */
 export function closeAllSessionTabsInState(state: AppDomainState): AppDomainState {
   let next = state;
-  for (const workspace of state.contexts.workspaces) {
-    const patched = closeSessionTabsInContext(workspace.snapshot);
-    if (patched !== workspace.snapshot) {
-      next = patchContextById(next, workspace.id, () => patched);
+  for (const entry of [...state.contexts.workspaces, ...state.contexts.tabGroups]) {
+    const patched = closeSessionTabsInContext(entry.snapshot);
+    if (patched !== entry.snapshot) {
+      next = patchContextById(next, entry.id, () => patched);
     }
-  }
-  const notepadPatched = closeSessionTabsInContext(next.contexts.notepad);
-  if (notepadPatched !== next.contexts.notepad) {
-    next = { ...next, contexts: { ...next.contexts, notepad: notepadPatched } };
   }
   return next;
 }

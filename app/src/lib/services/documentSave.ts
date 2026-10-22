@@ -9,7 +9,7 @@ import { renameOpenFileRegistry } from "./openFileRegistry";
 import { untitledSaveDefaultPath } from "./untitledSavePath";
 import { isFileContextRestricted } from "./fileContextPolicy";
 import { isPathUnderRoot } from "./workspacePaths";
-import { handoffSavedFileToNotepad } from "./savedFileHandoff";
+import { handoffSavedFileToTabGroup } from "./savedFileHandoff";
 
 export type SaveDocumentDeps = {
   getWindowId: () => string;
@@ -95,7 +95,7 @@ async function persistDocument(
     .find((tab) => tab.kind === "file" && tab.documentId === document.id)?.id;
 
   if (options?.allowWorkspaceTabMove && savedOutsideWorkspace && tabId) {
-    await handoffSavedFileToNotepad({
+    await handoffSavedFileToTabGroup({
       sourceTabId: tabId,
       sourceDocumentId: document.id,
       previousPath,

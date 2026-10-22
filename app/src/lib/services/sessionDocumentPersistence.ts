@@ -90,7 +90,10 @@ export function stripWindowSnapshotForSession(
 ): WindowSessionSnapshot {
   return {
     ...snapshot,
-    notepad: stripContextSnapshot(snapshot.notepad),
+    tabGroups: snapshot.tabGroups.map((group) => ({
+      ...group,
+      snapshot: stripContextSnapshot(group.snapshot),
+    })),
     workspaces: snapshot.workspaces.map((workspace) => ({
       ...workspace,
       snapshot: stripContextSnapshot(workspace.snapshot),

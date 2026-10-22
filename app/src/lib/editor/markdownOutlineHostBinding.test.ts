@@ -10,7 +10,7 @@ function binding(
   overrides: Partial<EditorHostIdentity> = {},
 ): EditorHostIdentity {
   return {
-    contextId: "notepad",
+    contextId: "tabs-default",
     paneId: "pane-a",
     documentId: "doc-1",
     generation: 1,

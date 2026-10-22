@@ -48,12 +48,12 @@ export function isGitIntegrationEnabledInApp(): boolean {
  * proceed under `scope: "versionControlOnly"` (the user is actively looking
  * at VC, so badges/column refreshes are expected and not "git outside VC").
  *
- * Walks every context (notepad and each workspace) and every pane.
+ * Walks every context (each tab group and workspace) and every pane.
  */
 export function isVersionControlViewActiveInAnyPane(): boolean {
   const { contexts } = appState.getSnapshot();
   const layouts: EditorLayout[] = [
-    contexts.notepad.session.editorLayout,
+    ...contexts.tabGroups.map((group) => group.snapshot.session.editorLayout),
     ...contexts.workspaces.map((workspace) => workspace.snapshot.session.editorLayout),
   ];
   for (const layout of layouts) {

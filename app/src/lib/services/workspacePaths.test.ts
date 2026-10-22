@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { appState } from "../state/appState";
 import {
   collapsePathSegments,
-  ensureNotepadForOutsidePath,
+  ensureTabGroupForOutsidePath,
   isPathUnderRoot,
-  runInNotepadContext,
+  runInTabGroupContext,
   workspaceRelativePath,
 } from "./workspacePaths";
 
@@ -65,31 +65,31 @@ describe("workspaceRelativePath", () => {
   });
 });
 
-describe("ensureNotepadForOutsidePath", () => {
+describe("ensureTabGroupForOutsidePath", () => {
   beforeEach(() => {
     appState.resetAppState();
   });
 
   it("does nothing in notepad mode", () => {
-    const result = ensureNotepadForOutsidePath("/tmp/file.txt");
+    const result = ensureTabGroupForOutsidePath("/tmp/file.txt");
     expect(result.activeWorkspaceRoot).toBeNull();
-    expect(result.switchedToNotepad).toBe(false);
-    expect(appState.isNotepadActive()).toBe(true);
+    expect(result.switchedToTabGroup).toBe(false);
+    expect(appState.isTabGroupActive()).toBe(true);
   });
 
   it("switches to notepad when active workspace path is outside root", () => {
     const workspaceId = appState.addWorkspace("/tmp/workspace");
     expect(workspaceId).not.toBeNull();
-    expect(appState.isNotepadActive()).toBe(false);
+    expect(appState.isTabGroupActive()).toBe(false);
 
-    const result = ensureNotepadForOutsidePath("/tmp/elsewhere/file.txt");
+    const result = ensureTabGroupForOutsidePath("/tmp/elsewhere/file.txt");
     expect(result.activeWorkspaceRoot).toBe("/tmp/workspace");
-    expect(result.switchedToNotepad).toBe(true);
-    expect(appState.isNotepadActive()).toBe(true);
+    expect(result.switchedToTabGroup).toBe(true);
+    expect(appState.isTabGroupActive()).toBe(true);
   });
 });
 
-describe("runInNotepadContext", () => {
+describe("runInTabGroupContext", () => {
   beforeEach(() => {
     appState.resetAppState();
   });
@@ -97,10 +97,10 @@ describe("runInNotepadContext", () => {
   it("switches to notepad and runs callback", async () => {
     appState.addWorkspace("/tmp/workspace");
     let ran = false;
-    await runInNotepadContext(async () => {
+    await runInTabGroupContext(async () => {
       ran = true;
     });
     expect(ran).toBe(true);
-    expect(appState.isNotepadActive()).toBe(true);
+    expect(appState.isTabGroupActive()).toBe(true);
   });
 });

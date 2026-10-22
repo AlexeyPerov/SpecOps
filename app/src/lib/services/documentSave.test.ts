@@ -62,10 +62,10 @@ describe("saveDocumentForClose", () => {
       ),
     ).resolves.toBe(true);
 
-    expect(appState.isNotepadActive()).toBe(true);
+    expect(appState.isTabGroupActive()).toBe(true);
     const notepadDoc = appState
       .getSnapshot()
-      .contexts.notepad.documents.find((doc) => doc.filePath === "/tmp/outside.txt");
+      .contexts.tabGroups[0].snapshot.documents.find((doc) => doc.filePath === "/tmp/outside.txt");
     expect(notepadDoc).toBeDefined();
     expect(notepadDoc).toMatchObject({
       content: "content",
@@ -77,7 +77,7 @@ describe("saveDocumentForClose", () => {
     expect(appState.getSnapshot().contexts.workspaces[0]?.snapshot.documents).not.toContainEqual(
       expect.objectContaining({ filePath: "/tmp/outside.txt" }),
     );
-    const notepadTab = getSessionTabs(appState.getSnapshot().contexts.notepad.session).find(
+    const notepadTab = getSessionTabs(appState.getSnapshot().contexts.tabGroups[0].snapshot.session).find(
       (tab) => isFileTab(tab) && tab.documentId === notepadDoc?.id,
     );
     expect(notepadTab).toBeDefined();

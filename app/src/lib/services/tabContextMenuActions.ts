@@ -124,9 +124,9 @@ export function canCopyRelativePath(
  */
 export function canOpenTabInNewWindow(
   tab: TabState | null,
-  isNotepadActive: boolean,
+  isTabGroupActive: boolean,
 ): boolean {
-  return Boolean(tab && isFileTab(tab) && isNotepadActive);
+  return Boolean(tab && isFileTab(tab) && isTabGroupActive);
 }
 
 export function canRenameTab(

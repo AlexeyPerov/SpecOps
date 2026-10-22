@@ -39,7 +39,7 @@ function workspaceState(rootPath: string, documents: DocumentState[] = []): AppD
           rootPath,
           snapshot: {
             documents,
-            session: base.contexts.notepad.session,
+            session: base.contexts.tabGroups[0].snapshot.session,
           },
         },
       ],

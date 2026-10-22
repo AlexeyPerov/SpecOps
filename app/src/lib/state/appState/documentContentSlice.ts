@@ -55,10 +55,10 @@ type AppStateUpdate = (mutator: (state: AppDomainState) => AppDomainState) => vo
  * layout ref when the pane/tab is missing.
  */
 function selectAndActivatePane(
-  layout: AppDomainState["contexts"]["notepad"]["session"]["editorLayout"],
+  layout: ContextSnapshot["session"]["editorLayout"],
   paneId: string,
   tabId: string,
-): AppDomainState["contexts"]["notepad"]["session"]["editorLayout"] {
+): ContextSnapshot["session"]["editorLayout"] {
   const activated = setActivePaneInLayout(layout, paneId);
   const pane = activated.panes.find((entry) => entry.id === paneId);
   if (!pane || !pane.tabs.some((tab) => tab.id === tabId)) {

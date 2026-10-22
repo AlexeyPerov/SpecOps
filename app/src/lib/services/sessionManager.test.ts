@@ -51,7 +51,7 @@ import { openPath } from "./fileSystem";
 const openPathMock = vi.mocked(openPath);
 
 function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowSessionSnapshot {
-  const notepad: WindowSessionSnapshot["notepad"] = {
+  const snapshot: WindowSessionSnapshot["tabGroups"][number]["snapshot"] = {
     documents: [
       {
         id: "doc-1",
@@ -78,8 +78,8 @@ function windowSnapshot(overrides: Partial<WindowSessionSnapshot> = {}): WindowS
     },
   };
   return {
-    activeContextId: "notepad",
-    notepad,
+    activeContextId: "tabs-default",
+    tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot }],
     workspaces: [],
     editorPreferences: {
       zoomPercent: 100,
@@ -118,17 +118,17 @@ describe("sanitizeWindowSnapshot", () => {
   it("marks missing files on disk without dropping tabs", async () => {
     const snapshot = windowSnapshot();
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(getSessionTabs(sanitized.notepad.session)).toHaveLength(1);
-    expect(sanitized.notepad.documents[0]?.fileMissing).toBe(true);
+    expect(getSessionTabs(sanitized.tabGroups[0].snapshot.session)).toHaveLength(1);
+    expect(sanitized.tabGroups[0].snapshot.documents[0]?.fileMissing).toBe(true);
   });
 
   it("drops orphan tabs without linked documents", async () => {
     sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
     const snapshot = windowSnapshot({
-      notepad: {
-        ...windowSnapshot().notepad,
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+        ...windowSnapshot().tabGroups[0].snapshot,
         session: {
-          ...windowSnapshot().notepad.session,
+          ...windowSnapshot().tabGroups[0].snapshot.session,
           editorLayout: createSinglePaneLayout(
             [
               createFileTab("tab-1", "doc-1"),
@@ -137,11 +137,11 @@ describe("sanitizeWindowSnapshot", () => {
             "tab-1",
           ),
         },
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(getSessionTabs(sanitized.notepad.session).map((tab) => tab.id)).toEqual(["tab-1"]);
+    expect(getSessionTabs(sanitized.tabGroups[0].snapshot.session).map((tab) => tab.id)).toEqual(["tab-1"]);
   });
 
   it("refreshes legacy image documents from disk on restore", async () => {
@@ -153,11 +153,11 @@ describe("sanitizeWindowSnapshot", () => {
       fingerprint: { mtimeMs: 1, sizeBytes: 42 },
     });
     const snapshot = windowSnapshot({
-      notepad: {
-        ...windowSnapshot().notepad,
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+        ...windowSnapshot().tabGroups[0].snapshot,
         documents: [
           {
-            ...windowSnapshot().notepad.documents[0]!,
+            ...windowSnapshot().tabGroups[0].snapshot.documents[0]!,
             id: "doc-1",
             filePath: "/tmp/keenetic-dns.png",
             title: "keenetic-dns.png",
@@ -166,30 +166,30 @@ describe("sanitizeWindowSnapshot", () => {
             contentKind: "text",
           },
         ],
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(sanitized.notepad.documents[0]?.contentKind).toBe("image");
-    expect(sanitized.notepad.documents[0]?.content).toBe("");
+    expect(sanitized.tabGroups[0].snapshot.documents[0]?.contentKind).toBe("image");
+    expect(sanitized.tabGroups[0].snapshot.documents[0]?.content).toBe("");
     expect(openPathMock).toHaveBeenCalledWith("/tmp/keenetic-dns.png");
   });
 
   it("creates a fallback untitled tab when no tabs remain", async () => {
     const snapshot = windowSnapshot({
-      notepad: {
-        ...windowSnapshot().notepad,
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+        ...windowSnapshot().tabGroups[0].snapshot,
         documents: [],
         session: {
-          ...windowSnapshot().notepad.session,
+          ...windowSnapshot().tabGroups[0].snapshot.session,
           editorLayout: createSinglePaneLayout([createFileTab("tab-1", "doc-missing")], "tab-1"),
         },
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(getSessionTabs(sanitized.notepad.session)).toHaveLength(1);
-    expect(sanitized.notepad.documents[0]?.title).toBe("Untitled");
+    expect(getSessionTabs(sanitized.tabGroups[0].snapshot.session)).toHaveLength(1);
+    expect(sanitized.tabGroups[0].snapshot.documents[0]?.title).toBe("Untitled");
   });
 });
 
@@ -239,18 +239,18 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
       "pane-1",
     );
     const snapshot = windowSnapshot({
-      notepad: {
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b", "/tmp/b.txt")],
         session: {
           editorLayout: layout,
           lastActiveWindowId: "win-a",
           windowBounds: null,
         },
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    const restored = sanitized.notepad.session.editorLayout;
+    const restored = sanitized.tabGroups[0].snapshot.session.editorLayout;
     expect(restored.panes).toHaveLength(2);
     expect(restored.panes.map((p) => p.id)).toEqual(["pane-1", "pane-2"]);
     expect(restored.panes[0].tabs.map((t) => t.id)).toEqual(["tab-a"]);
@@ -274,18 +274,18 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
       "pane-1",
     );
     const snapshot = windowSnapshot({
-      notepad: {
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b", "/tmp/b.txt")],
         session: {
           editorLayout: layout,
           lastActiveWindowId: "win-a",
           windowBounds: null,
         },
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    const restored = sanitized.notepad.session.editorLayout;
+    const restored = sanitized.tabGroups[0].snapshot.session.editorLayout;
     // pane-1 lost its selected tab; selection falls back to the first remaining.
     expect(restored.panes[0].tabs.map((t) => t.id)).toEqual(["tab-a"]);
     expect(restored.panes[0].selectedTabId).toBe("tab-a");
@@ -301,23 +301,23 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
       "missing-pane",
     );
     const snapshot = windowSnapshot({
-      notepad: {
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b")],
         session: {
           editorLayout: layout,
           lastActiveWindowId: "win-a",
           windowBounds: null,
         },
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(sanitized.notepad.session.editorLayout.activePaneId).toBe("pane-1");
+    expect(sanitized.tabGroups[0].snapshot.session.editorLayout.activePaneId).toBe("pane-1");
   });
 
   it("falls back to a single empty pane when the layout shape is malformed", async () => {
     const snapshot = windowSnapshot({
-      notepad: {
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [doc("doc-a")],
         session: {
           // Malformed: panes present but not an array of valid panes.
@@ -325,11 +325,11 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
           lastActiveWindowId: "win-a",
           windowBounds: null,
         },
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    const restored = sanitized.notepad.session.editorLayout;
+    const restored = sanitized.tabGroups[0].snapshot.session.editorLayout;
     expect(restored.panes).toHaveLength(1);
     expect(restored.kind).toBe("single");
   });
@@ -337,7 +337,7 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
   it("re-seeds a legacy flat openTabs snapshot into a single pane", async () => {
     sessionMock.diskFiles.set("/tmp/a.txt", "x");
     const snapshot = windowSnapshot({
-      notepad: {
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [doc("doc-a", "/tmp/a.txt")],
         session: {
           // Legacy pre-split-view shape: no editorLayout, flat openTabs + selectedTabId.
@@ -347,14 +347,14 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
           openTabs: [createFileTab("tab-a", "doc-a")],
           selectedTabId: "tab-a",
         } as never,
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    const restored = sanitized.notepad.session.editorLayout;
+    const restored = sanitized.tabGroups[0].snapshot.session.editorLayout;
     expect(restored.kind).toBe("single");
     expect(restored.panes).toHaveLength(1);
-    expect(getSessionTabs(sanitized.notepad.session).map((t) => t.id)).toEqual(["tab-a"]);
+    expect(getSessionTabs(sanitized.tabGroups[0].snapshot.session).map((t) => t.id)).toEqual(["tab-a"]);
   });
 
   it("marks per-pane file tabs missing on disk without dropping them", async () => {
@@ -366,22 +366,22 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
       "pane-2",
     );
     const snapshot = windowSnapshot({
-      notepad: {
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b", "/tmp/b.txt")],
         session: {
           editorLayout: layout,
           lastActiveWindowId: "win-a",
           windowBounds: null,
         },
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    const restored = sanitized.notepad.session.editorLayout;
+    const restored = sanitized.tabGroups[0].snapshot.session.editorLayout;
     expect(restored.panes).toHaveLength(2);
     expect(restored.panes[0].tabs.map((t) => t.id)).toEqual(["tab-a"]);
-    expect(sanitized.notepad.documents.find((d) => d.id === "doc-a")?.fileMissing).toBe(true);
-    expect(sanitized.notepad.documents.find((d) => d.id === "doc-b")?.fileMissing).toBe(false);
+    expect(sanitized.tabGroups[0].snapshot.documents.find((d) => d.id === "doc-a")?.fileMissing).toBe(true);
+    expect(sanitized.tabGroups[0].snapshot.documents.find((d) => d.id === "doc-b")?.fileMissing).toBe(false);
   });
 
   it("uses activePane accessor against the restored multi-pane layout", async () => {
@@ -393,18 +393,18 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
       "pane-2",
     );
     const snapshot = windowSnapshot({
-      notepad: {
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [doc("doc-a", "/tmp/a.txt"), doc("doc-b", "/tmp/b.txt")],
         session: {
           editorLayout: layout,
           lastActiveWindowId: "win-a",
           windowBounds: null,
         },
-      },
+      } }],
     });
 
     const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
-    expect(activePane(sanitized.notepad.session.editorLayout).id).toBe("pane-2");
+    expect(activePane(sanitized.tabGroups[0].snapshot.session.editorLayout).id).toBe("pane-2");
   });
 });
 
@@ -421,8 +421,18 @@ describe("restoreWindowSession", () => {
     sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
 
     const restored = await sessionManager.restoreWindowSession("win-a");
-    expect(restored?.snapshot.notepad.documents[0]?.content).toBe("saved");
+    expect(restored?.snapshot.tabGroups[0].snapshot.documents[0]?.content).toBe("saved");
     expect(restored?.recentFiles).toEqual(["/tmp/restored.txt"]);
+  });
+
+  it("does not restore a window snapshot without tab groups", async () => {
+    const { tabGroups, ...rest } = windowSnapshot();
+    sessionMock.setSessionStore(
+      sessionWithWindow("win-a", { ...rest, notepad: tabGroups[0].snapshot } as unknown as WindowSessionSnapshot),
+    );
+    sessionMock.diskFiles.set("/tmp/restored.txt", "saved");
+
+    await expect(sessionManager.restoreWindowSession("win-a")).resolves.toBeNull();
   });
 
   it("returns null for a new window id instead of hydrating another window's session", async () => {
@@ -450,7 +460,7 @@ describe("restoreWindowSession", () => {
     });
 
     const restored = await sessionManager.restoreWindowSession("win-a");
-    expect(getSessionSelectedTabId(restored?.snapshot.notepad.session as never)).toBe("tab-1");
+    expect(getSessionSelectedTabId(restored?.snapshot.tabGroups[0].snapshot.session as never)).toBe("tab-1");
   });
 
   it("returns null when both primary and backup fail", async () => {
@@ -486,7 +496,7 @@ describe("persistSessionSnapshot", () => {
 
     await sessionManager.persistSessionSnapshot(appState.getSnapshot(), "win-a");
 
-    const persisted = sessionMock.getSessionStore()?.windows["win-a"]?.notepad.documents.find(
+    const persisted = sessionMock.getSessionStore()?.windows["win-a"]?.tabGroups[0].snapshot.documents.find(
       (documentState) => documentState.filePath === "/tmp/persist-photo.png",
     );
     expect(persisted?.contentKind).toBe("image");
@@ -568,13 +578,13 @@ describe("persistSessionSnapshot", () => {
     appState.openFileInTab("/tmp/latest.txt", "latest");
     await sessionManager.flushSessionPersistence(appState.getSnapshot(), "win-a");
 
-    const notepadDocs = sessionMock.getSessionStore()?.windows["win-a"]?.notepad.documents ?? [];
+    const notepadDocs = sessionMock.getSessionStore()?.windows["win-a"]?.tabGroups[0].snapshot.documents ?? [];
     expect(notepadDocs.some((doc) => doc.filePath === "/tmp/latest.txt")).toBe(true);
 
     await new Promise((resolve) => {
       setTimeout(resolve, 1300);
     });
-    const afterDebounce = sessionMock.getSessionStore()?.windows["win-a"]?.notepad.documents ?? [];
+    const afterDebounce = sessionMock.getSessionStore()?.windows["win-a"]?.tabGroups[0].snapshot.documents ?? [];
     expect(afterDebounce.some((doc) => doc.filePath === "/tmp/latest.txt")).toBe(true);
   });
 });
@@ -671,7 +681,7 @@ describe("persistGlobalRecentFiles", () => {
     );
     const written = JSON.parse(String(sessionWriteCall?.[1] ?? "{}"));
     expect(written.recentFiles).toEqual(["/tmp/a.txt", "/tmp/b.txt"]);
-    expect(getSessionSelectedTabId(written.windows["win-a"]?.notepad.session as never)).toBe("tab-1");
+    expect(getSessionSelectedTabId(written.windows["win-a"]?.tabGroups[0].snapshot.session as never)).toBe("tab-1");
   });
 });
 
@@ -758,11 +768,11 @@ describe("incremental session persistence", () => {
     const restored = await sessionManager.restoreWindowSession("win-crash");
 
     expect(restored).not.toBeNull();
-    expect(restored?.snapshot.notepad.documents.find((doc) => doc.id === documentId)).toMatchObject({
+    expect(restored?.snapshot.tabGroups[0].snapshot.documents.find((doc) => doc.id === documentId)).toMatchObject({
       content: "unsaved-before-crash",
       isDirty: true,
     });
-    expect(getSessionTabs(restored?.snapshot.notepad.session as never).some(
+    expect(getSessionTabs(restored?.snapshot.tabGroups[0].snapshot.session as never).some(
       (tab) => tab.kind === "file" && tab.documentId === documentId,
     )).toBe(true);
   });
@@ -857,7 +867,7 @@ describe("incremental session persistence", () => {
     expect(sessionMock.writeTextFile).not.toHaveBeenCalled();
 
     const restored = await sessionManager.restoreWindowSession("win-a");
-    const doc = restored?.snapshot.notepad.documents.find((d) => d.filePath === "/tmp/secret.txt");
+    const doc = restored?.snapshot.tabGroups[0].snapshot.documents.find((d) => d.filePath === "/tmp/secret.txt");
     expect(doc?.content).toBe("top-secret-payload");
   });
 
@@ -938,7 +948,7 @@ describe("incremental session persistence", () => {
     const restored = await sessionManager.restoreWindowSession("win-lost");
 
     expect(restored).not.toBeNull();
-    const doc = restored?.snapshot.notepad.documents.find((d) => d.id === documentId);
+    const doc = restored?.snapshot.tabGroups[0].snapshot.documents.find((d) => d.id === documentId);
     // Restoring stripped (empty) content verbatim would look like a legit empty
     // file and overwrite the real file on the next save; mark it missing instead.
     expect(doc?.fileMissing).toBe(true);

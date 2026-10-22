@@ -120,15 +120,15 @@ describe("documentForSessionPersistence", () => {
 describe("stripWindowSnapshotForSession", () => {
   it("strips documents in notepad and workspaces", () => {
     const stripped = stripWindowSnapshotForSession({
-      activeContextId: "notepad",
-      notepad: {
+      activeContextId: "tabs-default",
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [baseDocument()],
         session: {
           editorLayout: createSinglePaneLayout([], "tab-1"),
           lastActiveWindowId: "main",
           windowBounds: null,
         },
-      },
+      } }],
       workspaces: [
         {
           id: "ws-1",
@@ -145,14 +145,14 @@ describe("stripWindowSnapshotForSession", () => {
       ],
       editorPreferences: { zoomPercent: 100, wrapLines: true },
     });
-    expect(stripped.notepad.documents[0]?.content).toBe("");
+    expect(stripped.tabGroups[0].snapshot.documents[0]?.content).toBe("");
     expect(stripped.workspaces[0]?.snapshot.documents[0]?.contentKind).toBe("image");
   });
 
   it("strips ephemeral view tabs and reseats a view-tab selection", () => {
     const stripped = stripWindowSnapshotForSession({
-      activeContextId: "notepad",
-      notepad: {
+      activeContextId: "tabs-default",
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [baseDocument()],
         session: {
           // Settings view tab is selected; a file tab also exists.
@@ -167,17 +167,17 @@ describe("stripWindowSnapshotForSession", () => {
           lastActiveWindowId: "main",
           windowBounds: null,
         },
-      },
+      } }],
       workspaces: [],
       editorPreferences: { zoomPercent: 100, wrapLines: true },
     });
 
-    const tabs = getSessionTabs(stripped.notepad.session);
+    const tabs = getSessionTabs(stripped.tabGroups[0].snapshot.session);
     expect(tabs.every((tab) => tab.kind !== "view")).toBe(true);
     expect(tabs).toHaveLength(1);
     expect(tabs[0]?.kind).toBe("file");
     // Selection fell back to the remaining file tab.
-    expect(getSessionSelectedTabId(stripped.notepad.session)).toBe("tab-file");
+    expect(getSessionSelectedTabId(stripped.tabGroups[0].snapshot.session)).toBe("tab-file");
   });
 });
 

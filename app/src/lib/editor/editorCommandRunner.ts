@@ -6,6 +6,7 @@
 import type { Compartment } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import type { EditorCommandRunner, EditorHost } from "../types/editor";
+import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
 import { createEditorDomainApis } from "./editorDomainApis";
 import { editorHostToCommandRunner } from "./editorHostFactory";
 
@@ -27,7 +28,7 @@ export function createEditorCommandRunner(
     findEnabledSnippet: () => undefined,
   });
   const host: EditorHost = {
-    identity: { contextId: "notepad", paneId: "", documentId: null, generation: 0 },
+    identity: { contextId: DEFAULT_TAB_GROUP_ID, paneId: "", documentId: null, generation: 0 },
     actions,
     queries,
     capability,

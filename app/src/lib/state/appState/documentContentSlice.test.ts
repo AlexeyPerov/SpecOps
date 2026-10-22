@@ -70,7 +70,7 @@ describe("appState documents and paths", () => {
     appState.switchContext(workspaceId);
     const workspaceDocumentId = appState.getActiveDocuments()[0]!.id;
     appState.setDocumentContent(workspaceDocumentId, "workspace draft");
-    appState.switchContext("notepad");
+    appState.switchContext("tabs-default");
 
     appState.setDocumentContentForContext(
       workspaceId,
@@ -88,8 +88,8 @@ describe("appState documents and paths", () => {
       scrollTop: 240,
       isDirty: true,
     });
-    expect(snapshot.contexts.notepad.documents[0]?.content).toBe("");
-    expect(snapshot.contexts.notepad.documents[0]?.scrollTop).toBe(0);
+    expect(snapshot.contexts.tabGroups[0].snapshot.documents[0]?.content).toBe("");
+    expect(snapshot.contexts.tabGroups[0].snapshot.documents[0]?.scrollTop).toBe(0);
   });
 
   it("markDocumentSaved clears dirty state and updates metadata", () => {
@@ -253,7 +253,7 @@ describe("appState external file fields", () => {
     const workspaceId = appState.addWorkspace("/tmp/column-workspace")!;
     appState.switchContext(workspaceId);
     const workspaceDocumentId = appState.getActiveDocuments()[0]!.id;
-    appState.switchContext("notepad");
+    appState.switchContext("tabs-default");
 
     appState.setDocumentTextColumnWidthForContext(workspaceId, workspaceDocumentId, 720);
 
@@ -262,6 +262,6 @@ describe("appState external file fields", () => {
       (workspace) => workspace.id === workspaceId,
     )?.snapshot.documents[0];
     expect(parkedDocument?.textColumnWidthPx).toBe(720);
-    expect(snapshot.contexts.notepad.documents[0]?.textColumnWidthPx ?? null).toBeNull();
+    expect(snapshot.contexts.tabGroups[0].snapshot.documents[0]?.textColumnWidthPx ?? null).toBeNull();
   });
 });

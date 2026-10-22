@@ -29,7 +29,7 @@ function workspaceWithDocuments(
           rootPath,
           snapshot: {
             documents,
-            session: base.contexts.notepad.session,
+            session: base.contexts.tabGroups[0].snapshot.session,
           },
         },
         {
@@ -39,7 +39,7 @@ function workspaceWithDocuments(
             documents: [
               buildDocument({ id: "doc-other", filePath: "/tmp/other-workspace/dirty.txt" }, "x", "dirty.txt"),
             ],
-            session: base.contexts.notepad.session,
+            session: base.contexts.tabGroups[0].snapshot.session,
           },
         },
       ],

@@ -1,5 +1,6 @@
 import { normalizePathForStorage, normalizePathSync } from "./diskFingerprint";
 import { appState } from "../state/appState";
+import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
 
 /**
  * Collapse `.` / `..` segments and duplicate slashes on an already
@@ -95,24 +96,24 @@ export function workspaceRelativePath(filePath: string, workspaceRoot: string): 
   return displayPath.slice(displayRoot.length + 1);
 }
 
-export function ensureNotepadForOutsidePath(path: string): {
-  switchedToNotepad: boolean;
+export function ensureTabGroupForOutsidePath(path: string): {
+  switchedToTabGroup: boolean;
   activeWorkspaceRoot: string | null;
 } {
   const activeWorkspaceRoot = appState.getWorkspaceRoot();
   if (!activeWorkspaceRoot) {
-    return { switchedToNotepad: false, activeWorkspaceRoot: null };
+    return { switchedToTabGroup: false, activeWorkspaceRoot: null };
   }
   if (isPathUnderRoot(path, activeWorkspaceRoot)) {
-    return { switchedToNotepad: false, activeWorkspaceRoot };
+    return { switchedToTabGroup: false, activeWorkspaceRoot };
   }
-  const switched = appState.switchContext("notepad");
-  return { switchedToNotepad: switched, activeWorkspaceRoot };
+  const switched = appState.switchContext(DEFAULT_TAB_GROUP_ID);
+  return { switchedToTabGroup: switched, activeWorkspaceRoot };
 }
 
-export function runInNotepadContext<T>(fn: () => Promise<T> | T): Promise<T> | T {
-  if (!appState.isNotepadActive()) {
-    appState.switchContext("notepad");
+export function runInTabGroupContext<T>(fn: () => Promise<T> | T): Promise<T> | T {
+  if (!appState.isTabGroupActive()) {
+    appState.switchContext(DEFAULT_TAB_GROUP_ID);
   }
   return fn();
 }

@@ -419,7 +419,7 @@ describe("file.open command", () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: "/tmp/open.txt",
-      switchedToNotepad: false,
+      switchedToTabGroup: false,
     });
     completeOpenPathMock.mockResolvedValue("doc-2");
 
@@ -607,7 +607,7 @@ describe("file.saveAs command", () => {
     await flushCommandQueue();
 
     const snapshot = appState.getSnapshot();
-    const notepadDocument = snapshot.contexts.notepad.documents.find(
+    const notepadDocument = snapshot.contexts.tabGroups[0].snapshot.documents.find(
       (document) => document.filePath === "/tmp/outside.txt",
     );
     expect(notepadDocument).toMatchObject({

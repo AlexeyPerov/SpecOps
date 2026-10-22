@@ -41,7 +41,7 @@ function buildState(activeContextId: AppDomainState["contexts"]["activeContextId
   return {
     contexts: {
       activeContextId,
-      notepad: buildSnapshot("doc-1", "tab-1"),
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: buildSnapshot("doc-1", "tab-1") }],
       workspaces: [
         {
           id: "ws-1",
@@ -98,7 +98,7 @@ describe("context-aware document lookup", () => {
     return {
       contexts: {
         activeContextId,
-        notepad: buildSnapshot("doc-1", "tab-1"),
+        tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: buildSnapshot("doc-1", "tab-1") }],
         workspaces: [
           {
             id: "ws-1",
@@ -175,7 +175,7 @@ describe("context-aware document lookup", () => {
     // Active first, then notepad, and the two workspaces.
     expect(ids).toContain("ws-1");
     expect(ids).toContain("ws-2");
-    expect(ids).toContain("notepad");
+    expect(ids).toContain("tabs-default");
     // No duplicates.
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -194,7 +194,7 @@ describe("context-aware document lookup", () => {
     const state: AppDomainState = {
       contexts: {
         activeContextId: "ws-2",
-        notepad: buildSnapshot("doc-1", "tab-1"),
+        tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: buildSnapshot("doc-1", "tab-1") }],
         workspaces: [
           {
             id: "ws-2",

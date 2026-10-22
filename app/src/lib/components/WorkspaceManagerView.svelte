@@ -5,6 +5,7 @@
   import { managerProjects, sortManagerProjects, applyCatalogBatch, removeClosedCatalogProject, type ManagerProject, type ManagerScope, type ManagerSort, type CatalogBatchAction } from "../services/workspaceCatalogManagement";
   import { onMount } from "svelte";
   import type { ContextId, WorkspaceEntry } from "../domain/contracts";
+  import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
   import { workspaceGitSummaryPresentation } from "../git/workspaceGitSummaryPresentation";
   import { subscribeWorkspaceGitSummary, refreshWorkspaceGitSummaries, type WorkspaceGitSummarySnapshot } from "../git/workspaceGitSummary";
   import { shouldLoadWorkspaceManagerGitColumn } from "../git/gitIntegrationGating";
@@ -18,7 +19,7 @@
   type ManagerRow = ManagerProject;
   let {
     workspaces = [],
-    activeContextId = "notepad",
+    activeContextId = DEFAULT_TAB_GROUP_ID,
     hiddenRootPaths = emptySet<string>(),
     onAddWorkspace = () => {},
     onAddMultiple = () => {},

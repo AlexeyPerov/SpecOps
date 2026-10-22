@@ -67,7 +67,7 @@ describe("domain/contracts barrel", () => {
       content: "hello",
       createdAt: new Date(0).toISOString(),
     };
-    const contextId: ContextId = "notepad";
+    const contextId: ContextId = "tabs-default";
     const settingsKeys: (keyof AppSettingsState)[] = ["statusBarVisible", "externalFiles"];
     const domainKeys: (keyof AppDomainState)[] = ["contexts", "settings", "theme"];
     const snapshotKeys: (keyof AppSessionSnapshot)[] = ["version", "windows"];
@@ -75,7 +75,7 @@ describe("domain/contracts barrel", () => {
     expect(definition.id).toBe(command);
     expect(tab.kind).toBe("file");
     expect(message.role).toBe("user");
-    expect(contextId).toBe("notepad");
+    expect(contextId).toBe("tabs-default");
     expect(settingsKeys).toHaveLength(2);
     expect(domainKeys).toHaveLength(3);
     expect(snapshotKeys).toHaveLength(2);

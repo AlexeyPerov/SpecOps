@@ -2,7 +2,7 @@ import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { appState } from "../state/appState";
 import type { ContextId, DiskFingerprint } from "../domain/contracts";
-import { allTabs, isFileTab } from "../domain/contracts";
+import { allTabs, DEFAULT_TAB_GROUP_ID, isFileTab, isTabGroupId } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { claimOpenFile, pruneOpenFileRegistryWindows } from "./openFileRegistry";
 import { initializeDocumentDiskState } from "./externalFileChanges";
@@ -18,18 +18,15 @@ import { isPathUnderRoot } from "./workspacePaths";
 export type RequestOpenPathResult =
   | { kind: "redirected"; path: string; ownerWindowId: string }
   | { kind: "existing"; path: string; documentId: string }
-  | { kind: "needs_read"; path: string; switchedToNotepad: boolean };
+  | { kind: "needs_read"; path: string; switchedToTabGroup: boolean };
 
 function findLocalDocumentForNormalizedPath(
   normalizedPath: string,
 ): { contextId: ContextId; documentId: string } | null {
   const snapshot = appState.getSnapshot();
   const contexts = [
-    { id: "notepad" as const, snapshot: snapshot.contexts.notepad },
-    ...snapshot.contexts.workspaces.map((workspace) => ({
-      id: workspace.id,
-      snapshot: workspace.snapshot,
-    })),
+    ...snapshot.contexts.tabGroups,
+    ...snapshot.contexts.workspaces,
   ];
 
   for (const context of contexts) {
@@ -80,10 +77,10 @@ export async function requestOpenPath(
   if (
     restricted &&
     activeWorkspaceRoot &&
-    activeContextId !== "notepad" &&
+    !isTabGroupId(activeContextId) &&
     isPathUnderRoot(path, activeWorkspaceRoot)
   ) {
-    const migratedDocumentId = appState.migrateNotepadFileTabToWorkspace(
+    const migratedDocumentId = appState.migrateTabGroupFileTabToWorkspace(
       normalized,
       activeContextId,
     );
@@ -103,17 +100,17 @@ export async function requestOpenPath(
     return { kind: "existing", path, documentId: existingLocal.documentId };
   }
 
-  let switchedToNotepad = false;
+  let switchedToTabGroup = false;
   if (
     restricted &&
     activeWorkspaceRoot &&
-    activeContextId !== "notepad" &&
+    !isTabGroupId(activeContextId) &&
     !isPathUnderRoot(path, activeWorkspaceRoot)
   ) {
-    switchedToNotepad = appState.switchContext("notepad");
+    switchedToTabGroup = appState.switchContext(DEFAULT_TAB_GROUP_ID);
   }
 
-  return { kind: "needs_read", path, switchedToNotepad };
+  return { kind: "needs_read", path, switchedToTabGroup };
 }
 
 export async function redirectToOwnerWindow(
@@ -132,11 +129,8 @@ export async function redirectToOwnerWindow(
 export function selectTabForNormalizedPath(normalizedPath: string): boolean {
   const snapshot = appState.getSnapshot();
   const contexts = [
-    { id: "notepad" as const, snapshot: snapshot.contexts.notepad },
-    ...snapshot.contexts.workspaces.map((workspace) => ({
-      id: workspace.id,
-      snapshot: workspace.snapshot,
-    })),
+    ...snapshot.contexts.tabGroups,
+    ...snapshot.contexts.workspaces,
   ];
   for (const context of contexts) {
     for (const tab of allTabs(context.snapshot.session.editorLayout)) {

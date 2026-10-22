@@ -56,6 +56,8 @@
   import type { AppDomainState } from "../lib/domain/contracts";
   import {
     allTabs,
+    DEFAULT_TAB_GROUP_ID,
+    defaultTabGroupSnapshot,
     getSessionActiveTab,
     getSessionSelectedTabId,
     isFileTab,
@@ -246,16 +248,19 @@
   });
 
   let retainedWorkspaceRoots = new Set<string>();
-  // Keystrokes replace the workspaces array; key the retain pass on the
-  // workspace identities so it only re-runs when they actually change.
+  // Keystrokes replace the context arrays; key the retain pass on the
+  // context identities so it only re-runs when they actually change.
   const retainedWorkspacesKey = $derived(
-    $appContexts.workspaces.map(workspace => `${workspace.id}\0${workspace.rootPath}`).join("\n"),
+    [
+      ...$appContexts.tabGroups.map(group => group.id),
+      ...$appContexts.workspaces.map(workspace => `${workspace.id}\0${workspace.rootPath}`),
+    ].join("\n"),
   );
   $effect(() => {
     retainedWorkspacesKey;
     // Retain undo/fold cache across inactive contexts (LRU-bounded); only drop
     // entries whose documents no longer exist in any context.
-    const currentWorkspaces = untrack(() => appState.getSnapshot().contexts.workspaces);
+    const { tabGroups: currentTabGroups, workspaces: currentWorkspaces } = untrack(() => appState.getSnapshot().contexts);
     const roots = currentWorkspaces.map(workspace => workspace.rootPath);
     const nextRoots = new Set(roots);
     for (const root of retainedWorkspaceRoots) if (!nextRoots.has(root)) {
@@ -264,7 +269,7 @@
     retainedWorkspaceRoots = nextRoots;
     projectTreeController.retainRoots(roots);
     workspaceDirectoryCache.retainRoots(roots);
-    editorSessionCache.retainContexts(new Set(['notepad', ...currentWorkspaces.map(workspace => workspace.id)]));
+    editorSessionCache.retainContexts(new Set([...currentTabGroups, ...currentWorkspaces].map(context => context.id)));
     editorSessionCache.retainDocuments($appOpenDocumentIds);
     retainDocumentMarkdownHtml($appOpenDocumentIds);
   });
@@ -471,7 +476,8 @@
   // opened file tabs in append order (newest-opened last), capped at
   // NOTEPAD_RAIL_TAB_LIMIT so the card cannot push the workspace list down the
   // rail.
-  const notepadSession = $derived($appContexts.notepad.session);
+  const notepadSnapshot = $derived(defaultTabGroupSnapshot($appContexts));
+  const notepadSession = $derived(notepadSnapshot.session);
   const notepadOpenTabCount = $derived(allTabs(notepadSession.editorLayout).length);
   // P03-08-24f: memoize on the notepad session + documents references so the
   // card's tab list keeps its array identity across unrelated app-state emits
@@ -483,7 +489,7 @@
   } | null = null;
   let notepadRecentTabsOutput: { tabId: string; label: string }[] = [];
   const notepadRecentTabs = $derived.by(() => {
-    const notepadDocs = $appContexts.notepad.documents;
+    const notepadDocs = notepadSnapshot.documents;
     if (
       notepadRecentTabsInput &&
       notepadRecentTabsInput.session === notepadSession &&
@@ -578,7 +584,7 @@
 
   /** Switches to the notepad context and selects the given tab. */
   function handleSelectNotepadTab(tabId: string): void {
-    appState.switchContext("notepad");
+    appState.switchContext(DEFAULT_TAB_GROUP_ID);
     appState.selectTab(tabId);
   }
 

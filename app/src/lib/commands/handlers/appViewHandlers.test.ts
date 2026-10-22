@@ -364,7 +364,7 @@ describe("app shell toggle commands", () => {
 
     dispatchCommand("app.openWorkspaceManager", context);
 
-    expect(appState.getActiveContext().id).toBe("notepad");
+    expect(appState.getActiveContext().id).toBe("tabs-default");
     const tabs = getSessionTabs(appState.getActiveSession());
     expect(tabs.some((tab) => tab.kind === "view" && tab.view === "workspace-manager")).toBe(true);
   });

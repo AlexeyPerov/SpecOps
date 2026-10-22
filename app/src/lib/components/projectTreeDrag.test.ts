@@ -183,7 +183,7 @@ describe("projectTreeDrag — file→context drop", () => {
 
   it("never treats a dragged directory as a context-open candidate", async () => {
     const target = document.createElement("button");
-    target.dataset.fileDropContext = "notepad";
+    target.dataset.fileDropContext = "tabs-default";
     target.getBoundingClientRect = () => ({
       left: 40, top: 40, right: 80, bottom: 80, width: 40, height: 40,
       x: 40, y: 40, toJSON: () => ({}),

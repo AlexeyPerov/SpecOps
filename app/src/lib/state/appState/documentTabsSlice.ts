@@ -238,9 +238,11 @@ export function createDocumentTabsLifecycleSlice(deps: {
       if (inActive) {
         return inActive.id;
       }
-      const inNotepad = findDocumentByPathInContext(snapshot.contexts.notepad, filePath);
-      if (inNotepad) {
-        return inNotepad.id;
+      for (const group of snapshot.contexts.tabGroups) {
+        const inTabGroup = findDocumentByPathInContext(group.snapshot, filePath);
+        if (inTabGroup) {
+          return inTabGroup.id;
+        }
       }
       for (const workspace of snapshot.contexts.workspaces) {
         const inWorkspace = findDocumentByPathInContext(workspace.snapshot, filePath);

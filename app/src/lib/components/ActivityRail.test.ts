@@ -39,7 +39,7 @@ describe("ActivityRail", () => {
     try {
       const { host } = mountComponent(ActivityRail, { panelWidthPx: width, onSelectContext: select }); await tick();
       host.querySelector<HTMLButtonElement>('[aria-label="Tasks"]')!.click();
-      expect(select).toHaveBeenCalledWith('notepad'); expect(open).toHaveBeenLastCalledWith('workspace-tasks');
+      expect(select).toHaveBeenCalledWith('tabs-default'); expect(open).toHaveBeenLastCalledWith('workspace-tasks');
       host.querySelector<HTMLButtonElement>('[aria-label="Notes"]')!.click();
       expect(open).toHaveBeenLastCalledWith('workspace-notes');
     } finally { read.mockRestore(); open.mockRestore(); }

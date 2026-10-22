@@ -21,8 +21,8 @@ const saveMock = vi.mocked(savePersistedSettings);
 function makeState(overrides: Partial<AppDomainState> = {}): AppDomainState {
   return {
     contexts: {
-      activeContextId: "notepad",
-      notepad: {
+      activeContextId: "tabs-default",
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
         documents: [],
         session: {
           editorLayout: createSinglePaneLayout([], null),
@@ -30,7 +30,7 @@ function makeState(overrides: Partial<AppDomainState> = {}): AppDomainState {
           windowBounds: null,
           lastActiveSessionId: null,
         },
-      },
+      } }],
 
       workspaces: [],
     },

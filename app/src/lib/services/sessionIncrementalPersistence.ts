@@ -96,7 +96,10 @@ async function bufferPath(
 
 function contextEntries(snapshot: WindowSessionSnapshot): ContextEntry[] {
   return [
-    { contextId: "notepad", snapshot: snapshot.notepad },
+    ...snapshot.tabGroups.map((group) => ({
+      contextId: group.id,
+      snapshot: group.snapshot,
+    })),
     ...snapshot.workspaces.map((workspace) => ({
       contextId: workspace.id,
       snapshot: workspace.snapshot,
@@ -125,7 +128,10 @@ function buildNavigationSnapshot(snapshot: WindowSessionSnapshot): WindowSession
   });
   return {
     ...snapshot,
-    notepad: stripContextDocuments(snapshot.notepad),
+    tabGroups: snapshot.tabGroups.map((group) => ({
+      ...group,
+      snapshot: stripContextDocuments(group.snapshot),
+    })),
     workspaces: snapshot.workspaces.map((workspace) => ({
       ...workspace,
       snapshot: stripContextDocuments(workspace.snapshot),
@@ -217,7 +223,10 @@ function navigationFingerprint(snapshot: WindowSessionSnapshot): string {
       );
     }
   };
-  emitContext("notepad", snapshot.notepad);
+  for (const group of snapshot.tabGroups) {
+    parts.push(`#tg=${group.id}@${group.name}`);
+    emitContext(group.id, group.snapshot);
+  }
   for (const workspace of snapshot.workspaces) {
     parts.push(`#ws=${workspace.id}@${workspace.rootPath}`);
     emitContext(workspace.id, workspace.snapshot);
@@ -498,18 +507,23 @@ export async function readIncrementalWindowSession(
   if (
     navigation.version !== NAVIGATION_VERSION ||
     navigation.windowId !== windowId ||
-    !navigation.snapshot?.notepad ||
+    !Array.isArray(navigation.snapshot?.tabGroups) ||
     !Array.isArray(navigation.snapshot.workspaces)
   ) {
     return checkpoint;
   }
   const fallback = fallbackDocumentsByContext(checkpoint);
   const snapshot = navigation.snapshot;
-  const notepad = await hydrateContextBuffers(
-    windowId,
-    "notepad",
-    snapshot.notepad,
-    fallback.get("notepad"),
+  const tabGroups = await Promise.all(
+    snapshot.tabGroups.map(async (group) => ({
+      ...group,
+      snapshot: await hydrateContextBuffers(
+        windowId,
+        group.id,
+        group.snapshot,
+        fallback.get(group.id),
+      ),
+    })),
   );
   const workspaces = await Promise.all(
     snapshot.workspaces.map(async (workspace) => ({
@@ -524,7 +538,7 @@ export async function readIncrementalWindowSession(
   );
   return {
     ...snapshot,
-    notepad,
+    tabGroups,
     workspaces,
   };
 }

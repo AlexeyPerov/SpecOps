@@ -3,7 +3,7 @@ import { mount, unmount, tick } from 'svelte';
 import { EditorView } from '@codemirror/view';
 vi.mock('../editor/editorWorkbenchContext', async () => {
   const { createEditorWorkbenchRuntime } = await import('../editor/editorWorkbenchRuntime');
-  return { getEditorWorkbenchRuntime: () => createEditorWorkbenchRuntime({ getActiveContextId: () => 'notepad', getActivePaneId: () => 'pane-1', getActiveDocumentId: () => 'workspace-notes' }) };
+  return { getEditorWorkbenchRuntime: () => createEditorWorkbenchRuntime({ getActiveContextId: () => 'tabs-default', getActivePaneId: () => 'pane-1', getActiveDocumentId: () => 'workspace-notes' }) };
 });
 vi.mock('../editor/editorDocumentSessionContext', async () => {
   const { createEditorDocumentSessionCache } = await import('../editor/editorDocumentSessionCache');
@@ -26,7 +26,7 @@ let target: HTMLElement;
 afterEach(async () => { if (view) await unmount(view); view = undefined; target?.remove(); });
 async function render(kind: 'tasks' | 'notes', root: string | null = '/project') {
   target = window.document.createElement('div'); window.document.body.append(target);
-  view = mount(WorkspaceDocumentView, { target, props: { root, kind, contextId: root === null ? 'notepad' : 'ws-1', paneId: 'pane-1', notify: vi.fn() } });
+  view = mount(WorkspaceDocumentView, { target, props: { root, kind, contextId: root === null ? 'tabs-default' : 'ws-1', paneId: 'pane-1', notify: vi.fn() } });
   await tick();
 }
 describe('workspace document views', () => {

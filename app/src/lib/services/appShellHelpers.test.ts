@@ -13,7 +13,7 @@ import {
 
 function domainState(overrides: {
   openTabs?: TabState[];
-  documents?: AppDomainState["contexts"]["notepad"]["documents"];
+  documents?: AppDomainState["contexts"]["tabGroups"][number]["snapshot"]["documents"];
   watchExternalChanges?: boolean;
 }): AppDomainState {
   const snapshot = {
@@ -26,8 +26,8 @@ function domainState(overrides: {
   };
   return {
     contexts: {
-      activeContextId: "notepad",
-      notepad: snapshot,
+      activeContextId: "tabs-default",
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: snapshot }],
 
       workspaces: [],
     },
@@ -206,14 +206,14 @@ describe("externalFileWatcherSyncKey", () => {
       ...common,
       contexts: {
         activeContextId: "ws-1",
-        notepad: {
+        tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
           documents: [],
           session: {
             editorLayout: createSinglePaneLayout([], null),
             lastActiveWindowId: "main",
             windowBounds: null,
           },
-        },
+        } }],
 
         workspaces: [
           { id: "ws-1", rootPath: "/ws", snapshot: wsSnapshotA },

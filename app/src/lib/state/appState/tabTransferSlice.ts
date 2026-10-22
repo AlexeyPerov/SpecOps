@@ -1,4 +1,4 @@
-import type { AppDomainState, ContextId, ContextSnapshot } from "../../domain/contracts";
+import type { AppDomainState, ContextId, ContextSnapshot, TabGroupEntry } from "../../domain/contracts";
 import {
   allTabs,
   createFileTab,
@@ -8,6 +8,7 @@ import {
   recomputeSelectedTabId,
   setActivePaneTabs,
   tabDocumentId,
+  withTabGroupSnapshot,
 } from "../../domain/contracts";
 import { createImplicitDraftPair, isReplaceableBootstrapTab } from "../../services/implicitDraftTab";
 import { isPathUnderRoot } from "../../services/workspacePaths";
@@ -21,6 +22,7 @@ import {
   nextDocAndTabIds,
   nextTabId,
   patchActiveContext,
+  patchContextById,
 } from "./contextHelpers";
 import { buildDocument } from "./documentHelpers";
 import { canCreateFileTabs, reopenTabForDocument, selectTabInternal } from "./tabHelpers";
@@ -163,7 +165,7 @@ export function createTabTransferSlice(deps: {
       let movedDocumentId: string | null = null;
       update((state) => {
         const contexts = [
-          { id: "notepad" as ContextId, snapshot: state.contexts.notepad },
+          ...state.contexts.tabGroups.map((entry) => ({ id: entry.id as ContextId, snapshot: entry.snapshot })),
           ...state.contexts.workspaces.map((entry) => ({ id: entry.id, snapshot: entry.snapshot })),
         ];
         const target = contexts.find((entry) => entry.id === targetContextId);
@@ -199,32 +201,21 @@ export function createTabTransferSlice(deps: {
         const nextTarget = targetMatch
           ? target.snapshot
           : addFileTabWithDocument(target.snapshot, sourceMatch.document, nextTabId());
-        const replaceContext = (id: ContextId, snapshot: ContextSnapshot): AppDomainState["contexts"] => ({
-          ...state.contexts,
-          notepad: id === "notepad" ? snapshot : state.contexts.notepad,
-          workspaces: state.contexts.workspaces.map((entry) =>
-            entry.id === id ? { ...entry, snapshot } : entry,
-          ),
-        });
-        let nextContexts = replaceContext(source.id, nextSource);
-        nextContexts = {
-          ...nextContexts,
-          notepad: target.id === "notepad" ? nextTarget : nextContexts.notepad,
-          workspaces: nextContexts.workspaces.map((entry) =>
-            entry.id === target.id ? { ...entry, snapshot: nextTarget } : entry,
-          ),
-          activeContextId: targetContextId,
-        };
+        const patched = patchContextById(
+          patchContextById(state, source.id, () => nextSource),
+          target.id,
+          () => nextTarget,
+        );
         const nextState = {
-          ...state,
-          contexts: nextContexts,
+          ...patched,
+          contexts: { ...patched.contexts, activeContextId: targetContextId },
           editor: { ...state.editor, previewMode: "editor" as const },
         };
         return targetMatch ? selectTabInternal(nextState, targetMatch.tabId) : nextState;
       });
       return movedDocumentId;
     },
-    migrateNotepadFileTabToWorkspace(
+    migrateTabGroupFileTabToWorkspace(
       normalizedPath: string,
       workspaceContextId: ContextId,
     ): string | null {
@@ -237,10 +228,28 @@ export function createTabTransferSlice(deps: {
         if (!isPathUnderRoot(normalizedPath, workspace.rootPath)) {
           return state;
         }
-        const notepadMatch = findFileTabForNormalizedPath(state.contexts.notepad, normalizedPath);
-        if (!notepadMatch) {
+        let tabGroup: TabGroupEntry | null = null;
+        let tabGroupMatch: ReturnType<typeof findFileTabForNormalizedPath> = null;
+        for (const group of state.contexts.tabGroups) {
+          tabGroupMatch = findFileTabForNormalizedPath(group.snapshot, normalizedPath);
+          if (tabGroupMatch) {
+            tabGroup = group;
+            break;
+          }
+        }
+        if (!tabGroup || !tabGroupMatch) {
           return state;
         }
+        const nextTabGroups = withTabGroupSnapshot(
+          state.contexts.tabGroups,
+          tabGroup.id,
+          removeFileTabFromSnapshot(
+            tabGroup.snapshot,
+            tabGroupMatch.tabId,
+            tabGroupMatch.documentId,
+            tabGroup.snapshot.session.lastActiveWindowId,
+          ),
+        );
         const existingInWorkspace = findDocumentByPathInContext(
           workspace.snapshot,
           normalizedPath,
@@ -258,12 +267,7 @@ export function createTabTransferSlice(deps: {
             contexts: {
               ...state.contexts,
               activeContextId: workspaceContextId,
-              notepad: removeFileTabFromSnapshot(
-                state.contexts.notepad,
-                notepadMatch.tabId,
-                notepadMatch.documentId,
-                state.contexts.notepad.session.lastActiveWindowId,
-              ),
+              tabGroups: nextTabGroups,
               workspaces: state.contexts.workspaces.map((entry) =>
                 entry.id === workspaceContextId
                   ? {
@@ -281,26 +285,18 @@ export function createTabTransferSlice(deps: {
           return existingTab ? selectTabInternal(nextState, existingTab.id) : nextState;
         }
 
-        migratedDocumentId = notepadMatch.documentId;
-        const workspaceTabId = nextTabId();
-        const lastActiveWindowId = state.contexts.notepad.session.lastActiveWindowId;
-        const nextNotepad = removeFileTabFromSnapshot(
-          state.contexts.notepad,
-          notepadMatch.tabId,
-          notepadMatch.documentId,
-          lastActiveWindowId,
-        );
+        migratedDocumentId = tabGroupMatch.documentId;
         const nextWorkspace = addFileTabWithDocument(
           workspace.snapshot,
-          notepadMatch.document,
-          workspaceTabId,
+          tabGroupMatch.document,
+          nextTabId(),
         );
         return {
           ...state,
           contexts: {
             ...state.contexts,
             activeContextId: workspaceContextId,
-            notepad: nextNotepad,
+            tabGroups: nextTabGroups,
             workspaces: state.contexts.workspaces.map((entry) =>
               entry.id === workspaceContextId ? { ...entry, snapshot: nextWorkspace } : entry,
             ),

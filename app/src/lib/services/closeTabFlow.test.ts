@@ -27,10 +27,10 @@ const deps = {
 function applyPinnedTabs(): void {
   appState.applyWindowSession({
     ...appState.getWindowSessionSnapshot(),
-    notepad: {
-      ...appState.getWindowSessionSnapshot().notepad,
+    tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+      ...appState.getWindowSessionSnapshot().tabGroups[0].snapshot,
       session: {
-        ...appState.getWindowSessionSnapshot().notepad.session,
+        ...appState.getWindowSessionSnapshot().tabGroups[0].snapshot.session,
         editorLayout: createSinglePaneLayout(
           [
             createFileTab("tab-1", "doc-1"),
@@ -41,7 +41,7 @@ function applyPinnedTabs(): void {
           "tab-4",
         ),
       },
-    },
+    } }],
   });
 }
 

@@ -263,7 +263,7 @@ describe("closeWorkspaceWithConfirm — Save all writes to disk", () => {
   it('saves Notepad buffers through the shared Save all path', async () => {
     const doc = appState.getActiveDocuments()[0]; appState.setDocumentContent(doc.id, 'note');
     saveFileAsMock.mockResolvedValueOnce({ path: '/tmp/note.txt', fingerprint: {mtimeMs:1,sizeBytes:4} });
-    expect(await saveAllDirtyDocumentsToDisk('notepad', appState.getActiveDocuments().filter(doc => doc.isDirty), vi.fn(), {getWindowId: () => 'main'})).toBe(true);
+    expect(await saveAllDirtyDocumentsToDisk('tabs-default', appState.getActiveDocuments().filter(doc => doc.isDirty), vi.fn(), {getWindowId: () => 'main'})).toBe(true);
     expect(appState.getActiveDocuments()[0].filePath).toBe('/tmp/note.txt');
   });
 

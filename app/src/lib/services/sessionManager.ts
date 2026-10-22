@@ -227,9 +227,11 @@ async function restoreWindowSessionFromSnapshot(
   if (parsed.version !== 2 || !parsed.windows) {
     return null;
   }
+  // Window snapshots without tab groups predate the current format and are not restored.
+  const checkpoint = parsed.windows[windowId];
   const snapshot = await readIncrementalWindowSession(
     windowId,
-    parsed.windows[windowId] ?? null,
+    Array.isArray(checkpoint?.tabGroups) ? checkpoint : null,
   );
   if (!snapshot) {
     return null;

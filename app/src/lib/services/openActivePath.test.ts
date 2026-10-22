@@ -166,7 +166,7 @@ describe("openActivePath", () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: FILE_PATH,
-      switchedToNotepad: false,
+      switchedToTabGroup: false,
     });
     statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 100 });
     openPathMock.mockResolvedValue({
@@ -204,7 +204,7 @@ describe("openActivePath", () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: FILE_PATH,
-      switchedToNotepad: false,
+      switchedToTabGroup: false,
     });
     statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: limit + 1 });
     completeLargePendingOpenMock.mockResolvedValue("doc-pending");
@@ -225,7 +225,7 @@ describe("openActivePath", () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: FILE_PATH,
-      switchedToNotepad: false,
+      switchedToTabGroup: false,
     });
     // Well above the default 1 MiB confirm threshold.
     statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 64 * 1024 * 1024 });
@@ -253,7 +253,7 @@ describe("openActivePath", () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: FILE_PATH,
-      switchedToNotepad: false,
+      switchedToTabGroup: false,
     });
     statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 600 * 1024 * 1024 });
     completeLargePendingOpenMock.mockResolvedValue("doc-pending");
@@ -276,7 +276,7 @@ describe("openActivePath", () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: FILE_PATH,
-      switchedToNotepad: false,
+      switchedToTabGroup: false,
     });
     statDiskFingerprintMock.mockRejectedValue(new Error("no such file or directory"));
 
@@ -293,7 +293,7 @@ describe("openActivePath", () => {
     requestOpenPathMock.mockResolvedValue({
       kind: "needs_read",
       path: FILE_PATH,
-      switchedToNotepad: false,
+      switchedToTabGroup: false,
     });
     statDiskFingerprintMock.mockResolvedValue({ mtimeMs: 1, sizeBytes: 100 });
     openPathMock.mockRejectedValue(new Error("permission denied"));

@@ -5,6 +5,7 @@
   import HoverTooltip from "./HoverTooltip.svelte";
   import {
     allTabs,
+    DEFAULT_TAB_GROUP_ID,
     type ContextId,
     type WorkspaceEntry,
   } from "../domain/contracts";
@@ -78,7 +79,7 @@
     searchQuery = $bindable(''),
     manualOrder = true,
     onError = console.error,
-    activeContextId = "notepad",
+    activeContextId = DEFAULT_TAB_GROUP_ID,
     sessionsEnabled = false,
     panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
     notepadOpenTabCount = 0,
@@ -492,11 +493,11 @@
 >
   {#if expanded}
     <button
-      class={`rail-workspace-card rail-notepad-card ${activeContextId === "notepad" ? "rail-workspace-card-active" : ""}`}
-      data-file-drop-context="notepad"
+      class={`rail-workspace-card rail-notepad-card ${activeContextId === DEFAULT_TAB_GROUP_ID ? "rail-workspace-card-active" : ""}`}
+      data-file-drop-context={DEFAULT_TAB_GROUP_ID}
       type="button"
       aria-label="Notepad"
-      onclick={() => onSelectContext("notepad")}
+      onclick={() => onSelectContext(DEFAULT_TAB_GROUP_ID)}
     >
       <span class="rail-workspace-avatar rail-notepad-avatar"><NotepadIcon size={16} /></span>
       <span class="rail-workspace-info">
@@ -536,11 +537,11 @@
   {:else}
     <HoverTooltip label="Notepad">
       <button
-        class={`rail-button rail-button-notepad ${activeContextId === "notepad" ? "rail-button-active" : ""}`}
-        data-file-drop-context="notepad"
+        class={`rail-button rail-button-notepad ${activeContextId === DEFAULT_TAB_GROUP_ID ? "rail-button-active" : ""}`}
+        data-file-drop-context={DEFAULT_TAB_GROUP_ID}
         type="button"
         aria-label="Notepad"
-        onclick={() => onSelectContext("notepad")}
+        onclick={() => onSelectContext(DEFAULT_TAB_GROUP_ID)}
       >
         <NotepadIcon size={16} />
       </button>
@@ -550,7 +551,7 @@
   {#each ["tasks", "notes"] as kind (kind)}
     <HoverTooltip label={kind === "tasks" ? "Tasks" : "Notes"}>
       <button type="button" class={expanded ? "global-document-link" : "rail-button"} aria-label={kind === "tasks" ? "Tasks" : "Notes"}
-        onclick={() => { onSelectContext("notepad"); if (appState.getSnapshot().contexts.activeContextId !== "notepad") return; appState.openOrFocusViewTab(kind === "tasks" ? "workspace-tasks" : "workspace-notes"); }}>
+        onclick={() => { onSelectContext(DEFAULT_TAB_GROUP_ID); if (appState.getSnapshot().contexts.activeContextId !== DEFAULT_TAB_GROUP_ID) return; appState.openOrFocusViewTab(kind === "tasks" ? "workspace-tasks" : "workspace-notes"); }}>
         <span aria-hidden="true">{kind === "tasks" ? "☑" : "▤"}</span>{#if expanded}<span>{kind === "tasks" ? "Tasks" : "Notes"}</span>{/if}
       </button>
     </HoverTooltip>

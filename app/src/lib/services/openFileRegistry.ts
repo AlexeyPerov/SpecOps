@@ -11,6 +11,7 @@ import type {
 } from "../domain/contracts";
 import {
   allTabs,
+  DEFAULT_TAB_GROUP_ID,
   isFileTab,
   tryNormalizeTabState,
   recomputeSelectedTabId,
@@ -165,7 +166,7 @@ export function buildOpenFileRegistryForWindow(
   }
 
   const contextSnapshots: ContextSnapshot[] = [
-    state.contexts.notepad,
+    ...state.contexts.tabGroups.map((group) => group.snapshot),
     ...state.contexts.workspaces.map((workspace) => workspace.snapshot),
   ];
 
@@ -379,22 +380,25 @@ export function applyRegistryDedupeToWindowSnapshot(
     };
   }
 
-  const nextNotepad = dedupeContext(snapshot.notepad);
+  const nextTabGroups = snapshot.tabGroups.map((group) => ({
+    ...group,
+    snapshot: dedupeContext(group.snapshot),
+  }));
   const nextWorkspaces = snapshot.workspaces.map((workspace) => ({
     ...workspace,
     snapshot: dedupeContext(workspace.snapshot),
   }));
   const activeContextExists =
-    snapshot.activeContextId === "notepad" ||
+    nextTabGroups.some((group) => group.id === snapshot.activeContextId) ||
     nextWorkspaces.some((workspace) => workspace.id === snapshot.activeContextId);
-  const nextActiveContextId = activeContextExists ? snapshot.activeContextId : "notepad";
+  const nextActiveContextId = activeContextExists ? snapshot.activeContextId : DEFAULT_TAB_GROUP_ID;
 
   return {
     registry: nextRegistry,
     snapshot: {
       ...snapshot,
       activeContextId: nextActiveContextId,
-      notepad: nextNotepad,
+      tabGroups: nextTabGroups,
       workspaces: nextWorkspaces,
     },
   };

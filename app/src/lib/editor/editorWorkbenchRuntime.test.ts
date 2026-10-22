@@ -4,7 +4,7 @@ import type { ContextId } from "../domain/contracts";
 import { createEditorWorkbenchRuntime } from "./editorWorkbenchRuntime";
 
 /**
- * Build a test host. `contextId` defaults to "notepad" so existing tests that
+ * Build a test host. `contextId` defaults to "tabs-default" so existing tests that
  * don't care about cross-context behavior stay terse; tests that exercise
  * context namespacing pass an explicit contextId.
  */
@@ -13,7 +13,7 @@ function makeHost(
   label = "host",
 ): EditorHost {
   const fullIdentity: EditorHostIdentity = {
-    contextId: identity.contextId ?? "notepad",
+    contextId: identity.contextId ?? "tabs-default",
     paneId: identity.paneId,
     documentId: identity.documentId,
     generation: identity.generation,
@@ -126,7 +126,7 @@ describe("createEditorWorkbenchRuntime", () => {
     let activePaneId = "pane-a";
     let activeDocumentId: string | null = "doc-1";
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => activePaneId,
       getActiveDocumentId: () => activeDocumentId,
     });
@@ -152,7 +152,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("rejects late registration from an older generation of the same document", () => {
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
@@ -178,7 +178,7 @@ describe("createEditorWorkbenchRuntime", () => {
   it("keeps multiple documents in the same pane coexisting (tab keep-alive)", () => {
     let activeDocumentId: string | null = "doc-1";
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => activeDocumentId,
     });
@@ -209,7 +209,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("does not clear a newer host when an older registration unregisters", () => {
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-2",
     });
@@ -230,7 +230,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("makes unregister idempotent", () => {
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
@@ -246,7 +246,7 @@ describe("createEditorWorkbenchRuntime", () => {
   it("returns null when the active document does not match the registered host", () => {
     let activeDocumentId: string | null = "doc-1";
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => activeDocumentId,
     });
@@ -261,20 +261,20 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("publishes cursor status only for the active matching host", () => {
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
     dispose = () => runtime.dispose();
 
     const identityA: EditorHostIdentity = {
-      contextId: "notepad",
+      contextId: "tabs-default",
       paneId: "pane-a",
       documentId: "doc-1",
       generation: 1,
     };
     const identityB: EditorHostIdentity = {
-      contextId: "notepad",
+      contextId: "tabs-default",
       paneId: "pane-b",
       documentId: "doc-2",
       generation: 1,
@@ -303,14 +303,14 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("publishes selection count for multi-cursor", () => {
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
     dispose = () => runtime.dispose();
 
     const identity: EditorHostIdentity = {
-      contextId: "notepad",
+      contextId: "tabs-default",
       paneId: "pane-a",
       documentId: "doc-1",
       generation: 1,
@@ -331,7 +331,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("dispose clears hosts and ignores further registrations", () => {
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });
@@ -350,7 +350,7 @@ describe("createEditorWorkbenchRuntime", () => {
 
   it("exposes an active command runner for find/go-to style callers", () => {
     const runtime = createEditorWorkbenchRuntime({
-      getActiveContextId: () => "notepad",
+      getActiveContextId: () => "tabs-default",
       getActivePaneId: () => "pane-a",
       getActiveDocumentId: () => "doc-1",
     });

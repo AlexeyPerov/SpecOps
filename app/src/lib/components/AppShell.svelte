@@ -37,6 +37,7 @@
     WorkspaceEntry,
     WindowContextState,
   } from "../domain/contracts";
+  import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
   import { appState } from "../state/appState";
   import { isGitIntegrationEnabled } from "../services/gitIntegrationSettings";
   import {
@@ -410,11 +411,13 @@
 
   const editorContextsById = $derived.by(() => {
     const entries = new Map<ContextId, MountedEditorContext>();
-    entries.set("notepad", {
-      contextId: "notepad",
-      snapshot: editor.contexts.notepad,
-      workspaceRootPath: null,
-    });
+    for (const group of editor.contexts.tabGroups) {
+      entries.set(group.id, {
+        contextId: group.id,
+        snapshot: group.snapshot,
+        workspaceRootPath: null,
+      });
+    }
     for (const workspace of editor.contexts.workspaces) {
       entries.set(workspace.id, {
         contextId: workspace.id,
@@ -662,7 +665,7 @@
               contextId={contextHost.contextId}
               workspaceRootPath={contextHost.workspaceRootPath}
               workspaceManagerWorkspaces={editor.workspaceManager?.workspaces ?? []}
-              workspaceManagerActiveContextId={editor.workspaceManager?.activeContextId ?? "notepad"}
+              workspaceManagerActiveContextId={editor.workspaceManager?.activeContextId ?? DEFAULT_TAB_GROUP_ID}
               workspaceManagerHiddenRootPaths={editor.workspaceManager?.hiddenRootPaths ?? EMPTY_HIDDEN_ROOT_PATHS}
               onWorkspaceManagerAddWorkspace={editor.workspaceManager?.onAddWorkspace ?? noop}
               onWorkspaceManagerAddMultiple={editor.workspaceManager?.onAddMultiple ?? noop}

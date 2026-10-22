@@ -10,7 +10,7 @@ import { stripWindowSnapshotForSession } from "./sessionDocumentPersistence";
 export function toWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
   return stripWindowSnapshotForSession({
     activeContextId: state.contexts.activeContextId,
-    notepad: state.contexts.notepad,
+    tabGroups: state.contexts.tabGroups,
     workspaces: state.contexts.workspaces,
     editorPreferences: {
       zoomPercent: state.editor.zoomPercent,

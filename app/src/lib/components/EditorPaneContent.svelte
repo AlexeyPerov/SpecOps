@@ -20,6 +20,7 @@
     isSessionTabActiveInPane,
   } from "./editorRouting";
   import {
+    DEFAULT_TAB_GROUP_ID,
     findPane,
     isFileTab,
     paneActiveTab,
@@ -59,7 +60,7 @@
     /** Window-session workspaces, used by the workspace-manager view tab. */
     workspaceManagerWorkspaces = [],
     /** Active context id, used by the workspace-manager view tab. */
-    workspaceManagerActiveContextId = "notepad",
+    workspaceManagerActiveContextId = DEFAULT_TAB_GROUP_ID,
     /** Normalized root paths hidden from the activity rail. */
     workspaceManagerHiddenRootPaths = emptySet<string>(),
     /** Callbacks for the workspace-manager view tab. */

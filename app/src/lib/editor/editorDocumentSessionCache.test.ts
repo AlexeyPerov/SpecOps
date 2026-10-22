@@ -14,7 +14,7 @@ function makeState(doc: string): EditorState {
 /** Build a session key with a default context id. The cache is now namespaced
  *  by context, but these tests exercise pane/document behavior within one
  *  context, so a fixed default keeps them terse. */
-function key(paneId: string, documentId: string, contextId: ContextId = "notepad"): EditorSessionKey {
+function key(paneId: string, documentId: string, contextId: ContextId = "tabs-default"): EditorSessionKey {
   return { contextId, paneId, documentId };
 }
 

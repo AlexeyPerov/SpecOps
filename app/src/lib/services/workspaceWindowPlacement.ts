@@ -5,6 +5,7 @@ import { join } from '@tauri-apps/api/path';
 import { ensureSpecOpsDataDir } from './appDataDir';
 import { normalizePathSync } from './diskFingerprint';
 import type { WindowSessionSnapshot } from '../domain/contracts';
+import { DEFAULT_TAB_GROUP_ID, isTabGroupId } from '../domain/contracts';
 export type WorkspaceWindowOwners = Record<string, string>;
 type Placement = WorkspaceWindowOwners;
 export const WORKSPACE_PLACEMENT_CHANGED = 'spec-ops/workspace-placement-changed';
@@ -34,7 +35,7 @@ export async function setWorkspaceWindowOwner(root: string, windowId: string | n
 export async function filterWorkspacePlacement(snapshot: WindowSessionSnapshot, windowId: string): Promise<WindowSessionSnapshot> {
   const placements = await read();
   const workspaces = snapshot.workspaces.filter(entry => !placements[normalizePathSync(entry.rootPath)] || placements[normalizePathSync(entry.rootPath)] === windowId);
-  return { ...snapshot, workspaces, activeContextId: snapshot.activeContextId === 'notepad' || workspaces.some(entry => entry.id === snapshot.activeContextId) ? snapshot.activeContextId : workspaces[0]?.id ?? 'notepad' };
+  return { ...snapshot, workspaces, activeContextId: isTabGroupId(snapshot.activeContextId) || workspaces.some(entry => entry.id === snapshot.activeContextId) ? snapshot.activeContextId : workspaces[0]?.id ?? DEFAULT_TAB_GROUP_ID };
 }
 const outgoing = new Set<string>();
 const incoming = new Set<string>();

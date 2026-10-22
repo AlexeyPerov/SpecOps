@@ -22,7 +22,7 @@ function baseProps(
   return {
     content: "document-a",
     documentId: "doc-a",
-    contextId: "notepad",
+    contextId: "tabs-default",
     paneId: "pane-1",
     scrollTop: 0,
     wrapLines: false,
@@ -157,7 +157,7 @@ describe("createEditorViewController", () => {
     controller!.update(
       baseProps({ content: "document-b", documentId: "doc-b" }),
     );
-    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
+    expect(sessionCache.has({ contextId: "tabs-default", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
 
     // Simulate disk reload invalidation for inactive A.
     sessionCache.invalidateDocument("doc-a");
@@ -231,17 +231,17 @@ describe("createEditorViewController", () => {
     controller!.update(
       baseProps({ content: "document-b", documentId: "doc-b" }),
     );
-    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
+    expect(sessionCache.has({ contextId: "tabs-default", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
     // Other pane sessions for the same document must survive teardown.
     sessionCache.save(
-      { contextId: "notepad", paneId: "pane-2", documentId: "doc-a" },
+      { contextId: "tabs-default", paneId: "pane-2", documentId: "doc-a" },
       EditorState.create({ doc: "from-other-pane" }),
     );
 
     controller!.destroy();
     controller!.destroy();
-    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
-    expect(sessionCache.has({ contextId: "notepad", paneId: "pane-2", documentId: "doc-a" })).toBe(true);
+    expect(sessionCache.has({ contextId: "tabs-default", paneId: "pane-1", documentId: "doc-a" })).toBe(true);
+    expect(sessionCache.has({ contextId: "tabs-default", paneId: "pane-2", documentId: "doc-a" })).toBe(true);
     expect(controller!.getView()).toBeUndefined();
     controller = undefined;
   });

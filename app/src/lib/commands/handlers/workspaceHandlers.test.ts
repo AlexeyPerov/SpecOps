@@ -361,8 +361,8 @@ describe("workspace.reorder command", () => {
     appState.addWorkspace("/tmp/ws-a");
     const wsAId = appState.getSnapshot().contexts.workspaces[0]?.id;
     appState.addWorkspace("/tmp/ws-b");
-    appState.switchContext("notepad");
-    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
+    appState.switchContext("tabs-default");
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("tabs-default");
 
     dispatchCommand("workspace.reorder", context, { fromIndex: 1, toIndex: 0 });
 
@@ -370,7 +370,7 @@ describe("workspace.reorder command", () => {
       "/tmp/ws-b",
       "/tmp/ws-a",
     ]);
-    expect(appState.getSnapshot().contexts.activeContextId).toBe("notepad");
+    expect(appState.getSnapshot().contexts.activeContextId).toBe("tabs-default");
     expect(appState.getSnapshot().contexts.workspaces[1]?.id).toBe(wsAId);
   });
 

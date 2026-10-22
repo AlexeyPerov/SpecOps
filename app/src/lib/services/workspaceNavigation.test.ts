@@ -12,7 +12,7 @@ beforeEach(() => { appState.resetAppState(); vi.clearAllMocks(); });
 describe('successful workspace activation history', () => {
   it('toggles successful open contexts and ignores Manager and plain Notepad switches', async () => {
     const first = appState.addWorkspace('/first')!, second = appState.addWorkspace('/second')!;
-    appState.switchContext('notepad'); appState.openOrFocusViewTab('workspace-manager');
+    appState.switchContext('tabs-default'); appState.openOrFocusViewTab('workspace-manager');
     await activatePreviousWorkspace(vi.fn());
     expect(appState.getSnapshot().contexts.activeContextId).toBe(first);
     await activatePreviousWorkspace(vi.fn());

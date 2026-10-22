@@ -38,6 +38,7 @@
     WorkspaceEntry,
     WindowContextState,
   } from "../domain/contracts";
+  import { isTabGroupId } from "../domain/contracts";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { createProjectTreeController } from "../services/projectTreeController";
   import type { AppShellDocumentView } from "../services/appShellDocumentView";
@@ -566,7 +567,7 @@
   bind:editorPaneEl
   bind:consoleHeightPx
   {consoleOpen}
-  compactNotepad={currentWindowId !== "main" && activeContextId === "notepad"}
+  compactNotepad={currentWindowId !== "main" && isTabGroupId(activeContextId)}
   onConsoleHeightCommit={layoutHandlers.persistConsoleHeightNow}
   projectSearch={{
     open: psPanel.open,

@@ -318,7 +318,7 @@ describe("syncProjectTreeWatcherEffect", () => {
 
 function watcherDomainState(overrides: {
   openTabs?: TabState[];
-  documents?: AppDomainState["contexts"]["notepad"]["documents"];
+  documents?: AppDomainState["contexts"]["tabGroups"][number]["snapshot"]["documents"];
   watchExternalChanges?: boolean;
 }): AppDomainState {
   const snapshot = {
@@ -331,8 +331,8 @@ function watcherDomainState(overrides: {
   };
   return {
     contexts: {
-      activeContextId: "notepad",
-      notepad: snapshot,
+      activeContextId: "tabs-default",
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: snapshot }],
       workspaces: [],
     },
     settings: {

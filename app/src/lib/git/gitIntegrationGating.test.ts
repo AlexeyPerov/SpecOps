@@ -57,7 +57,7 @@ describe("gitIntegrationGating — isVersionControlViewActiveInAnyPane", () => {
     appState.openOrFocusViewTab("version-control");
 
     // Switch away to notepad; the VC tab is still open in the workspace pane.
-    appState.switchContext("notepad");
+    appState.switchContext("tabs-default");
     expect(isVersionControlViewActiveInAnyPane()).toBe(true);
   });
 });

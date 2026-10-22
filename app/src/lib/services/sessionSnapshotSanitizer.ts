@@ -1,5 +1,6 @@
 import { stat } from "@tauri-apps/plugin-fs";
 import type {
+  ContextSnapshot,
   DocumentState,
   EditorLayout,
   EditorPane,
@@ -10,6 +11,7 @@ import type {
 import {
   allTabs,
   createFileTab,
+  DEFAULT_TAB_GROUP_ID,
   isFileTab,
   isSessionTab,
   isViewTab,
@@ -87,8 +89,8 @@ async function fileStillExists(path: string): Promise<boolean> {
 }
 
 async function sanitizeContext(
-  context: WindowSessionSnapshot["notepad"],
-): Promise<WindowSessionSnapshot["notepad"]> {
+  context: ContextSnapshot,
+): Promise<ContextSnapshot> {
   const documentsById = new Map(
     await Promise.all(
       context.documents.map(async (documentState) => {
@@ -241,9 +243,9 @@ async function sanitizeContext(
 
 /** Build a single-empty-document fallback context when no tabs survive pruning. */
 function buildFallbackContext(
-  context: WindowSessionSnapshot["notepad"],
+  context: ContextSnapshot,
   layout: EditorLayout,
-): WindowSessionSnapshot["notepad"] {
+): ContextSnapshot {
   const docId = nextNumericId(
     "doc",
     context.documents.map((documentState) => documentState.id),
@@ -286,7 +288,7 @@ function normalizePane(pane: EditorPane): EditorPane {
  * unrecognizable shapes (caller falls back to a single empty pane).
  */
 function readIncomingLayout(
-  context: WindowSessionSnapshot["notepad"],
+  context: ContextSnapshot,
 ): EditorLayout | null {
   const session = context.session as unknown as Record<string, unknown>;
   const layout = session.editorLayout;
@@ -332,7 +334,7 @@ function readIncomingLayout(
  * snapshots carry a structured `editorLayout` (handled by `readIncomingLayout`);
  * this only reads the flat `openTabs` list used by the legacy re-seed path.
  */
-function readIncomingTabs(context: WindowSessionSnapshot["notepad"]): TabState[] {
+function readIncomingTabs(context: ContextSnapshot): TabState[] {
   const session = context.session as unknown as Record<string, unknown>;
   if (Array.isArray(session.openTabs)) {
     return session.openTabs as TabState[];
@@ -340,7 +342,7 @@ function readIncomingTabs(context: WindowSessionSnapshot["notepad"]): TabState[]
   return [];
 }
 
-function readIncomingSelectedTabId(context: WindowSessionSnapshot["notepad"]): string | null {
+function readIncomingSelectedTabId(context: ContextSnapshot): string | null {
   const session = context.session as unknown as Record<string, unknown>;
   if (typeof session.selectedTabId === "string") {
     return session.selectedTabId;
@@ -351,7 +353,10 @@ function readIncomingSelectedTabId(context: WindowSessionSnapshot["notepad"]): s
 export async function sanitizeWindowSnapshot(
   snapshot: WindowSessionSnapshot,
 ): Promise<WindowSessionSnapshot> {
-  const notepad = await sanitizeContext(snapshot.notepad);
+  const tabGroups = [];
+  for (const group of snapshot.tabGroups) {
+    tabGroups.push({ ...group, snapshot: await sanitizeContext(group.snapshot) });
+  }
   const workspaces = [];
   for (const workspace of snapshot.workspaces) {
     // A workspace whose root folder is gone used to be dropped here. But
@@ -371,15 +376,15 @@ export async function sanitizeWindowSnapshot(
     });
   }
   const activeContextId =
-    snapshot.activeContextId === "notepad" ||
+    tabGroups.some((group) => group.id === snapshot.activeContextId) ||
     workspaces.some((workspace) => workspace.id === snapshot.activeContextId)
       ? snapshot.activeContextId
-      : "notepad";
+      : DEFAULT_TAB_GROUP_ID;
 
   return {
     ...snapshot,
     activeContextId,
-    notepad,
+    tabGroups,
     workspaces,
   };
 }

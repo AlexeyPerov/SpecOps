@@ -11,10 +11,10 @@ function available(...ids: ContextId[]): ReadonlySet<ContextId> {
 
 describe("updateMountedEditorContexts", () => {
   it("keeps the active context and the most recent parked contexts up to the bound", () => {
-    const ids = available("notepad", "ws-1", "ws-2", "ws-3", "ws-4", "ws-5", "ws-6");
+    const ids = available("tabs-default", "ws-1", "ws-2", "ws-3", "ws-4", "ws-5", "ws-6");
     let mounted: ContextId[] = [];
     for (const contextId of [
-      "notepad",
+      "tabs-default",
       "ws-1",
       "ws-2",
       "ws-3",
@@ -30,10 +30,10 @@ describe("updateMountedEditorContexts", () => {
   });
 
   it("moves a revisited parked context to the active end without duplication", () => {
-    const ids = available("notepad", "ws-1", "ws-2");
+    const ids = available("tabs-default", "ws-1", "ws-2");
 
-    expect(updateMountedEditorContexts(["notepad", "ws-1", "ws-2"], "ws-1", ids)).toEqual([
-      "notepad",
+    expect(updateMountedEditorContexts(["tabs-default", "ws-1", "ws-2"], "ws-1", ids)).toEqual([
+      "tabs-default",
       "ws-2",
       "ws-1",
     ]);
@@ -42,19 +42,19 @@ describe("updateMountedEditorContexts", () => {
   it("prunes contexts that were closed while parked", () => {
     expect(
       updateMountedEditorContexts(
-        ["notepad", "ws-1", "ws-2"],
-        "notepad",
-        available("notepad", "ws-2"),
+        ["tabs-default", "ws-1", "ws-2"],
+        "tabs-default",
+        available("tabs-default", "ws-2"),
       ),
-    ).toEqual(["ws-2", "notepad"]);
+    ).toEqual(["ws-2", "tabs-default"]);
   });
 
   it("always retains the active context when the bound is one", () => {
     expect(
       updateMountedEditorContexts(
-        ["notepad", "ws-1"],
+        ["tabs-default", "ws-1"],
         "ws-2",
-        available("notepad", "ws-1", "ws-2"),
+        available("tabs-default", "ws-1", "ws-2"),
         1,
       ),
     ).toEqual(["ws-2"]);

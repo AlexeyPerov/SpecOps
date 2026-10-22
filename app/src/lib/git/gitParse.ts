@@ -16,6 +16,11 @@ import { normalizeGitOutputPath } from "./types";
 import { isWindows } from "../services/platform";
 import { isConflictStatusCode } from "./gitStatusFormat";
 
+// Shared collators: `localeCompare` with options builds a collator per call,
+// which dominates sorts of large status, branch and tag lists.
+const baseCollator = new Intl.Collator(undefined, { sensitivity: "base" });
+const numericBaseCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
 /** Parsed commit row from structured `git log --format=…` output (phase 2). */
 export interface ParsedCommitLine {
   sha: string;
@@ -160,7 +165,7 @@ export function parseCommitDecorators(raw: string): CommitDecorator[] {
     if (typeDelta !== 0) {
       return typeDelta;
     }
-    return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
+    return numericBaseCollator.compare(left.name, right.name);
   });
 
   return refs;
@@ -647,7 +652,7 @@ export function parseTagList(stdout: string): string[] {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  return tags.sort((left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }));
+  return tags.sort((left, right) => baseCollator.compare(left, right));
 }
 
 /** NUL-separated `git stash list --format=…` field layout (D-07). */
@@ -790,7 +795,7 @@ export function parseRemoteVvLines(stdout: string): GitRemote[] {
       fetchUrl: urls.fetchUrl,
       pushUrl: urls.pushUrl,
     }))
-    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
+    .sort((left, right) => baseCollator.compare(left.name, right.name));
 }
 
 /** Parse `git ls-remote --tags <remote>` stdout into sorted tag names. */
@@ -824,7 +829,7 @@ export function parseLsRemoteTags(stdout: string): string[] {
   }
 
   return Array.from(tags).sort((left, right) =>
-    left.localeCompare(right, undefined, { sensitivity: "base" }),
+    baseCollator.compare(left, right),
   );
 }
 
@@ -1167,7 +1172,7 @@ export function splitWorkingTreeStatus(lines: ParsedStatusLine[]): WorkingTreeSt
   }
 
   const sortByPath = (left: WorkingTreeFileEntry, right: WorkingTreeFileEntry): number =>
-    left.path.localeCompare(right.path, undefined, { sensitivity: "base" });
+    baseCollator.compare(left.path, right.path);
 
   return {
     staged: staged.sort(sortByPath),

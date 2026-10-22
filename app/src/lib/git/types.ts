@@ -56,6 +56,11 @@ export interface CancellableGitOptions {
   /** Optional subprocess timeout in milliseconds (cancellable commands only). */
   timeoutMs?: number;
   /**
+   * Cap stdout at this many bytes natively (tail dropped, truncation marker
+   * appended). For callers that reject larger output anyway, such as inline diffs.
+   */
+  maxOutputBytes?: number;
+  /**
    * When true, skip the per-repo FIFO serialization queue and run the command
    * concurrently. Reserved for short, non-mutating remote probes (e.g. remote
    * tag presence) that must not block local reads/writes on an unreachable

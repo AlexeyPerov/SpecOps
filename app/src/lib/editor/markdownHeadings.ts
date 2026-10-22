@@ -80,7 +80,10 @@ function extractHeadingsFromTree(
         name === "FencedCode" ||
         name === "CodeBlock" ||
         name === "HTMLBlock" ||
-        name === "CommentBlock"
+        name === "CommentBlock" ||
+        // Leaf blocks cannot contain headings; skip their inline children.
+        name === "Paragraph" ||
+        name === "Table"
       ) {
         return false;
       }
@@ -103,11 +106,13 @@ function extractHeadingsFromTree(
 }
 
 /**
- * Per-`EditorState` memo for {@link extractMarkdownHeadings}.
+ * Per-document memo for {@link extractMarkdownHeadings}.
  *
- * An `EditorState` is immutable and replaced on every transaction, so keying on it
- * gives exactly "compute once per document version" with no invalidation logic. A
- * `WeakMap` means entries disappear with the state they describe.
+ * Headings depend only on the text, and the immutable `Text` is kept across
+ * selection-only transactions, so keying on `state.doc` gives exactly "compute
+ * once per document version" without recomputing on every caret move (a new
+ * `EditorState` per transaction). A `WeakMap` means entries disappear with the
+ * document they describe.
  *
  * This matters because extraction is expensive — `ensureSyntaxTree` with a 5s budget,
  * and a fresh `EditorState` plus a full Lezer parse on the fallback path — while the
@@ -115,21 +120,21 @@ function extractHeadingsFromTree(
  * and the folded state of *each* heading, all against the same state, on a 500ms poll.
  * That was `2 + headings` full-document parses twice a second on a large file.
  */
-const headingsByState = new WeakMap<EditorState, MarkdownHeading[]>();
+const headingsByDoc = new WeakMap<EditorState["doc"], MarkdownHeading[]>();
 
 /**
  * Extract headings from an EditorState syntax tree.
  * Ignores headings nested inside FencedCode / CodeBlock / HTMLBlock.
  *
- * Memoized per state; see {@link headingsByState}.
+ * Memoized per document; see {@link headingsByDoc}.
  */
 export function extractMarkdownHeadings(state: EditorState): MarkdownHeading[] {
-  const cached = headingsByState.get(state);
+  const cached = headingsByDoc.get(state.doc);
   if (cached) {
     return cached;
   }
   const headings = computeMarkdownHeadings(state);
-  headingsByState.set(state, headings);
+  headingsByDoc.set(state.doc, headings);
   return headings;
 }
 
@@ -145,7 +150,7 @@ function computeMarkdownHeadings(state: EditorState): MarkdownHeading[] {
   // re-polls every 500 ms and re-extracts on every tab switch into a markdown
   // doc, so a multi-second budget handed the parser a main-thread stall on
   // every activation. A partial tree is fine: the poll re-schedules, and the
-  // per-state WeakMap memo means a completed parse is reused for the rest of
+  // per-document WeakMap memo means a completed parse is reused for the rest of
   // that document version. The text fallback only runs when parsing genuinely
   // cannot finish in a frame (very large docs), and even then it runs once per
   // state version, not per poll.

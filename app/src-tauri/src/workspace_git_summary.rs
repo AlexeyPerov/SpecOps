@@ -1248,6 +1248,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: Some(5_000),
+            max_output_bytes: None,
         };
         let mut future = Box::pin(git::run_git_with_lifetime(request, Lifetime(tx)));
         assert!(matches!(

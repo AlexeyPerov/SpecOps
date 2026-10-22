@@ -40,6 +40,12 @@ function asLiteralPathspec(path: string): string {
  * (512 KiB). Larger patches throw {@link GitDiffTooLargeError}.
  */
 export const COMMIT_FILE_DIFF_MAX_BYTES = 512 * 1024;
+/**
+ * Inline file diffs are rejected past {@link COMMIT_FILE_DIFF_MAX_BYTES}, so cap
+ * the native read just above it: oversized output is truncated there instead
+ * of being buffered and sent over IPC in full only to be thrown away.
+ */
+export const DIFF_OUTPUT_OPTIONS = { maxOutputBytes: COMMIT_FILE_DIFF_MAX_BYTES + 1 } as const;
 
 /**
  * Build argv for `git log` commit history queries.
@@ -246,12 +252,17 @@ export async function queryCommitFileDiff(
           asLiteralPathspec(normalizedPath),
         ];
 
-  const response = await runGit(repoRoot, args, scope);
+  const response = await runGit(repoRoot, args, scope, undefined, DIFF_OUTPUT_OPTIONS);
   if (response.exitCode !== 0) {
     throw createGitCommandError(response);
   }
 
-  const stdoutByteLength = new TextEncoder().encode(response.stdout).length;
+  // UTF-8 never takes fewer bytes than UTF-16 code units, so an over-long
+  // string is rejected without encoding a copy of it.
+  const stdoutByteLength =
+    response.stdout.length > COMMIT_FILE_DIFF_MAX_BYTES
+      ? response.stdout.length
+      : new TextEncoder().encode(response.stdout).length;
   if (stdoutByteLength > COMMIT_FILE_DIFF_MAX_BYTES) {
     throw new GitDiffTooLargeError(normalizedPath, stdoutByteLength, COMMIT_FILE_DIFF_MAX_BYTES);
   }

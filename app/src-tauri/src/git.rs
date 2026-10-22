@@ -245,6 +245,11 @@ pub struct RunGitRequest {
     /// Optional subprocess timeout in milliseconds (cancellable commands only).
     #[serde(default)]
     pub timeout_ms: Option<u64>,
+    /// Optional stdout cap below [`MAX_GIT_OUTPUT_BYTES`]. Callers that reject output
+    /// past a size (inline diffs) set it so oversized output is not buffered and sent
+    /// over IPC in full; the tail is dropped and a truncation marker appended.
+    #[serde(default)]
+    pub max_output_bytes: Option<u64>,
 }
 
 /// Result of a `git` subprocess invocation.
@@ -314,9 +319,9 @@ struct GitOutputReaders {
 /// Detach the child's pipes onto reader threads so they drain concurrently with the
 /// caller's poll loop. Each thread ends at EOF, which happens when the child exits or
 /// is terminated, so the threads never outlive the subprocess.
-fn spawn_output_readers(child: &mut Child) -> GitOutputReaders {
+fn spawn_output_readers(child: &mut Child, stdout_limit: usize) -> GitOutputReaders {
     let stdout = child.stdout.take().map(|mut stream| {
-        std::thread::spawn(move || read_limited_stream(&mut stream, MAX_GIT_OUTPUT_BYTES))
+        std::thread::spawn(move || read_limited_stream(&mut stream, stdout_limit))
     });
     let stderr = child.stderr.take().map(|mut stream| {
         std::thread::spawn(move || read_limited_stream(&mut stream, MAX_GIT_OUTPUT_BYTES))
@@ -559,8 +564,18 @@ fn cleanup_stale_index_lock_if_unowned(repo_root: &Path) {
 fn register_active_git_command_with_kind(
     command_id: &str,
     repo_root: PathBuf,
+    child: Child,
+    mutating: bool,
+) -> Result<(), String> {
+    register_active_git_command_with_limit(command_id, repo_root, child, mutating, MAX_GIT_OUTPUT_BYTES)
+}
+
+fn register_active_git_command_with_limit(
+    command_id: &str,
+    repo_root: PathBuf,
     mut child: Child,
     mutating: bool,
+    stdout_limit: usize,
 ) -> Result<(), String> {
     // F41: the duplicate-id path used to call `terminate_child_process_gracefully`
     // while holding `registry.commands`, blocking every register/poll/cancel/drain
@@ -598,7 +613,7 @@ fn register_active_git_command_with_kind(
 
     // Start draining before the child is handed to the poll loop — see the `readers`
     // field docs for why this cannot wait until the process exits.
-    let readers = spawn_output_readers(&mut child);
+    let readers = spawn_output_readers(&mut child, stdout_limit);
 
     commands.insert(
         command_id.to_string(),
@@ -1405,10 +1420,11 @@ struct LimitedCommandOutput {
 fn run_command_with_limited_output(
     mut command: Command,
     timeout_ms: Option<u64>,
+    stdout_limit: usize,
 ) -> Result<LimitedCommandOutput, String> {
     let mut child = spawn_tracked_git(&mut command)
         .map_err(|error| format!("Failed to spawn git: {error}"))?;
-    let readers = spawn_output_readers(&mut child);
+    let readers = spawn_output_readers(&mut child, stdout_limit);
     let status = match timeout_ms {
         None => Some(
             child
@@ -1615,6 +1631,7 @@ pub struct ExecuteGitOptions<'a> {
     pub askpass_operation: Option<&'a str>,
     pub askpass_timeout_ms: Option<u64>,
     pub timeout_ms: Option<u64>,
+    pub max_output_bytes: Option<u64>,
 }
 
 #[cfg(test)]
@@ -1634,6 +1651,7 @@ pub fn execute_git_with_options(
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
+            max_output_bytes: None,
         },
     )
 }
@@ -1688,6 +1706,10 @@ pub fn execute_git_with_full_options(
     // registered above); gate the env on the same condition.
     let is_read_only = normalized_command_id.is_none() || is_read_only_git_args(args);
     let effective_env = build_effective_git_env(base_env, is_read_only);
+    let stdout_limit = options
+        .max_output_bytes
+        .map(|limit| usize::try_from(limit).unwrap_or(usize::MAX).min(MAX_GIT_OUTPUT_BYTES))
+        .unwrap_or(MAX_GIT_OUTPUT_BYTES);
 
     if let Some(id) = normalized_command_id.as_deref() {
         let mut command = build_git_command(repo_root, args, &effective_env);
@@ -1705,7 +1727,13 @@ pub fn execute_git_with_full_options(
             }
         };
 
-        if let Err(error) = register_active_git_command_with_kind(id, repo_root.to_path_buf(), child, !is_read_only) {
+        if let Err(error) = register_active_git_command_with_limit(
+            id,
+            repo_root.to_path_buf(),
+            child,
+            !is_read_only,
+            stdout_limit,
+        ) {
             return RunGitResponse {
                 exit_code: -1,
                 stdout: String::new(),
@@ -1756,6 +1784,7 @@ pub fn execute_git_with_full_options(
         match run_command_with_limited_output(
             build_git_command(repo_root, args, &effective_env),
             options.timeout_ms,
+            stdout_limit,
         ) {
             Ok(output) => {
                 // Size already enforced while reading; `apply_output_limit` is a
@@ -1871,6 +1900,7 @@ fn commit_with_message_blocking(
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: request.timeout_ms,
+            max_output_bytes: None,
         },
     );
 
@@ -1930,6 +1960,7 @@ pub async fn run_git_with_lifetime<T: Send + 'static>(
                 askpass_operation: request.askpass_operation.as_deref(),
                 askpass_timeout_ms: request.askpass_timeout_ms,
                 timeout_ms: request.timeout_ms,
+                max_output_bytes: request.max_output_bytes,
             },
         )
     })
@@ -2386,6 +2417,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
+            max_output_bytes: None,
         }))
         .expect_err("empty repo_root should fail");
 
@@ -2403,6 +2435,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
+            max_output_bytes: None,
         }))
         .expect_err("relative repo_root should fail");
 
@@ -2704,6 +2737,43 @@ mod tests {
     }
 
     #[test]
+    fn run_git_caps_stdout_at_requested_limit() {
+        if skip_if_git_unavailable() {
+            return;
+        }
+        let repo_root = create_temp_git_repo();
+        fs::write(repo_root.join("big.txt"), "x".repeat(64 * 1024)).expect("write file");
+        let run = |max_output_bytes| {
+            tauri::async_runtime::block_on(run_git(RunGitRequest {
+                repo_root: repo_root.to_string_lossy().into_owned(),
+                args: vec![
+                    "diff".to_string(),
+                    "--no-index".to_string(),
+                    "--".to_string(),
+                    "/dev/null".to_string(),
+                    "big.txt".to_string(),
+                ],
+                env: None,
+                command_id: None,
+                askpass_enabled: false,
+                askpass_operation: None,
+                askpass_timeout_ms: None,
+                timeout_ms: Some(10_000),
+                max_output_bytes,
+            }))
+            .expect("run_git should return response")
+        };
+
+        let capped = run(Some(1024));
+        assert!(capped.stdout.contains("output truncated"), "{}", capped.stdout);
+        assert!(capped.stdout.len() < 2048, "stdout was {} bytes", capped.stdout.len());
+        let full = run(None);
+        assert!(!full.stdout.contains("output truncated"));
+        assert!(full.stdout.len() > 64 * 1024);
+        let _ = fs::remove_dir_all(repo_root);
+    }
+
+    #[test]
     fn run_git_rejects_duplicate_command_ids() {
         if skip_if_git_unavailable() {
             return;
@@ -2733,6 +2803,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
+            max_output_bytes: None,
         }))
         .expect("run_git should return response");
 
@@ -2817,6 +2888,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
+            max_output_bytes: None,
         }))
         .expect_err("missing repo_root should fail");
 
@@ -2838,6 +2910,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
+            max_output_bytes: None,
         }))
         .expect_err("disallowed subcommand should fail");
 
@@ -2864,6 +2937,7 @@ mod tests {
             askpass_operation: None,
             askpass_timeout_ms: None,
             timeout_ms: None,
+            max_output_bytes: None,
         }))
         .expect("status should succeed when blocked env is stripped");
 

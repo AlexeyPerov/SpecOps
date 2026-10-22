@@ -272,10 +272,13 @@
       return projectTreeController;
     },
     onFilesystemChange: (path, kind) => {
-      for (const workspace of appState.getSnapshot().contexts.workspaces) {
-        workspaceDirectoryCache.invalidate(
-          directoriesToInvalidateForChange(workspace.rootPath, path),
-        );
+      // Listings hold names and entry kinds only; a content write keeps them.
+      if (kind !== "modify") {
+        for (const workspace of appState.getSnapshot().contexts.workspaces) {
+          workspaceDirectoryCache.invalidate(
+            directoriesToInvalidateForChange(workspace.rootPath, path),
+          );
+        }
       }
       workspaceFileCatalogRegistry.notifyFilesystemChange(path, kind);
     },

@@ -114,6 +114,10 @@ export interface EnumerateOpenableFilesResult {
  */
 const MAX_TRAVERSAL_DEPTH = 64;
 const MAX_ENUMERATED_FILES = 100_000;
+/** Directory listings in flight at once during enumeration. */
+const TRAVERSAL_CONCURRENCY = 8;
+
+type PendingDirectory = { path: string; depth: number };
 
 /**
  * Recursively enumerate openable file paths under a workspace root.
@@ -139,26 +143,22 @@ export async function enumerateOpenableWorkspaceFiles(
   // round-trip per call, which made enumeration cost one hop per directory
   // entry on large trees (H27). `directoryPath` descends from a normalized
   // root, so plain string concatenation is equivalent.
-  async function walk(directoryPath: string, depth: number): Promise<boolean> {
-    if (options.isCancelled?.()) {
-      return false;
-    }
-
+  async function visit(directoryPath: string, depth: number, pending: PendingDirectory[]): Promise<void> {
     let entries: WorkspaceListEntry[];
     try {
       entries = await readDirFn(directoryPath);
     } catch {
       partialErrors.push(directoryPath);
-      return true;
+      return;
     }
 
     for (const raw of entries) {
       if (options.isCancelled?.()) {
-        return false;
+        return;
       }
       if (paths.length >= MAX_ENUMERATED_FILES) {
         truncated = true;
-        return true;
+        return;
       }
       const entry = raw as WorkspaceListEntry;
       if (skipSymlinks && entry.isSymlink) {
@@ -172,11 +172,7 @@ export async function enumerateOpenableWorkspaceFiles(
           truncated = true;
           continue;
         }
-        const childPath = joinDirectoryPath(directoryPath, entry.name);
-        const ok = await walk(childPath, depth + 1);
-        if (!ok) {
-          return false;
-        }
+        pending.push({ path: joinDirectoryPath(directoryPath, entry.name), depth: depth + 1 });
         continue;
       }
       if (shouldSkipFileEntry(entry)) {
@@ -187,11 +183,36 @@ export async function enumerateOpenableWorkspaceFiles(
         paths.push(path);
       }
     }
-    return true;
   }
 
-  const completed = await walk(root, 0);
-  if (!completed) {
+  // Each listing is one IPC round trip, so keep a few in flight instead of
+  // walking strictly one directory at a time. Output order does not matter:
+  // paths are sorted below.
+  const pending: PendingDirectory[] = [{ path: root, depth: 0 }];
+  await new Promise<void>((resolve) => {
+    let active = 0;
+    const pump = (): void => {
+      const stopped =
+        options.isCancelled?.() === true || paths.length >= MAX_ENUMERATED_FILES;
+      while (!stopped && active < TRAVERSAL_CONCURRENCY && pending.length > 0) {
+        const next = pending.pop()!;
+        active += 1;
+        void visit(next.path, next.depth, pending).finally(() => {
+          active -= 1;
+          pump();
+        });
+      }
+      if (active === 0 && (stopped || pending.length === 0)) {
+        if (paths.length >= MAX_ENUMERATED_FILES && pending.length > 0) {
+          truncated = true;
+        }
+        resolve();
+      }
+    };
+    pump();
+  });
+
+  if (options.isCancelled?.()) {
     return { paths: [], partialErrors, cancelled: true };
   }
   paths.sort((a, b) => a.localeCompare(b));

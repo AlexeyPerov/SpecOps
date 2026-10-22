@@ -94,6 +94,8 @@
   let diffLoading = $state(false);
   let diffError = $state<string | null>(null);
   let statusVersion = $state(0);
+  /** Re-reading status for the same repo while the previous rows stay listed. */
+  let statusRefreshing = $state(false);
   // `lastLoadedRepoRoot` is a non-reactive memoization guard: it decides
   // whether a status load should preserve the active diff selection (same repo,
   // e.g. a refresh) or reset it (new repo). Making it `$state` re-invalidated
@@ -129,8 +131,10 @@
     }
     return formatWorkingTreeDiffSubtitleHelp(activeDiffSource, activeDiffEntry);
   });
+  // Rows may be stale while a refresh is in flight, so row actions wait for it.
+  const controlsBusy = $derived(actionBusy || statusRefreshing);
   const canCommit = $derived(
-    hasStagedChanges && !actionBusy && !operationBusy && !readOnly && commitMessage.trim().length > 0,
+    hasStagedChanges && !controlsBusy && !operationBusy && !readOnly && commitMessage.trim().length > 0,
   );
   const isClean = $derived(loadStatus === "ready" && staged.length === 0 && unstaged.length === 0);
 
@@ -145,10 +149,18 @@
     const priorPath = preserveDiffSelection ? untrack(() => activeDiffPath) : null;
     const priorSource = preserveDiffSelection ? untrack(() => activeDiffSource) : null;
 
-    loadStatus = "loading";
+    // Refreshing the same repo (after stage/unstage/commit or an explicit
+    // refresh) keeps the current rows on screen instead of swapping the whole
+    // list for a loading state, which rebuilt every row on large change sets.
+    const keepRows = preserveDiffSelection && untrack(() => loadStatus) === "ready";
+    if (keepRows) {
+      statusRefreshing = true;
+    } else {
+      loadStatus = "loading";
+      staged = [];
+      unstaged = [];
+    }
     loadError = null;
-    staged = [];
-    unstaged = [];
     selectedUnstaged = new Set();
     selectedStaged = new Set();
 
@@ -185,6 +197,10 @@
       }
       loadStatus = "error";
       loadError = error instanceof Error ? error.message : String(error);
+    } finally {
+      if (!signal?.aborted) {
+        statusRefreshing = false;
+      }
     }
   }
 
@@ -298,7 +314,7 @@
   }
 
   async function handleStageSelected(): Promise<void> {
-    if (selectedUnstaged.size === 0 || actionBusy || operationBusy || readOnly) {
+    if (selectedUnstaged.size === 0 || controlsBusy || operationBusy || readOnly) {
       return;
     }
     const root = repoRoot;
@@ -324,7 +340,7 @@
   }
 
   async function handleStageAll(): Promise<void> {
-    if (unstaged.length === 0 || actionBusy || operationBusy || readOnly) {
+    if (unstaged.length === 0 || controlsBusy || operationBusy || readOnly) {
       return;
     }
     const root = repoRoot;
@@ -350,7 +366,7 @@
   }
 
   async function handleUnstageSelected(): Promise<void> {
-    if (selectedStaged.size === 0 || actionBusy || operationBusy || readOnly) {
+    if (selectedStaged.size === 0 || controlsBusy || operationBusy || readOnly) {
       return;
     }
     const root = repoRoot;
@@ -382,7 +398,7 @@
       commitError = "Commit message cannot be empty.";
       return;
     }
-    if (!hasStagedChanges || actionBusy || operationBusy || readOnly) {
+    if (!hasStagedChanges || controlsBusy || operationBusy || readOnly) {
       return;
     }
 
@@ -442,7 +458,7 @@
       <p class="git-changes-action-error" role="alert">{actionError}</p>
     {/if}
 
-    <div class="git-changes-main">
+    <div class="git-changes-main" aria-busy={statusRefreshing}>
       <div class="git-changes-lists">
         <section class="git-changes-section" aria-labelledby="git-changes-unstaged-heading">
           <div class="git-changes-section-header">
@@ -457,7 +473,7 @@
               <button
                 type="button"
                 class="btn btn-secondary btn-compact"
-                disabled={selectedUnstaged.size === 0 || actionBusy || operationBusy || readOnly}
+                disabled={selectedUnstaged.size === 0 || controlsBusy || operationBusy || readOnly}
                 onclick={handleStageSelected}
               >
                 Stage selected
@@ -465,7 +481,7 @@
               <button
                 type="button"
                 class="btn btn-secondary btn-compact"
-                disabled={unstaged.length === 0 || actionBusy || operationBusy || readOnly}
+                disabled={unstaged.length === 0 || controlsBusy || operationBusy || readOnly}
                 onclick={handleStageAll}
               >
                 Stage all
@@ -499,7 +515,7 @@
                       type="checkbox"
                       aria-label={`Select unstaged ${entry.path}`}
                       checked={selectedUnstaged.has(entry.path)}
-                      disabled={actionBusy || operationBusy || readOnly}
+                      disabled={controlsBusy || operationBusy || readOnly}
                       onclick={(event) => event.stopPropagation()}
                       onchange={(event) =>
                         toggleUnstaged(
@@ -528,7 +544,7 @@
               <button
                 type="button"
                 class="btn btn-secondary btn-compact"
-                disabled={selectedStaged.size === 0 || actionBusy || operationBusy || readOnly}
+                disabled={selectedStaged.size === 0 || controlsBusy || operationBusy || readOnly}
                 onclick={handleUnstageSelected}
               >
                 Unstage selected
@@ -562,7 +578,7 @@
                       type="checkbox"
                       aria-label={`Select staged ${entry.path}`}
                       checked={selectedStaged.has(entry.path)}
-                      disabled={actionBusy || operationBusy || readOnly}
+                      disabled={controlsBusy || operationBusy || readOnly}
                       onclick={(event) => event.stopPropagation()}
                       onchange={(event) =>
                         toggleStaged(entry.path, (event.currentTarget as HTMLInputElement).checked)}
@@ -592,7 +608,7 @@
         class:git-changes-message-invalid={commitError !== null}
         bind:this={messageElement}
         bind:value={commitMessage}
-        disabled={actionBusy || operationBusy || readOnly}
+        disabled={controlsBusy || operationBusy || readOnly}
         rows={4}
         placeholder="Describe your changes…"
         aria-invalid={commitError !== null}

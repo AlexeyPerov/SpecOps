@@ -58,6 +58,34 @@ function props(extra: Record<string, unknown> = {}) {
 }
 
 describe("GitChangesPanel", () => {
+  it("keeps the current rows listed while refreshing the same repository", async () => {
+    const token = writable(0);
+    const tokenState = fromStore(token);
+    const view = mountComponent(
+      GitChangesPanel,
+      props({
+        get refreshToken() {
+          return tokenState.current;
+        },
+      }),
+    );
+    await settle();
+    const before = row(view.host, "a.md");
+
+    let finish!: (value: { staged: WorkingTreeFileEntry[]; unstaged: WorkingTreeFileEntry[] }) => void;
+    vi.mocked(queryWorkingTreeStatus).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    token.set(1);
+    await settle();
+    expect(view.host.textContent).not.toContain("Loading changes");
+    expect(row(view.host, "a.md")).toBe(before);
+    expect(view.host.querySelector('[aria-busy="true"]')).not.toBeNull();
+
+    finish({ staged: [entry("a.md")], unstaged: [entry("b.md")] });
+    await settle();
+    expect(view.host.querySelector('input[aria-label="Select unstaged a.md"]')).toBeNull();
+    expect(row(view.host, "b.md")).not.toBeNull();
+  });
+
   it("selecting a file for diff after a refresh does not reload status or clear checkbox selections", async () => {
     const token = writable(0);
     const tokenState = fromStore(token);

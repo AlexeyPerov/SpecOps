@@ -199,26 +199,23 @@
   const columnTemplate = $derived(`${Math.max(widths[0], graphWidth)}px ${widths.slice(1).map(w => `${w}px`).join(" ")}`);
   const graphHeight = $derived(commits.length * rowHeight);
 
-  // Precompute each commit's rendered date strings once per `commits` change
-  // rather than re-running `new Date().toISOString()` + `toLocaleString()`
-  // per row per render (M13). Both are pure functions of `authorTime`, so the
-  // memo is stable across scroll/selection re-renders.
-  const commitDateMeta = $derived.by(() => {
-    void commits;
-    return commits.map((commit) => {
-      const ms = commit.authorTime * 1000;
-      const date = new Date(ms);
-      // An out-of-range timestamp yields an invalid Date, whose `toISOString`
-      // throws and would break the whole list.
-      if (!Number.isFinite(date.getTime())) {
-        return { iso: undefined, local: undefined };
-      }
-      return {
-        iso: date.toISOString(),
-        local: date.toLocaleString(),
-      };
-    });
-  });
+  // Rendered date strings for visible rows only, cached by timestamp: a
+  // refresh reloads up to 5000 commits but only a screenful is ever shown, so
+  // formatting every loaded commit up front was wasted work.
+  const commitDateMetaCache = new Map<number, { iso: string | undefined; local: string | undefined }>();
+  function commitDateMeta(authorTime: number): { iso: string | undefined; local: string | undefined } {
+    const cached = commitDateMetaCache.get(authorTime);
+    if (cached) return cached;
+    const date = new Date(authorTime * 1000);
+    // An out-of-range timestamp yields an invalid Date, whose `toISOString`
+    // throws and would break the whole list.
+    const meta = Number.isFinite(date.getTime())
+      ? { iso: date.toISOString(), local: date.toLocaleString() }
+      : { iso: undefined, local: undefined };
+    if (commitDateMetaCache.size >= 2000) commitDateMetaCache.clear();
+    commitDateMetaCache.set(authorTime, meta);
+    return meta;
+  }
 
   // Window the rendered rows against the scroll viewport. The graph column
   // (SVG) stays full-height so curve segments spanning off-screen rows still
@@ -578,7 +575,7 @@
         <div role="listbox" aria-label="Commits in history scope">
           {#if historyTopPadPx > 0}<div style="height: {historyTopPadPx}px" aria-hidden="true"></div>{/if}
           {#each commits.slice(historyVisibleRange.start, historyVisibleRange.end) as commit, i (commit.sha)}
-            {@const meta = commitDateMeta[historyVisibleRange.start + i]}
+            {@const meta = commitDateMeta(commit.authorTime)}
             <div class="git-history-item" class:git-history-row-selected={selectedSha === commit.sha}>
               <button class="git-history-row" data-sha={commit.sha} role="option" aria-selected={selectedSha === commit.sha} tabindex={selectedSha === commit.sha || (!selectedSha && i === 0) ? 0 : -1} onclick={() => handleSelectCommit(commit)} onkeydown={event => handleRowKeydown(event, commit)}>
                 <span></span><span class="git-history-description" title={commit.subject}>

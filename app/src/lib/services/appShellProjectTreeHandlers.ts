@@ -193,7 +193,11 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     path: string,
     kind: FileWatcherEventKind = "other",
   ): void {
-    deps.projectTreeController.handleFilesystemChange(getActiveWorkspaceRoot(), path);
+    // Content and metadata writes (every save, every build output rewrite)
+    // cannot change a directory listing, so they do not reload tree folders.
+    if (kind !== "modify") {
+      deps.projectTreeController.handleFilesystemChange(getActiveWorkspaceRoot(), path);
+    }
     onFilesystemChange?.(path, kind);
   }
 

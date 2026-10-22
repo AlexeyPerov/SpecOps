@@ -6,7 +6,7 @@ import {
   splitWorkingTreeStatus,
 } from "./gitParse";
 import { enqueueGitCommandForRepo } from "./gitCommandQueue";
-import { COMMIT_FILE_DIFF_MAX_BYTES, DIFF_CONTEXT_LINES } from "./gitHistory";
+import { COMMIT_FILE_DIFF_MAX_BYTES, DIFF_CONTEXT_LINES, DIFF_OUTPUT_OPTIONS } from "./gitHistory";
 import {
   gitCommitInvokeArgs,
   LOCAL_GIT_OPERATION_TIMEOUT_MS,
@@ -120,7 +120,12 @@ function parseWorkingTreeFileDiffPatch(
   stdout: string,
   normalizedPath: string,
 ): ParsedTextDiff {
-  const stdoutByteLength = new TextEncoder().encode(stdout).length;
+  // UTF-8 never takes fewer bytes than UTF-16 code units, so an over-long
+  // string is rejected without encoding a copy of it.
+  const stdoutByteLength =
+    stdout.length > COMMIT_FILE_DIFF_MAX_BYTES
+      ? stdout.length
+      : new TextEncoder().encode(stdout).length;
   if (stdoutByteLength > COMMIT_FILE_DIFF_MAX_BYTES) {
     throw new GitDiffTooLargeError(normalizedPath, stdoutByteLength, COMMIT_FILE_DIFF_MAX_BYTES);
   }
@@ -243,6 +248,8 @@ export async function queryWorkingTreeFileDiff(
         asLiteralPathspec(normalizedPath),
       ],
       scope,
+      undefined,
+      DIFF_OUTPUT_OPTIONS,
     );
     assertDiffCommandSuccess(response, false);
     return parseWorkingTreeFileDiffPatch(response.stdout, normalizedPath);
@@ -261,6 +268,8 @@ export async function queryWorkingTreeFileDiff(
       asLiteralPathspec(normalizedPath),
     ],
     scope,
+    undefined,
+    DIFF_OUTPUT_OPTIONS,
   );
 
   // F28 (H7): in an unborn repo (no commits yet — the exact state the Changes
@@ -300,6 +309,8 @@ export async function queryWorkingTreeFileDiff(
       normalizedPath,
     ],
     scope,
+    undefined,
+    DIFF_OUTPUT_OPTIONS,
   );
   assertDiffCommandSuccess(untrackedResponse, true);
 

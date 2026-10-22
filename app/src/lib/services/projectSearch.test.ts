@@ -37,6 +37,16 @@ function re(text: string, opts: { caseSensitive?: boolean } = {}) {
 }
 
 describe("computeFileMatches", () => {
+  it("keeps literal matches identical with the whole-file pre-check", () => {
+    const content = "Ärger ärger\nfoo.bar foo-bar\nword words\n";
+    expect(computeFileMatches(content, lit("ÄRGER"))).toHaveLength(2);
+    expect(computeFileMatches(content, lit("ärger", { caseSensitive: true }))).toHaveLength(1);
+    expect(computeFileMatches(content, lit("foo.bar"))).toHaveLength(1);
+    expect(computeFileMatches(content, lit("word", { wholeWord: true }))).toHaveLength(1);
+    expect(computeFileMatches(content, lit("bar\nword"))).toHaveLength(1);
+    expect(computeFileMatches(content, lit("missing"))).toEqual([]);
+  });
+
   it("returns no matches for empty query", () => {
     expect(computeFileMatches("foo bar", lit(""))).toEqual([]);
   });

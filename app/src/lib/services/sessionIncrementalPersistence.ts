@@ -144,6 +144,23 @@ function bufferKey(windowId: string, contextId: ContextId, documentId: string): 
  * edit (almost certainly a different length) re-syncs it. The point is that
  * the map no longer retains the full text of every persisted document.
  */
+/**
+ * Fingerprints per persisted document object. Document states are immutable
+ * and {@link toWindowSnapshot} returns the same object for an unchanged
+ * document, so only edited documents are re-hashed on each persist instead of
+ * every open buffer in every context.
+ */
+const fingerprintByDocument = new WeakMap<object, string>();
+
+function documentContentFingerprint(documentState: { content: string }): string {
+  let fingerprint = fingerprintByDocument.get(documentState);
+  if (fingerprint === undefined) {
+    fingerprint = contentFingerprint(documentState.content);
+    fingerprintByDocument.set(documentState, fingerprint);
+  }
+  return fingerprint;
+}
+
 function contentFingerprint(content: string): string {
   let hash = 5381;
   for (let i = 0; i < content.length; i += 1) {
@@ -263,7 +280,7 @@ export async function persistIncrementalWindowSession(
         continue;
       }
       liveBufferCount += 1;
-      const fingerprint = contentFingerprint(documentState.content);
+      const fingerprint = documentContentFingerprint(documentState);
       if (bufferFingerprintByKey.get(key) !== fingerprint) {
         changedBuffers.push({
           record: {

@@ -106,7 +106,12 @@ export function createWorkspaceDirectoryCache(
     invalidate(paths) {
       for (const path of paths) {
         const key = normalizeDirPath(path);
-        generationByKey.set(key, (generationByKey.get(key) ?? 0) + 1);
+        // The generation only fences a read in flight from caching a listing
+        // older than this change; bumping it for every changed path (most of
+        // them files, never listed) grew the map for the whole session.
+        if (inflight.has(key)) {
+          generationByKey.set(key, (generationByKey.get(key) ?? 0) + 1);
+        }
         cache.delete(key);
         inflight.delete(key);
       }

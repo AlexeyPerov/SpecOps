@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  enumerateOpenableWorkspaceFiles,
   joinDirectoryPath,
+  type WorkspaceListEntry,
   normalizeWorkspaceRoot,
   relativePathFromRoot,
   shouldSkipDirectoryEntry,
@@ -28,5 +30,57 @@ describe("workspaceTraversal policy", () => {
     expect(normalizeWorkspaceRoot("/Users/Me/Ws/")).toBe("/Users/Me/Ws");
     expect(relativePathFromRoot("/Users/Me/Ws/Src/A.ts", "/Users/Me/Ws")).toBe("Src/A.ts");
     expect(relativePathFromRoot("/users/me/ws/Src/A.ts", "/Users/Me/Ws")).toBe("Src/A.ts");
+  });
+});
+
+describe("enumerateOpenableWorkspaceFiles", () => {
+  const dir = (name: string): WorkspaceListEntry => ({ name, isDirectory: true, isFile: false });
+  const file = (name: string): WorkspaceListEntry => ({ name, isDirectory: false, isFile: true });
+  const tree: Record<string, WorkspaceListEntry[]> = {
+    "/ws": [dir("src"), dir("docs"), dir("node_modules"), dir("locked"), file("README.md")],
+    "/ws/src": [dir("lib"), file("main.ts"), file("image.bin")],
+    "/ws/src/lib": [file("util.ts")],
+    "/ws/docs": [file("guide.md")],
+  };
+
+  it("lists openable files across the tree with bounded concurrent reads", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const readDir = async (path: string) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      inFlight -= 1;
+      const entries = tree[path];
+      if (!entries) throw new Error("denied");
+      return entries;
+    };
+    const result = await enumerateOpenableWorkspaceFiles("/ws", { readDir });
+    expect(result.cancelled).toBe(false);
+    expect(result.paths).toEqual([
+      "/ws/docs/guide.md",
+      "/ws/README.md",
+      "/ws/src/lib/util.ts",
+      "/ws/src/main.ts",
+    ].sort((a, b) => a.localeCompare(b)));
+    expect(result.partialErrors).toEqual(["/ws/locked"]);
+    expect(maxInFlight).toBeGreaterThan(1);
+    expect(maxInFlight).toBeLessThanOrEqual(8);
+  });
+
+  it("reports cancellation and stops reading", async () => {
+    let cancelled = false;
+    const reads: string[] = [];
+    const readDir = async (path: string) => {
+      reads.push(path);
+      cancelled = true;
+      return tree[path] ?? [];
+    };
+    const result = await enumerateOpenableWorkspaceFiles("/ws", {
+      readDir,
+      isCancelled: () => cancelled,
+    });
+    expect(result).toEqual({ paths: [], partialErrors: [], cancelled: true });
+    expect(reads).toEqual(["/ws"]);
   });
 });

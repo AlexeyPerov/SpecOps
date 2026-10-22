@@ -19,6 +19,7 @@ import { findNextOpenSessionTabAfterClose } from "../../services/workspaceAgentS
 import { getDocumentByIdMap } from "../../services/tabDocumentLookup";
 import { isGitIntegrationEnabled } from "../../services/gitIntegrationSettings";
 import {
+  allContextSnapshots,
   findDocumentByPath,
   findDocumentByPathInContext,
   findDocumentContext,
@@ -30,6 +31,30 @@ import {
   patchContextById,
 } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
+
+/**
+ * Document ids shown by transient (preview) tabs, memoized per `contexts`.
+ * Promotion runs on every caret move and keystroke and almost never finds a
+ * transient tab, so this keeps the common case off the document lookup index.
+ */
+const transientDocumentIdsCache = new WeakMap<AppDomainState["contexts"], Set<string>>();
+
+function transientDocumentIds(state: AppDomainState): Set<string> {
+  const cached = transientDocumentIdsCache.get(state.contexts);
+  if (cached) {
+    return cached;
+  }
+  const ids = new Set<string>();
+  for (const entry of allContextSnapshots(state)) {
+    for (const tab of allTabs(entry.snapshot.session.editorLayout)) {
+      if (isFileTab(tab) && tab.transient) {
+        ids.add(tab.documentId);
+      }
+    }
+  }
+  transientDocumentIdsCache.set(state.contexts, ids);
+  return ids;
+}
 import { createDocumentContentSlice } from "./documentContentSlice";
 import { closeTabForceById, closeTabInPaneForceOnContext, selectTabAcrossPanes } from "./closeTabInPane";
 import { createTabTransferSlice } from "./tabTransferSlice";
@@ -291,6 +316,9 @@ export function createDocumentTabsLifecycleSlice(deps: {
      */
     promoteTransientTabForDocument(documentId: string) {
       update((state) => {
+        if (!transientDocumentIds(state).has(documentId)) {
+          return state;
+        }
         const owner = findDocumentContext(state, documentId);
         if (!owner) {
           return state;

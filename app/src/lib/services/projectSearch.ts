@@ -4,10 +4,39 @@ import { readTextFile, stat } from "@tauri-apps/plugin-fs";
 import { isImageFilePath } from "./fileContentKind";
 import { mapWithConcurrency } from "./mapWithConcurrency";
 import {
+  compileQueryInternal,
   findAllRangesInText,
   validateSearchQuery,
   type SearchQuery,
 } from "../editor/searchQuery";
+
+/**
+ * Whole-string pre-check for literal queries, compiled once per query object.
+ * Most scanned files have no match, and splitting each into a `Text` tree
+ * first cost a full copy per file. Uses the same source and flags as the
+ * editor's `RegExpCursor` (`m`, `u`, optional `i`); a literal pattern cannot
+ * match differently across lines, so a miss here means no match there.
+ * Regex queries skip the pre-check: their multi-line semantics differ.
+ */
+const literalPrecheckByQuery = new WeakMap<SearchQuery, RegExp | null>();
+
+function literalPrecheck(query: SearchQuery): RegExp | null {
+  if (query.regexp) {
+    return null;
+  }
+  if (literalPrecheckByQuery.has(query)) {
+    return literalPrecheckByQuery.get(query) ?? null;
+  }
+  const compiled = compileQueryInternal(query);
+  let pattern: RegExp | null = null;
+  try {
+    pattern = compiled ? new RegExp(compiled.source, `mu${compiled.ignoreCase ? "i" : ""}`) : null;
+  } catch {
+    pattern = null;
+  }
+  literalPrecheckByQuery.set(query, pattern);
+  return pattern;
+}
 
 /**
  * Per-file size cap (H28). The openable-file catalog admits any file without a
@@ -94,6 +123,10 @@ export function computeFileMatches(
   query: SearchQuery,
 ): ProjectSearchMatch[] {
   if (!query.text) {
+    return [];
+  }
+  const precheck = literalPrecheck(query);
+  if (precheck && !precheck.test(content)) {
     return [];
   }
   // One split → Text tree; RegExpCursor + lineAt reuse that structure (no second

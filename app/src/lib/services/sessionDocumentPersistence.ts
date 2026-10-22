@@ -17,6 +17,13 @@ export function shouldStripDocumentContentForSession(doc: DocumentState): boolea
 }
 
 /**
+ * Collapsed copies of clean documents, keyed by the (immutable) source state,
+ * so each persist hands out the same object for an unchanged document and
+ * per-document work downstream (buffer fingerprints) can be memoized on it.
+ */
+const collapsedCleanDocuments = new WeakMap<DocumentState, DocumentState>();
+
+/**
  * Collapse clean buffers so session.json does not store the same text twice.
  * On restore, {@link normalizeRestoredDocument} expands empty `savedContent`
  * back to `content` when `isDirty` is false.
@@ -40,10 +47,12 @@ export function documentForSessionPersistence(doc: DocumentState): DocumentState
     };
   }
   if (!doc.isDirty && doc.content === doc.savedContent) {
-    return {
-      ...doc,
-      savedContent: "",
-    };
+    let collapsed = collapsedCleanDocuments.get(doc);
+    if (!collapsed) {
+      collapsed = { ...doc, savedContent: "" };
+      collapsedCleanDocuments.set(doc, collapsed);
+    }
+    return collapsed;
   }
   return doc;
 }

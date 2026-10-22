@@ -228,6 +228,9 @@ function buildRunGitInvokePayload(
   // all, so one hung `git status` (stalled network mount, wedged credential
   // helper) pinned its backend worker — and the per-repo queue — forever.
   extra.timeoutMs = resolveGitCommandTimeout(options);
+  if (options?.maxOutputBytes !== undefined) {
+    extra.maxOutputBytes = options.maxOutputBytes;
+  }
   return runGitInvokeArgs(repoRoot, args, extra);
 }
 

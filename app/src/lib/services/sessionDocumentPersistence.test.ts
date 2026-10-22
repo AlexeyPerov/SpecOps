@@ -98,6 +98,9 @@ describe("documentForSessionPersistence", () => {
     expect(persisted.content).toBe("hello");
     expect(persisted.savedContent).toBe("");
     expect(persisted.isDirty).toBe(false);
+    // Stable per source document so downstream per-document memos hit.
+    expect(documentForSessionPersistence(doc)).toBe(persisted);
+    expect(documentForSessionPersistence({ ...doc })).not.toBe(persisted);
   });
 
   it("keeps both buffers when the document is dirty", () => {

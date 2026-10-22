@@ -614,9 +614,11 @@
                     <span class="rail-workspace-distinction" title={workspace.rootPath}>{shortPaths.get(workspace.id)}</span>
                   {/if}
                 </span>
-                <span class="rail-workspace-git" class:rail-git-conflict={gitCells.get(workspace.rootPath)?.summary?.hasConflicts} aria-hidden="true">⎇ <span>{gitFor(workspace.rootPath).text}</span></span>
+                {#if gitFor(workspace.rootPath).text}
+                  <span class="rail-workspace-git" class:rail-git-conflict={gitCells.get(workspace.rootPath)?.summary?.hasConflicts} aria-hidden="true">⎇ <span>{gitFor(workspace.rootPath).text}</span></span>
+                {/if}
               </span>
-            {:else}
+            {:else if gitFor(workspace.rootPath).mark}
               <span class="rail-workspace-git-mark" class:rail-git-conflict={gitCells.get(workspace.rootPath)?.summary?.hasConflicts} aria-hidden="true">{gitFor(workspace.rootPath).mark}</span>
             {/if}
           </button>

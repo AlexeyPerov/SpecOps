@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-22 11:04 MSK — Remove transient workspace Git labels
+
+- Hide Git check/cache status labels and refresh markers in workspace sidebar rows and the workspace manager. Preserve the last branch, tracking and working-tree summary through background refreshes and failures; leave rows without a summary blank. Keep diagnostic details in tooltips and accessible descriptions.
+- Validation: all 16 focused presentation, sidebar and manager tests pass, including stable text/marks during refresh and errors in both sidebar widths. Svelte/type checks report zero errors and warnings; Svelte autofixer reports no issues; production frontend build passes. The installed native app was not rebuilt or replaced.
+
 ## 2026-10-21 18:43 MSK — Expand a workspace folder after its first incoming move
 
 - After a successful sidebar context-menu or drag-and-drop move, expand the destination folder when the moved workspace is its only visible member. Count members without the search filter and persist expansion for the current window. Preserve collapse state for populated folders and failed moves.

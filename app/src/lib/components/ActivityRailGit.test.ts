@@ -71,11 +71,14 @@ describe('rail Git demand and presentation', () => {
   it.each([48,240])('retains branch/conflict/tracking/error meaning at width %i; separate VC/refresh never select row',async(width)=>{
     const select=vi.fn(),vc=vi.fn();const {host}=mountComponent(ActivityRail,{workspaces:[workspace(1),workspace(2)],panelWidthPx:width,onSelectContext:select,onOpenVersionControl:vc});await tick();
     Observer.all[0].visible(true);await tick();
+    expect(host.querySelector('.rail-workspace-git, .rail-workspace-git-mark')).toBeNull();
     const fresh: WorkspaceGitSummarySnapshot={status:'fresh',refreshing:false,summary,checkedAt:123,error:null};emit('/projects/1',fresh);await tick();
     const row=host.querySelector<HTMLElement>('[data-workspace-id]')!;
     expect(row.getAttribute('aria-label')).toContain('topic · ↑2 ↓1 · conflicts');expect(row.getAttribute('aria-label')).toContain('locally known upstream');expect(host.querySelector('.rail-git-conflict')).not.toBeNull();
-    emit('/projects/1',{...fresh,status:'stale',refreshing:true});await tick();expect(row.getAttribute('aria-label')).toContain('Stale');expect(row.getAttribute('aria-label')).toContain('previous result retained');
-    emit('/projects/1',{...fresh,status:'error',error:'timeout'});await tick();expect(row.getAttribute('aria-label')).toContain('topic');expect(row.getAttribute('aria-label')).toContain('timeout');
+    const visibleGit=()=>row.querySelector('.rail-workspace-git, .rail-workspace-git-mark')?.textContent;
+    const initialGit=visibleGit();
+    emit('/projects/1',{...fresh,status:'stale',refreshing:true});await tick();expect(visibleGit()).toBe(initialGit);expect(row.getAttribute('aria-label')).toContain('Stale');expect(row.getAttribute('aria-label')).toContain('previous result retained');
+    emit('/projects/1',{...fresh,status:'error',error:'timeout'});await tick();expect(row.getAttribute('aria-label')).toContain('topic');expect(row.getAttribute('aria-label')).toContain('timeout');expect(visibleGit()).toBe(initialGit);
     host.querySelector<HTMLButtonElement>('.rail-git-action')!.click();expect(vc).toHaveBeenCalledWith('ws-1');expect(select).not.toHaveBeenCalled();
     host.querySelector<HTMLButtonElement>('[aria-label="Refresh visible Git summaries"]')!.click();await tick();expect(refreshWorkspaceGitSummaries).toHaveBeenCalledWith(['/projects/1']);
     row.dispatchEvent(new KeyboardEvent('keydown',{key:'ContextMenu',bubbles:true}));await tick();

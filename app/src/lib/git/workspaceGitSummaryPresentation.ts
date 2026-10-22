@@ -12,11 +12,10 @@ export function workspaceGitSummaryPresentation(cell: WorkspaceGitSummarySnapsho
     unknown: "Git not checked", loading: "Checking Git…", fresh: "Fresh",
     stale: "Stale", notGit: "Not a Git repository", error: "Git error",
   }[cell.status];
-  const marker = cell.status === "error" ? "!" : cell.refreshing || cell.status === "loading" ? "↻" : cell.status === "stale" ? "◷" : cell.status === "notGit" ? "—" : cell.status === "unknown" ? "?" : "";
   const summary = cell.summary;
-  const content = summary ? formatGitColumnDisplayText(summary) : state;
-  const mark = summary?.hasConflicts ? "⚠" : marker || (summary?.isDirty ? "●" : "✓");
-  const text = summary ? `${content}${marker ? ` · ${marker} ${state === "Fresh" ? "Checking…" : state}` : ""}` : content;
+  const content = summary ? formatGitColumnDisplayText(summary) : "";
+  const mark = summary ? (summary.hasConflicts ? "⚠" : summary.isDirty ? "●" : "✓") : "";
+  const text = content;
   const details = summary ? [content, state] : [state];
   if (summary?.aheadBehindError) details.push(`Tracking unavailable: ${summary.aheadBehindError}`);
   else if (summary && !summary.aheadBehind) details.push("No upstream configured");

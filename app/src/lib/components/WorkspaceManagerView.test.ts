@@ -144,7 +144,7 @@ describe("WorkspaceManagerView", () => {
     host.remove();
   });
 
-  it("writes Git error cells when a git-column load rejects", async () => {
+  it("keeps Git error diagnostics in the tooltip when a git-column load rejects", async () => {
     vi.mocked(subscribeWorkspaceGitSummary).mockImplementationOnce((_path, listener) => {
       listener({status:"error",refreshing:false,summary:null,checkedAt:null,error:"boom"});
       return {setDemand:vi.fn(),unsubscribe:vi.fn(),refresh:vi.fn()};
@@ -171,7 +171,8 @@ describe("WorkspaceManagerView", () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     const gitCell = host.querySelector(".wm-git-text");
-    expect(gitCell?.textContent?.trim()).toBe("Git error");
+    expect(gitCell?.textContent?.trim()).toBe("");
+    expect(gitCell?.getAttribute("title")).toContain("Git error");
     expect(gitCell?.getAttribute("title")).toContain("boom");
 
     unmount(instance as never);

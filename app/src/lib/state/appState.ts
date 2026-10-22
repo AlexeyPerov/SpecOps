@@ -98,10 +98,28 @@ const STATIC_THEME_REFS: ActiveThemeRef[] = [
 const cycleThemeRefsCache = new WeakMap<CustomThemeRecord[], ActiveThemeRef[]>();
 
 function createStateStore() {
-  const { subscribe, update: rawUpdate, set } = writable<AppDomainState>(initialState);
+  const { subscribe, set: rawSet } = writable<AppDomainState>(initialState);
 
+  // Tracked here rather than through a subscriber so a mutator nested inside a
+  // notification still sees the newest state.
+  let latest: AppDomainState = initialState;
+
+  function set(next: AppDomainState): void {
+    latest = next;
+    rawSet(next);
+  }
+
+  /**
+   * Mutators return the same state object when nothing changed (caret moves on
+   * a non-transient tab, no-op promotions). Svelte stores notify for every
+   * object `set`, so skip it to avoid re-running every selector and `$appState`
+   * reader on each keystroke.
+   */
   function update(mutator: (state: AppDomainState) => AppDomainState): void {
-    rawUpdate(mutator);
+    const next = mutator(latest);
+    if (next !== latest) {
+      set(next);
+    }
   }
 
   // Maintain the latest state via a single long-lived subscription instead of

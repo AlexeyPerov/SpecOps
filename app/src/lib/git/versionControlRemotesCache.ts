@@ -55,7 +55,9 @@ function ensureMutationHook(): void {
   // Any VC mutation could change the configured remotes (a `remote add` during
   // a fetch/pull/push flow, a branch operation that updates tracking). Drop the
   // cached entry so the next read re-shells-out.
-  subscribeVersionControlMutations((workspaceRootPath: string, _scope: VersionControlMutationScope) => {
+  subscribeVersionControlMutations((workspaceRootPath: string, scope: VersionControlMutationScope) => {
+    // Index and working-tree edits never touch remote configuration.
+    if (scope === "stage" || scope === "workspace-edit") return;
     invalidateRemotesForWorkspace(workspaceRootPath);
   });
 }

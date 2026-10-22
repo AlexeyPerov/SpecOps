@@ -624,11 +624,21 @@ fn unregister_active_git_command(command_id: &str) {
     }
 }
 
+// Most git reads finish within a few milliseconds, so exit polling starts short and
+// backs off; a fixed 50ms sleep added that much latency to every command.
+const GIT_WAIT_POLL_INITIAL: Duration = Duration::from_millis(1);
+const GIT_WAIT_POLL_MAX: Duration = Duration::from_millis(50);
+
+fn next_git_wait_poll_delay(current: Duration) -> Duration {
+    (current * 2).min(GIT_WAIT_POLL_MAX)
+}
+
 fn wait_for_registered_git_command(
     command_id: &str,
     timeout_ms: Option<u64>,
 ) -> Result<RegisteredCommandOutput, String> {
     let poll_start = Instant::now();
+    let mut poll_delay = GIT_WAIT_POLL_INITIAL;
 
     loop {
         if active_git_command_was_cancelled(command_id) {
@@ -702,7 +712,8 @@ fn wait_for_registered_git_command(
                 });
             }
             Ok(None) => {
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(poll_delay);
+                poll_delay = next_git_wait_poll_delay(poll_delay);
             }
             Err(error) => return Err(error),
         }
@@ -1406,6 +1417,7 @@ fn run_command_with_limited_output(
         ),
         Some(timeout) => {
             let wait_start = Instant::now();
+            let mut poll_delay = GIT_WAIT_POLL_INITIAL;
             loop {
                 let polled = child.try_wait();
                 let polled = match polled {
@@ -1423,7 +1435,8 @@ fn run_command_with_limited_output(
                         if wait_start.elapsed().as_millis() as u64 >= timeout {
                             break None;
                         }
-                        std::thread::sleep(Duration::from_millis(50));
+                        std::thread::sleep(poll_delay);
+                        poll_delay = next_git_wait_poll_delay(poll_delay);
                     }
                 }
             }

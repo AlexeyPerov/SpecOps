@@ -169,15 +169,19 @@
     };
     void listenProjectFavorites(root, () => { void reload(); }).then((unlisten) => {
       if (disposed) unlisten();
-      else { stop = unlisten; reloadFavorites = reload; }
+      else { stop = unlisten; reloadFavorites = reload; void reload(); }
     }).catch(() => { void reload(); });
     return () => { disposed = true; stop?.(); };
   });
+  // Tree listings change on every expand and watcher flush; coalesce the
+  // favorites re-check (a file read plus one exists() per favorite) per burst.
   $effect(() => {
     void rootNodes;
     void childrenByPath;
     const reload = reloadFavorites;
-    if (reload) untrack(() => { void reload(); });
+    if (!reload) return;
+    const timer = setTimeout(() => untrack(() => { void reload(); }), 500);
+    return () => clearTimeout(timer);
   });
   async function toggleFavorite(node: ProjectTreeNode): Promise<void> {
     const root = workspaceRoot;

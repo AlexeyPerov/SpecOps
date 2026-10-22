@@ -248,6 +248,16 @@
     markdownSnippets,
   }: Props = $props();
 
+  // Null until the catalog has listed the workspace at least once (a rebuild
+  // keeps the previous entries), so the `.md` filter does not hide folders it
+  // simply has not seen yet. Derived on its own so unrelated project-tree prop
+  // changes do not re-map the whole catalog.
+  const catalogMarkdownPaths = $derived(
+    quickOpenCatalogSnapshot.status === "ready" || quickOpenCatalogSnapshot.entries.length > 0
+      ? quickOpenCatalogSnapshot.entries.map((entry) => entry.absolutePath)
+      : null,
+  );
+
   let layoutResizeObserver = $state<ResizeObserver | null>(null);
   let previousActiveContextId = $state<ContextId | null>(null);
   let largeFileConfirming = $state(false);
@@ -659,13 +669,7 @@
     state: projectTreeControllerState,
     activeFilePath: documentView.activeDocumentPath,
     statusByPath: fileStatusByPath,
-    // Null until the catalog has listed the workspace at least once (a rebuild
-    // keeps the previous entries), so the `.md` filter does not hide folders
-    // it simply has not seen yet.
-    markdownPaths:
-      quickOpenCatalogSnapshot.status === "ready" || quickOpenCatalogSnapshot.entries.length > 0
-        ? quickOpenCatalogSnapshot.entries.map((entry) => entry.absolutePath)
-        : null,
+    markdownPaths: catalogMarkdownPaths,
     collapsed: !showProjectPanel,
     panelWidthPx: workspaceLayout.projectPanelWidthPx,
     onOpenSearch: () => overlayHost?.api.openOverlay("projectSearch"),

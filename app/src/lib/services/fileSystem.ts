@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { readDir, readFile, readTextFile, rename, stat } from "@tauri-apps/plugin-fs";
+import { exists, readDir, readFile, readTextFile, rename, stat } from "@tauri-apps/plugin-fs";
 import { atomicWriteTextFile } from "./atomicWrite";
 import type { FileContentKind } from "./fileContentKind";
 import { inferFileContentKind } from "./fileContentKind";
@@ -295,6 +295,18 @@ export async function saveFileAs(
       clearSaveInFlight(selectedPath);
     }
   });
+}
+
+/** What is on disk at `path`, or null when it cannot be read. */
+export async function statPathKind(path: string): Promise<"file" | "directory" | "missing" | null> {
+  try {
+    if (!(await exists(path))) {
+      return "missing";
+    }
+    return (await stat(path)).isDirectory ? "directory" : "file";
+  } catch {
+    return null;
+  }
 }
 
 export async function renameFile(oldPath: string): Promise<string | null> {

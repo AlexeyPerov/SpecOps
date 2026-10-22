@@ -515,6 +515,7 @@ pub async fn workspace_git_summary_refresh(app: AppHandle, paths: Vec<String>) -
 
 fn invalidate_keys(app: &AppHandle, keys: Vec<String>) {
     let mut state = lock_coordinator();
+    let mut changed = false;
     for key in keys {
         let Some(entry) = state.entries.get_mut(&key) else {
             continue;
@@ -524,6 +525,7 @@ fn invalidate_keys(app: &AppHandle, keys: Vec<String>) {
             continue;
         }
         entry.debounce = true;
+        changed = true;
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(350)).await;
@@ -548,8 +550,12 @@ fn invalidate_keys(app: &AppHandle, keys: Vec<String>) {
             .await;
         });
     }
-    state.publication += 1;
-    let _ = app.emit(EVENT, state.payload(Vec::new()));
+    // Entries already debouncing were published stale by the invalidation that
+    // armed them; re-broadcasting every row to every window per event is waste.
+    if changed {
+        state.publication += 1;
+        let _ = app.emit(EVENT, state.payload(Vec::new()));
+    }
 }
 fn metadata_changed(app: &AppHandle, paths: &[PathBuf]) {
     let keys = {
@@ -594,19 +600,27 @@ fn path_affects_root(path: &Path, root: &Path) -> bool {
     path.starts_with(root) || root.starts_with(path)
 }
 #[tauri::command]
-pub async fn workspace_git_summary_invalidate(app: AppHandle, path: String) -> Result<(), String> {
+pub async fn workspace_git_summary_invalidate(app: AppHandle, paths: Vec<String>) -> Result<(), String> {
     blocking(move || {
         // Watcher events use the frontend-registered prefix; layout roots are canonical.
-        let raw = PathBuf::from(&path);
-        let resolved = canonical_lenient(&raw);
+        let candidates: Vec<(PathBuf, PathBuf)> = paths
+            .iter()
+            .map(|path| {
+                let raw = PathBuf::from(path);
+                let resolved = canonical_lenient(&raw);
+                (raw, resolved)
+            })
+            .collect();
         let keys = {
             let state = lock_coordinator();
             state
                 .entries
                 .iter()
                 .filter(|(_, entry)| {
-                    path_affects_root(&raw, &entry.layout.root)
-                        || path_affects_root(&resolved, &entry.layout.root)
+                    candidates.iter().any(|(raw, resolved)| {
+                        path_affects_root(raw, &entry.layout.root)
+                            || path_affects_root(resolved, &entry.layout.root)
+                    })
                 })
                 .map(|(key, _)| key.clone())
                 .collect()

@@ -57,6 +57,12 @@ export interface WorkspaceFileCatalogDeps {
    * rather than clearing caches for every open workspace.
    */
   onBeforeRebuild?: (root: string) => void;
+  /**
+   * Resolves what is on disk at `path` after a rename or create event, or
+   * null when it cannot tell. Lets renames (including atomic saves) update the
+   * catalog in place; without it every rename schedules a full rebuild.
+   */
+  statPath?: (path: string) => Promise<"file" | "directory" | "missing" | null>;
 }
 
 export interface WorkspaceFileCatalog {
@@ -75,8 +81,9 @@ export interface WorkspaceFileCatalog {
   /**
    * Watcher hint. When `kind` is supplied, applies a safe incremental update
    * (remove the deleted entry, add a newly created openable file); otherwise
-   * (or for rename/modify/other/directory events) schedules a debounced
-   * rebuild. Repeated bursts collapse into at most one rebuild.
+   * (or for other/directory events) schedules a debounced rebuild. Modify
+   * events are ignored, and renames are resolved with `statPath` when given.
+   * Repeated bursts collapse into at most one rebuild.
    */
   notifyFilesystemChange(changedPath?: string, kind?: FileWatcherEventKind): void;
   /** Non-fatal diagnostics counters (no file contents). */
@@ -159,23 +166,34 @@ export function createWorkspaceFileCatalog(
   const enumerate = deps.enumerate ?? enumerateOpenableWorkspaceFiles;
   const invalidateDebounceMs = deps.invalidateDebounceMs ?? DEFAULT_INVALIDATE_DEBOUNCE_MS;
   const onBeforeRebuild = deps.onBeforeRebuild;
+  const statPath = deps.statPath;
 
   let disposed = false;
   let generation = 0;
   let workspaceRoot: string | null = null;
   let status: WorkspaceFileCatalogStatus = "idle";
   let entries: WorkspaceFileEntry[] = [];
+  /** Keys of {@link entries}, kept in sync so watcher updates avoid linear scans. */
+  let entryKeys = new Set<string>();
   let partialErrors: string[] = [];
   let errorMessage: string | null = null;
   let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
   /** A watcher rebuild came due while an enumeration was still running. */
   let rebuildAfterLoad = false;
   const listeners = new Set<() => void>();
+  /** Latest watcher event per key, so a slow rename stat cannot undo a newer event. */
+  const eventSeqByKey = new Map<string, number>();
+  let eventSeq = 0;
 
   // Diagnostics counters for incremental invalidation. No file contents.
   let incrementalAdds = 0;
   let incrementalRemoves = 0;
   let debouncedRebuilds = 0;
+
+  function setEntries(next: WorkspaceFileEntry[]): void {
+    entries = next;
+    entryKeys = new Set(next.map((entry) => entry.key));
+  }
 
   function emit(): void {
     for (const listener of listeners) {
@@ -236,11 +254,11 @@ export function createWorkspaceFileCatalog(
    * entry set changed (caller emits + bumps diagnostics).
    */
   function removeEntry(normalizedPath: string): boolean {
-    const next = entries.filter((entry) => entry.key !== normalizedPath);
-    if (next.length === entries.length) {
+    if (!entryKeys.has(normalizedPath)) {
       return false;
     }
-    entries = next;
+    entries = entries.filter((entry) => entry.key !== normalizedPath);
+    entryKeys.delete(normalizedPath);
     incrementalRemoves += 1;
     return true;
   }
@@ -253,13 +271,10 @@ export function createWorkspaceFileCatalog(
       return true;
     }
     const prefix = `${normalizedPath}/`;
-    const next = entries.filter(
-      (entry) => entry.key !== normalizedPath && !entry.key.startsWith(prefix),
-    );
-    if (next.length === entries.length) {
+    if (!entries.some((entry) => entry.key.startsWith(prefix))) {
       return false;
     }
-    entries = next;
+    setEntries(entries.filter((entry) => !entry.key.startsWith(prefix)));
     incrementalRemoves += 1;
     return true;
   }
@@ -276,15 +291,51 @@ export function createWorkspaceFileCatalog(
     if (!isOpenableFilePath(path) || shouldSkipCatalogPath(root, path)) {
       return false;
     }
-    const existing = entries.find((entry) => entry.key === key);
-    if (existing) {
+    if (entryKeys.has(key)) {
       return false;
     }
-    const next = [...entries, toEntry(root, path)];
-    next.sort((a, b) => a.absolutePath.localeCompare(b.absolutePath));
+    // Entries stay sorted, so binary-insert instead of re-sorting the catalog.
+    const entry = toEntry(root, path);
+    let low = 0;
+    let high = entries.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (entries[mid]!.absolutePath.localeCompare(entry.absolutePath) <= 0) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    const next = entries.slice();
+    next.splice(low, 0, entry);
     entries = next;
+    entryKeys.add(key);
     incrementalAdds += 1;
     return true;
+  }
+
+  function resolvePathChange(root: string, path: string, key: string, seq: number): void {
+    const gen = generation;
+    void statPath!(path)
+      .catch(() => null)
+      .then((kind) => {
+        const current = eventSeqByKey.get(key) === seq;
+        if (current) {
+          eventSeqByKey.delete(key);
+        }
+        if (disposed || gen !== generation || workspaceRoot !== root || !current) {
+          return;
+        }
+        if (status !== "ready" || kind === null || kind === "directory") {
+          scheduleRebuild();
+          return;
+        }
+        const changed =
+          kind === "missing" ? removeEntryOrSubtree(key) : addEntry(root, path);
+        if (changed) {
+          emit();
+        }
+      });
   }
 
   function snapshot(): WorkspaceFileCatalogSnapshot {
@@ -317,7 +368,7 @@ export function createWorkspaceFileCatalog(
         if (result.cancelled) {
           return;
         }
-        entries = toEntries(root, result.paths);
+        setEntries(toEntries(root, result.paths));
         partialErrors = [...result.partialErrors];
         status = "ready";
         errorMessage = null;
@@ -327,7 +378,7 @@ export function createWorkspaceFileCatalog(
         if (disposed || gen !== generation) {
           return;
         }
-        entries = [];
+        setEntries([]);
         partialErrors = [];
         status = "error";
         errorMessage = error instanceof Error ? error.message : String(error);
@@ -363,7 +414,7 @@ export function createWorkspaceFileCatalog(
         generation += 1;
         workspaceRoot = null;
         status = "idle";
-        entries = [];
+        setEntries([]);
         partialErrors = [];
         errorMessage = null;
         emit();
@@ -378,7 +429,7 @@ export function createWorkspaceFileCatalog(
       }
       generation += 1;
       workspaceRoot = normalized;
-      entries = [];
+      setEntries([]);
       partialErrors = [];
       errorMessage = null;
       status = "idle";
@@ -432,29 +483,41 @@ export function createWorkspaceFileCatalog(
         // Only apply incremental updates once the initial build is ready.
         // During loading, every event collapses into a single deferred rebuild.
         if (status === "ready" && kind) {
+          if (kind === "modify") {
+            // Content and metadata changes cannot change the set of files.
+            return;
+          }
+          // A newer event supersedes any rename still waiting on its stat.
+          eventSeqByKey.delete(normalizedChanged);
           if (kind === "remove") {
             if (removeEntryOrSubtree(normalizedChanged)) {
               emit();
             }
             return;
           }
+          // Match full enumeration: ignore events under skipped dirs/dot
+          // segments so npm install etc. cannot flood the catalog or force
+          // a rebuild for paths that would never be listed.
+          if (shouldSkipCatalogPath(root, normalizedChanged)) {
+            return;
+          }
           if (kind === "create") {
-            // Match full enumeration: ignore creates under skipped dirs/dot
-            // segments so npm install etc. cannot flood the catalog or force
-            // a rebuild for paths that would never be listed.
-            if (shouldSkipCatalogPath(root, normalizedChanged)) {
-              return;
-            }
             if (addEntry(root, changedPath)) {
               emit();
             }
-            // If the created path is a directory, addEntry no-ops (the file
-            // predicate rejects it) — fall through to a debounced rebuild so
-            // nested new files are picked up.
-            if (entries.some((entry) => entry.key === normalizedChanged)) {
+            if (entryKeys.has(normalizedChanged)) {
               return;
             }
-          } else if (shouldSkipCatalogPath(root, normalizedChanged)) {
+          }
+          // A rename only says the path appeared or disappeared (an atomic
+          // save renames over the target), and a create addEntry rejected may
+          // be a directory or a non-openable file: check what is on disk.
+          // Without a stat dependency, fall through to a debounced rebuild so
+          // nested new files are picked up.
+          if ((kind === "create" || kind === "rename") && statPath) {
+            eventSeq += 1;
+            eventSeqByKey.set(normalizedChanged, eventSeq);
+            resolvePathChange(root, changedPath, normalizedChanged, eventSeq);
             return;
           }
         }
@@ -468,7 +531,7 @@ export function createWorkspaceFileCatalog(
       generation += 1;
       workspaceRoot = null;
       status = "idle";
-      entries = [];
+      setEntries([]);
       partialErrors = [];
       errorMessage = null;
       incrementalAdds = 0;

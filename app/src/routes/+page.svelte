@@ -72,7 +72,7 @@
     createWorkspaceFileCatalogRegistry,
     type WorkspaceFileCatalogRegistry,
   } from "../lib/services/workspaceFileCatalogRegistry";
-  import { probeWorkspaceReadAccess } from "../lib/services/fileSystem";
+  import { probeWorkspaceReadAccess, statPathKind } from "../lib/services/fileSystem";
   import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
   import { listEnabledMarkdownSnippetsMemoized } from "../lib/editor/markdownSnippetSettings";
   import { buildCommandAvailabilitySnapshot } from "../lib/commands/availability";
@@ -191,6 +191,7 @@
         // this called `.clear()`, wiping every workspace's cached listings.
         workspaceDirectoryCache.invalidateUnder(root);
       },
+      statPath: statPathKind,
     });
   let workspaceFileCatalogRevision = $state(0);
   let autoProjectPanelCollapsed = $state(false);
@@ -246,10 +247,17 @@
   });
 
   let retainedWorkspaceRoots = new Set<string>();
+  // Keystrokes replace the workspaces array; key the retain pass on the
+  // workspace identities so it only re-runs when they actually change.
+  const retainedWorkspacesKey = $derived(
+    $appContexts.workspaces.map(workspace => `${workspace.id}\0${workspace.rootPath}`).join("\n"),
+  );
   $effect(() => {
+    retainedWorkspacesKey;
     // Retain undo/fold cache across inactive contexts (LRU-bounded); only drop
     // entries whose documents no longer exist in any context.
-    const roots = $appState.contexts.workspaces.map(workspace => workspace.rootPath);
+    const currentWorkspaces = untrack(() => appState.getSnapshot().contexts.workspaces);
+    const roots = currentWorkspaces.map(workspace => workspace.rootPath);
     const nextRoots = new Set(roots);
     for (const root of retainedWorkspaceRoots) if (!nextRoots.has(root)) {
       releaseWorkspaceDocuments(root); releaseWorkspaceGitSummary(root);
@@ -257,7 +265,7 @@
     retainedWorkspaceRoots = nextRoots;
     projectTreeController.retainRoots(roots);
     workspaceDirectoryCache.retainRoots(roots);
-    editorSessionCache.retainContexts(new Set(['notepad', ...$appState.contexts.workspaces.map(workspace => workspace.id)]));
+    editorSessionCache.retainContexts(new Set(['notepad', ...currentWorkspaces.map(workspace => workspace.id)]));
     editorSessionCache.retainDocuments($appOpenDocumentIds);
     retainDocumentMarkdownHtml($appOpenDocumentIds);
   });
@@ -708,12 +716,16 @@
     });
   });
 
+  // Primitive deriveds so caret moves (which replace the editor slice) do not
+  // re-run the settings persistence fingerprint.
+  const editorWrapLines = $derived($appEditor.wrapLines);
+  const editorZoomPercent = $derived($appEditor.zoomPercent);
   $effect(() => {
     runtimeReady;
     currentWindowId;
     $appSettings;
-    $appEditor.wrapLines;
-    $appEditor.zoomPercent;
+    editorWrapLines;
+    editorZoomPercent;
     syncSettingsPersistenceEffect({
       runtimeReady,
       currentWindowId,

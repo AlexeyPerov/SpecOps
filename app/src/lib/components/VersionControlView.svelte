@@ -231,6 +231,8 @@
   let remotes = $state<GitRemote[]>([]);
   let remoteSelection = $state<VersionControlRemoteSelection>(emptyRemoteSelection());
   let panelRefreshToken = $state(0);
+  /** Bumped by stage/unstage, which only change the working tree status. */
+  let changesRefreshToken = $state(0);
   let probeGeneration = 0;
   let lastRefreshAt = 0;
   // AbortController for an in-flight manual Refresh. A new Refresh, a probe
@@ -969,9 +971,19 @@
     if (mutationChangesHead(scope)) {
       selectedCommitSha = null;
     }
-    panelRefreshToken += 1;
+    // Staging cannot move HEAD or change refs, stashes or remotes, so it only
+    // reloads the Changes status instead of re-running history, the reference
+    // tree and the branch header.
+    if (scope === "stage") {
+      changesRefreshToken += 1;
+    } else {
+      panelRefreshToken += 1;
+    }
     if (workspaceRootPath) {
       notifyVersionControlMutation(workspaceRootPath, scope);
+    }
+    if (scope === "stage") {
+      return;
     }
     const root = repoRoot;
     const controller = new AbortController();
@@ -1249,6 +1261,7 @@
   $effect(() => {
     const root = repoRoot;
     panelRefreshToken;
+    changesRefreshToken;
     let disposed = false;
     operationState = null;
     operationError = null;
@@ -1702,7 +1715,7 @@
             workspaceRootPath={workspaceRootPath}
             preGitSaveDeps={preGitSaveDeps}
             readOnly={isReadOnlyRepository}
-            refreshToken={panelRefreshToken}
+            refreshToken={panelRefreshToken + changesRefreshToken}
             onMutation={(scope) => changesRoot === repoRoot && changesScope === layoutScope ? refreshAfterMutation(scope) : undefined}
             onRemoteCommandChange={(command) => { if (changesRoot === repoRoot && changesScope === layoutScope) registerPanelRemoteCommand(command); }}
             {notify}

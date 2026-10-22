@@ -292,7 +292,7 @@ describe("createWorkspaceFileCatalog", () => {
     vi.useRealTimers();
   });
 
-  it("falls back to a debounced rebuild for 'rename'/'modify'/'other' kinds", async () => {
+  it("falls back to a debounced rebuild for 'rename'/'other' kinds without statPath", async () => {
     vi.useFakeTimers();
     const enumerate = vi.fn(async () => ({
       paths: ["/ws/a.ts"],
@@ -318,6 +318,140 @@ describe("createWorkspaceFileCatalog", () => {
     expect(catalog.getDiagnostics().debouncedRebuilds).toBeGreaterThanOrEqual(1);
     catalog.dispose();
     vi.useRealTimers();
+  });
+
+  it("ignores 'modify' events once ready", async () => {
+    vi.useFakeTimers();
+    const enumerate = vi.fn(async () => ({
+      paths: ["/ws/a.ts"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    const catalog = createWorkspaceFileCatalog({ enumerate, invalidateDebounceMs: 50 });
+    catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
+    await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
+    const listener = vi.fn();
+    catalog.subscribe(listener);
+
+    catalog.notifyFilesystemChange("/ws/a.ts", "modify");
+    catalog.notifyFilesystemChange("/ws/src", "modify");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(enumerate).toHaveBeenCalledTimes(1);
+    expect(listener).not.toHaveBeenCalled();
+    catalog.dispose();
+    vi.useRealTimers();
+  });
+
+  it("resolves renames and unknown creates with statPath instead of rebuilding", async () => {
+    vi.useFakeTimers();
+    const enumerate = vi.fn(async () => ({
+      paths: ["/ws/a.ts", "/ws/b.ts"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    const disk: Record<string, "file" | "directory" | "missing"> = {
+      "/ws/a.ts": "file",
+      "/ws/a.ts.x1.tmp": "missing",
+      "/ws/b.ts": "missing",
+      "/ws/c.ts": "file",
+      "/ws/out.o": "file",
+    };
+    const statPath = vi.fn(async (path: string) => disk[path] ?? null);
+    const catalog = createWorkspaceFileCatalog({ enumerate, invalidateDebounceMs: 50, statPath });
+    catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
+    await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
+
+    // Atomic save: temp file renamed over the target.
+    catalog.notifyFilesystemChange("/ws/a.ts.x1.tmp", "rename");
+    catalog.notifyFilesystemChange("/ws/a.ts", "rename");
+    // Moved away, moved in, non-openable create.
+    catalog.notifyFilesystemChange("/ws/b.ts", "rename");
+    catalog.notifyFilesystemChange("/ws/c.ts", "rename");
+    catalog.notifyFilesystemChange("/ws/out.o", "create");
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(catalog.getSnapshot().entries.map((e) => e.absolutePath)).toEqual([
+      "/ws/a.ts",
+      "/ws/c.ts",
+    ]);
+    expect(enumerate).toHaveBeenCalledTimes(1);
+    catalog.dispose();
+    vi.useRealTimers();
+  });
+
+  it("rebuilds when a renamed or created path is a directory", async () => {
+    vi.useFakeTimers();
+    const enumerate = vi.fn(async () => ({
+      paths: ["/ws/a.ts"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    const statPath = vi.fn(async () => "directory" as const);
+    const catalog = createWorkspaceFileCatalog({ enumerate, invalidateDebounceMs: 50, statPath });
+    catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
+    await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
+
+    catalog.notifyFilesystemChange("/ws/moved", "rename");
+    await vi.advanceTimersByTimeAsync(60);
+    await vi.waitFor(() => expect(enumerate).toHaveBeenCalledTimes(2));
+    catalog.dispose();
+    vi.useRealTimers();
+  });
+
+  it("ignores a stale rename stat superseded by a later remove", async () => {
+    vi.useFakeTimers();
+    const enumerate = vi.fn(async () => ({
+      paths: ["/ws/a.ts"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    const stat = deferred<"file" | "directory" | "missing" | null>();
+    const catalog = createWorkspaceFileCatalog({
+      enumerate,
+      invalidateDebounceMs: 50,
+      statPath: () => stat.promise,
+    });
+    catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
+    await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
+
+    catalog.notifyFilesystemChange("/ws/a.ts", "rename");
+    catalog.notifyFilesystemChange("/ws/a.ts", "remove");
+    stat.resolve("file");
+    await vi.advanceTimersByTimeAsync(100);
+    expect(catalog.getSnapshot().entries).toHaveLength(0);
+    catalog.dispose();
+    vi.useRealTimers();
+  });
+
+  it("keeps entries sorted when adding files incrementally", async () => {
+    const enumerate = vi.fn(async () => ({
+      paths: ["/ws/b.ts", "/ws/d.ts"],
+      partialErrors: [],
+      cancelled: false,
+    }));
+    const catalog = createWorkspaceFileCatalog({ enumerate });
+    catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
+    await vi.waitFor(() => expect(catalog.getSnapshot().status).toBe("ready"));
+
+    for (const path of ["/ws/e.ts", "/ws/a.ts", "/ws/c.ts", "/ws/c.ts"]) {
+      catalog.notifyFilesystemChange(path, "create");
+    }
+    expect(catalog.getSnapshot().entries.map((e) => e.absolutePath)).toEqual([
+      "/ws/a.ts",
+      "/ws/b.ts",
+      "/ws/c.ts",
+      "/ws/d.ts",
+      "/ws/e.ts",
+    ]);
+    catalog.notifyFilesystemChange("/ws/c.ts", "remove");
+    catalog.notifyFilesystemChange("/ws/c.ts", "create");
+    expect(catalog.getSnapshot().entries).toHaveLength(5);
+    catalog.dispose();
   });
 
   it("ignores watcher events outside the workspace root", async () => {

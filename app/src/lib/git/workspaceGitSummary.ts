@@ -201,9 +201,21 @@ export async function refreshWorkspaceGitSummaries(paths: readonly string[]): Pr
     await finished;
   } catch { finish(); }
 }
+// Watcher bursts (checkout, install, builds) deliver one event per path; batch
+// them into one invalidation call instead of an IPC round trip per path.
+const INVALIDATE_BATCH_MS = 100;
+const pendingInvalidations = new Set<string>();
+let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
+function flushInvalidations(): void {
+  invalidateTimer = null;
+  const paths = [...pendingInvalidations]; pendingInvalidations.clear();
+  if (!startPromise || !paths.length) return;
+  void invoke("workspace_git_summary_invalidate", { paths }).catch(() => {});
+}
 export function invalidateWorkspaceGitSummary(path: string): void {
   if (!startPromise) return;
-  void invoke("workspace_git_summary_invalidate", { path }).catch(() => {});
+  pendingInvalidations.add(path);
+  invalidateTimer ??= setTimeout(flushInvalidations, INVALIDATE_BATCH_MS);
 }
 export function releaseWorkspaceGitSummary(path: string): void {
   if ([...consumers].some(consumer => consumer.path === path)) return;
@@ -217,6 +229,8 @@ export function disposeWorkspaceGitSummaryService(): void {
   disposed = true; windowActive = false; cancelRefreshWaiters();
   unlisten?.(); unlisten = null; unsubscribeState?.(); unsubscribeState = null; unsubscribeMutations?.(); unsubscribeMutations = null;
   for (const timer of staleTimers.values()) clearTimeout(timer);
+  if (invalidateTimer) clearTimeout(invalidateTimer);
+  invalidateTimer = null; pendingInvalidations.clear();
   staleTimers.clear(); consumers.clear(); snapshots.clear(); seenLeases.clear(); publication = -1; startPromise = null;
   if (hadStarted) void invoke("workspace_git_summary_detach").catch(() => {});
 }

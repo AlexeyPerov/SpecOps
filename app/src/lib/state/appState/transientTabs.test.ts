@@ -79,3 +79,25 @@ describe("transient (preview) tabs", () => {
     expect(tabForDocument(documentId)?.transient).toBeUndefined();
   });
 });
+
+describe("no-op state updates", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("does not notify subscribers when a mutator leaves state unchanged", () => {
+    const documentId = appState.openFileInTab("/tmp/a.txt", "a");
+    const listener = vi.fn();
+    const unsubscribe = appState.subscribe(listener);
+    listener.mockClear();
+
+    // The tab is not transient, so promotion has nothing to change.
+    appState.promoteTransientTabForDocument(documentId);
+    expect(listener).not.toHaveBeenCalled();
+
+    appState.setFileTabTransient(tabForDocument(documentId)!.id, true);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(appState.getSnapshot()).toBe(listener.mock.calls[0]![0]);
+    unsubscribe();
+  });
+});

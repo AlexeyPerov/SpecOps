@@ -43,6 +43,15 @@ describe("loadRemotes cache invalidation", () => {
     expect(queryRemotesMock).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps cached remotes across stage and working-tree edits", async () => {
+    queryRemotesMock.mockResolvedValue(remotes("origin"));
+    await loadRemotes("/repo");
+    notifyVersionControlMutation("/repo", "stage");
+    notifyVersionControlMutation("/repo", "workspace-edit");
+    await loadRemotes("/repo");
+    expect(queryRemotesMock).toHaveBeenCalledTimes(1);
+  });
+
   it("does not let an in-flight pre-invalidation read repopulate the cache", async () => {
     let finishStale: (value: GitRemote[]) => void = () => {};
     queryRemotesMock

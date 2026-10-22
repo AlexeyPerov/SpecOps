@@ -1,5 +1,5 @@
 use notify::{EventKind, RecursiveMode, Watcher};
-use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
+use notify_debouncer_full::{new_debouncer_opt, DebounceEventResult, Debouncer, NoCache};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -101,7 +101,7 @@ pub struct FileWatcherState {
 }
 
 struct FileWatcherInner {
-    debouncer: Option<Debouncer<notify::RecommendedWatcher, FileIdMap>>,
+    debouncer: Option<Debouncer<notify::RecommendedWatcher, NoCache>>,
     /// Paths as the frontend registered them (not necessarily canonical).
     watched_paths: HashSet<String>,
     file_paths_by_window: HashMap<String, HashSet<String>>,
@@ -298,7 +298,10 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
     let restart_requested = Arc::clone(&inner.restart_requested);
     let health = Arc::clone(&inner.health);
 
-    let debouncer = new_debouncer(
+    // No file-ID cache: events are emitted per path, so rename correlation is
+    // unused, and the cache stats every created path and scans its whole map on
+    // each remove (quadratic on mass deletes such as `rm -rf node_modules`).
+    let debouncer = new_debouncer_opt::<_, notify::RecommendedWatcher, NoCache>(
         Duration::from_millis(200),
         None,
         move |result: DebounceEventResult| {
@@ -354,6 +357,8 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
                 }
             }
         },
+        NoCache,
+        notify::Config::default(),
     )
     .map_err(|error| error.to_string())?;
 
@@ -429,7 +434,7 @@ fn register_canonical_entry(
 /// filter remains the root-aware emit check (`path_has_ignored_component_below_roots`),
 /// so a backend that ignores the `unwatch` still drops those events before IPC.
 fn prune_ignored_subdirectories(
-    debouncer: &mut Debouncer<notify::RecommendedWatcher, FileIdMap>,
+    debouncer: &mut Debouncer<notify::RecommendedWatcher, NoCache>,
     root_canonical: &str,
 ) {
     let root_path = Path::new(root_canonical);
@@ -457,9 +462,6 @@ fn prune_ignored_subdirectories(
                 subdir.display()
             );
         }
-        // Drop the ignored subtree from the file-ID cache too, mirroring the
-        // unwatch. Best-effort: a missing root is expected here.
-        debouncer.cache().remove_root(subdir);
     }
 }
 
@@ -483,7 +485,7 @@ fn prune_ignored_subdirectories(
 /// original→canonical mapping is kept (reference-counted across both watch sets)
 /// so emitted events can be rewritten back to the frontend-registered form.
 fn apply_watcher_path_diff(
-    debouncer: &mut Debouncer<notify::RecommendedWatcher, FileIdMap>,
+    debouncer: &mut Debouncer<notify::RecommendedWatcher, NoCache>,
     previous: &HashSet<String>,
     next_paths: &HashSet<String>,
     mode: RecursiveMode,
@@ -511,7 +513,6 @@ fn apply_watcher_path_diff(
             {
                 log::debug!("file watcher unwatch failed for {canonical}: {error}");
             }
-            debouncer.cache().remove_root(PathBuf::from(&canonical));
         }
         watched.remove(&path);
     }
@@ -523,18 +524,6 @@ fn apply_watcher_path_diff(
             .watch(PathBuf::from(&canonical).as_path(), mode)
         {
             Ok(()) => {
-                // The FileIdMap cache (`add_root`) walks and stats every entry
-                // under a recursive root to build rename-correlation state.
-                // This app does not rely on FileIdMap rename tracking — the
-                // debounce callback rewrites emitted paths via the
-                // `canonical_to_original` map and filters ignored subtrees via
-                // `path_has_ignored_component_below_roots`, neither of which
-                // needs the FileIdMap. Registering the cache only for individual
-                // file paths (NonRecursive) skips the 10^4–10^5 stats per
-                // workspace switch that `add_root(Recursive)` performs.
-                if matches!(mode, RecursiveMode::NonRecursive) {
-                    debouncer.cache().add_root(PathBuf::from(&canonical), mode);
-                }
                 // F38: prune heavy subdirectories at registration so notify does
                 // not install per-dir watches (or stat every entry) under
                 // `.git`/`node_modules`/`target`. Only meaningful for a recursive
@@ -790,11 +779,13 @@ mod tests {
         paths.iter().map(|path| (*path).to_string()).collect()
     }
 
-    fn test_debouncer() -> Debouncer<notify::RecommendedWatcher, FileIdMap> {
-        new_debouncer(
+    fn test_debouncer() -> Debouncer<notify::RecommendedWatcher, NoCache> {
+        new_debouncer_opt::<_, notify::RecommendedWatcher, NoCache>(
             Duration::from_millis(200),
             None,
             |_result: DebounceEventResult| {},
+            NoCache,
+            notify::Config::default(),
         )
         .expect("create debouncer")
     }
@@ -1063,7 +1054,7 @@ mod tests {
         let map = Arc::new(Mutex::new(HashMap::new()));
         let callback_map = Arc::clone(&map);
         let (send, receive) = std::sync::mpsc::channel();
-        let mut debouncer = new_debouncer(
+        let mut debouncer = new_debouncer_opt::<_, notify::RecommendedWatcher, NoCache>(
             Duration::from_millis(200),
             None,
             move |result: DebounceEventResult| {
@@ -1078,6 +1069,8 @@ mod tests {
                     }
                 }
             },
+            NoCache,
+            notify::Config::default(),
         )
         .unwrap();
         let watched = apply_watcher_path_diff(

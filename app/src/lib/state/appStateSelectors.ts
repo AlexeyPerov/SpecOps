@@ -91,8 +91,15 @@ function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
  * Reuses the previous Set when membership is unchanged so content-only edits
  * (which replace `state.contexts`) do not thrash session-cache retain.
  */
+let lastOpenDocIdsContexts: AppDomainState["contexts"] | null = null;
+
 export const appOpenDocumentIds = stableDerived(
   derived(appState, ($state) => {
+    // Cursor moves and settings changes keep `contexts`; skip the tab walk.
+    if ($state.contexts === lastOpenDocIdsContexts) {
+      return lastOpenDocIdsOutput;
+    }
+    lastOpenDocIdsContexts = $state.contexts;
     const next = collectAllOpenDocumentIds($state);
     if (setsEqual(lastOpenDocIdsOutput, next)) {
       return lastOpenDocIdsOutput;
@@ -177,8 +184,19 @@ function watcherStructuralEqual(
  * Gates on watch-flag + per-context session identity and document id/path
  * (not `contexts` referential identity), so keystrokes do not re-walk tabs.
  */
+let lastExternalWatcherContexts: AppDomainState["contexts"] | null = null;
+
 export const appExternalWatcherSyncKey = derived(appState, ($state) => {
   const watchFlag = $state.settings.externalFiles.watchExternalChanges;
+  // Cursor moves and unrelated settings keep `contexts`; skip the tab walk.
+  if (
+    $state.contexts === lastExternalWatcherContexts &&
+    lastExternalWatcherWatchFlag === watchFlag &&
+    lastExternalWatcherKeyOutput !== null
+  ) {
+    return lastExternalWatcherKeyOutput;
+  }
+  lastExternalWatcherContexts = $state.contexts;
   const slices = watcherStructuralSlices($state);
   if (
     lastExternalWatcherWatchFlag === watchFlag &&

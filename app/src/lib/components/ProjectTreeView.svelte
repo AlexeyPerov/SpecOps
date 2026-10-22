@@ -274,9 +274,20 @@
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
   }
 
-  const rows = $derived(
-    flattenProjectTree(nodes, expandedPaths, childrenByPath, loadingPaths),
-  );
+  // Last flattened rows by key (not reactive): unchanged rows are reused so
+  // only the rows an expand/collapse actually touches re-render.
+  let previousRowsByKey = new Map<string, ProjectTreeRow>();
+  const rows = $derived.by(() => {
+    const next = flattenProjectTree(
+      nodes,
+      expandedPaths,
+      childrenByPath,
+      loadingPaths,
+      previousRowsByKey,
+    );
+    previousRowsByKey = new Map(next.map((row) => [projectTreeRowKey(row), row]));
+    return next;
+  });
 
   type DisplayRow = ProjectTreeRow | { kind: "draft"; depth: number };
   const displayRows = $derived.by<DisplayRow[]>(() => {

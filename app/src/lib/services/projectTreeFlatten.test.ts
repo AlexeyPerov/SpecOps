@@ -55,4 +55,17 @@ describe("flattenProjectTree", () => {
     const rows = flattenProjectTree([dir("/r/a")], none, children, none);
     expect(rows).toHaveLength(1);
   });
+
+  it("reuses unchanged rows from the previous result", () => {
+    const a = dir("/r/a");
+    const b = dir("/r/b");
+    const children = new Map([["/r/a", [file("/r/a/1.txt")]]]);
+    const expanded = flattenProjectTree([a, b], new Set(["/r/a"]), children, none);
+    const previous = new Map(expanded.map((row) => [projectTreeRowKey(row), row]));
+    const collapsed = flattenProjectTree([a, b], none, children, none, previous);
+    expect(collapsed.map(projectTreeRowKey)).toEqual(["/r/a", "/r/b"]);
+    expect(collapsed[0]).not.toBe(expanded[0]);
+    expect(collapsed[0]).toMatchObject({ expanded: false });
+    expect(collapsed[1]).toBe(expanded[2]);
+  });
 });

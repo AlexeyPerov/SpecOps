@@ -27,13 +27,43 @@ export function projectTreeRowKey(row: ProjectTreeRow): string {
   return row.kind === "node" ? row.node.path : `loading:${row.path}`;
 }
 
+/**
+ * `previousRows` (the last result, by key) lets an unchanged row keep its
+ * object identity, so a keyed `{#each}` skips it instead of re-rendering every
+ * visible row on each expand/collapse.
+ */
 export function flattenProjectTree(
   nodes: readonly ProjectTreeNode[],
   expandedPaths: ReadonlySet<string>,
   childrenByPath: ReadonlyMap<string, ProjectTreeNode[]>,
   loadingPaths: ReadonlySet<string>,
+  previousRows?: ReadonlyMap<string, ProjectTreeRow>,
 ): ProjectTreeRow[] {
   const rows: ProjectTreeRow[] = [];
+
+  function pushNode(node: ProjectTreeNode, depth: number, canExpand: boolean, expanded: boolean): void {
+    const previous = previousRows?.get(node.path);
+    if (
+      previous?.kind === "node" &&
+      previous.node === node &&
+      previous.depth === depth &&
+      previous.canExpand === canExpand &&
+      previous.expanded === expanded
+    ) {
+      rows.push(previous);
+      return;
+    }
+    rows.push({ kind: "node", node, depth, canExpand, expanded });
+  }
+
+  function pushLoading(path: string, depth: number): void {
+    const previous = previousRows?.get(`loading:${path}`);
+    rows.push(
+      previous?.kind === "loading" && previous.depth === depth
+        ? previous
+        : { kind: "loading", path, depth },
+    );
+  }
 
   function visit(list: readonly ProjectTreeNode[], depth: number): void {
     for (const node of list) {
@@ -44,12 +74,12 @@ export function flattenProjectTree(
         isDirectory &&
         (!hasLoadedChildren || children.length > 0 || loadingPaths.has(node.path));
       const expanded = isDirectory && expandedPaths.has(node.path);
-      rows.push({ kind: "node", node, depth, canExpand, expanded });
+      pushNode(node, depth, canExpand, expanded);
       if (!isDirectory || !canExpand || !expanded) {
         continue;
       }
       if (loadingPaths.has(node.path)) {
-        rows.push({ kind: "loading", path: node.path, depth: depth + 1 });
+        pushLoading(node.path, depth + 1);
         continue;
       }
       visit(children, depth + 1);

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-22 22:06 MSK — Speed up project tree expand and collapse
+
+- Reuse unchanged flattened tree rows between renders, so expanding or collapsing a folder only updates the rows it adds, removes or changes instead of re-rendering every visible row. Keep the project tree controller state as raw (non-proxied) state so root nodes keep their identity across publishes and their rows are reused too.
+- Validation: in a component benchmark with 150 visible rows, a collapse drops from ~30 ms to ~2.5 ms, an expand from ~30 ms to ~5 ms, and a no-op tree update from ~33 ms to ~0.3 ms. A new flatten regression covers row reuse; all focused tree tests pass; Svelte/type checks report zero errors and warnings. The full suite passes except the pre-existing `ActivityRail` Git-label test, which also fails without this change. The installed native app was not rebuilt or replaced.
+
 ## 2026-10-22 17:26 MSK — Fix commit SHA button contrast
 
 - Give the Copy SHA button an explicit theme surface and primary text color instead of combining a native button background with muted text. Add padding, rounded corners, hover/pressed borders and a keyboard focus ring.

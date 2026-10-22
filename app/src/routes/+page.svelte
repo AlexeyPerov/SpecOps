@@ -147,7 +147,10 @@
     ((state: AppDomainState) => Promise<void>) | null
   >(null);
   let workspaceContextMenuEl = $state<HTMLDivElement | null>(null);
-  let projectTreeControllerState = $state<ProjectTreeControllerState>({
+  // Raw, not deeply proxied: the controller publishes immutable snapshots, and a
+  // deep proxy would hand the tree fresh node objects on every publish, which
+  // defeats row reuse in the project tree view.
+  let projectTreeControllerState = $state.raw<ProjectTreeControllerState>({
     rootNodes: [],
     childrenByPath: new Map(),
     expandedPaths: new Set(),

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-22 17:26 MSK — Fix commit SHA button contrast
+
+- Give the Copy SHA button an explicit theme surface and primary text color instead of combining a native button background with muted text. Add padding, rounded corners, hover/pressed borders and a keyboard focus ring.
+- Validation: browser checks across all 43 built-in and preset themes in normal, hover, pressed and focus states pass with a minimum text contrast of 4.51:1. All 27 focused commit-detail and theme tests pass; Svelte/type checks report zero errors and warnings; Svelte autofixer reports no issues; production frontend build passes. The installed native app was not rebuilt or replaced.
+
 ## 2026-10-22 11:04 MSK — Remove transient workspace Git labels
 
 - Hide Git check/cache status labels and refresh markers in workspace sidebar rows and the workspace manager. Preserve the last branch, tracking and working-tree summary through background refreshes and failures; leave rows without a summary blank. Keep diagnostic details in tooltips and accessible descriptions.

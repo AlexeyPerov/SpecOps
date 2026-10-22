@@ -88,9 +88,22 @@
   }
   .git-commit-detail-sha {
     margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
     font-family: var(--font-mono, ui-monospace, monospace);
     font-size: 0.8125rem;
-    color: var(--color-text-muted);
+    color: var(--color-text);
+  }
+  .git-commit-detail-sha:hover {
+    border-color: var(--color-text-secondary);
+  }
+  .git-commit-detail-sha:active {
+    border-color: var(--color-text);
+  }
+  .git-commit-detail-sha:focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
   }
   .git-commit-detail-parents {
     display: flex;

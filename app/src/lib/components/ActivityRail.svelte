@@ -32,6 +32,8 @@
   import { workspaceRailSections, readRailWindowPreferences, writeRailWindowPreferences, type RailProject, type RailSection } from '../services/workspaceRailSections';
   import { clampFixedOverlayPosition } from './clampFixedOverlayPosition';
   import { distinguishingProjectPaths, projectName, projectColor, projectIcon } from "./workspaceRailPresentation";
+  import { loadWorkspaceDocument, workspaceDocumentSnapshot, workspaceDocumentsRevision, type WorkspaceDocumentKind } from "../services/workspaceDocuments";
+  import { subscribeWorkspacePreferences } from "../services/workspacePreferences";
 
   /** A notepad tab shown in the expanded notepad card's "last opened" list. */
   export interface NotepadRailTab {
@@ -54,19 +56,17 @@
     notepadOpenTabCount?: number;
     /** Last opened notepad tabs (append order), already formatted. */
     notepadRecentTabs?: NotepadRailTab[];
-    /**
-     * When non-null a workspace context menu is open for that workspace id.
-     * Workspace tooltips are suppressed while any menu is open so the tooltip
-     * never overlaps the menu, and a longer delay (2× default) keeps the
-     * workspace tooltips from flickering up on quick hover.
-     */
-    contextMenuWorkspaceId?: ContextId | null;
+    /** Hides the Version Control menu entry when Git integration is off. */
+    gitIntegrationEnabled?: boolean;
     onSelectContext?: (contextId: ContextId) => void;
     onOpenVersionControl?: (workspaceId: ContextId) => void;
+    onOpenSettings?: (workspaceId: ContextId) => void;
+    onMoveToWindow?: (workspaceId: ContextId, newWindow: boolean) => void;
+    onOpenDocument?: (workspaceId: ContextId, kind: WorkspaceDocumentKind) => void | Promise<void>;
+    onCloseWorkspace?: (workspaceId: ContextId) => void;
     onAddWorkspace?: () => void;
     onOpenWorkspaceManager?: () => void;
     onPanelWidthChange?: (width: number) => void;
-    onRequestCloseWorkspace?: (workspaceId: ContextId, x: number, y: number) => void;
     onReorderWorkspaces?: (fromIndex: number, toIndex: number) => void;
     /** Switches to notepad and selects the given tab id. */
     onSelectNotepadTab?: (tabId: string) => void;
@@ -83,13 +83,16 @@
     panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
     notepadOpenTabCount = 0,
     notepadRecentTabs = [],
-    contextMenuWorkspaceId = null,
+    gitIntegrationEnabled = true,
     onSelectContext = () => {},
     onOpenVersionControl = () => {},
+    onOpenSettings,
+    onMoveToWindow,
+    onOpenDocument,
+    onCloseWorkspace,
     onAddWorkspace = () => {},
     onOpenWorkspaceManager = () => {},
     onPanelWidthChange = () => {},
-    onRequestCloseWorkspace = () => {},
     onReorderWorkspaces = () => {},
     onSelectNotepadTab = () => {},
   }: Props = $props();
@@ -117,10 +120,6 @@
    * a longer delay keeps the name tooltip from flickering on every pass).
    */
   const WORKSPACE_TOOLTIP_DELAY_MS = 400;
-
-  // Suppress every workspace tooltip while any workspace context menu is open
-  // so the tooltip never overlaps the menu.
-  const workspaceTooltipSuppressed = $derived(contextMenuWorkspaceId !== null);
 
   let dragState = $state<WorkspaceDragState>({
     pointerId: null,
@@ -285,6 +284,9 @@
   let menu = $state<{ project?: RailProject; section?: RailSection; x: number; y: number; projectsOnly?: boolean } | null>(null);
   let menuEl = $state<HTMLDivElement | null>(null);
   let menuTrigger: HTMLElement | null = null;
+  // Suppress every workspace tooltip while any rail menu is open so the
+  // tooltip never overlaps the menu.
+  const workspaceTooltipSuppressed = $derived(menu !== null);
   function closeMenu(): void { if (!menu) return; const trigger = menuTrigger; menu = null; void tick().then(() => trigger?.focus()); }
   function openMenu(event: MouseEvent | KeyboardEvent, value: { project?: RailProject; section?: RailSection; projectsOnly?: boolean }): void {
     event.preventDefault();
@@ -316,11 +318,29 @@
     commit(folderEdit.id ? [{ type: 'renameFolder', id: folderEdit.id, name }] :
       [{ type: 'putFolder', folder: { id: crypto.randomUUID(), name, order: 0 } }]); folderEdit = null;
   }
-  function reorderFolder(section: RailSection, direction: -1 | 1): void {
-    const folders = sections.filter(section => section.folderId); const index = folders.findIndex(folder => folder.id === section.id);
-    if (index + direction < 0 || index + direction >= folders.length || !section.folderId) return;
-    commit([{ type: 'moveFolder', id: section.folderId, beforeId: direction < 0 ? folders[index - 1].folderId : folders[index + 2]?.folderId ?? null }]); closeMenu();
+  function togglePinned(project: RailProject): void {
+    commit([{ type: 'moveProject', id: project.id, pinned: !project.pinned }]);
   }
+  // Workspace actions that open a tab, window or dialog elsewhere: close the
+  // menu without returning focus to the rail row.
+  function runWorkspaceAction(contextId: ContextId, action: ((id: ContextId) => unknown) | undefined): void {
+    menu = null;
+    void Promise.resolve(action?.(contextId)).catch(error => onError(String(error)));
+  }
+  async function copyProjectPath(project: RailProject): Promise<void> {
+    closeMenu();
+    try { await navigator.clipboard.writeText(project.rootPath); }
+    catch { /* clipboard is best-effort from the workspace menu */ }
+  }
+  const DOCUMENT_KINDS = ["tasks", "notes"] as const;
+  const menuRoot = $derived(menu?.project?.contextId ? menu.project.rootPath : null);
+  let documentPreferenceRevision = $state(0);
+  $effect(() => untrack(() => subscribeWorkspacePreferences(() => { documentPreferenceRevision++; })));
+  $effect(() => {
+    const root = menuRoot; void documentPreferenceRevision;
+    if (root) for (const kind of DOCUMENT_KINDS) void loadWorkspaceDocument(root, kind, undefined, true).catch(() => {});
+  });
+  const menuDocuments = $derived.by(() => { void $workspaceDocumentsRevision; return menuRoot ? DOCUMENT_KINDS.map(kind => workspaceDocumentSnapshot(menuRoot, kind)) : []; });
   let draggedFolder = $state<string | null>(null);
   function dropFolder(event: DragEvent, section: RailSection): void {
     event.preventDefault();
@@ -625,6 +645,9 @@
         </HoverTooltip>
         <button class="rail-git-action" type="button" aria-label={`Version Control for ${workspaceName(workspace)}`}
           title={`Version Control — ${gitFor(workspace.rootPath).detail}`} onclick={() => void openProjectVersionControl(workspace)}>⎇</button>
+        <button class="rail-pin-action" class:rail-pin-action-pinned={workspace.pinned} type="button"
+          aria-label={`${workspace.pinned ? 'Unpin' : 'Pin'} ${workspaceName(workspace)}`} aria-pressed={workspace.pinned}
+          title={workspace.pinned ? 'Unpin' : 'Pin'} onclick={() => togglePinned(workspace)}>{workspace.pinned ? '★' : '☆'}</button>
         </div>
     {/each}
         {/if}
@@ -694,20 +717,26 @@
     style={`left:${menu.x}px;top:${menu.y}px`} onkeydown={menuKeydown}>
     {#if menu.project}
       {@const project = menu.project}
-      <button type="button" role="menuitem" onclick={() => selectProject(project)}>Open workspace</button>
-      <button type="button" role="menuitem" onclick={() => void openProjectVersionControl(project)}>Version Control</button>
-      <button type="button" role="menuitem" onclick={() => { const path = project.rootPath; closeMenu(); void refreshWorkspaceGitSummaries([path]).catch(error => onError(String(error))); }}>Refresh Git status</button>
-      <button type="button" role="menuitem" onclick={() => { commit([{ type: 'moveProject', id: project.id, pinned: !project.pinned }]); closeMenu(); }}>{project.pinned ? 'Unpin' : 'Pin'}</button>
-      <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderProject(project, -1)}>Move up</button>
-      <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderProject(project, 1)}>Move down</button>
-      <span class="rail-menu-label">Move to folder</span>
-      {#each sections.filter(section => !section.pinned) as section (section.id)}
-        <button type="button" role="menuitem" onclick={() => { moveToSection(project, section); closeMenu(); }}>{section.name}</button>
-      {/each}
-      <button type="button" role="menuitem" onclick={() => { commit([{ type: 'updateProject', id: project.id, patch: { hiddenFromRail: true } }]); closeMenu(); }}>Hide from sidebar</button>
-      {#if project.contextId}
-        <button type="button" role="menuitem" onclick={() => { const position = menu!; const id = project.contextId!; menu = null; onRequestCloseWorkspace(id, position.x, position.y); }}>Workspace actions…</button>
+      {@const contextId = project.contextId}
+      {#if !contextId}
+        <button type="button" role="menuitem" onclick={() => selectProject(project)}>Open Workspace</button>
+      {:else}
+        {#if onOpenSettings}<button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, onOpenSettings)}>Settings</button>{/if}
+        {#if onMoveToWindow}
+          <button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, id => onMoveToWindow(id, true))}>Open in Separate Window</button>
+          <button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, id => onMoveToWindow(id, false))}>Move to Window…</button>
+        {/if}
+        {#if onOpenDocument}
+          {#each DOCUMENT_KINDS as kind, index (kind)}
+            <button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, id => onOpenDocument(id, kind))}>{menuDocuments[index]?.content != null ? "Open" : "Create"} {kind === "tasks" ? "Tasks" : "Notes"}</button>
+          {/each}
+        {/if}
       {/if}
+      {#if gitIntegrationEnabled}<button type="button" role="menuitem" onclick={() => void openProjectVersionControl(project)}>Version Control</button>{/if}
+      <button type="button" role="menuitem" onclick={() => void copyProjectPath(project)}>Copy Path</button>
+      <div class="rail-menu-separator" role="separator"></div>
+      <button type="button" role="menuitem" onclick={() => { commit([{ type: 'updateProject', id: project.id, patch: { hiddenFromRail: true } }]); closeMenu(); }}>Hide from Sidebar</button>
+      {#if contextId && onCloseWorkspace}<button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, onCloseWorkspace)}>Close Workspace</button>{/if}
     {:else if menu.section}
       {@const section = menu.section}
       {#if menu.projectsOnly}
@@ -716,9 +745,6 @@
       <button type="button" role="menuitem" onclick={() => { toggleSection(section); closeMenu(); }}>{sectionCollapsed(section) ? 'Expand' : 'Collapse'}</button>
       {#if section.folderId}
         <button type="button" role="menuitem" onclick={() => editFolder(section.folderId)}>Rename folder</button>
-        <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderFolder(section, -1)}>Move folder up</button>
-        <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => reorderFolder(section, 1)}>Move folder down</button>
-        <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => { commit([{ type: 'moveFolder', id: section.folderId!, beforeId: null }]); closeMenu(); }}>Move folder to end</button>
         <button type="button" role="menuitem" onclick={() => { commit([{ type: 'removeFolder', id: section.folderId! }]); closeMenu(); }}>Delete folder (keep projects)</button>
       {/if}
       <button type="button" role="menuitem" onclick={() => editFolder(null)}>Create folder</button>
@@ -734,7 +760,13 @@
   .rail-git-action:focus-visible { outline: 2px solid var(--color-focus-ring); }
   .rail-git-action:hover { background: var(--color-hover); }
   .rail-workspace-git.rail-git-conflict, .rail-workspace-git-mark.rail-git-conflict { color: var(--color-danger, #ee7755); font-weight: bold; }
-  .activity-rail-expanded .rail-project-entry .rail-workspace-info { padding-right: 12px; }
+  .rail-pin-action { position: absolute; left: 0; bottom: 0; padding: 0; width: 16px; height: 16px; font-size: 12px; line-height: 1; border: 0; border-radius: 3px; background: transparent; color: var(--color-text-muted); cursor: pointer; opacity: 0; }
+  .activity-rail-expanded .rail-pin-action { left: auto; right: 0; opacity: .6; }
+  .rail-project-entry:hover .rail-pin-action, .rail-pin-action:focus-visible, .rail-pin-action-pinned { opacity: 1; }
+  .rail-pin-action-pinned { color: var(--color-warning, #e5b454); }
+  .rail-pin-action:hover { background: var(--color-hover); }
+  .rail-pin-action:focus-visible { outline: 2px solid var(--color-focus-ring); }
+  .activity-rail-expanded .rail-project-entry .rail-workspace-info { padding-right: 18px; }
 
   .rail-search { width: calc(100% - 12px); margin: 6px; min-width: 0; padding: 5px; background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); }
   .rail-search-compact { width: 220px; position: absolute; z-index: 20; left: 44px; top: 45px; }
@@ -752,7 +784,8 @@
   .rail-catalog-menu button { flex-shrink: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-primary); font: inherit; font-size: 12px; padding: 6px 8px; text-align: left; cursor: pointer; }
   .rail-catalog-menu button:hover, .rail-catalog-menu button:focus-visible { background: var(--color-hover); outline: 2px solid var(--color-focus-ring); outline-offset: -2px; }
   .rail-catalog-menu button:disabled { opacity: .4; cursor: default; }
-  .rail-menu-label, .rail-empty { font-size: 10px; color: var(--color-text-secondary); padding: 4px; }
+  .rail-menu-separator { flex-shrink: 0; height: 1px; margin: 4px 2px; background: var(--color-border-subtle); }
+  .rail-empty { font-size: 10px; color: var(--color-text-secondary); padding: 4px; }
   .rail-folder-form { position: absolute; top: 40px; left: 8px; z-index: 10; min-width: 220px; max-width: 300px; padding: 8px; border: 1px solid var(--color-border-subtle); background: var(--color-surface-1); box-shadow: var(--shadow-overlay); display: flex; flex-wrap: wrap; gap: 2px; width: 100%; }
   .rail-folder-form input { min-width: 0; width: 100%; }
 

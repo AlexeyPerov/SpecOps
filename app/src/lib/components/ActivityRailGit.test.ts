@@ -81,8 +81,6 @@ describe('rail Git demand and presentation', () => {
     emit('/projects/1',{...fresh,status:'error',error:'timeout'});await tick();expect(row.getAttribute('aria-label')).toContain('topic');expect(row.getAttribute('aria-label')).toContain('timeout');expect(visibleGit()).toBe(initialGit);
     host.querySelector<HTMLButtonElement>('.rail-git-action')!.click();expect(vc).toHaveBeenCalledWith('ws-1');expect(select).not.toHaveBeenCalled();
     host.querySelector<HTMLButtonElement>('[aria-label="Refresh visible Git summaries"]')!.click();await tick();expect(refreshWorkspaceGitSummaries).toHaveBeenCalledWith(['/projects/1']);
-    row.dispatchEvent(new KeyboardEvent('keydown',{key:'ContextMenu',bubbles:true}));await tick();
-    [...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')].find(button=>button.textContent==='Refresh Git status')!.click();await tick();
-    expect(refreshWorkspaceGitSummaries).toHaveBeenLastCalledWith(['/projects/1']);expect(select).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
   });
 });

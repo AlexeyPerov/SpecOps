@@ -2,8 +2,6 @@
   import { workspaceTransferBusy } from "../services/workspaceTransferState";
   import ConsolePanel from "./ConsolePanel.svelte";
   import EntryNamePrompt from "./EntryNamePrompt.svelte";
-  import { loadWorkspaceDocument, workspaceDocumentSnapshot, workspaceDocumentsRevision } from "../services/workspaceDocuments";
-  import { subscribeWorkspacePreferences } from "../services/workspacePreferences";
   import ChoiceDialog from "./ChoiceDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import TagPushPrompt from "./TagPushPrompt.svelte";
@@ -44,7 +42,6 @@
   import {
     updateMountedEditorContexts,
   } from "../editor/editorContextKeepAlive";
-  import { clampFixedOverlayPosition } from "./clampFixedOverlayPosition";
   import "../styles/app-shell.css";
 
   const EMPTY_HIDDEN_ROOT_PATHS = new Set<string>();
@@ -65,13 +62,10 @@
     panelWidthPx: number;
     notepadOpenTabCount: number;
     notepadRecentTabs: { tabId: string; label: string }[];
-    /** When non-null, a workspace context menu is open — suppress tooltips. */
-    contextMenuWorkspaceId?: ContextId | null;
     onSelectContext: (contextId: ContextId) => void;
     onAddWorkspace: () => void;
     onOpenWorkspaceManager: () => void;
     onPanelWidthChange: (width: number) => void;
-    onRequestCloseWorkspace: (workspaceId: ContextId, x: number, y: number) => void;
     onReorderWorkspaces: (fromIndex: number, toIndex: number) => void;
     onSelectNotepadTab: (tabId: string) => void;
   }
@@ -254,17 +248,12 @@
     onOpenResult: (path: string, line: number) => void;
   }
 
-  export interface AppShellWorkspaceContextMenuProps {
-    menu: { workspaceId: ContextId; x: number; y: number } | null;
-    menuIndex: number;
-    workspaceCount: number;
-    onMoveUp: () => void;
-    onMoveDown: () => void;
+  /** Workspace actions offered by the sidebar's workspace context menu. */
+  export interface AppShellWorkspaceActionsProps {
     onOpenSettings: (workspaceId: ContextId) => void;
     onMoveToWindow?: (workspaceId: ContextId, newWindow: boolean) => void;
     onOpenDocument?: (workspaceId: ContextId, kind: "tasks" | "notes") => void | Promise<void>;
     onOpenVersionControl: (workspaceId: ContextId) => void;
-    onCopyPath: (workspaceId: ContextId) => void | Promise<void>;
     onCloseWorkspace: (workspaceId: ContextId) => void;
   }
 
@@ -365,7 +354,7 @@
     editor,
     statusBar,
     projectSearch,
-    workspaceContextMenu,
+    workspaceActions,
     overlays,
     addMultipleWorkspaces,
     timelineDialog,
@@ -381,7 +370,6 @@
     shellMainRowEl = $bindable<HTMLDivElement | null>(null),
     editorShellEl = $bindable<HTMLElement | null>(null),
     editorPaneEl = $bindable<HTMLElement | null>(null),
-    workspaceContextMenuEl = $bindable<HTMLDivElement | null>(null),
   }: {
     activityRail: AppShellActivityRailProps;
     sessionsSidebar: AppShellSessionsSidebarProps;
@@ -389,7 +377,7 @@
     editor: AppShellEditorChromeProps;
     statusBar: AppShellStatusBarProps;
     projectSearch?: AppShellProjectSearchProps;
-    workspaceContextMenu: AppShellWorkspaceContextMenuProps;
+    workspaceActions: AppShellWorkspaceActionsProps;
     overlays: AppShellOverlayProps;
     addMultipleWorkspaces?: AppShellAddMultipleWorkspacesProps;
     timelineDialog?: AppShellTimelineDialogProps;
@@ -405,11 +393,10 @@
     shellMainRowEl?: HTMLDivElement | null;
     editorShellEl?: HTMLElement | null;
     editorPaneEl?: HTMLElement | null;
-    workspaceContextMenuEl?: HTMLDivElement | null;
   } = $props();
 
   // P03-08-T1: honor `scope: "off"` (equivalent to `enabled: false`) in addition
-  // to the master toggle, so prompts and the workspace-context VC menu item are
+  // to the master toggle, so prompts and the workspace menu VC item are
   // hidden under both kill paths — not just the master toggle.
   const gitIntegrationEnabled = $derived(
     isGitIntegrationEnabled($appState.settings.gitIntegration),
@@ -463,10 +450,6 @@
       .filter((entry): entry is MountedEditorContext => entry !== undefined),
   );
 
-  // Local display coords so we can clamp the workspace menu after measure (M72)
-  // without mutating the overlay-host menu state.
-  let workspaceDocumentPreferenceRevision = $state(0);
-  $effect(() => untrack(() => subscribeWorkspacePreferences(() => { workspaceDocumentPreferenceRevision++; })));
   $effect(() => {
     if (!$workspaceTransferBusy) return;
     const block = (event: Event) => { event.preventDefault(); event.stopImmediatePropagation(); };
@@ -474,34 +457,6 @@
     events.forEach(event => window.addEventListener(event, block, true));
     return () => events.forEach(event => window.removeEventListener(event, block, true));
   });
-  const workspaceMenuRoot = $derived(editor.workspaceManager?.workspaces.find((entry) => entry.id === workspaceContextMenu.menu?.workspaceId)?.rootPath ?? null);
-  $effect(() => {
-    const root = workspaceMenuRoot; void workspaceDocumentPreferenceRevision;
-    if (root) for (const kind of ["tasks", "notes"] as const) void loadWorkspaceDocument(root, kind, undefined, true).catch(() => {});
-  });
-  const workspaceMenuDocuments = $derived.by(() => { void $workspaceDocumentsRevision; return workspaceMenuRoot ? [workspaceDocumentSnapshot(workspaceMenuRoot, "tasks"), workspaceDocumentSnapshot(workspaceMenuRoot, "notes")] : []; });
-  let workspaceMenuPosition = $state<{ x: number; y: number } | null>(null);
-
-  $effect(() => {
-    const menu = workspaceContextMenu.menu;
-    const el = workspaceContextMenuEl;
-    if (!menu) {
-      workspaceMenuPosition = null;
-      return;
-    }
-    if (!el) {
-      workspaceMenuPosition = { x: menu.x, y: menu.y };
-      return;
-    }
-    const rect = el.getBoundingClientRect();
-    workspaceMenuPosition = clampFixedOverlayPosition(
-      menu.x,
-      menu.y,
-      rect.width,
-      rect.height,
-    );
-  });
-
   function handleActivePaneElement(element: HTMLElement | null): void {
     editorPaneEl = element;
   }
@@ -650,13 +605,16 @@
         panelWidthPx={activityRail.panelWidthPx}
         notepadOpenTabCount={activityRail.notepadOpenTabCount}
         notepadRecentTabs={activityRail.notepadRecentTabs}
-        contextMenuWorkspaceId={activityRail.contextMenuWorkspaceId ?? null}
+        {gitIntegrationEnabled}
         onSelectContext={activityRail.onSelectContext}
-        onOpenVersionControl={workspaceContextMenu.onOpenVersionControl}
+        onOpenVersionControl={workspaceActions.onOpenVersionControl}
+        onOpenSettings={workspaceActions.onOpenSettings}
+        onMoveToWindow={workspaceActions.onMoveToWindow}
+        onOpenDocument={workspaceActions.onOpenDocument}
+        onCloseWorkspace={workspaceActions.onCloseWorkspace}
         onAddWorkspace={activityRail.onAddWorkspace}
         onOpenWorkspaceManager={activityRail.onOpenWorkspaceManager}
         onPanelWidthChange={activityRail.onPanelWidthChange}
-        onRequestCloseWorkspace={activityRail.onRequestCloseWorkspace}
         onReorderWorkspaces={activityRail.onReorderWorkspaces}
         onSelectNotepadTab={activityRail.onSelectNotepadTab}
       />
@@ -975,112 +933,6 @@
 
 
 
-
-{#if workspaceContextMenu.menu}
-  {@const menuPos = workspaceMenuPosition ?? workspaceContextMenu.menu}
-  <div
-    bind:this={workspaceContextMenuEl}
-    class="workspace-context-menu"
-    style={`left:${menuPos.x}px; top:${menuPos.y}px;`}
-    role="menu"
-    tabindex="-1"
-    onpointerdown={(event) => event.stopPropagation()}
-  >
-    <button
-      class="workspace-context-item"
-      type="button"
-      role="menuitem"
-      onpointerdown={(event) => {
-        event.stopPropagation();
-        if (!workspaceContextMenu.menu) {
-          return;
-        }
-        workspaceContextMenu.onOpenSettings(workspaceContextMenu.menu.workspaceId);
-      }}
-    >
-      Settings
-    </button>
-    {#if workspaceContextMenu.onMoveToWindow}
-      <button class="workspace-context-item" type="button" role="menuitem" onclick={() => { if (workspaceContextMenu.menu) workspaceContextMenu.onMoveToWindow?.(workspaceContextMenu.menu.workspaceId, true); }}>Open in Separate Window</button>
-      <button class="workspace-context-item" type="button" role="menuitem" onclick={() => { if (workspaceContextMenu.menu) workspaceContextMenu.onMoveToWindow?.(workspaceContextMenu.menu.workspaceId, false); }}>Move to Window…</button>
-    {/if}
-    {#if workspaceContextMenu.onOpenDocument}
-      {#each ["tasks", "notes"] as kind, index (kind)}
-        <button class="workspace-context-item" type="button" role="menuitem" onclick={() => { if (workspaceContextMenu.menu) void workspaceContextMenu.onOpenDocument?.(workspaceContextMenu.menu.workspaceId, kind as "tasks" | "notes"); }}>{workspaceMenuDocuments[index]?.content != null ? "Open" : "Create"} {kind === "tasks" ? "Tasks" : "Notes"}</button>
-      {/each}
-    {/if}
-    {#if gitIntegrationEnabled}
-    <button
-      class="workspace-context-item"
-      type="button"
-      role="menuitem"
-      onpointerdown={(event) => {
-        event.stopPropagation();
-        if (!workspaceContextMenu.menu) {
-          return;
-        }
-        workspaceContextMenu.onOpenVersionControl(workspaceContextMenu.menu.workspaceId);
-      }}
-    >
-      Version Control
-    </button>
-    {/if}
-    <button
-      class="workspace-context-item"
-      type="button"
-      role="menuitem"
-      onpointerdown={(event) => {
-        event.stopPropagation();
-        if (!workspaceContextMenu.menu) {
-          return;
-        }
-        void workspaceContextMenu.onCopyPath(workspaceContextMenu.menu.workspaceId);
-      }}
-    >
-      Copy Path
-    </button>
-    <button
-      class="workspace-context-item"
-      type="button"
-      role="menuitem"
-      disabled={workspaceContextMenu.menuIndex <= 0 || workspaceContextMenu.workspaceCount <= 1}
-      onpointerdown={(event) => {
-        event.stopPropagation();
-        workspaceContextMenu.onMoveUp();
-      }}
-    >
-      Move Up
-    </button>
-    <button
-      class="workspace-context-item"
-      type="button"
-      role="menuitem"
-      disabled={workspaceContextMenu.menuIndex < 0 ||
-        workspaceContextMenu.menuIndex >= workspaceContextMenu.workspaceCount - 1 ||
-        workspaceContextMenu.workspaceCount <= 1}
-      onpointerdown={(event) => {
-        event.stopPropagation();
-        workspaceContextMenu.onMoveDown();
-      }}
-    >
-      Move Down
-    </button>
-    <button
-      class="workspace-context-item"
-      type="button"
-      role="menuitem"
-      onpointerdown={(event) => {
-        event.stopPropagation();
-        if (!workspaceContextMenu.menu) {
-          return;
-        }
-        workspaceContextMenu.onCloseWorkspace(workspaceContextMenu.menu.workspaceId);
-      }}
-    >
-      Close Workspace
-    </button>
-  </div>
-{/if}
 
 {#if $workspaceTransferBusy}
   <div class="workspace-transfer-overlay" role="status" aria-live="polite"><span>Moving workspace…</span></div>

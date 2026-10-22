@@ -16,7 +16,6 @@
  * would change DOM layering, which is out of scope for L14.
  */
 
-import type { ContextId } from "../../domain/contracts";
 import type { ProjectSearchResult } from "../../services/projectSearch";
 
 /** The 10 overlay kinds tracked by `OverlayHost`. */
@@ -29,8 +28,7 @@ export type OverlayKind =
   | "snippetInsert"
   | "projectSearch"
   | "addMultiple"
-  | "timeline"
-  | "workspaceContextMenu";
+  | "timeline";
 
 /**
  * Imperative surface the host exposes to its parent. The parent captures it
@@ -55,8 +53,7 @@ export interface OverlayHostApi {
    * the pre-refactor behavior at `+page.svelte:1553-1575`:
    * closes quickOpen, commandPalette, headingJump, bookmarkList, snippetInsert
    * and cancels in-flight project search. sessionList / addMultiple / timeline
-   * / workspaceContextMenu are intentionally NOT closed (pre-existing
-   * behavior — see L14 changelog).
+   * are intentionally NOT closed (pre-existing behavior — see L14 changelog).
    */
   closeAllOnWorkspaceSwitch: () => void;
   /**
@@ -66,8 +63,6 @@ export interface OverlayHostApi {
    * pre-existing behavior.
    */
   closeMarkdownOnlyPickers: (language: string | undefined) => void;
-  /** Open the workspace context menu at viewport coordinates. */
-  openWorkspaceContextMenu: (workspaceId: ContextId, x: number, y: number) => void;
   /** Refresh the quick-open catalog (delegated to the registry). */
   refreshQuickOpenCatalog: () => void;
 }
@@ -94,12 +89,6 @@ export interface ProjectSearchPanelState {
   status: string;
 }
 
-/** Snapshot of the workspace context menu (fed to AppShell's prop). */
-export interface WorkspaceContextMenuState {
-  menu: { workspaceId: ContextId; x: number; y: number } | null;
-  workspaceId: ContextId | null;
-}
-
 /**
  * The OverlayHost instance surface as seen by its parent (captured via
  * `bind:this`). Svelte 5 exposes a component instance as a proxy object
@@ -117,11 +106,6 @@ export interface OverlayHostBound {
    */
   anyOverlayOpen: boolean;
   projectSearchPanelState: ProjectSearchPanelState;
-  workspaceContextMenu: {
-    workspaceId: ContextId;
-    x: number;
-    y: number;
-  } | null;
   persistProjectSearchHeight: () => void;
   /** Internal setter — exposes the project-search query field setters. */
   setProjectSearchQuery: (query: string) => void;

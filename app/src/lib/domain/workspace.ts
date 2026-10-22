@@ -43,7 +43,13 @@ export interface SessionState {
   layout?: WorkspaceLayoutState;
 }
 
-export type ContextId = "notepad" | `ws-${number}`;
+/**
+ * Tab groups are window-owned contexts without a project root. Every window
+ * keeps the default group; additional groups use numbered ids.
+ */
+export type TabGroupId = "tabs-default" | `tabs-${number}`;
+
+export type ContextId = TabGroupId | `ws-${number}`;
 
 export interface ContextSnapshot {
   documents: DocumentState[];
@@ -62,9 +68,16 @@ export interface WorkspaceEntry {
   snapshot: ContextSnapshot;
 }
 
+export interface TabGroupEntry {
+  id: TabGroupId;
+  name: string;
+  snapshot: ContextSnapshot;
+}
+
 export interface WindowContextState {
   activeContextId: ContextId;
-  notepad: ContextSnapshot;
+  /** Window tab groups; the default group is always first. */
+  tabGroups: TabGroupEntry[];
   workspaces: WorkspaceEntry[];
 }
 

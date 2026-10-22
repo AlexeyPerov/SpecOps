@@ -82,12 +82,22 @@ export type {
   DiagnosticEvent,
   DiagnosticLevel,
   SessionState,
+  TabGroupEntry,
+  TabGroupId,
   WindowBounds,
   WindowContextState,
   WorkspaceContext,
   WorkspaceEntry,
   WorkspaceLayoutState,
 } from "./workspace";
+export {
+  DEFAULT_TAB_GROUP_ID,
+  DEFAULT_TAB_GROUP_NAME,
+  defaultTabGroupSnapshot,
+  findTabGroup,
+  isTabGroupId,
+  withTabGroupSnapshot,
+} from "./tabGroups";
 export type {
   AppSettingsState,
   AppThemeState,

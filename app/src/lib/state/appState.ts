@@ -1,6 +1,6 @@
 import { writable } from "svelte/store";
 import type { AppDomainState, AppThemeState, ExternalFilesSettings, MarkdownViewMode, ThemeMode } from "../domain/contracts";
-import { createFileTab, createSinglePaneLayout } from "../domain/contracts";
+import { createFileTab, createSinglePaneLayout, DEFAULT_TAB_GROUP_ID, DEFAULT_TAB_GROUP_NAME } from "../domain/contracts";
 import { bumpRecentFile } from "../services/recentFiles";
 import { DEFAULT_ACTIVITY_RAIL_WIDTH_PX, normalizeActivityRailWidthPx } from "../services/panelLayout";
 import { syncRecentFiles } from "../services/recentFilesSync";
@@ -13,7 +13,6 @@ import { normalizeAppearanceOverrides, type ThemeAppearance } from "../styles/th
 import type { BuiltinThemeId } from "../styles/themeTokens";
 import {
   findWorkspaceByPath,
-  NOTEPAD_CONTEXT_ID,
   resetIdCounters,
 } from "./appState/contextHelpers";
 import { buildEmptyUnsavedDocument } from "./appState/documentHelpers";
@@ -54,11 +53,15 @@ export { findWorkspaceByPath, resetThemePersistenceForTests, setThemeSaveErrorNo
 
 const initialState: AppDomainState = {
   contexts: {
-    activeContextId: NOTEPAD_CONTEXT_ID,
-    notepad: {
-      documents: [buildEmptyUnsavedDocument("doc-1")],
-      session: buildDefaultContextSession(),
-    },
+    activeContextId: DEFAULT_TAB_GROUP_ID,
+    tabGroups: [{
+      id: DEFAULT_TAB_GROUP_ID,
+      name: DEFAULT_TAB_GROUP_NAME,
+      snapshot: {
+        documents: [buildEmptyUnsavedDocument("doc-1")],
+        session: buildDefaultContextSession(),
+      },
+    }],
     workspaces: [],
   },
   settings: defaultSettings,

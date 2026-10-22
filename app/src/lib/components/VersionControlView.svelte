@@ -94,6 +94,7 @@
     notifyVersionControlMutation,
     type VersionControlMutationScope,
   } from "../git/versionControlRefresh";
+  import { refreshWorkspaceGitSummaries } from "../git/workspaceGitSummary";
   import {
     canStartRemoteGitOperation,
     isRemoteGitOperationBusy,
@@ -1370,6 +1371,9 @@
     }
     lastRefreshAt = now;
     refreshBusy = true;
+    // The sidebar's per-workspace Git status is a separate cache; refresh it
+    // with the view so both agree after an explicit Refresh.
+    void refreshWorkspaceGitSummaries([workspaceRootPath]).catch(() => {});
 
     // Capture the generation the refresh belongs to. If the workspace changes
     // before the response lands, the probe-generation effect aborts this
@@ -1501,6 +1505,8 @@
         {/if}
       </div>
       <div class="version-control-header-actions">
+        <button type="button" class="btn btn-sm version-control-refresh" aria-label="Refresh Git status" title={refreshBusy ? "Refreshing Git status…" : "Refresh Git status"}
+          aria-busy={refreshBusy} disabled={toolbarBusy} onclick={() => void handleRefresh()}><span class="version-control-refresh-glyph" class:version-control-refresh-spinning={refreshBusy} aria-hidden="true">↻</span></button>
         <button type="button" class="btn btn-sm" disabled={toolbarBusy || isReadOnlyRepository} title={isReadOnlyRepository ? "Commit is unavailable for bare repositories" : "Open File Status and write a commit message"} onclick={openCommit}>Commit</button>
         <button type="button" class="btn btn-sm" aria-expanded={!sidebarCollapsed} onclick={() => sidebarCollapsed = !sidebarCollapsed}>Navigation</button>
         <span class="version-control-remote-indicator" title={remotePickerTitle}>
@@ -2047,6 +2053,29 @@
     font-size: 1rem;
     line-height: 1;
     letter-spacing: 0.02em;
+  }
+
+  .version-control-refresh {
+    min-width: 1.75rem;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .version-control-refresh-glyph {
+    display: inline-block;
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .version-control-refresh-spinning {
+    animation: version-control-refresh-spin 0.8s linear infinite;
+  }
+
+  @keyframes version-control-refresh-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .version-control-refresh-spinning { animation: none; }
   }
 
   .version-control-overflow-menu {

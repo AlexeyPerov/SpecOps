@@ -3,7 +3,6 @@ import {
   createOverlayCoordinator,
   type OverlayState,
 } from "./overlayCoordinator";
-import type { ContextId } from "../../domain/contracts";
 
 /** Build a coordinator over a mutable state object, returning both. */
 function setup(initial: Partial<OverlayState> = {}) {
@@ -16,7 +15,6 @@ function setup(initial: Partial<OverlayState> = {}) {
     projectSearchOpen: false,
     addMultipleOpen: false,
     timelineOpen: false,
-    workspaceContextMenu: null,
     ...initial,
   };
   const patchLog: Array<Partial<OverlayState>> = [];
@@ -36,8 +34,6 @@ function setup(initial: Partial<OverlayState> = {}) {
   });
   return { state, patchLog, counters, coordinator };
 }
-
-const WORKSPACE_ID: ContextId = "ws-1";
 
 describe("createOverlayCoordinator.closeOtherPickers", () => {
   it("closes every picker except the named one", () => {
@@ -107,7 +103,6 @@ describe("createOverlayCoordinator.shouldCloseEditorTools", () => {
     expect(coordinator.shouldCloseEditorTools("addMultiple")).toBe(false);
     expect(coordinator.shouldCloseEditorTools("addMultiple")).toBe(false);
     expect(coordinator.shouldCloseEditorTools("timeline")).toBe(false);
-    expect(coordinator.shouldCloseEditorTools("workspaceContextMenu")).toBe(false);
   });
 });
 
@@ -119,24 +114,15 @@ describe("createOverlayCoordinator.isAnyOverlayOpen", () => {
 
   it("returns true when any one overlay is open", () => {
     for (const key of Object.keys(setup().state) as Array<keyof OverlayState>) {
-      const initial =
-        key === "workspaceContextMenu"
-          ? { workspaceContextMenu: { workspaceId: WORKSPACE_ID, x: 0, y: 0 } }
-          : { [key]: true };
-      const { coordinator } = setup(initial);
+      const { coordinator } = setup({ [key]: true });
       expect(coordinator.isAnyOverlayOpen(), `expected true when ${key} is open`).toBe(true);
     }
   });
 });
 
 describe("createOverlayCoordinator.isModalOverlayOpen (H30)", () => {
-  it("excludes the non-modal project search panel and the workspace context menu", () => {
+  it("excludes the non-modal project search panel", () => {
     expect(setup({ projectSearchOpen: true }).coordinator.isModalOverlayOpen()).toBe(false);
-    expect(
-      setup({
-        workspaceContextMenu: { workspaceId: WORKSPACE_ID, x: 0, y: 0 },
-      }).coordinator.isModalOverlayOpen(),
-    ).toBe(false);
   });
 
   it("returns true for every modal overlay", () => {
@@ -191,13 +177,6 @@ describe("createOverlayCoordinator.closeAllOnWorkspaceSwitch", () => {
     coordinator.closeAllOnWorkspaceSwitch();
     expect(state.addMultipleOpen).toBe(true);
     expect(state.timelineOpen).toBe(true);
-  });
-
-  it("does NOT close the workspace context menu (pre-existing asymmetry)", () => {
-    const menu = { workspaceId: WORKSPACE_ID, x: 10, y: 20 };
-    const { state, coordinator } = setup({ workspaceContextMenu: menu });
-    coordinator.closeAllOnWorkspaceSwitch();
-    expect(state.workspaceContextMenu).toEqual(menu);
   });
 
   it("does NOT close projectSearch (the host cancels in-flight search separately)", () => {
@@ -270,16 +249,14 @@ describe("createOverlayCoordinator.isPicker", () => {
     expect(coordinator.isPicker("snippetInsert")).toBe(true);
   });
 
-  it("classifies the 5 non-picker overlays as not pickers", () => {
+  it("classifies the non-picker overlays as not pickers", () => {
     const { coordinator } = setup();
     expect(coordinator.isPicker("projectSearch")).toBe(false);
     expect(coordinator.isPicker("addMultiple")).toBe(false);
     expect(coordinator.isPicker("addMultiple")).toBe(false);
     expect(coordinator.isPicker("timeline")).toBe(false);
-    expect(coordinator.isPicker("workspaceContextMenu")).toBe(false);
   });
 });
-
 
 describe('workspace switcher coordination', () => {
   it('owns modal routing, closes other pickers and closes after actual context switch', () => {

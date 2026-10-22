@@ -1,11 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ContextId } from "../domain/contracts";
-import {
-  computeWorkspaceReorderTarget,
-  createWorkspaceContextMenuActions,
-  findWorkspaceIndex,
-  type WorkspaceContextMenuState,
-} from "./workspaceContextMenuController";
+import { createWorkspaceContextMenuActions } from "./workspaceContextMenuController";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("../state/appState", () => ({
@@ -28,65 +23,16 @@ vi.mock("./workspaceCloseFlow", () => ({
   closeWorkspaceWithConfirm: vi.fn().mockResolvedValue(true),
 }));
 
-import { invoke } from "@tauri-apps/api/core";
-import { catalogProjectForRoot, loadProjectCatalog, _resetProjectCatalogForTests } from "./workspaceCatalog";
-beforeEach(() => { _resetProjectCatalogForTests(); vi.mocked(invoke).mockReset(); });
 import { appState } from "../state/appState";
 import { markWorkspaceLifecycleActive } from "./workspaceLifecycle";
-
-describe("findWorkspaceIndex", () => {
-  it("returns the index of a workspace id", () => {
-    expect(findWorkspaceIndex(["ws-1", "ws-2", "ws-3"], "ws-2")).toBe(1);
-  });
-
-  it("returns -1 when the workspace is missing", () => {
-    expect(findWorkspaceIndex(["ws-1"], "missing")).toBe(-1);
-  });
-});
-
-describe("computeWorkspaceReorderTarget", () => {
-  const workspaceCount = 3;
-
-  it("moves up within bounds", () => {
-    expect(computeWorkspaceReorderTarget(1, "up", workspaceCount)).toBe(0);
-  });
-
-  it("moves down within bounds", () => {
-    expect(computeWorkspaceReorderTarget(1, "down", workspaceCount)).toBe(2);
-  });
-
-  it("returns null when moving up from the first workspace", () => {
-    expect(computeWorkspaceReorderTarget(0, "up", workspaceCount)).toBeNull();
-  });
-
-  it("returns null when moving down from the last workspace", () => {
-    expect(computeWorkspaceReorderTarget(2, "down", workspaceCount)).toBeNull();
-  });
-
-  it("returns null when the current index is invalid", () => {
-    expect(computeWorkspaceReorderTarget(-1, "down", workspaceCount)).toBeNull();
-  });
-});
 
 describe("createWorkspaceContextMenuActions", () => {
   function createActions(options: {
     previousActiveContextId?: ContextId | null;
     loadProjectTreeRoot?: () => Promise<void>;
     workspaceRootPath?: string | null;
-    writeClipboardText?: (text: string) => Promise<void>;
   } = {}) {
-    let menu: WorkspaceContextMenuState | null = {
-      workspaceId: "ws-1",
-      x: 10,
-      y: 20,
-    };
     const actions = createWorkspaceContextMenuActions({
-      getMenu: () => menu,
-      setMenu: (nextMenu) => {
-        menu = nextMenu;
-      },
-      getMenuEl: () => null,
-      getWorkspaceIds: () => ["ws-1"],
       getWorkspaceRootPath: () => options.workspaceRootPath ?? "/tmp/workspace",
       getPreviousActiveContextId: () => options.previousActiveContextId ?? null,
       setPreviousActiveContextId: () => {},
@@ -94,34 +40,19 @@ describe("createWorkspaceContextMenuActions", () => {
       setMarkdownViewMode: () => {},
       loadProjectTreeRoot: options.loadProjectTreeRoot ?? (async () => {}),
       notify: () => {},
-      writeClipboardText: options.writeClipboardText,
     });
-    return { actions, getMenu: () => menu };
+    return { actions };
   }
 
-  it("openVersionControl switches context, opens the tab, and closes the menu", () => {
+  it("openVersionControl switches context and opens the tab", () => {
     vi.mocked(appState.switchContext).mockReturnValue(true);
-    const { actions, getMenu } = createActions();
+    const { actions } = createActions();
 
     actions.openVersionControl("ws-1");
 
     expect(appState.switchContext).toHaveBeenCalledWith("ws-1");
     expect(markWorkspaceLifecycleActive).toHaveBeenCalled();
     expect(appState.openOrFocusViewTab).toHaveBeenCalledWith("version-control");
-    expect(getMenu()).toBeNull();
-  });
-
-  it("copyPath copies the workspace root and closes the menu", async () => {
-    const writeClipboardText = vi.fn().mockResolvedValue(undefined);
-    const { actions, getMenu } = createActions({
-      workspaceRootPath: "/tmp/workspace-root",
-      writeClipboardText,
-    });
-
-    await actions.copyPath("ws-1");
-
-    expect(writeClipboardText).toHaveBeenCalledWith("/tmp/workspace-root");
-    expect(getMenu()).toBeNull();
   });
 
   it("leaves project-tree loading to the root-keyed shell effect on context switch", () => {
@@ -135,16 +66,4 @@ describe("createWorkspaceContextMenuActions", () => {
 
     expect(loadProjectTreeRoot).not.toHaveBeenCalled();
   });
-  it('reorders the visible catalog section including closed entries instead of window contexts', async () => {
-    const a={...catalogProjectForRoot('/a'),order:0}, hidden={...catalogProjectForRoot('/hidden'),order:1,hiddenFromRail:true};
-    const b={...catalogProjectForRoot('/b'),order:2}, c={...catalogProjectForRoot('/c'),order:3};
-    const source={version:1,revision:1,folders:{},savedContexts:{},projects:{'/a':a,'/hidden':hidden,'/b':b,'/c':c}};
-    vi.mocked(invoke).mockResolvedValue(source); await loadProjectCatalog();
-    const {actions,getMenu}=createActions({workspaceRootPath:'/a'});
-    expect(actions.menuIndex()).toBe(0); expect(actions.menuCount()).toBe(3);
-    actions.move('down');
-    expect(invoke).toHaveBeenLastCalledWith('project_catalog_transaction',{mutations:[{type:'moveProject',id:'/a',folderId:null,pinned:false,beforeId:'/c'}]});
-    expect(appState.reorderWorkspaces).not.toHaveBeenCalled(); expect(getMenu()).toBeNull();
-  });
-
 });

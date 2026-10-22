@@ -146,7 +146,6 @@
   let runtimeSyncExternalFileWatcher = $state<
     ((state: AppDomainState) => Promise<void>) | null
   >(null);
-  let workspaceContextMenuEl = $state<HTMLDivElement | null>(null);
   // Raw, not deeply proxied: the controller publishes immutable snapshots, and a
   // deep proxy would hand the tree fresh node objects on every publish, which
   // defeats row reuse in the project tree view.
@@ -924,7 +923,6 @@
   bind:shellMainRowEl
   bind:editorShellEl
   bind:editorPaneEl
-  bind:workspaceContextMenuEl
   bind:consoleHeightPx
   bind:consoleOpen
   bind:shellMainRowWidth

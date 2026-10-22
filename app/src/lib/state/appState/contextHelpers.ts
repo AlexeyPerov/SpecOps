@@ -8,15 +8,16 @@ import type {
 } from "../../domain/contracts";
 import {
   allTabs,
+  defaultTabGroupSnapshot,
+  findTabGroup,
   isFileTab,
+  isTabGroupId,
   paneIdNumericSuffix,
   reindexPaneIdCounter,
   resetPaneIdCounter,
 } from "../../domain/contracts";
 import { normalizePathForStorage, normalizePathSync } from "../../services/diskFingerprint";
 import { normalizeDocument } from "./documentHelpers";
-
-export const NOTEPAD_CONTEXT_ID: ContextId = "notepad";
 
 const idCounters = {
   doc: 1,
@@ -66,14 +67,14 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
   idCounters.doc = Math.max(
     1,
     ...[
-      ...contexts.notepad.documents,
+      ...contexts.tabGroups.flatMap((group) => group.snapshot.documents),
       ...contexts.workspaces.flatMap((workspace) => workspace.snapshot.documents),
     ].map((documentState) => Number(documentState.id.replace("doc-", "")) || 1),
   );
   idCounters.tab = Math.max(
     1,
     ...[
-      ...allTabs(contexts.notepad.session.editorLayout),
+      ...contexts.tabGroups.flatMap((group) => allTabs(group.snapshot.session.editorLayout)),
       ...contexts.workspaces.flatMap((workspace) =>
         allTabs(workspace.snapshot.session.editorLayout),
       ),
@@ -85,7 +86,7 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
   // after restore, the next split/preset expansion can mint pane-1/pane-2/...
   // that already exist in a restored layout (duplicate ids → remount loops).
   const paneLayouts = [
-    contexts.notepad.session.editorLayout,
+    ...contexts.tabGroups.map((group) => group.snapshot.session.editorLayout),
     ...contexts.workspaces.map((workspace) => workspace.snapshot.session.editorLayout),
   ];
   let maxPane = 0;
@@ -130,7 +131,7 @@ export function normalizeWorkspaceEntries(entries: WorkspaceEntry[]): WorkspaceE
 }
 
 /**
- * Per-state lookup cache for workspace context snapshots. The state object is
+ * Per-state lookup cache for context snapshots. The state object is
  * replaced on every mutation (immutable updates), so keying the cache by the
  * state reference via WeakMap auto-invalidates it when state changes. Within a
  * single state revision, repeated `getContextSnapshotById` calls for the same
@@ -146,9 +147,6 @@ export function getContextSnapshotById(
   state: AppDomainState,
   contextId: ContextId,
 ): ContextSnapshot | null {
-  if (contextId === NOTEPAD_CONTEXT_ID) {
-    return state.contexts.notepad;
-  }
   let cache = contextSnapshotCache.get(state);
   if (cache) {
     const cached = cache.get(contextId);
@@ -156,8 +154,10 @@ export function getContextSnapshotById(
       return cached;
     }
   }
-  const workspace = state.contexts.workspaces.find((entry) => entry.id === contextId);
-  const snapshot = workspace?.snapshot ?? null;
+  const entry = isTabGroupId(contextId)
+    ? findTabGroup(state.contexts.tabGroups, contextId)
+    : state.contexts.workspaces.find((workspace) => workspace.id === contextId);
+  const snapshot = entry?.snapshot ?? null;
   if (!cache) {
     cache = new Map();
     contextSnapshotCache.set(state, cache);
@@ -167,7 +167,7 @@ export function getContextSnapshotById(
 }
 
 export function getActiveContextSnapshot(state: AppDomainState): ContextSnapshot {
-  return getContextSnapshotById(state, state.contexts.activeContextId) ?? state.contexts.notepad;
+  return getContextSnapshotById(state, state.contexts.activeContextId) ?? defaultTabGroupSnapshot(state.contexts);
 }
 
 export function getActiveDocuments(state: AppDomainState): DocumentState[] {
@@ -184,23 +184,14 @@ export function patchActiveContext(
 ): AppDomainState {
   const contextId = state.contexts.activeContextId;
   const resolved = getContextSnapshotById(state, contextId);
-  const current = resolved ?? state.contexts.notepad;
+  const current = resolved ?? defaultTabGroupSnapshot(state.contexts);
   const nextSnapshot = patch(current);
   if (nextSnapshot === current) {
     return state;
   }
-  if (contextId === NOTEPAD_CONTEXT_ID) {
-    return {
-      ...state,
-      contexts: {
-        ...state.contexts,
-        notepad: nextSnapshot,
-      },
-    };
-  }
   if (!resolved) {
-    // `activeContextId` dangles: reads fell back to the notepad snapshot above, but
-    // no workspace owns this id, so the computed patch has nowhere to land and is
+    // `activeContextId` dangles: reads fell back to the default tab group above, but
+    // no context owns this id, so the computed patch has nowhere to land and is
     // silently dropped. This is always a bug — surface it instead of swallowing
     // the write (which would otherwise turn a dangling-id regression into silent
     // data loss). `patchContextById` returns early for the same reason.
@@ -209,12 +200,31 @@ export function patchActiveContext(
     );
     return state;
   }
+  return replaceContextSnapshot(state, contextId, nextSnapshot);
+}
+
+function replaceContextSnapshot(
+  state: AppDomainState,
+  contextId: ContextId,
+  snapshot: ContextSnapshot,
+): AppDomainState {
+  if (isTabGroupId(contextId)) {
+    return {
+      ...state,
+      contexts: {
+        ...state.contexts,
+        tabGroups: state.contexts.tabGroups.map((group) =>
+          group.id === contextId ? { ...group, snapshot } : group,
+        ),
+      },
+    };
+  }
   return {
     ...state,
     contexts: {
       ...state.contexts,
       workspaces: state.contexts.workspaces.map((workspace) =>
-        workspace.id === contextId ? { ...workspace, snapshot: nextSnapshot } : workspace,
+        workspace.id === contextId ? { ...workspace, snapshot } : workspace,
       ),
     },
   };
@@ -262,24 +272,7 @@ export function patchContextById(
   if (nextSnapshot === current) {
     return state;
   }
-  if (contextId === NOTEPAD_CONTEXT_ID) {
-    return {
-      ...state,
-      contexts: {
-        ...state.contexts,
-        notepad: nextSnapshot,
-      },
-    };
-  }
-  return {
-    ...state,
-    contexts: {
-      ...state.contexts,
-      workspaces: state.contexts.workspaces.map((workspace) =>
-        workspace.id === contextId ? { ...workspace, snapshot: nextSnapshot } : workspace,
-      ),
-    },
-  };
+  return replaceContextSnapshot(state, contextId, nextSnapshot);
 }
 
 export function findFileTabForNormalizedPath(
@@ -356,8 +349,8 @@ function getContextLookupIndex(state: AppDomainState): ContextLookupIndex {
 
 /**
  * Enumerates every context snapshot in a stable order: active context first
- * (so first-match lookups prefer it), then notepad, and finally the remaining
- * workspaces. Used by the cross-context document discovery helpers so file
+ * (so first-match lookups prefer it), then tab groups, and finally the
+ * remaining workspaces. Used by the cross-context document discovery helpers so file
  * side effects (watcher checks, reload prompts, relocation, Replace All sync)
  * can find a document that lives in a workspace which is not active.
  */
@@ -377,15 +370,17 @@ export function allContextSnapshots(state: AppDomainState): ContextEntry[] {
     seen.add(id);
     entries.push({ id, snapshot });
   };
-  push(contexts.activeContextId, getContextSnapshotById(state, contexts.activeContextId) ?? contexts.notepad);
-  push(NOTEPAD_CONTEXT_ID, contexts.notepad);
+  push(contexts.activeContextId, getContextSnapshotById(state, contexts.activeContextId) ?? defaultTabGroupSnapshot(contexts));
+  for (const group of contexts.tabGroups) {
+    push(group.id, group.snapshot);
+  }
   for (const workspace of contexts.workspaces) {
     push(workspace.id, workspace.snapshot);
   }
   return entries;
 }
 
-/** Document ids across notepad and every workspace (for session-cache retain). */
+/** Document ids across tab groups and every workspace (for session-cache retain). */
 export function collectAllOpenDocumentIds(state: AppDomainState): Set<string> {
   const ids = new Set<string>();
   for (const entry of allContextSnapshots(state)) {
@@ -425,7 +420,7 @@ export function findDocumentContext(
 
 /**
  * Find an open file tab + document by normalized path across every context
- * (notepad, chat-http, and all workspaces). Returns the owning context id,
+ * (tab groups, chat-http, and all workspaces). Returns the owning context id,
  * the document, and its tab id so side-effect flows can target the correct
  * workspace without requiring it to be the active context.
  */

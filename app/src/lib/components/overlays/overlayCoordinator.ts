@@ -11,11 +11,10 @@
  * the workspace-switch picker-clear at 1553-1575, and the markdown-only
  * picker closer at 1581-1591). The asymmetries noted in the L14 changelog —
  * bookmark list NOT closed on language change; sessionList / addMultiple /
- * timeline / workspaceContextMenu NOT closed on workspace switch — are pinned
+ * timeline NOT closed on workspace switch — are pinned
  * by tests in `overlayCoordinator.test.ts`.
  */
 
-import type { ContextId } from "../../domain/contracts";
 import type { OverlayKind } from "./overlayHostTypes";
 
 /**
@@ -33,7 +32,6 @@ export interface OverlayState {
   projectSearchOpen: boolean;
   addMultipleOpen: boolean;
   timelineOpen: boolean;
-  workspaceContextMenu: { workspaceId: ContextId; x: number; y: number } | null;
 }
 
 export interface OverlayCoordinatorDeps {
@@ -111,8 +109,7 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
       s.workspaceSwitcherOpen ||
       s.headingJumpOpen ||
       s.bookmarkListOpen ||
-      s.snippetInsertOpen ||
-      Boolean(s.workspaceContextMenu)
+      s.snippetInsertOpen
     );
   }
 
@@ -139,8 +136,8 @@ export function createOverlayCoordinator(deps: OverlayCoordinatorDeps) {
 
   /**
    * Mirrors the pre-refactor workspace-switch picker-clear block at
-   * +page.svelte:1553-1575. sessionList / addMultiple / timeline /
-   * workspaceContextMenu are intentionally NOT closed (pre-existing behavior).
+   * +page.svelte:1553-1575. sessionList / addMultiple / timeline are
+   * intentionally NOT closed (pre-existing behavior).
    *
    * Project search is NOT closed here either — the pre-refactor code cancelled
    * the in-flight search and cleared the results/status/running flags but left

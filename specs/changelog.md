@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-22 23:24 MSK — Flatten the sidebar workspace context menu
+
+- Sidebar: right-clicking a workspace opens one flat menu again instead of a catalog menu with a nested "Workspace actions…" submenu. It combines the former workspace menu (Settings, Open in Separate Window, Move to Window…, Open/Create Tasks and Notes, Version Control, Copy Path, Close Workspace) with Hide from Sidebar. Projects not open in this window show Open Workspace, Version Control, Copy Path and Hide from Sidebar. The menu keeps arrow-key navigation, Escape, viewport clamping and tooltip suppression.
+- Removed from the menus: Refresh Git status, Pin/Unpin, Move up/down, Move to folder, and Move folder up/down/to end. Workspaces and folders move between and within sections by drag and drop (Alt+Arrow still reorders a focused workspace). Each workspace row has a star button that pins or unpins it: filled when pinned, outlined when not (always shown in the expanded sidebar, on hover or when pinned in the compact one).
+- Version Control: the toolbar has a visible Refresh Git status button. Refresh (from the toolbar or the overflow menu) also refreshes the workspace's sidebar Git status.
+- Cleanup: the separate shell-rendered workspace menu, its overlay-host state and its move up/down and copy-path controller actions are removed; the sidebar menu calls the remaining workspace actions directly.
+- Validation: updated sidebar, overlay-coordinator and workspace-action tests; new tests cover the flat menu items, the star toggle and the Version Control refresh button. Menu-based folder moves in tests now use drag and drop. The pre-existing `ActivityRail` Git-label test is fixed to read the row's accessible label. Svelte/type checks report zero errors and warnings. The full frontend suite passes except a `GitHistoryPanel` test and a chat-persistence integration test that timed out under full-suite load and pass on their own. The app was not run, so the menu, star and button have not been checked visually.
+
 ## 2026-10-22 22:52 MSK — Fix medium performance issues in files, Git and the editor
 
 - Git: sort status, branch and tag lists with shared `Intl.Collator`s instead of per-comparison `localeCompare` options. Inline file diffs cap native stdout just above the 512 KB display limit, so an oversized diff (for example a large untracked file) is truncated in the native reader instead of buffered, sent over IPC and re-encoded in full; over-long strings are rejected without encoding a copy.

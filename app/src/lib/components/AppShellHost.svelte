@@ -6,11 +6,11 @@
    *   - the snapshot-derived values the page computes (activeContext, session,
    *     documents, documentView, layout flags, workspaces, …),
    *   - the already-extracted handler bundles (agent / editor / file / layout
-   *     / project-tree / command / workspace-context-menu handlers),
+   *     / project-tree / command / workspace action handlers),
    *   - the editor workbench + tools singletons,
    *   - the `OverlayHost` instance (so this wrapper can feed the AppShell-
-   *     rendered overlays — project search + workspace context menu — from
-   *     the host's exposed state, and read its imperative API).
+   *     rendered project search panel from the host's exposed state, and read
+   *     its imperative API).
    *
    * What used to be ~370 lines of inline `<AppShell editor={{...}} .../>`
    * prop wiring in `+page.svelte` now lives here. The page just mounts
@@ -18,7 +18,7 @@
    * cross-cutting `$effect`s (L14).
    *
    * The DOM-element `bind:this` refs (`shellMainRowEl`, `editorShellEl`,
-   * `editorPaneEl`, `workspaceContextMenuEl`) are `$bindable` so the page's
+   * `editorPaneEl`) are `$bindable` so the page's
    * layout observers and effects can still see them.
    */
   import { observeReadyAgents } from "../services/readyAgents";
@@ -97,7 +97,6 @@
     shellMainRowEl: HTMLDivElement | null;
     editorShellEl: HTMLElement | null;
     editorPaneEl: HTMLElement | null;
-    workspaceContextMenuEl: HTMLDivElement | null;
     consoleHeightPx: number;
     consoleOpen: boolean;
     shellMainRowWidth: number;
@@ -183,7 +182,6 @@
     shellMainRowEl = $bindable(null),
     editorShellEl = $bindable(null),
     editorPaneEl = $bindable(null),
-    workspaceContextMenuEl = $bindable(null),
     consoleHeightPx = $bindable(0),
     consoleOpen = $bindable(false),
     shellMainRowWidth = $bindable(0),
@@ -342,16 +340,6 @@
   });
 
   const workspaceContextMenuActions = createWorkspaceContextMenuActions({
-    getMenu: () => overlayHost?.workspaceContextMenu ?? null,
-    setMenu: (menu) => {
-      if (menu) {
-        overlayHost?.api.openWorkspaceContextMenu(menu.workspaceId, menu.x, menu.y);
-      } else {
-        overlayHost?.api.closeOverlay("workspaceContextMenu");
-      }
-    },
-    getMenuEl: () => workspaceContextMenuEl,
-    getWorkspaceIds: () => workspaces.map((workspace) => workspace.id),
     getWorkspaceRootPath: (workspaceId) =>
       workspaces.find((workspace) => workspace.id === workspaceId)?.rootPath ?? null,
     getPreviousActiveContextId: () => previousActiveContextId,
@@ -364,15 +352,6 @@
     setMarkdownViewMode: layoutHandlers.setMarkdownViewMode,
     loadProjectTreeRoot: projectTreeHandlers.loadProjectTreeRoot,
     notify: (message) => notify(message),
-  });
-
-  // Detach the workspace context menu's window listeners when this host is
-  // destroyed, so a menu left open on unmount does not leak pointer/keydown
-  // handlers for the page lifetime (L21).
-  $effect(() => {
-    return () => {
-      workspaceContextMenuActions.detach();
-    };
   });
 
   const commandHandlers = createAppShellCommandHandlers({
@@ -481,12 +460,6 @@
   const isThemesViewActive = $derived(activeViewTabKind === "themes");
   const isViewTabActive = $derived(activeViewTabKind !== null);
 
-  // The workspace-context-menu open state is owned by OverlayHost; the
-  // action callbacks (move / close / openSettings) are page-owned via
-  // `workspaceContextMenuActions`. `menuIndex()` reflects the menu's
-  // position in the workspaces list.
-  const workspaceContextMenuMenu = $derived(overlayHost?.workspaceContextMenu ?? null);
-
   // Guarded overlay-host accessors: the host is null only on the very first
   // render before `bind:this` fires. The fallbacks render closed overlays.
   const psPanel = $derived(overlayHost?.projectSearchPanelState ?? IDLE_PROJECT_SEARCH);
@@ -549,10 +522,6 @@
     void ps.openResult(path, line);
   }
 
-  function handleRequestCloseWorkspace(workspaceId: ContextId, x: number, y: number): void {
-    workspaceContextMenuActions.open(workspaceId, x, y);
-  }
-
   function handleReorderWorkspaces(fromIndex: number, toIndex: number): void {
     appState.reorderWorkspaces(fromIndex, toIndex);
   }
@@ -586,14 +555,6 @@
     onFileDropPaneChange(paneId);
   }
 
-  function handleWorkspaceContextMenuMoveUp(): void {
-    workspaceContextMenuActions.move("up");
-  }
-
-  function handleWorkspaceContextMenuMoveDown(): void {
-    workspaceContextMenuActions.move("down");
-  }
-
   function handleRestartRuntime(): void {
     void agentHandlers.handleRestartAgentHost();
   }
@@ -603,7 +564,6 @@
   bind:shellMainRowEl
   bind:editorShellEl
   bind:editorPaneEl
-  bind:workspaceContextMenuEl
   bind:consoleHeightPx
   {consoleOpen}
   compactNotepad={currentWindowId !== "main" && activeContextId === "notepad"}
@@ -644,12 +604,10 @@
     panelWidthPx: normalizeActivityRailWidthPx(activityRailWidthPx),
     notepadOpenTabCount,
     notepadRecentTabs,
-    contextMenuWorkspaceId: workspaceContextMenuMenu?.workspaceId ?? null,
     onSelectContext: handleSelectContext,
     onAddWorkspace: handleAddWorkspace,
     onOpenWorkspaceManager: handleOpenWorkspaceManager,
     onPanelWidthChange: layoutHandlers.handleActivityRailWidthChange,
-    onRequestCloseWorkspace: handleRequestCloseWorkspace,
     onReorderWorkspaces: handleReorderWorkspaces,
     onSelectNotepadTab: handleSelectNotepadTab,
   }}
@@ -769,17 +727,11 @@
     selectionCount: editorSelectionCount,
     onToggleConsole: handleToggleConsole,
   }}
-  workspaceContextMenu={{
-    menu: workspaceContextMenuMenu,
-    menuIndex: workspaceContextMenuActions.menuIndex(),
-    workspaceCount: workspaceContextMenuActions.menuCount(),
-    onMoveUp: handleWorkspaceContextMenuMoveUp,
-    onMoveDown: handleWorkspaceContextMenuMoveDown,
+  workspaceActions={{
     onOpenSettings: workspaceContextMenuActions.openSettings,
     onOpenDocument: workspaceContextMenuActions.openDocument,
     onMoveToWindow: workspaceContextMenuActions.moveToWindow,
     onOpenVersionControl: workspaceContextMenuActions.openVersionControl,
-    onCopyPath: workspaceContextMenuActions.copyPath,
     onCloseWorkspace: workspaceContextMenuActions.closeWorkspace,
   }}
   overlays={{

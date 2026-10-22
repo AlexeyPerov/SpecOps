@@ -6,8 +6,7 @@
    *   5 pickers ......... QuickOpen, CommandPalette, HeadingJump,
    *                       BookmarkList, SnippetInsert
    *   3 dialogs ......... SessionList, AddMultipleWorkspaces, SessionTimeline
-   *   2 inline panels ... ProjectSearch (bottom panel), WorkspaceContextMenu
-   *                       (positioned menu)
+   *   1 inline panel .... ProjectSearch (bottom panel)
    *
    * The pickers and the three dialogs are rendered here (they were previously
    * rendered inside `AppShell.svelte`). ProjectSearch and WorkspaceContextMenu
@@ -29,7 +28,7 @@
   import { rankFiles } from "../../picker/fileRanking";
   import { rankHeadings } from "../../picker/headingRanking";
   import { rankSnippets } from "../../picker/snippetRanking";
-  import type { AppCommandId, ContextId } from "../../domain/contracts";
+  import type { AppCommandId } from "../../domain/contracts";
   import type { ProjectSearchResult } from "../../services/projectSearch";
   import type {
     MarkdownHeadingSnapshot,
@@ -46,7 +45,6 @@
     OverlayHostApi,
     OverlayKind,
     ProjectSearchPanelState,
-    WorkspaceContextMenuState,
   } from "./overlayHostTypes";
 
   interface Props {
@@ -161,15 +159,6 @@
   // -------------------------------------------------------------------------
   let timelineOpen = $state(false);
   let timelineSearch = $state("");
-
-  // -------------------------------------------------------------------------
-  // Workspace context menu state (was +page.svelte:229-233)
-  // -------------------------------------------------------------------------
-  let workspaceContextMenu = $state<{
-    workspaceId: ContextId;
-    x: number;
-    y: number;
-  } | null>(null);
 
   // -------------------------------------------------------------------------
   // Picker derived rankings (was +page.svelte:451-462, 608-673)
@@ -395,7 +384,6 @@
       projectSearchOpen,
       addMultipleOpen,
       timelineOpen,
-      workspaceContextMenu,
     }),
     patch: (p) => {
       if (p.quickOpenOpen !== undefined) quickOpenOpen = p.quickOpenOpen;
@@ -413,9 +401,6 @@
       if (p.projectSearchOpen !== undefined) projectSearchOpen = p.projectSearchOpen;
       if (p.addMultipleOpen !== undefined) addMultipleOpen = p.addMultipleOpen;
       if (p.timelineOpen !== undefined) timelineOpen = p.timelineOpen;
-      if (p.workspaceContextMenu !== undefined) {
-        workspaceContextMenu = p.workspaceContextMenu;
-      }
     },
     clearSnippetInsertHostIdentity: () => {
       snippetInsertHostIdentity = null;
@@ -466,8 +451,7 @@
       workspaceSwitcherOpen ||
       headingJumpOpen ||
       bookmarkListOpen ||
-      snippetInsertOpen ||
-      Boolean(workspaceContextMenu),
+      snippetInsertOpen,
   );
 
   function openOverlay(kind: OverlayKind, options?: { focusReplace?: boolean }): void {
@@ -525,9 +509,6 @@
       case "timeline":
         timelineOpen = true;
         break;
-      case "workspaceContextMenu":
-        // opened via openWorkspaceContextMenu (needs coords)
-        break;
     }
   }
 
@@ -560,9 +541,6 @@
       case "timeline":
         timelineOpen = false;
         break;
-      case "workspaceContextMenu":
-        workspaceContextMenu = null;
-        break;
     }
   }
 
@@ -585,7 +563,7 @@
       projectSearchStatus = "";
       projectSearchRunning = false;
     }
-    // NOTE: sessionList / addMultiple / timeline / workspaceContextMenu are
+    // NOTE: sessionList / addMultiple / timeline are
     // intentionally NOT closed here — pre-existing behavior pinned by L14.
   }
 
@@ -598,10 +576,6 @@
     coordinator.closeMarkdownOnlyPickers(language);
   }
 
-  function openWorkspaceContextMenu(workspaceId: ContextId, x: number, y: number): void {
-    workspaceContextMenu = { workspaceId, x, y };
-  }
-
   const api: OverlayHostApi = {
     isAnyOverlayOpen,
     isModalOverlayOpen,
@@ -609,7 +583,6 @@
     closeOverlay,
     closeAllOnWorkspaceSwitch,
     closeMarkdownOnlyPickers,
-    openWorkspaceContextMenu,
     refreshQuickOpenCatalog,
   };
 
@@ -632,11 +605,6 @@
     results: projectSearchResults,
     running: projectSearchRunning,
     status: projectSearchStatus,
-  });
-
-  const workspaceContextMenuState = $derived<WorkspaceContextMenuState>({
-    menu: workspaceContextMenu,
-    workspaceId: workspaceContextMenu?.workspaceId ?? null,
   });
 
 
@@ -698,8 +666,6 @@
     api,
     anyOverlayOpen,
     projectSearchPanelState,
-    workspaceContextMenuState,
-    workspaceContextMenu,
     persistProjectSearchHeightNow as persistProjectSearchHeight,
     runProjectSearch,
     replaceAllInProject,

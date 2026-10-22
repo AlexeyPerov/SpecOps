@@ -1,5 +1,5 @@
 import type { AppSettingsState, AppThemeState } from "./settings";
-import type { ContextSnapshot, ContextId, WorkspaceEntry, WindowContextState } from "./workspace";
+import type { ContextId, TabGroupEntry, WorkspaceEntry, WindowContextState } from "./workspace";
 
 export interface OpenFileOwner {
   windowId: string;
@@ -32,7 +32,7 @@ export interface AppDomainState {
 
 export interface WindowSessionSnapshot {
   activeContextId: ContextId;
-  notepad: ContextSnapshot;
+  tabGroups: TabGroupEntry[];
   workspaces: WorkspaceEntry[];
   editorPreferences: Pick<AppDomainState["editor"], "zoomPercent" | "wrapLines">;
   /**

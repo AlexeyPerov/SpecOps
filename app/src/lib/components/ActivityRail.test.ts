@@ -78,16 +78,16 @@ describe("ActivityRail", () => {
     expect(rows).toHaveLength(30);
     expect(host.querySelectorAll(".rail-workspace-distinction")).toHaveLength(30);
     expect(rows[0].textContent).toContain("group-0");
-    expect(rows[0].textContent).toContain("Git not checked");
+    expect(rows[0].getAttribute("aria-label")).toContain("Git not checked");
     expect(rows[0].textContent).not.toMatch(/Sessions:|Tabs:/);
     expect(rows[0].dataset.fileDropContext).toBe("ws-0");
     expect(rows[0].getAttribute("aria-label")).toContain("/projects/group-0/app");
     expect(invoke).not.toHaveBeenCalled();
   });
   it("supports native keyboard activation, keyboard context menu and reorder with several projects", async () => {
-    const onSelectContext = vi.fn(), onRequestCloseWorkspace = vi.fn(), onReorderWorkspaces = vi.fn();
+    const onSelectContext = vi.fn(), onCloseWorkspace = vi.fn(), onOpenSettings = vi.fn(), onReorderWorkspaces = vi.fn();
     const { host } = mountComponent(ActivityRail, { workspaces: [workspace(1, "/one"), workspace(2, "/two")], panelWidthPx: 240,
-      onSelectContext, onRequestCloseWorkspace, onReorderWorkspaces, activeContextId: "ws-1" as const });
+      onSelectContext, onCloseWorkspace, onOpenSettings, onMoveToWindow: vi.fn(), onOpenDocument: vi.fn(), onReorderWorkspaces, activeContextId: "ws-1" as const });
     await tick();
     const row = host.querySelector<HTMLButtonElement>("[data-workspace-id]")!;
     row.focus(); row.click();
@@ -96,14 +96,32 @@ describe("ActivityRail", () => {
     expect(row.getAttribute("aria-current")).toBe("true");
     row.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }));
     await tick();
-    expect(document.querySelector('[role=menu]')?.textContent).toContain('Pin');
-    [...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')].find(button => button.textContent === 'Workspace actions…')!.click();
-    expect(onRequestCloseWorkspace).toHaveBeenCalledWith("ws-1", 0, 0);
+    const items = () => [...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')];
+    expect(items().map(button => button.textContent)).toEqual(['Settings', 'Open in Separate Window', 'Move to Window…',
+      'Create Tasks', 'Create Notes', 'Version Control', 'Copy Path', 'Hide from Sidebar', 'Close Workspace']);
+    items().find(button => button.textContent === 'Close Workspace')!.click(); await tick();
+    expect(onCloseWorkspace).toHaveBeenCalledWith("ws-1");
+    expect(document.querySelector('[role=menu]')).toBeNull();
     row.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", altKey: true, bubbles: true }));
     expect(invoke).toHaveBeenCalledWith('project_catalog_transaction', { mutations: [
       ...['/one', '/two'].map(root => ({ type: 'register', project: catalogProjectForRoot(root) })),
       { type:'moveProject', id:'/one', folderId:null, pinned:false, beforeId:null },
     ] });
+  });
+  it("toggles pinning from the row star without selecting the workspace", async () => {
+    const onSelectContext = vi.fn();
+    const { host } = mountComponent(ActivityRail, { workspaces: [workspace(1, "/one")], panelWidthPx: 240, onSelectContext });
+    await tick();
+    const star = host.querySelector<HTMLButtonElement>('.rail-pin-action')!;
+    expect(star.getAttribute('aria-label')).toBe('Pin one');
+    expect(star.getAttribute('aria-pressed')).toBe('false');
+    expect(star.textContent).toBe('☆');
+    star.click();
+    expect(invoke).toHaveBeenCalledWith('project_catalog_transaction', { mutations: [
+      { type: 'register', project: catalogProjectForRoot('/one') },
+      { type: 'moveProject', id: '/one', pinned: true },
+    ] });
+    expect(onSelectContext).not.toHaveBeenCalled();
   });
   it("keeps pointer selection and drag reorder without a duplicate click activation", async () => {
     const onSelectContext = vi.fn(), onReorderWorkspaces = vi.fn();
@@ -200,7 +218,7 @@ describe("ActivityRail", () => {
     const cleared=mountComponent(ActivityRail,{panelWidthPx:240,currentWindowId:'main'}); await tick();
     expect(cleared.host.querySelector('[data-workspace-id="/normal"]')).toBeNull();
   });
-  it('exposes collapsed narrow projects through a keyboard menu and moves pinned projects out of Pinned when assigning a folder', async () => {
+  it('exposes collapsed narrow projects through a keyboard menu without button-based moves', async () => {
     await groupedCatalog(); localStorage.setItem('spec-ops:workspace-rail:main',JSON.stringify({collapsed:['folder:one'],scrollTop:0}));
     const {host}=mountComponent(ActivityRail,{panelWidthPx:48}); await tick();
     host.querySelector<HTMLButtonElement>('[data-rail-section="folder:one"] .rail-section-toggle')!.click(); await tick();
@@ -209,8 +227,8 @@ describe("ActivityRail", () => {
     projectButton.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await tick();
     const row=host.querySelector<HTMLButtonElement>('[data-workspace-id="/pinned"]')!;
     row.dispatchEvent(new KeyboardEvent('keydown',{key:'F10',shiftKey:true,bubbles:true})); await tick();
-    [...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')].find(button=>button.textContent==='Second folder')!.click();
-    expect(invoke).toHaveBeenLastCalledWith('project_catalog_transaction',{mutations:[{type:'moveProject',id:'/pinned',folderId:'two',pinned:false,beforeId:null}]});
+    const labels=[...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')].map(button=>button.textContent);
+    expect(labels).toEqual(['Open Workspace','Version Control','Copy Path','Hide from Sidebar']);
   });
   it.each([48, 240])('keeps the captured row mounted and drops at the release position into a collapsed folder (%s)', async (width) => {
     await groupedCatalog();
@@ -267,8 +285,19 @@ describe("ActivityRail", () => {
       next.revision++; return next;
     });
     const { host, unmount } = mountComponent(ActivityRail, { panelWidthPx: 240, onError }); await tick();
-    host.querySelector('[data-workspace-id="/pinned"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true })); await tick();
-    [...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')].find(button => button.textContent === (folder === 'one' ? 'First folder' : 'Second folder'))!.click();
+    const rect = (top: number, height = 40) => ({ left: 0, right: 240, top, bottom: top + height, width: 240, height, x: 0, y: top, toJSON: () => ({}) });
+    host.querySelector<HTMLElement>('.rail-workspaces')!.getBoundingClientRect = () => rect(0, 400);
+    host.querySelector<HTMLElement>('.activity-rail')!.getBoundingClientRect = () => rect(0, 400);
+    for (const node of host.querySelectorAll<HTMLElement>('[data-workspace-id]')) node.hasPointerCapture = () => false;
+    const row = host.querySelector<HTMLButtonElement>('[data-workspace-id="/pinned"]')!;
+    row.getBoundingClientRect = () => rect(0); row.setPointerCapture = vi.fn();
+    const target = host.querySelector<HTMLElement>(`[data-rail-section="folder:${folder}"]`)!;
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => target });
+    const pointer = (type: string, y: number) => {
+      const event = new MouseEvent(type, { clientX: 20, clientY: y, button: 0, bubbles: true });
+      Object.defineProperty(event, 'pointerId', { value: 1 }); return event;
+    };
+    row.dispatchEvent(pointer('pointerdown', 20)); window.dispatchEvent(pointer('pointermove', 130)); window.dispatchEvent(pointer('pointerup', 130));
     await tick(); await tick(); await tick();
     const destination = host.querySelector(`[data-rail-section="folder:${folder}"]`)!;
     expect(destination.querySelector('.rail-section-toggle')?.getAttribute('aria-expanded')).toBe(scenario === 'empty' ? 'true' : 'false');
@@ -280,14 +309,14 @@ describe("ActivityRail", () => {
       expect(remounted.host.querySelector('[data-rail-section="folder:two"] .rail-section-toggle')?.getAttribute('aria-expanded')).toBe('true');
     }
   });
-  it('offers keyboard folder rename/delete/order and disables ambiguous ordering during search', async () => {
+  it('offers keyboard folder rename/delete without button-based ordering', async () => {
     await groupedCatalog();
     const {host}=mountComponent(ActivityRail,{panelWidthPx:240,searchQuery:'normal'}); await tick();
     const toggle=host.querySelector<HTMLButtonElement>('[data-rail-section="folder:one"] .rail-section-toggle')!;
     expect(toggle.draggable).toBe(false);
     toggle.dispatchEvent(new KeyboardEvent('keydown',{key:'ContextMenu',bubbles:true})); await tick();
     const buttons=[...document.querySelectorAll<HTMLButtonElement>('[role=menu] button')];
-    expect(buttons.find(button=>button.textContent==='Move folder down')!.disabled).toBe(true);
+    expect(buttons.map(button=>button.textContent)).toEqual(['Collapse','Rename folder','Delete folder (keep projects)','Create folder']);
     buttons.find(button=>button.textContent==='Rename folder')!.click(); await tick();
     const input=host.querySelector<HTMLInputElement>('[aria-label="Folder name"]')!;
     input.value='Renamed'; input.dispatchEvent(new Event('input',{bubbles:true}));

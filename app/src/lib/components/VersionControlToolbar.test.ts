@@ -8,6 +8,7 @@ import * as pushState from '../git/gitPush';
 import * as pullState from '../git/gitPull';
 import { promptLocalChangesPull } from '../services/localChangesPullPrompt';
 import { prepareWorkspaceForGitOperation } from '../services/preGitOperationGuard';
+import { refreshWorkspaceGitSummaries } from '../git/workspaceGitSummary';
 vi.mock('../git/gitService', async original => ({ ...await original<typeof import('../git/gitService')>(), queryRemoteHeads:vi.fn().mockResolvedValue(['main']), queryBranches: vi.fn().mockResolvedValue([]), queryTags: vi.fn().mockResolvedValue([]), queryStashes: vi.fn().mockResolvedValue([]), queryCommits: vi.fn().mockResolvedValue([]), queryCurrentBranch: vi.fn().mockResolvedValue({name:'main',isDetached:false,upstream:null}), queryWorkingTreeStatus: vi.fn(), queryWorkingTreeFileDiff: vi.fn().mockResolvedValue({hunks:[],isBinary:false}), createStash:vi.fn().mockResolvedValue("stash-sha"), applyStash:vi.fn().mockResolvedValue(undefined), fetchRemote:vi.fn(), pullRemote:vi.fn(), pushRemote:vi.fn(), isWorkingTreeDirty:vi.fn().mockResolvedValue(false), stageAll:vi.fn(), createCommit:vi.fn(), cancelGitCommand:vi.fn().mockResolvedValue({outcome:'cancelled'}) }));
 vi.mock('../git/gitPull', async original => ({ ...await original<typeof import('../git/gitPull')>(), queryPullSnapshot:vi.fn().mockResolvedValue({head:'abc',branch:'main'}), assertPullSnapshot:vi.fn().mockResolvedValue(undefined), queryGitOperationState:vi.fn().mockResolvedValue({kind:'none',conflicts:[]}), recoverGitOperation:vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../git/gitPush',async original=>({...await original<typeof import('../git/gitPush')>(),queryPushSources:vi.fn().mockResolvedValue({branches:[{ref:'refs/heads/main',name:'main',sha:'a'.repeat(40),current:true,upstream:'',upstreamRemote:'',upstreamBranch:''}],tags:[]}),executePushPlan:vi.fn()}));
@@ -16,11 +17,17 @@ vi.mock('../git/versionControlProbe', async original => ({ ...await original<typ
 vi.mock('../git/versionControlRemotesCache',()=>({loadRemotes:vi.fn().mockResolvedValue([{name:'origin',fetchUrl:'https://example.test/repo',pushUrl:null}])}));
 vi.mock('../git/versionControlRemoteSelection',async original=>({...await original<typeof import('../git/versionControlRemoteSelection')>(),readPersistedRemoteSelection:vi.fn().mockResolvedValue({remoteName:'origin',remoteBranch:null})}));
 vi.mock('../services/localChangesPullPrompt',()=>({promptLocalChangesPull:vi.fn().mockResolvedValue({type:'stash-and-pull'})}));
+vi.mock('../git/workspaceGitSummary',()=>({refreshWorkspaceGitSummaries:vi.fn().mockResolvedValue(undefined)}));
 vi.mock('../services/preGitOperationGuard',()=>({prepareWorkspaceForGitOperation:vi.fn().mockResolvedValue(true)}));
 async function settle(){for(let i=0;i<35;i++){await Promise.resolve();flushSync();}}
 function button(host:HTMLElement,label:string){return Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find(b=>b.textContent?.trim()===label)!;}
 beforeEach(()=>{vi.mocked(pushState.executePushPlan).mockResolvedValue({ok:true,refs:[{destination:'refs/heads/main',status:'success',summary:'new branch'}],message:'',cancelled:false});clearVersionControlProbeCache();vi.clearAllMocks();vi.mocked(pullState.queryGitOperationState).mockResolvedValue({kind:"none",conflicts:[]});vi.mocked(pullState.assertPullSnapshot).mockResolvedValue(undefined);vi.mocked(git.isWorkingTreeDirty).mockResolvedValue(false);vi.mocked(git.pullRemote).mockResolvedValue(undefined);vi.stubGlobal('ResizeObserver',class{observe(){} disconnect(){}});vi.mocked(git.queryWorkingTreeStatus).mockResolvedValue({staged:[],unstaged:[{path:'file.ts',statusCode:' M'}]} as never);vi.mocked(prepareWorkspaceForGitOperation).mockResolvedValue(true);});
 describe('mounted version control toolbar',()=>{
+ it('refreshes repository state and the sidebar Git status from the toolbar',async()=>{
+ const view=mountComponent(VersionControlView,{workspaceRootPath:'/repo'});await settle();const reads=vi.mocked(git.queryCurrentBranch).mock.calls.length;
+ const refresh=view.host.querySelector<HTMLButtonElement>('[aria-label="Refresh Git status"]')!;expect(refresh).not.toBeNull();refresh.click();await settle();
+ expect(refreshWorkspaceGitSummaries).toHaveBeenCalledWith(['/repo']);expect(vi.mocked(git.queryCurrentBranch).mock.calls.length).toBeGreaterThan(reads);expect(refresh.disabled).toBe(false);
+ });
  it('inspects uncommitted files below history and removes the row when clean', async () => {
  const view=mountComponent(VersionControlView,{workspaceRootPath:'/repo'});await settle();
  expect(view.host.textContent).toContain('File Status');

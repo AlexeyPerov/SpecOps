@@ -4,6 +4,7 @@ import type {
   ContextId,
   ContextSnapshot,
   DocumentState,
+  TabGroupEntry,
   WindowBounds,
   WindowSessionSnapshot,
   WorkspaceLayoutState,
@@ -12,6 +13,9 @@ import type {
 import {
   totalTabCount,
   createFileTab,
+  DEFAULT_TAB_GROUP_ID,
+  DEFAULT_TAB_GROUP_NAME,
+  isTabGroupId,
   createSinglePaneLayout,
   ensureUniquePaneIds,
   nextPaneId,
@@ -29,13 +33,14 @@ import {
   getActiveContextSnapshot,
   getActiveDocuments,
   getActiveSession,
+  getContextSnapshotById,
   nextDocAndTabIds,
   nextDocId,
   nextTabId,
   nextWorkspaceId,
   normalizeWorkspaceEntries,
-  NOTEPAD_CONTEXT_ID,
   patchActiveContext,
+  patchContextById,
   reindexIdCountersFromContexts,
 } from "./contextHelpers";
 import { buildEmptyUnsavedDocument } from "./documentHelpers";
@@ -75,6 +80,29 @@ function ensureContextSnapshotHasTab(snapshot: ContextSnapshot): ContextSnapshot
   return fallbackContextSnapshot(withUniquePanes.session.lastActiveWindowId);
 }
 
+function cloneTabGroups(groups: TabGroupEntry[]): TabGroupEntry[] {
+  return groups.map((group) => ({
+    id: group.id,
+    name: group.name,
+    snapshot: cloneContextSnapshot(group.snapshot),
+  }));
+}
+
+/** Restored groups keep their order after the default group; a missing default is recreated. */
+function restoreTabGroups(groups: TabGroupEntry[], lastActiveWindowId: string): TabGroupEntry[] {
+  const restored = cloneTabGroups(groups).map((group) => ({
+    ...group,
+    name: group.name.trim() || DEFAULT_TAB_GROUP_NAME,
+    snapshot: ensureContextSnapshotHasTab(group.snapshot),
+  }));
+  const defaultGroup = restored.find((group) => group.id === DEFAULT_TAB_GROUP_ID) ?? {
+    id: DEFAULT_TAB_GROUP_ID,
+    name: DEFAULT_TAB_GROUP_NAME,
+    snapshot: fallbackContextSnapshot(lastActiveWindowId),
+  };
+  return [defaultGroup, ...restored.filter((group) => group.id !== DEFAULT_TAB_GROUP_ID)];
+}
+
 export function createWorkspaceContextsSlice(deps: {
   update: AppStateUpdate;
   getSnapshot: () => AppDomainState;
@@ -87,7 +115,7 @@ export function createWorkspaceContextsSlice(deps: {
   function toCurrentWindowSnapshot(state: AppDomainState): WindowSessionSnapshot {
     return {
       activeContextId: state.contexts.activeContextId,
-      notepad: cloneContextSnapshot(state.contexts.notepad),
+      tabGroups: cloneTabGroups(state.contexts.tabGroups),
       workspaces: normalizeWorkspaceEntries(state.contexts.workspaces),
       editorPreferences: {
         zoomPercent: state.editor.zoomPercent,
@@ -116,19 +144,22 @@ export function createWorkspaceContextsSlice(deps: {
     },
     applyWindowSession(snapshot: WindowSessionSnapshot, recentFiles: string[] = []) {
       const preservedSettings = getSnapshot().settings;
-      const normalizedNotepad = ensureContextSnapshotHasTab(cloneContextSnapshot(snapshot.notepad));
       const normalizedWorkspaces = normalizeWorkspaceEntries(snapshot.workspaces).map((workspace) => ({
         ...workspace,
         snapshot: ensureContextSnapshotHasTab(workspace.snapshot),
       }));
+      const tabGroups = restoreTabGroups(
+        snapshot.tabGroups,
+        getActiveSession(getSnapshot()).lastActiveWindowId,
+      );
       const activeContextId =
-        snapshot.activeContextId === NOTEPAD_CONTEXT_ID ||
+        tabGroups.some((group) => group.id === snapshot.activeContextId) ||
         normalizedWorkspaces.some((workspace) => workspace.id === snapshot.activeContextId)
           ? snapshot.activeContextId
-          : NOTEPAD_CONTEXT_ID;
+          : DEFAULT_TAB_GROUP_ID;
       const contexts = {
         activeContextId,
-        notepad: normalizedNotepad,
+        tabGroups,
         workspaces: normalizedWorkspaces,
       };
       reindexIdCountersFromContexts(contexts);
@@ -149,7 +180,7 @@ export function createWorkspaceContextsSlice(deps: {
         },
         activityRailWidthPx: railWidth,
       });
-      activationHistory = activeContextId === NOTEPAD_CONTEXT_ID ? [] : [activeContextId];
+      activationHistory = isTabGroupId(activeContextId) ? [] : [activeContextId];
       applyTheme(preservedTheme);
     },
     getWindowSessionSnapshot(): WindowSessionSnapshot {
@@ -157,10 +188,10 @@ export function createWorkspaceContextsSlice(deps: {
     },
     getActiveContext() {
       const state = getSnapshot();
-      if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
+      if (isTabGroupId(state.contexts.activeContextId)) {
         return {
-          id: NOTEPAD_CONTEXT_ID,
-          kind: "notepad" as const,
+          id: state.contexts.activeContextId,
+          kind: "tabGroup" as const,
           snapshot: getActiveContextSnapshot(state),
         };
       }
@@ -179,13 +210,13 @@ export function createWorkspaceContextsSlice(deps: {
     getActiveSession() {
       return getActiveSession(getSnapshot());
     },
-    isNotepadActive() {
-      return getSnapshot().contexts.activeContextId === NOTEPAD_CONTEXT_ID;
+    isTabGroupActive() {
+      return isTabGroupId(getSnapshot().contexts.activeContextId);
     },
     getWorkspaceRoot(contextId?: ContextId): string | null {
       const state = getSnapshot();
       const targetId = contextId ?? state.contexts.activeContextId;
-      if (targetId === NOTEPAD_CONTEXT_ID) {
+      if (isTabGroupId(targetId)) {
         return null;
       }
       return state.contexts.workspaces.find((workspace) => workspace.id === targetId)?.rootPath ?? null;
@@ -193,42 +224,18 @@ export function createWorkspaceContextsSlice(deps: {
     switchContext(contextId: ContextId): boolean {
       let switched = false;
       update((state) => {
-        const exists =
-          contextId === NOTEPAD_CONTEXT_ID ||
-          state.contexts.workspaces.some((workspace) => workspace.id === contextId);
-        if (!exists || state.contexts.activeContextId === contextId) {
+        const current = getContextSnapshotById(state, contextId);
+        if (!current || state.contexts.activeContextId === contextId) {
           return state;
         }
         switched = true;
         // Heal duplicate pane ids in the destination before activating so a
-        // corrupt notepad/workspace layout cannot freeze the editor grid.
-        let nextContexts = state.contexts;
-        if (contextId === NOTEPAD_CONTEXT_ID) {
-          const healed = ensureContextSnapshotHasTab(state.contexts.notepad);
-          if (healed !== state.contexts.notepad) {
-            nextContexts = { ...nextContexts, notepad: healed };
-          }
-        } else {
-          let workspacesChanged = false;
-          const workspaces = state.contexts.workspaces.map((workspace) => {
-            if (workspace.id !== contextId) {
-              return workspace;
-            }
-            const healed = ensureContextSnapshotHasTab(workspace.snapshot);
-            if (healed === workspace.snapshot) {
-              return workspace;
-            }
-            workspacesChanged = true;
-            return { ...workspace, snapshot: healed };
-          });
-          if (workspacesChanged) {
-            nextContexts = { ...nextContexts, workspaces };
-          }
-        }
+        // corrupt tab group/workspace layout cannot freeze the editor grid.
+        const healed = patchContextById(state, contextId, ensureContextSnapshotHasTab);
         return {
-          ...state,
+          ...healed,
           contexts: {
-            ...nextContexts,
+            ...healed.contexts,
             activeContextId: contextId,
           },
           editor: {
@@ -324,7 +331,7 @@ export function createWorkspaceContextsSlice(deps: {
         // Workspace order is user-visible and persisted, so the first remaining
         // entry is a deterministic successor when the active workspace closes.
         const activeContextId = closingActiveWorkspace
-          ? (workspaces[0]?.id ?? NOTEPAD_CONTEXT_ID)
+          ? (workspaces[0]?.id ?? DEFAULT_TAB_GROUP_ID)
           : state.contexts.activeContextId;
         return {
           ...state,
@@ -394,7 +401,7 @@ export function createWorkspaceContextsSlice(deps: {
     },
     getActiveWorkspaceLayout(): WorkspaceLayoutState {
       const state = getSnapshot();
-      if (state.contexts.activeContextId === NOTEPAD_CONTEXT_ID) {
+      if (isTabGroupId(state.contexts.activeContextId)) {
         return defaultWorkspaceLayout();
       }
       return normalizeWorkspaceLayout(getActiveSession(state).layout);

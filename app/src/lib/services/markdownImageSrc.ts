@@ -157,8 +157,8 @@ function rewriteRawHtmlImageSources(html: string, documentFilePath: string | nul
  *
  * Uses an isolated `Marked` instance so it never disturbs the global `marked`
  * configured by `chatMarkdown.ts` (GFM/breaks/code-highlighting). Marked
- * defaults are used here (GFM on, breaks off) to match prior document-rendering
- * behavior.
+ * defaults are used here (GFM on, breaks off) unless a caller opts into
+ * preserving soft line breaks.
  */
 /**
  * File path of the document currently being rendered.
@@ -206,11 +206,12 @@ const documentMarked = new Marked({
 export function renderDocumentMarkdown(
   content: string,
   documentFilePath: string | null,
+  options: { breaks?: boolean } = {},
 ): string {
   const previous = renderingDocumentFilePath;
   renderingDocumentFilePath = documentFilePath;
   try {
-    const html = documentMarked.parse(content, { async: false }) as string;
+    const html = documentMarked.parse(content, { async: false, breaks: options.breaks ?? false }) as string;
     return rewriteRawHtmlImageSources(html, documentFilePath);
   } finally {
     // Restore rather than clear: `rewriteRawHtmlImageSources` does not re-enter, but a

@@ -91,6 +91,15 @@ describe("resolveMarkdownImageSrc", () => {
 });
 
 describe("renderDocumentMarkdown", () => {
+  it("preserves soft line breaks when requested without changing subsequent document previews", () => {
+    const source = "First line\nSecond **line**\n\nNext paragraph\n\n```text\nline one\nline two\n```";
+    const html = renderDocumentMarkdown(source, null, { breaks: true });
+    expect(html).toContain("<p>First line<br>Second <strong>line</strong></p>");
+    expect(html).toContain("<p>Next paragraph</p>");
+    expect(html).toContain("line one\nline two\n</code></pre>");
+    expect(renderDocumentMarkdown("First\nSecond", null)).toBe("<p>First\nSecond</p>\n");
+  });
+
   it("rewrites a relative image src and stamps the local path", () => {
     const html = renderDocumentMarkdown("![logo](./img.png)", "/docs/readme.md");
     expect(html).toContain('src="asset:/docs/img.png"');

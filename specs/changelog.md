@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-23 14:22 MSK — Preserve Notes line breaks and open in Edit
+
+- Notes: Preview preserves single line breaks within Markdown paragraphs. The document renderer accepts a per-call line-break option, enabled for Notes; ordinary Markdown document previews retain their existing behavior.
+- Notes: workspace and app-wide documents always open in Edit, including when reopened after selecting Preview. The mode is local to the mounted view and is not persisted.
+- Validation: all 44 focused document-view and Markdown-renderer tests pass, including line breaks, paragraph and code-block formatting, reopening both Notes scopes, and HTML sanitization. Svelte/type checks report zero errors and warnings. The native app was not rebuilt or run.
+
 ## 2026-10-23 09:26 MSK — Add tab groups and app-wide Tasks and Notes to the sidebar
 
 - Tab groups: the sidebar lists the window's tab groups above the workspaces, with a "+" to create one ("Tabs 2", "Tabs 3", … or a typed name) and a menu with Rename and Delete. The default group cannot be deleted. Expanded rows show the name, tab count and last three saved files; compact rows show the default group's icon or an initial. Deleting a group with unsaved buffers asks to Save all or, after a second confirmation, discard them, then releases the window's claims on its files. Deleting the active group activates the default group.

@@ -65,6 +65,19 @@ describe('workspace document views', () => {
     [...target.querySelectorAll('button')].find(button => button.textContent === 'Preview')!.click(); await tick();
     expect(target.querySelector('.preview')?.textContent).toContain('First note');
   });
+  it.each(['/project', null])('opens saved Notes in Edit again after using Preview (%s)', async (root) => {
+    document.record.content = '# Notes\n\nFirst line\nSecond line';
+    await render('notes', root);
+    expect(target.querySelector('.cm-editor')).not.toBeNull();
+    expect(target.querySelector('.preview')).toBeNull();
+    [...target.querySelectorAll('button')].find(button => button.textContent === 'Preview')!.click(); await tick();
+    const paragraph = target.querySelector('.preview p')!;
+    expect(paragraph.innerHTML).toBe('First line<br>Second line');
+    await unmount(view!); view = undefined; target.remove();
+    await render('notes', root);
+    expect(target.querySelector('.cm-editor')).not.toBeNull();
+    expect([...target.querySelectorAll('button')].find(button => button.textContent === 'Edit')?.getAttribute('aria-pressed')).toBe('true');
+  });
   it('updates completion and order in structured tasks', async () => {
     const book: TaskBook = { version: 1, groups: [], lists: [{ id: 'list', title: 'Work', groupId: null }], tasks: [
       { id: 'a', listId: 'list', text: 'First', completed: false }, { id: 'b', listId: 'list', text: 'Second', completed: true },
@@ -137,6 +150,7 @@ describe('workspace document views', () => {
   it('renders notes Markdown and removes executable HTML from the preview', async () => {
     document.record.content = '# Notes\n<script>alert(1)</script><img src="https://example.com/image.png" onerror="alert(1)">\n**Hello**';
     await render('notes');
+    [...target.querySelectorAll('button')].find(button => button.textContent === 'Preview')!.click(); await tick();
     const preview = target.querySelector('.preview')!;
     expect(preview.querySelector('h1')?.textContent).toBe('Notes');
     expect(preview.querySelector('strong')?.textContent).toBe('Hello');

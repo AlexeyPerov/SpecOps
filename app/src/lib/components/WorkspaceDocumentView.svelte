@@ -17,7 +17,7 @@
   const globalDocument = $derived(documentId ? catalog.documents?.[documentId] ?? null : null);
   // A deleted document must not be recreated by loading or saving it again.
   const deleted = $derived(root === null && !globalDocument);
-  let mode = $state<"content" | "source" | null>(null);
+  let mode = $state<"content" | "source">("source");
   let storageRevision = $state(0);
   $effect(() => {
     const target = scope;
@@ -37,11 +37,9 @@
   // Service records are mutable; a fresh view snapshot propagates every revision.
   const recordView = $derived.by(() => { void $workspaceDocumentsRevision; return record ? { ...record } : null; });
   const content = $derived(recordView?.content ?? (kind === "tasks" ? serializeTaskBook(emptyTaskBook()) : ""));
-  const displayMode = $derived(mode ?? (recordView?.content === null ? "source" : "content"));
-  const html = $derived(kind === "notes" && displayMode === "content" ? DOMPurify.sanitize(renderDocumentMarkdown(content, recordView?.path ?? null)) : "");
+  const html = $derived(kind === "notes" && mode === "content" ? DOMPurify.sanitize(renderDocumentMarkdown(content, recordView?.path ?? null, { breaks: true })) : "");
   function edit(next: string): void {
     if (!record || next === content) return;
-    if (kind === "notes" && record.content === null) mode = "source";
     editWorkspaceDocument(record, next);
   }
   function refresh(): void { if (record) void refreshDocument(record).catch((error) => notify(String(error))); }
@@ -56,8 +54,8 @@
   <header>
     <strong title={root ?? "Shared across all windows"}>{root === null ? globalDocument?.name ?? (kind === "tasks" ? "Tasks" : "Notes") : `Workspace ${kind === "tasks" ? "Tasks" : "Notes"}`}</strong>
     {#if kind === "notes"}
-      <button class="btn btn-sm btn-ghost" type="button" aria-pressed={displayMode === "content"} onclick={() => mode = "content"}>Preview</button>
-      <button class="btn btn-sm btn-ghost" type="button" aria-pressed={displayMode === "source"} onclick={() => mode = "source"}>Edit</button>
+      <button class="btn btn-sm btn-ghost" type="button" aria-pressed={mode === "content"} onclick={() => mode = "content"}>Preview</button>
+      <button class="btn btn-sm btn-ghost" type="button" aria-pressed={mode === "source"} onclick={() => mode = "source"}>Edit</button>
     {/if}
     <small>{recordView?.error ? "Not saved" : recordView?.loading ? "Loading…" : recordView?.saving || recordView?.content !== recordView?.saved ? "Saving…" : recordView?.content === null ? "Empty" : "Saved"}</small>
     <button class="btn btn-sm btn-ghost" type="button" onclick={refresh}>Refresh</button>
@@ -71,7 +69,7 @@
   {/if}
   {#if deleted}<p class="deleted" role="status">This document was deleted.</p>
   {:else if !recordView || (recordView.loading && !recordView.path)}<p>Loading…</p>
-  {:else if kind === "notes" && displayMode === "source"}
+  {:else if kind === "notes" && mode === "source"}
     <EditorSurface {content} documentId={documentId ? `global-document-${documentId}` : `workspace-${kind}`} {paneId} {contextId} language="markdown" wrapLines={true} onDocumentDirty={edit} onStatusMessage={notify} />
   {:else if kind === "tasks"}
     {#key recordView.path}<TaskBookView {content} onchange={edit} {notify} />{/key}

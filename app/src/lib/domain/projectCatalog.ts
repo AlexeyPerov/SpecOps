@@ -33,10 +33,18 @@ export interface SavedProjectContext {
 export type SavedProjectDocument = Omit<DocumentState, 'content' | 'savedContent' | 'isDirty'>;
 export type ProjectRecoveryBuffers = Record<string, Pick<DocumentState, 'content' | 'savedContent' | 'isDirty'>>;
 export type SavedProjectContextWrite = SavedProjectContext & { recoveryBuffers?: ProjectRecoveryBuffers };
+/** App-wide Tasks or Notes document; not tied to any project. */
+export interface GlobalDocument {
+  id: string;
+  kind: 'tasks' | 'notes';
+  name: string;
+  order: number;
+}
 export interface ProjectCatalog {
   version: 1;
   revision: number;
   projects: Record<ProjectId, CatalogProject>;
   folders: Record<string, ProjectFolder>;
   savedContexts: Record<ProjectId, SavedProjectContext>;
+  documents: Record<string, GlobalDocument>;
 }

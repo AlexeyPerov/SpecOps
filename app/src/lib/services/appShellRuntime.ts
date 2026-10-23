@@ -6,6 +6,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { AppCommandId, AppDomainState, ContextId } from "../domain/contracts";
 import { defaultTabGroupSnapshot } from "../domain/contracts";
+import { subscribeProjectCatalog } from "./workspaceCatalog";
+import { pruneDeletedGlobalDocuments } from "./globalDocuments";
 import { appState, setThemeSaveErrorNotifier } from "../state/appState";
 import { subscribeSystemColorScheme } from "../state/appState/themeController";
 import { applyFontSettingsToDom } from "../state/appState/fontSettingsSlice";
@@ -263,6 +265,7 @@ async function startAppShellRuntimeInner(
   // dropped already-resolved handles when one listen rejected (C8).
   const registerListenersStartedAt = nowMs();
   cleanupCallbacks.push(await listenWorkspacePreferenceChanges());
+  cleanupCallbacks.push(subscribeProjectCatalog(pruneDeletedGlobalDocuments));
   cleanupCallbacks.push(await listen<ProjectRelocation>(PROJECT_PATH_RELOCATED, async ({ payload }) => {
     if (payload.sourceWindowId !== windowId) await syncOpenDocumentsAfterRelocation(payload.oldPath, payload.newPath, windowId);
     options.onFilesystemChange?.(payload.oldPath, "remove");

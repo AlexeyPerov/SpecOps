@@ -131,7 +131,7 @@ export async function resolveNewWindowBounds(snapshot: AppDomainState): Promise<
   }
 }
 
-export async function resolveNewNotepadWindowBounds(): Promise<WindowBounds> {
+export async function resolveNewTabGroupWindowBounds(): Promise<WindowBounds> {
   try {
     const monitor = await currentMonitor();
     if (monitor) {
@@ -156,7 +156,7 @@ export async function createNewWindowWithTransfer(
   options?: { label?: string; waitForReady?: boolean; bounds?: WindowBounds | null; activate?: boolean },
 ): Promise<string | null> {
   const label = options?.label ?? generateWindowLabel();
-  const bounds = options?.bounds ?? await (transferPayload ? resolveNewWindowBounds(snapshot) : resolveNewNotepadWindowBounds());
+  const bounds = options?.bounds ?? await (transferPayload ? resolveNewWindowBounds(snapshot) : resolveNewTabGroupWindowBounds());
 
   return new Promise((resolve) => {
     let settled = false;

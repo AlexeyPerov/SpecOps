@@ -3,7 +3,7 @@ import { workspaceRailSections, readRailWindowPreferences, writeRailWindowPrefer
 import { catalogProjectForRoot } from './workspaceCatalog';
 import type { ProjectCatalog } from '../domain/projectCatalog';
 const project = (root: string, patch = {}) => ({ ...catalogProjectForRoot(root), ...patch });
-const catalog = (): ProjectCatalog => ({ version:1, revision:1, folders:{ one:{id:'one',name:'One',order:0}, two:{id:'two',name:'Two',order:1} }, savedContexts:{}, projects: {
+const catalog = (): ProjectCatalog => ({ version:1, revision:1, folders:{ one:{id:'one',name:'One',order:0}, two:{id:'two',name:'Two',order:1} }, savedContexts:{}, documents:{}, projects: {
   '/a':project('/a',{folderId:'one',pinned:true,pinnedOrder:1}), '/b':project('/b',{folderId:'one',order:1}),
   '/hidden':project('/hidden',{pinned:true,hiddenFromRail:true}), '/other':project('/other'), '/closed':project('/closed'),
 } });

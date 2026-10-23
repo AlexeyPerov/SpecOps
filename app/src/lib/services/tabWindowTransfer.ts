@@ -194,7 +194,7 @@ export async function moveTabToNewWindow({
   notify: (message: string) => void;
 }): Promise<boolean> {
   if (!appState.isTabGroupActive()) {
-    notify("Move to new window is only available for Notepad tabs.");
+    notify("Move to new window is only available for tab group tabs.");
     return false;
   }
 

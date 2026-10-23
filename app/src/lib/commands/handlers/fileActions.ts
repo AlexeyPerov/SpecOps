@@ -198,7 +198,7 @@ export async function handleFileSaveAs(context: CommandContext): Promise<void> {
   }
   notify(
     savedOutsideWorkspace && isFileContextRestricted()
-      ? `Saved as ${saved.path} and moved tab to Notepad.`
+      ? `Saved as ${saved.path} and moved tab to a tab group.`
       : `Saved as ${saved.path}`,
   );
 }

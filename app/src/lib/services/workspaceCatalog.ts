@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { normalizePathForStorage, normalizePathSync } from './diskFingerprint';
 import type { WorkspaceEntry } from '../domain/contracts';
-import type { CatalogProject, ProjectCatalog, ProjectFolder, SavedProjectContextWrite } from '../domain/projectCatalog';
+import type { CatalogProject, GlobalDocument, ProjectCatalog, ProjectFolder, SavedProjectContextWrite } from '../domain/projectCatalog';
 
 export type ProjectPatch = Partial<Omit<CatalogProject, 'id' | 'rootPath' | 'openError' | 'color' | 'icon'>> & { openError?: string | null; color?: string | null; icon?: string | null };
 export type CatalogMutation =
@@ -13,9 +13,13 @@ export type CatalogMutation =
   | { type: 'moveFolder'; id: string; beforeId?: string | null }
   | { type: 'renameFolder'; id: string; name: string }
   | { type: 'removeFolder' | 'removeProject'; id: string }
-  | { type: 'saveContext'; id: string; context: SavedProjectContextWrite };
+  | { type: 'saveContext'; id: string; context: SavedProjectContextWrite }
+  | { type: 'putDocument'; document: GlobalDocument }
+  | { type: 'renameDocument'; id: string; name: string }
+  | { type: 'moveDocument'; id: string; beforeId?: string | null }
+  | { type: 'removeDocument'; id: string };
 
-const emptyCatalog = (): ProjectCatalog => ({ version: 1, revision: 0, projects: {}, folders: {}, savedContexts: {} });
+const emptyCatalog = (): ProjectCatalog => ({ version: 1, revision: 0, projects: {}, folders: {}, savedContexts: {}, documents: {} });
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) {
     Object.freeze(value);

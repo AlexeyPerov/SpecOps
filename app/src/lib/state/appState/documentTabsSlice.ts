@@ -60,6 +60,7 @@ import { closeTabForceById, closeTabInPaneForceOnContext, selectTabAcrossPanes }
 import { createTabTransferSlice } from "./tabTransferSlice";
 import {
   canCreateFileTabs,
+  closeAllViewTabsInState,
   closeTabsForce,
   closeTabsForceInContext,
   missingTabIdsToClose,
@@ -172,11 +173,13 @@ export function createDocumentTabsLifecycleSlice(deps: {
      * treating it like any other tab. When a view tab of the same `view`
      * already exists it is selected instead of duplicated. An optional `subTab`
      * carries a deep-link target (e.g. a settings section id) that is attached
-     * to a freshly created tab.
+     * to a freshly created tab. Tasks/Notes tabs of app-wide documents are one
+     * per `globalDocumentId`.
      */
     openOrFocusViewTab(
       view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control" | "workspace-tasks" | "workspace-notes",
       subTab?: string,
+      globalDocumentId?: string,
     ) {
       update((state) => {
         if (
@@ -187,7 +190,7 @@ export function createDocumentTabsLifecycleSlice(deps: {
         }
         const existingTab = allTabs(getActiveSession(state).editorLayout)
           .map((rawTab) => normalizeTabState(rawTab))
-          .find((tab) => isViewTab(tab) && tab.view === view);
+          .find((tab) => isViewTab(tab) && tab.view === view && tab.globalDocumentId === globalDocumentId);
         if (existingTab) {
           return selectTabAcrossPanes(state, existingTab.id);
         }
@@ -201,13 +204,17 @@ export function createDocumentTabsLifecycleSlice(deps: {
               ...ctx.session,
               editorLayout: setActivePaneTabs(
                 ctx.session.editorLayout,
-                [...tabs, createViewTab(tabId, view, false, subTab)],
+                [...tabs, createViewTab(tabId, view, false, subTab, globalDocumentId)],
                 tabId,
               ),
             },
           };
         });
       });
+    },
+    /** Close the Tasks/Notes tabs of a deleted app-wide document in every context. */
+    closeGlobalDocumentTabs(documentId: string) {
+      update((state) => closeAllViewTabsInState(state, (tab) => tab.globalDocumentId === documentId));
     },
     closeTabsForSession(sessionId: string) {
       update((state) => {

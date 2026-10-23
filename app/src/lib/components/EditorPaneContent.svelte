@@ -181,6 +181,10 @@
   const selectedTab = $derived(paneActiveTab(layout, paneId));
   const isSessionTabActive = $derived(isSessionTabActiveInPane(layout, paneId));
   const activeViewTabKind = $derived(activeViewKindInPane(layout, paneId));
+  const activeGlobalDocumentId = $derived.by(() => {
+    const tab = paneActiveTab(layout, paneId);
+    return tab && tab.kind === "view" ? tab.globalDocumentId ?? null : null;
+  });
   const isSettingsViewActive = $derived(activeViewTabKind === "settings");
   const isThemesViewActive = $derived(activeViewTabKind === "themes");
   const isWorkspaceSettingsViewActive = $derived(activeViewTabKind === "workspace-settings");
@@ -499,8 +503,8 @@
   {:else if isThemesViewActive}
     <ThemesView />
   {:else if (activeViewTabKind === "workspace-tasks" || activeViewTabKind === "workspace-notes")}
-    {#key `${workspaceRootPath}:${activeViewTabKind}`}
-      <WorkspaceDocumentView root={workspaceRootPath} kind={activeViewTabKind === "workspace-tasks" ? "tasks" : "notes"} {paneId} {contextId} {notify} />
+    {#key `${activeGlobalDocumentId ?? workspaceRootPath}:${activeViewTabKind}`}
+      <WorkspaceDocumentView root={activeGlobalDocumentId ? null : workspaceRootPath} documentId={activeGlobalDocumentId} kind={activeViewTabKind === "workspace-tasks" ? "tasks" : "notes"} {paneId} {contextId} {notify} />
     {/key}
   {:else if isWorkspaceSettingsViewActive}
     <WorkspaceSettingsView workspaceRootPath={workspaceRootPath} />

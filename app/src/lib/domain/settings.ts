@@ -169,8 +169,8 @@ export interface AppSettingsState {
    */
   defaultMarkdownViewMode: MarkdownViewMode;
   /**
-   * When true, files outside the active workspace open in Notepad and
-   * workspace files opened from a workspace migrate out of Notepad. When false
+   * When true, files outside the active workspace open in a tab group and
+   * workspace files opened from a workspace migrate out of tab groups. When false
    * (default), files open in whichever context is active.
    */
   restrictFilesToContext: boolean;

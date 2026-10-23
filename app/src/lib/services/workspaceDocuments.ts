@@ -5,8 +5,10 @@ import { writable } from "svelte/store";
 import { normalizePathSync } from "./diskFingerprint";
 import { getWorkspaceDocumentStorage, setWorkspaceDocumentStorage, type WorkspaceDocumentStorage } from "./workspacePreferences";
 export type WorkspaceDocumentKind = "tasks" | "notes";
+/** A workspace root, or an app-wide document from the catalog. */
+export type DocumentScope = string | { documentId: string };
 export interface WorkspaceDocumentRecord {
-  root: string | null; storage: WorkspaceDocumentStorage; kind: WorkspaceDocumentKind;
+  root: string | null; documentId: string | null; storage: WorkspaceDocumentStorage; kind: WorkspaceDocumentKind;
   path: string; content: string | null; saved: string | null; error: string | null;
   conflict?: boolean;
   loading?: Promise<WorkspaceDocumentRecord>; saving?: Promise<void>; timer?: ReturnType<typeof setTimeout>;
@@ -14,9 +16,13 @@ export interface WorkspaceDocumentRecord {
 const records = new Map<string, WorkspaceDocumentRecord>();
 export const workspaceDocumentsRevision = writable(0);
 function changed(): void { workspaceDocumentsRevision.update((revision) => revision + 1); }
-export function documentStorage(root: string | null): WorkspaceDocumentStorage { return root === null ? "app" : getWorkspaceDocumentStorage(root); }
-function scopeKey(root: string | null): string | null { return root === null ? null : normalizePathSync(root); }
-function key(root: string | null, storage: string, kind: string): string { return JSON.stringify([scopeKey(root), storage, kind]); }
+export function documentStorage(scope: DocumentScope): WorkspaceDocumentStorage { return typeof scope === "string" ? getWorkspaceDocumentStorage(scope) : "app"; }
+function scopeKey(scope: DocumentScope): string { return typeof scope === "string" ? `root:${normalizePathSync(scope)}` : `document:${scope.documentId}`; }
+function recordScope(record: WorkspaceDocumentRecord): DocumentScope { return record.root ?? { documentId: record.documentId ?? "" }; }
+function key(scope: DocumentScope, storage: string, kind: string): string { return JSON.stringify([scopeKey(scope), storage, kind]); }
+function readArgs(record: Pick<WorkspaceDocumentRecord, "root" | "documentId" | "storage" | "kind">) {
+  return { root: record.root, document: record.documentId, storage: record.storage, kind: record.kind };
+}
 let listening: Promise<unknown> | undefined;
 function ensureDocumentEvents(): Promise<unknown> {
   return listening ??= listen<{ path: string }>("workspace-document-changed", ({ payload }) => {
@@ -31,7 +37,7 @@ export async function refreshDocument(record: WorkspaceDocumentRecord): Promise<
   if (record.saving) await record.saving.catch(() => {});
   try {
     const expected = record.saved;
-    const result = await invoke<{ path: string; content: string | null }>("workspace_document_read", { root: record.root, storage: record.storage, kind: record.kind });
+    const result = await invoke<{ path: string; content: string | null }>("workspace_document_read", readArgs(record));
     // A save completed while the read was outstanding; its next event will refresh us.
     if (record.saved !== expected || record.saving) return;
     record.path = result.path;
@@ -47,21 +53,25 @@ export async function refreshDocument(record: WorkspaceDocumentRecord): Promise<
     record.error = String(error); changed(); throw error;
   }
 }
-export function workspaceDocumentSnapshot(root: string | null, kind: WorkspaceDocumentKind): WorkspaceDocumentRecord | null {
-  return records.get(key(root, documentStorage(root), kind)) ?? null;
+export function workspaceDocumentSnapshot(scope: DocumentScope, kind: WorkspaceDocumentKind): WorkspaceDocumentRecord | null {
+  return records.get(key(scope, documentStorage(scope), kind)) ?? null;
 }
-export async function loadWorkspaceDocument(root: string | null, kind: WorkspaceDocumentKind, storage = documentStorage(root), reload = false): Promise<WorkspaceDocumentRecord> {
+export async function loadWorkspaceDocument(scope: DocumentScope, kind: WorkspaceDocumentKind, storage = documentStorage(scope), reload = false): Promise<WorkspaceDocumentRecord> {
   await ensureDocumentEvents();
-  const id = key(root, storage, kind);
+  const id = key(scope, storage, kind);
   let record = records.get(id);
   if (record?.loading) return record.loading;
   if (record && (!reload || record.content !== record.saved || record.saving)) return record;
-  if (!record) { record = { root, kind, storage, path: "", content: null, saved: null, error: null }; records.set(id, record); }
+  if (!record) {
+    record = { root: typeof scope === "string" ? scope : null, documentId: typeof scope === "string" ? null : scope.documentId,
+      kind, storage, path: "", content: null, saved: null, error: null };
+    records.set(id, record);
+  }
   const target = record;
   target.loading = (async () => {
     try {
       const expected = target.saved;
-      const result = await invoke<{ path: string; content: string | null }>("workspace_document_read", { root, storage, kind });
+      const result = await invoke<{ path: string; content: string | null }>("workspace_document_read", readArgs(target));
       target.path = result.path;
       if (target.saved === expected && target.content === target.saved && !target.saving) { target.content = result.content; target.saved = result.content; target.error = null; target.conflict = false; }
       return target;
@@ -70,8 +80,8 @@ export async function loadWorkspaceDocument(root: string | null, kind: Workspace
   })();
   return target.loading;
 }
-export async function createWorkspaceDocument(root: string | null, kind: WorkspaceDocumentKind): Promise<void> {
-  const record = await loadWorkspaceDocument(root, kind, undefined, true);
+export async function createWorkspaceDocument(scope: DocumentScope, kind: WorkspaceDocumentKind): Promise<void> {
+  const record = await loadWorkspaceDocument(scope, kind, undefined, true);
   if (record.content !== null) return;
   record.content = kind === "tasks" ? serializeTaskBook(emptyTaskBook()) : "# Notes\n\n";
   changed();
@@ -93,7 +103,7 @@ export async function saveWorkspaceDocument(record: WorkspaceDocumentRecord): Pr
       while (record.content !== null && record.content !== record.saved) {
         const content = record.content;
         if (record.kind === "tasks") parseTaskBook(content);
-        await invoke("workspace_document_save", { root: record.root, storage: record.storage, kind: record.kind, content, expected: record.saved });
+        await invoke("workspace_document_save", { ...readArgs(record), content, expected: record.saved });
         record.saved = content;
       }
       record.error = null;
@@ -104,7 +114,7 @@ export async function saveWorkspaceDocument(record: WorkspaceDocumentRecord): Pr
 }
 export async function flushWorkspaceDocuments(root?: string): Promise<void> {
   for (const record of records.values()) {
-    if (!root || scopeKey(root) === scopeKey(record.root)) {
+    if (!root || scopeKey(root) === scopeKey(recordScope(record))) {
       if (record.loading) await record.loading;
       await saveWorkspaceDocument(record);
     }
@@ -125,7 +135,7 @@ export async function transferWorkspaceDocuments(root: string, target: Workspace
 }
 export async function reloadWorkspaceDocument(record: WorkspaceDocumentRecord, discard: boolean): Promise<void> {
   if (record.saving) await record.saving.catch(() => {});
-  const result = await invoke<{ path: string; content: string | null }>("workspace_document_read", { root: record.root, storage: record.storage, kind: record.kind });
+  const result = await invoke<{ path: string; content: string | null }>("workspace_document_read", readArgs(record));
   if (record.timer) { clearTimeout(record.timer); record.timer = undefined; }
   record.saved = result.content; record.path = result.path;
   if (discard) record.content = result.content;
@@ -133,10 +143,25 @@ export async function reloadWorkspaceDocument(record: WorkspaceDocumentRecord, d
   if (!discard) await saveWorkspaceDocument(record);
 }
 
+/**
+ * Forget an app-wide document after its catalog entry is deleted. Pending
+ * edits are dropped: the document no longer exists.
+ */
+export async function discardGlobalDocument(documentId: string): Promise<void> {
+  for (const [id, record] of records) {
+    if (record.documentId !== documentId) continue;
+    if (record.timer) clearTimeout(record.timer);
+    records.delete(id);
+    // An in-flight write must land before the files are deleted.
+    await record.saving?.catch(() => {});
+  }
+  changed();
+}
+
 /** Release only fully settled records; a flush failure must keep the live buffer. */
 export function releaseWorkspaceDocuments(root: string): void {
   for (const [id, record] of records) {
-    if (scopeKey(record.root) !== scopeKey(root) || record.loading || record.saving || record.content !== record.saved) continue;
+    if (scopeKey(recordScope(record)) !== scopeKey(root) || record.loading || record.saving || record.content !== record.saved) continue;
     if (record.timer) clearTimeout(record.timer);
     records.delete(id);
   }
@@ -144,6 +169,6 @@ export function releaseWorkspaceDocuments(root: string): void {
 }
 
 export function workspaceDocumentsSettled(root: string): boolean {
-  return [...records.values()].filter(record => scopeKey(record.root) === scopeKey(root))
+  return [...records.values()].filter(record => scopeKey(recordScope(record)) === scopeKey(root))
     .every(record => !record.loading && !record.saving && record.content === record.saved);
 }

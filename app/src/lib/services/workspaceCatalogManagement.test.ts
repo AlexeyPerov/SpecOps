@@ -5,7 +5,7 @@ import { readLiveWorkspaceWindowOwners } from './workspaceWindowPlacement';
 import { appState } from '../state/appState';
 vi.mock('./workspaceCatalog', async original => ({ ...await original<typeof import('./workspaceCatalog')>(), getProjectCatalog:vi.fn(), updateProjectCatalog:vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./workspaceWindowPlacement', () => ({ readLiveWorkspaceWindowOwners:vi.fn().mockResolvedValue({}) }));
-const catalog = () => ({ version:1 as const,revision:1,projects:{'/a':{...catalogProjectForRoot('/a'),pinned:true},'/b':{...catalogProjectForRoot('/b'),name:'Alpha',lastUsedAt:'2026-10-18'}},folders:{},savedContexts:{} });
+const catalog = () => ({ version:1 as const,revision:1,projects:{'/a':{...catalogProjectForRoot('/a'),pinned:true},'/b':{...catalogProjectForRoot('/b'),name:'Alpha',lastUsedAt:'2026-10-18'}},folders:{},savedContexts:{}, documents:{} });
 beforeEach(() => { vi.clearAllMocks(); appState.resetAppState(); vi.mocked(getProjectCatalog).mockReturnValue(catalog()); vi.mocked(updateProjectCatalog).mockResolvedValue(undefined as never); vi.mocked(readLiveWorkspaceWindowOwners).mockResolvedValue({}); });
 describe('catalog management', () => {
   it('distinguishes ownership and sorts the entire catalog without opening contexts', () => {

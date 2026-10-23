@@ -281,7 +281,7 @@
       disabled={!contextMenuCanOpenInNewWindow}
       title={contextMenuCanOpenInNewWindow
         ? "Move this file into a new window"
-        : "Only Notepad tabs can be opened in another window"}
+        : "Only tab group tabs can be opened in another window"}
       onpointerdown={(event) => {
         event.stopPropagation();
         if (contextMenuCanOpenInNewWindow) {

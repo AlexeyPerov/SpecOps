@@ -4,6 +4,8 @@ import type {
   ContextSnapshot,
   DocumentState,
   SessionState,
+  TabGroupEntry,
+  TabGroupId,
   WorkspaceEntry,
 } from "../../domain/contracts";
 import {
@@ -23,12 +25,14 @@ const idCounters = {
   doc: 1,
   tab: 1,
   workspace: 0,
+  tabGroup: 1,
 };
 
 export function resetIdCounters(): void {
   idCounters.doc = 1;
   idCounters.tab = 1;
   idCounters.workspace = 0;
+  idCounters.tabGroup = 1;
   resetPaneIdCounter();
 }
 
@@ -63,6 +67,18 @@ export function nextWorkspaceId(): ContextId {
   return `ws-${idCounters.workspace}`;
 }
 
+export function reindexTabGroupCounter(tabGroups: TabGroupEntry[]): void {
+  idCounters.tabGroup = Math.max(
+    1,
+    ...tabGroups.map((group) => Number(group.id.replace("tabs-", "")) || 1),
+  );
+}
+
+export function nextTabGroupId(): TabGroupId {
+  idCounters.tabGroup += 1;
+  return `tabs-${idCounters.tabGroup}`;
+}
+
 export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts"]): void {
   idCounters.doc = Math.max(
     1,
@@ -81,6 +97,7 @@ export function reindexIdCountersFromContexts(contexts: AppDomainState["contexts
     ].map((tab) => Number(tab.id.replace("tab-", "")) || 1),
   );
   reindexWorkspaceCounter(contexts.workspaces);
+  reindexTabGroupCounter(contexts.tabGroups);
 
   // Pane ids are allocated from a separate module counter. Without reindexing
   // after restore, the next split/preset expansion can mint pane-1/pane-2/...

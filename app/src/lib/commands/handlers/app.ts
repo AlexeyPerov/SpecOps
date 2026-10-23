@@ -2,7 +2,7 @@ import { appState } from "../../state/appState";
 import { openVersionControlForActiveContext } from "../../services/versionControlNavigation";
 import { createNewWindowWithTransfer } from "../../services/windowManager";
 import { requestAppQuit } from "../../services/windowCloseFlow";
-import { DEFAULT_TAB_GROUP_ID, getSessionActiveTab, tabDocumentId } from "../../domain/contracts";
+import { getSessionActiveTab, tabDocumentId } from "../../domain/contracts";
 import { getActiveDocuments, getActiveSession } from "../../state/appState/contextHelpers";
 import type { CommandHandlerMap } from "./types";
 
@@ -14,7 +14,7 @@ export const appHandlers: CommandHandlerMap = {
     appState.openOrFocusViewTab("settings");
   },
   "app.openWorkspaceManager": () => {
-    appState.switchContext(DEFAULT_TAB_GROUP_ID);
+    appState.switchContext(appState.getTargetTabGroupId());
     appState.openOrFocusViewTab("workspace-manager");
   },
   "app.openVersionControl": ({ notify }) => {

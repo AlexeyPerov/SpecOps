@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
-  import type { DocumentState, TabState } from "../domain/contracts";
+  import { onDestroy, untrack } from "svelte";
+  import { getProjectCatalog, subscribeProjectCatalog } from "../services/workspaceCatalog";
+  import type { ContextId, DocumentState, TabState } from "../domain/contracts";
   import { isSessionTab, isViewTab } from "../domain/contracts";
   import { appState } from "../state/appState";
   import { chatSessionIndex } from "../state/chatStore";
@@ -148,6 +149,18 @@
       promoteTransientTab(tabId);
       onMoveBetweenPanes?.(fromPaneId, tabId, toPaneId, toIndex);
     },
+    onMoveToTabGroup: (tabId, groupId) => {
+      const target = groupId as ContextId;
+      if (appState.getSnapshot().contexts.activeContextId === target) return;
+      promoteTransientTab(tabId);
+      const movedTabId = appState.moveFileTabToTabGroup(tabId, target);
+      if (!movedTabId) {
+        notify("Only file tabs can move to a tab group, and unsaved changes cannot replace a file already open there.");
+        return;
+      }
+      appState.switchContext(target);
+      appState.selectTab(movedTabId);
+    },
     getWindowId: () => windowId,
     notify: (message) => notify(message),
     onStateChange: (nextState) => {
@@ -159,13 +172,23 @@
 
   const draftTabTitle = $derived(draftEntryTitleForScope(null));
 
+  let catalog = $state.raw(getProjectCatalog());
+  $effect(() => untrack(() => subscribeProjectCatalog((next) => { catalog = next; })));
+
+  function documentViewTitle(tab: TabState & { kind: "view" }): string | null {
+    if (tab.view !== "workspace-tasks" && tab.view !== "workspace-notes") return null;
+    const label = tab.view === "workspace-tasks" ? "Tasks" : "Notes";
+    if (!tab.globalDocumentId) return label;
+    return catalog.documents?.[tab.globalDocumentId]?.name ?? label;
+  }
+
   function tabTitle(tab: TabState): string {
     if (isSessionTab(tab)) {
       return sessionTitleById.get(tab.sessionId) ?? draftTabTitle;
     }
     if (isViewTab(tab)) {
-      if (tab.view === "workspace-tasks") return "Tasks";
-      if (tab.view === "workspace-notes") return "Notes";
+      const documentTitle = documentViewTitle(tab);
+      if (documentTitle) return documentTitle;
       if (tab.view === "settings") {
         return "Settings";
       }
@@ -193,8 +216,8 @@
       return "Session";
     }
     if (isViewTab(tab)) {
-      if (tab.view === "workspace-tasks") return "Tasks";
-      if (tab.view === "workspace-notes") return "Notes";
+      const documentTitle = documentViewTitle(tab);
+      if (documentTitle) return documentTitle;
       if (tab.view === "settings") {
         return "Settings";
       }

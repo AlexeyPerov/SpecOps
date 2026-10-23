@@ -662,3 +662,71 @@ describe("appState tabs and selection", () => {
     expect(getSessionSelectedTabId(appState.getActiveSession())).toBe("tab-3");
   });
 });
+
+describe("tab group tab moves and app-wide document tabs", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  function openFile(path: string, content = "text"): string {
+    return appState.openTransferredTab({ filePath: path, content, title: path.split("/").pop()! })!;
+  }
+
+  it("moves a file tab with its unsaved buffer into another group without activating it", () => {
+    const documentId = openFile("/tmp/a.txt");
+    appState.setDocumentContent(documentId, "unsaved edit");
+    const tabId = getSessionSelectedTabId(appState.getActiveSession())!;
+    const drafts = appState.createTabGroup("Drafts");
+    appState.switchContext("tabs-default");
+
+    const movedTabId = appState.moveFileTabToTabGroup(tabId, drafts);
+
+    const { contexts } = appState.getSnapshot();
+    expect(contexts.activeContextId).toBe("tabs-default");
+    expect(contexts.tabGroups[0].snapshot.documents.some((doc) => doc.id === documentId)).toBe(false);
+    const target = contexts.tabGroups[1].snapshot;
+    expect(allTabs(target.session.editorLayout).some((tab) => tab.id === movedTabId)).toBe(true);
+    expect(target.documents.find((doc) => doc.id === documentId)).toMatchObject({ content: "unsaved edit", isDirty: true });
+  });
+
+  it("refuses moves that would drop a dirty buffer, view tabs and same-group moves", () => {
+    const drafts = appState.createTabGroup("Drafts");
+    openFile("/tmp/shared.txt");
+    appState.switchContext("tabs-default");
+    const documentId = openFile("/tmp/shared.txt");
+    appState.setDocumentContent(documentId, "dirty");
+    const tabId = getSessionSelectedTabId(appState.getActiveSession())!;
+    expect(appState.moveFileTabToTabGroup(tabId, drafts)).toBeNull();
+    expect(appState.moveFileTabToTabGroup(tabId, "tabs-default")).toBeNull();
+    appState.openOrFocusViewTab("settings");
+    const settingsTabId = getSessionSelectedTabId(appState.getActiveSession())!;
+    expect(appState.moveFileTabToTabGroup(settingsTabId, drafts)).toBeNull();
+  });
+
+  it("focuses an already open copy when the moved file is clean", () => {
+    const drafts = appState.createTabGroup("Drafts");
+    openFile("/tmp/shared.txt");
+    const existingTabId = getSessionSelectedTabId(appState.getActiveSession())!;
+    appState.switchContext("tabs-default");
+    openFile("/tmp/shared.txt");
+    const tabId = getSessionSelectedTabId(appState.getActiveSession())!;
+    expect(appState.moveFileTabToTabGroup(tabId, drafts)).toBe(existingTabId);
+    expect(allTabs(appState.getActiveSession().editorLayout).some((tab) => tab.id === tabId)).toBe(false);
+  });
+
+  it("keeps one Tasks/Notes tab per app-wide document and closes them all on delete", () => {
+    appState.openOrFocusViewTab("workspace-tasks", undefined, "plan");
+    appState.openOrFocusViewTab("workspace-tasks", undefined, "later");
+    appState.openOrFocusViewTab("workspace-tasks", undefined, "plan");
+    const viewTabs = () => allTabs(appState.getActiveSession().editorLayout).filter(isViewTab);
+    expect(viewTabs().map((tab) => tab.globalDocumentId)).toEqual(["plan", "later"]);
+    expect(viewTabs().find((tab) => tab.id === getSessionSelectedTabId(appState.getActiveSession()))?.globalDocumentId).toBe("plan");
+    const drafts = appState.createTabGroup("Drafts");
+    appState.openOrFocusViewTab("workspace-tasks", undefined, "plan");
+    appState.closeGlobalDocumentTabs("plan");
+    expect(viewTabs().map((tab) => tab.globalDocumentId)).toEqual([]);
+    appState.switchContext("tabs-default");
+    expect(viewTabs().map((tab) => tab.globalDocumentId)).toEqual(["later"]);
+    expect(appState.getSnapshot().contexts.tabGroups.find((group) => group.id === drafts)).toBeDefined();
+  });
+});

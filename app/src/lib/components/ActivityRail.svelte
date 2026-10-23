@@ -6,6 +6,7 @@
   import {
     allTabs,
     DEFAULT_TAB_GROUP_ID,
+    isTabGroupId,
     type ContextId,
     type WorkspaceEntry,
   } from "../domain/contracts";
@@ -23,6 +24,7 @@
   } from "../services/panelLayout";
   import { startPointerDrag } from "./pointerDrag";
   import { appState } from "../state/appState";
+  import { appActiveSession } from "../state/appStateSelectors";
   import NotepadIcon from "./icons/NotepadIcon.svelte";
   import AddIcon from "./icons/AddIcon.svelte";
   import ListIcon from "./icons/ListIcon.svelte";
@@ -33,14 +35,22 @@
   import { workspaceRailSections, readRailWindowPreferences, writeRailWindowPreferences, type RailProject, type RailSection } from '../services/workspaceRailSections';
   import { clampFixedOverlayPosition } from './clampFixedOverlayPosition';
   import { distinguishingProjectPaths, projectName, projectColor, projectIcon } from "./workspaceRailPresentation";
+  import type { RailTabGroup } from "../services/railTabGroups";
+  import { removeTabGroupWithConfirm } from "../services/tabGroupCloseFlow";
+  import type { GlobalDocument } from "../domain/projectCatalog";
+  import {
+    GLOBAL_DOCUMENT_KINDS,
+    createGlobalDocument,
+    deleteGlobalDocument,
+    globalDocumentKindLabel,
+    globalDocumentsOfKind,
+    moveGlobalDocument,
+    openGlobalDocument,
+    renameGlobalDocument,
+  } from "../services/globalDocuments";
+  import { requestConfirm } from "../services/confirmDialogUi";
   import { loadWorkspaceDocument, workspaceDocumentSnapshot, workspaceDocumentsRevision, type WorkspaceDocumentKind } from "../services/workspaceDocuments";
   import { subscribeWorkspacePreferences } from "../services/workspacePreferences";
-
-  /** A notepad tab shown in the expanded notepad card's "last opened" list. */
-  export interface NotepadRailTab {
-    tabId: string;
-    label: string;
-  }
 
   interface Props {
     workspaces?: WorkspaceEntry[];
@@ -53,10 +63,8 @@
     sessionsEnabled?: boolean;
     /** Resizable rail width (compact 48px → expanded rows). */
     panelWidthPx?: number;
-    /** Number of currently-open tabs in the notepad context. */
-    notepadOpenTabCount?: number;
-    /** Last opened notepad tabs (append order), already formatted. */
-    notepadRecentTabs?: NotepadRailTab[];
+    /** The window's tab groups, default group first. */
+    tabGroups?: RailTabGroup[];
     /** Hides the Version Control menu entry when Git integration is off. */
     gitIntegrationEnabled?: boolean;
     onSelectContext?: (contextId: ContextId) => void;
@@ -69,8 +77,8 @@
     onOpenWorkspaceManager?: () => void;
     onPanelWidthChange?: (width: number) => void;
     onReorderWorkspaces?: (fromIndex: number, toIndex: number) => void;
-    /** Switches to notepad and selects the given tab id. */
-    onSelectNotepadTab?: (tabId: string) => void;
+    /** Switches to a tab group and selects the given tab id. */
+    onSelectTabGroupTab?: (groupId: ContextId, tabId: string) => void;
   }
 
   let {
@@ -82,8 +90,7 @@
     activeContextId = DEFAULT_TAB_GROUP_ID,
     sessionsEnabled = false,
     panelWidthPx = DEFAULT_ACTIVITY_RAIL_WIDTH_PX,
-    notepadOpenTabCount = 0,
-    notepadRecentTabs = [],
+    tabGroups = [],
     gitIntegrationEnabled = true,
     onSelectContext = () => {},
     onOpenVersionControl = () => {},
@@ -95,7 +102,7 @@
     onOpenWorkspaceManager = () => {},
     onPanelWidthChange = () => {},
     onReorderWorkspaces = () => {},
-    onSelectNotepadTab = () => {},
+    onSelectTabGroupTab = () => {},
   }: Props = $props();
 
   let activityRailEl: HTMLElement | null = null;
@@ -282,14 +289,15 @@
     collapsed = collapsed.includes(section.id) ? collapsed.filter(id => id !== section.id) : [...collapsed, section.id];
     saveRailPreferences();
   }
-  let menu = $state<{ project?: RailProject; section?: RailSection; x: number; y: number; projectsOnly?: boolean } | null>(null);
+  type RailMenuTarget = { project?: RailProject; section?: RailSection; projectsOnly?: boolean; tabGroup?: RailTabGroup; globalDocument?: GlobalDocument };
+  let menu = $state<(RailMenuTarget & { x: number; y: number }) | null>(null);
   let menuEl = $state<HTMLDivElement | null>(null);
   let menuTrigger: HTMLElement | null = null;
   // Suppress every workspace tooltip while any rail menu is open so the
   // tooltip never overlaps the menu.
   const workspaceTooltipSuppressed = $derived(menu !== null);
   function closeMenu(): void { if (!menu) return; const trigger = menuTrigger; menu = null; void tick().then(() => trigger?.focus()); }
-  function openMenu(event: MouseEvent | KeyboardEvent, value: { project?: RailProject; section?: RailSection; projectsOnly?: boolean }): void {
+  function openMenu(event: MouseEvent | KeyboardEvent, value: RailMenuTarget): void {
     event.preventDefault();
     menuTrigger = event.currentTarget as HTMLElement;
     const rect = menuTrigger.getBoundingClientRect();
@@ -319,6 +327,48 @@
     commit(folderEdit.id ? [{ type: 'renameFolder', id: folderEdit.id, name }] :
       [{ type: 'putFolder', folder: { id: crypto.randomUUID(), name, order: 0 } }]); folderEdit = null;
   }
+  // Tab groups (this window) and app-wide Tasks/Notes documents share one name form.
+  type EntityKind = 'tabGroup' | 'tasks' | 'notes';
+  let entityName = $state('');
+  let entityEdit = $state<{ kind: EntityKind; id: string | null } | null>(null);
+  function entityLabel(kind: EntityKind): string { return kind === 'tabGroup' ? 'Tab group' : globalDocumentKindLabel(kind); }
+  function editEntity(kind: EntityKind, id: string | null, name = ''): void {
+    entityName = name; entityEdit = { kind, id }; menu = null;
+    void tick().then(() => activityRailEl?.querySelector<HTMLInputElement>('.rail-entity-form input')?.focus());
+  }
+  async function saveEntity(): Promise<void> {
+    const edit = entityEdit; const name = entityName.trim();
+    if (!edit || !name) return;
+    entityEdit = null;
+    try {
+      if (edit.kind === 'tabGroup') {
+        if (edit.id) appState.renameTabGroup(edit.id as ContextId, name); else appState.createTabGroup(name);
+      } else if (edit.id) {
+        await renameGlobalDocument(edit.id, name);
+      } else {
+        const document = await createGlobalDocument(edit.kind, name);
+        openGlobalDocument(document.id);
+      }
+    } catch (error) { onError(String(error)); }
+  }
+  function runEntityAction(action: () => unknown): void {
+    menu = null;
+    void Promise.resolve().then(action).catch(error => onError(String(error)));
+  }
+  async function confirmDeleteGlobalDocument(document: GlobalDocument): Promise<void> {
+    if (!await requestConfirm({ title: `Delete ${globalDocumentKindLabel(document.kind)}`,
+      message: `Delete "${document.name}"? Its file is removed and this cannot be undone.`,
+      confirmLabel: 'Delete', cancelLabel: 'Cancel', danger: true })) return;
+    await deleteGlobalDocument(document.id);
+  }
+  const globalDocumentSections = $derived(GLOBAL_DOCUMENT_KINDS.map(kind => ({ kind, documents: globalDocumentsOfKind(catalog, kind) })));
+  const activeGlobalDocumentId = $derived.by(() => {
+    if (!isTabGroupId(activeContextId)) return null;
+    const layout = $appActiveSession.editorLayout;
+    const pane = layout.panes.find(entry => entry.id === layout.activePaneId);
+    const tab = pane?.tabs.find(entry => entry.id === pane.selectedTabId);
+    return tab?.kind === 'view' ? tab.globalDocumentId ?? null : null;
+  });
   function togglePinned(project: RailProject): void {
     commit([{ type: 'moveProject', id: project.id, pinned: !project.pinned }]);
   }
@@ -491,71 +541,114 @@
   bind:this={activityRailEl}
   style={`width:${displayWidth}px`}
 >
-  {#if expanded}
-    <button
-      class={`rail-workspace-card rail-notepad-card ${activeContextId === DEFAULT_TAB_GROUP_ID ? "rail-workspace-card-active" : ""}`}
-      data-file-drop-context={DEFAULT_TAB_GROUP_ID}
-      type="button"
-      aria-label="Notepad"
-      onclick={() => onSelectContext(DEFAULT_TAB_GROUP_ID)}
-    >
-      <span class="rail-workspace-avatar rail-notepad-avatar"><NotepadIcon size={16} /></span>
-      <span class="rail-workspace-info">
-        <!-- No "Notepad" heading here: the avatar icon already names the card,
-             and dropping the row lifts the tab count + open-file list to the
-             top of the rail. -->
-        <span class="rail-workspace-path">Tabs: {notepadOpenTabCount}</span>
-        {#if notepadRecentTabs.length > 0}
-          <span class="rail-workspace-stats rail-notepad-tabs">
-            {#each notepadRecentTabs as tab (tab.tabId)}
-              <!-- Nested interactive trigger inside the card button: a span with
-                   role=button (nested <button>/<a> are invalid here). -->
-              <span
-                class="rail-notepad-tab"
-                role="button"
-                tabindex="0"
-                title={tab.label}
-                onclick={(event) => {
-                  event.stopPropagation();
-                  onSelectNotepadTab(tab.tabId);
-                }}
-                onkeydown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onSelectNotepadTab(tab.tabId);
-                  }
-                }}
-              >
-                {tab.label}
-              </span>
-            {/each}
+  <section class="rail-section rail-entity-section" aria-label="Tab groups">
+    <div class="rail-section-heading rail-entity-heading">
+      {#if expanded}<span class="rail-section-name rail-entity-title">Tab groups</span>{/if}
+      <button type="button" class="rail-section-more rail-entity-add" aria-label="New tab group" title="New tab group"
+        onclick={() => editEntity('tabGroup', null)}>+</button>
+    </div>
+    {#each tabGroups as group (group.id)}
+      {@const active = activeContextId === group.id}
+      {#if expanded}
+        <button
+          class={`rail-workspace-card rail-tab-group-card ${active ? "rail-workspace-card-active" : ""}`}
+          data-file-drop-context={group.id}
+          data-tab-group-drop={group.id}
+          data-tab-group-id={group.id}
+          type="button"
+          aria-label={`Tab group ${group.name}, ${group.tabCount} tabs`}
+          aria-current={active ? "true" : undefined}
+          onclick={() => onSelectContext(group.id)}
+          oncontextmenu={(event) => openMenu(event, { tabGroup: group })}
+          onkeydown={(event) => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openMenu(event, { tabGroup: group }); }}
+        >
+          <span class="rail-workspace-avatar rail-tab-group-avatar" aria-hidden="true">
+            {#if group.id === DEFAULT_TAB_GROUP_ID}<NotepadIcon size={16} />{:else}{group.name.trim().charAt(0).toUpperCase() || "#"}{/if}
           </span>
-        {/if}
-      </span>
-    </button>
-  {:else}
-    <HoverTooltip label="Notepad">
-      <button
-        class={`rail-button rail-button-notepad ${activeContextId === DEFAULT_TAB_GROUP_ID ? "rail-button-active" : ""}`}
-        data-file-drop-context={DEFAULT_TAB_GROUP_ID}
-        type="button"
-        aria-label="Notepad"
-        onclick={() => onSelectContext(DEFAULT_TAB_GROUP_ID)}
-      >
-        <NotepadIcon size={16} />
-      </button>
-    </HoverTooltip>
-  {/if}
+          <span class="rail-workspace-info">
+            <span class="rail-workspace-heading"><span class="rail-workspace-name">{group.name}</span></span>
+            <span class="rail-workspace-path">Tabs: {group.tabCount}</span>
+            {#if group.recentTabs.length > 0}
+              <span class="rail-workspace-stats rail-tab-group-tabs">
+                {#each group.recentTabs as tab (tab.tabId)}
+                  <!-- Nested interactive trigger inside the card button: a span with
+                       role=button (nested <button>/<a> are invalid here). -->
+                  <span
+                    class="rail-tab-group-tab"
+                    role="button"
+                    tabindex="0"
+                    title={tab.label}
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      onSelectTabGroupTab(group.id, tab.tabId);
+                    }}
+                    onkeydown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onSelectTabGroupTab(group.id, tab.tabId);
+                      }
+                    }}
+                  >
+                    {tab.label}
+                  </span>
+                {/each}
+              </span>
+            {/if}
+          </span>
+        </button>
+      {:else}
+        <HoverTooltip label={group.name} detail={`Tabs: ${group.tabCount}`} suppress={workspaceTooltipSuppressed}>
+          <button
+            class={`rail-button rail-button-tab-group ${active ? "rail-button-active" : ""}`}
+            data-file-drop-context={group.id}
+            data-tab-group-drop={group.id}
+            data-tab-group-id={group.id}
+            type="button"
+            aria-label={`Tab group ${group.name}, ${group.tabCount} tabs`}
+            aria-current={active ? "true" : undefined}
+            onclick={() => onSelectContext(group.id)}
+            oncontextmenu={(event) => openMenu(event, { tabGroup: group })}
+          >
+            {#if group.id === DEFAULT_TAB_GROUP_ID}<NotepadIcon size={16} />{:else}<span class="rail-workspace-initial">{group.name.trim().charAt(0).toUpperCase() || "#"}</span>{/if}
+          </button>
+        </HoverTooltip>
+      {/if}
+    {/each}
+  </section>
 
-  {#each ["tasks", "notes"] as kind (kind)}
-    <HoverTooltip label={kind === "tasks" ? "Tasks" : "Notes"}>
-      <button type="button" class={expanded ? "global-document-link" : "rail-button"} aria-label={kind === "tasks" ? "Tasks" : "Notes"}
-        onclick={() => { onSelectContext(DEFAULT_TAB_GROUP_ID); if (appState.getSnapshot().contexts.activeContextId !== DEFAULT_TAB_GROUP_ID) return; appState.openOrFocusViewTab(kind === "tasks" ? "workspace-tasks" : "workspace-notes"); }}>
-        <span aria-hidden="true">{kind === "tasks" ? "☑" : "▤"}</span>{#if expanded}<span>{kind === "tasks" ? "Tasks" : "Notes"}</span>{/if}
-      </button>
-    </HoverTooltip>
+  {#each globalDocumentSections as section (section.kind)}
+    {@const label = globalDocumentKindLabel(section.kind)}
+    <section class="rail-section rail-entity-section" aria-label={label}>
+      <div class="rail-section-heading rail-entity-heading">
+        {#if expanded}<span class="rail-section-name rail-entity-title">{label}</span>{/if}
+        <button type="button" class="rail-section-more rail-entity-add" aria-label={`New ${label}`} title={`New ${label}`}
+          onclick={() => editEntity(section.kind, null)}>+</button>
+      </div>
+      {#each section.documents as document (document.id)}
+        {@const active = activeGlobalDocumentId === document.id}
+        <HoverTooltip label={document.name} suppress={workspaceTooltipSuppressed || expanded}>
+          <button type="button"
+            class={expanded ? `global-document-link ${active ? "global-document-link-active" : ""}` : `rail-button ${active ? "rail-button-active" : ""}`}
+            data-global-document-id={document.id}
+            aria-label={`${label} ${document.name}`}
+            aria-current={active ? "true" : undefined}
+            onclick={() => { openGlobalDocument(document.id); }}
+            oncontextmenu={(event) => openMenu(event, { globalDocument: document })}
+            onkeydown={(event) => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openMenu(event, { globalDocument: document }); }}>
+            <span aria-hidden="true">{section.kind === "tasks" ? "☑" : "▤"}</span>{#if expanded}<span class="global-document-name">{document.name}</span>{/if}
+          </button>
+        </HoverTooltip>
+      {/each}
+    </section>
   {/each}
+  {#if entityEdit}
+    <form class="rail-folder-form rail-entity-form" onsubmit={(event) => { event.preventDefault(); void saveEntity(); }}>
+      <input aria-label={`${entityLabel(entityEdit.kind)} name`} placeholder={`${entityLabel(entityEdit.kind)} name`} bind:value={entityName}
+        onkeydown={(event) => { if (event.key === 'Escape') entityEdit = null; }} />
+      <button type="submit" disabled={!entityName.trim()}>{entityEdit.id ? 'Rename' : 'Create'}</button><button type="button" onclick={() => entityEdit = null}>Cancel</button>
+    </form>
+  {/if}
 
   {#if !expanded}<button type="button" class="rail-button" aria-label="Search workspaces" title="Search workspaces" onclick={() => { railSearchOpen = !railSearchOpen; void tick().then(() => railSearchInput?.focus()); }}>⌕</button>{/if}
   {#if expanded || railSearchOpen}
@@ -738,6 +831,22 @@
       <div class="rail-menu-separator" role="separator"></div>
       <button type="button" role="menuitem" onclick={() => { commit([{ type: 'updateProject', id: project.id, patch: { hiddenFromRail: true } }]); closeMenu(); }}>Hide from Sidebar</button>
       {#if contextId && onCloseWorkspace}<button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, onCloseWorkspace)}>Close Workspace</button>{/if}
+    {:else if menu.tabGroup}
+      {@const group = menu.tabGroup}
+      <button type="button" role="menuitem" onclick={() => editEntity('tabGroup', group.id, group.name)}>Rename</button>
+      <button type="button" role="menuitem" disabled={group.id === DEFAULT_TAB_GROUP_ID}
+        title={group.id === DEFAULT_TAB_GROUP_ID ? 'The default tab group cannot be deleted' : undefined}
+        onclick={() => runEntityAction(() => removeTabGroupWithConfirm(group.id, onError))}>Delete</button>
+    {:else if menu.globalDocument}
+      {@const document = menu.globalDocument}
+      {@const siblings = globalDocumentsOfKind(catalog, document.kind)}
+      {@const index = siblings.findIndex(entry => entry.id === document.id)}
+      <button type="button" role="menuitem" onclick={() => runEntityAction(() => openGlobalDocument(document.id))}>Open</button>
+      <button type="button" role="menuitem" onclick={() => editEntity(document.kind, document.id, document.name)}>Rename</button>
+      <button type="button" role="menuitem" disabled={index <= 0} onclick={() => runEntityAction(() => moveGlobalDocument(document.id, -1))}>Move Up</button>
+      <button type="button" role="menuitem" disabled={index < 0 || index >= siblings.length - 1} onclick={() => runEntityAction(() => moveGlobalDocument(document.id, 1))}>Move Down</button>
+      <div class="rail-menu-separator" role="separator"></div>
+      <button type="button" role="menuitem" onclick={() => runEntityAction(() => confirmDeleteGlobalDocument(document))}>Delete</button>
     {:else if menu.section}
       {@const section = menu.section}
       {#if menu.projectsOnly}
@@ -756,6 +865,14 @@
 <style>
   .global-document-link { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; color: var(--color-text-primary); background: transparent; border: 0; border-radius: 5px; cursor: pointer; text-align: left; font: inherit; }
   .global-document-link:hover { background: var(--color-hover); }
+  .global-document-link-active { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+  .global-document-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rail-entity-section { gap: 2px; }
+  .rail-entity-heading { justify-content: center; min-height: 22px; }
+  .activity-rail-expanded .rail-entity-heading { justify-content: space-between; padding: 0 2px 0 6px; }
+  .rail-entity-title { font-size: 10px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+  .rail-entity-add { font-size: 14px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); }
+  .rail-entity-add:hover { background: var(--color-hover); color: var(--color-text-primary); }
   .rail-project-entry { position: relative; width: 100%; flex-shrink: 0; }
   .rail-git-action { position: absolute; right: 0; top: 0; padding: 0; width: 16px; height: 16px; font-size: 11px; border: 0; border-radius: 3px; background: var(--color-surface-1); color: var(--color-text-secondary); cursor: pointer; }
   .rail-git-action:focus-visible { outline: 2px solid var(--color-focus-ring); }
@@ -800,7 +917,7 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-2);
-    /* Collapsed mode: a small 2px top offset keeps the Notepad button off the
+    /* Collapsed mode: a small 2px top offset keeps the first tab group button off the
        top border; a tight gap keeps its divider near the editor tab-bar bottom
        line (~var(--tab-header-height) down the rail). Expanded mode overrides
        these below. */
@@ -819,9 +936,8 @@
   }
 
   /* Expanded rail behaves like a column panel: left-aligned content, room for
-     the wider info cards. Top padding + gap are kept tight so the notepad card
-     region stays compact and its divider lands near the editor tab-bar bottom
-     line (~var(--tab-header-height)). */
+     the wider info cards. Top padding + gap are kept tight so the tab group
+     region stays compact. */
   .activity-rail-expanded {
     align-items: stretch;
     gap: var(--space-2);
@@ -1071,18 +1187,16 @@
     color: var(--color-text-muted);
   }
 
-  /* ---- Expanded notepad card (reuses .rail-workspace-card layout; only the
-     avatar icon and tab-link styling below are notepad-specific content). ---- */
-  .rail-notepad-avatar {
-    /* The notepad avatar holds an icon, not initials — keep it centered. */
+  /* ---- Expanded tab group card (reuses .rail-workspace-card layout; only the
+     avatar and tab-link styling below are tab-group-specific content). ---- */
+  .rail-tab-group-avatar {
+    /* The default group's avatar holds an icon, not initials — keep it centered. */
     text-transform: none;
   }
 
-  /* The card has no heading row, so it starts tight against the rail top and
-     its labels sit where the workspace cards' names do. The min-height that
-     keeps workspace cards uniform is dropped: this card grows with the number
-     of listed files instead. */
-  .rail-notepad-card {
+  /* The min-height that keeps workspace cards uniform is dropped: a tab group
+     card grows with the number of listed files instead. */
+  .rail-tab-group-card {
     min-height: 0;
     padding-top: var(--space-1);
     padding-bottom: var(--space-2);
@@ -1090,7 +1204,7 @@
 
   /* Open files are a vertical list, not the wrapped stat row the workspace
      cards use: file names are long and wrap badly side by side. */
-  .rail-notepad-tabs {
+  .rail-tab-group-tabs {
     margin-top: var(--space-1);
     flex-direction: column;
     flex-wrap: nowrap;
@@ -1099,7 +1213,7 @@
     min-width: 0;
   }
 
-  .rail-notepad-tab {
+  .rail-tab-group-tab {
     border: none;
     background: transparent;
     color: var(--color-text-secondary);
@@ -1121,12 +1235,12 @@
       color var(--motion-fast) var(--easing-standard);
   }
 
-  .rail-notepad-tab:hover {
+  .rail-tab-group-tab:hover {
     background: var(--color-hover);
     color: var(--color-text-primary);
   }
 
-  .rail-notepad-tab:focus-visible {
+  .rail-tab-group-tab:focus-visible {
     outline: 2px solid var(--color-focus-ring);
     outline-offset: 1px;
   }

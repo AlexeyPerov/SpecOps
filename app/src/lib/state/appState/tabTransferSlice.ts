@@ -7,9 +7,11 @@ import {
   isFileTab,
   recomputeSelectedTabId,
   setActivePaneTabs,
+  findTabGroup,
   tabDocumentId,
   withTabGroupSnapshot,
 } from "../../domain/contracts";
+import { normalizePathSync } from "../../services/diskFingerprint";
 import { createImplicitDraftPair, isReplaceableBootstrapTab } from "../../services/implicitDraftTab";
 import { isPathUnderRoot } from "../../services/workspacePaths";
 import {
@@ -214,6 +216,56 @@ export function createTabTransferSlice(deps: {
         return targetMatch ? selectTabInternal(nextState, targetMatch.tabId) : nextState;
       });
       return movedDocumentId;
+    },
+    /**
+     * Move a file tab of the active context into a tab group without changing
+     * the active context. Returns the new tab id, or null when the tab cannot
+     * move (unknown tab or group, same context, or a dirty buffer whose file is
+     * already open in the destination).
+     */
+    moveFileTabToTabGroup(tabId: string, groupId: ContextId): string | null {
+      let movedTabId: string | null = null;
+      update((state) => {
+        const sourceId = state.contexts.activeContextId;
+        const target = findTabGroup(state.contexts.tabGroups, groupId);
+        const source = getActiveContextSnapshot(state);
+        if (!target || sourceId === groupId) {
+          return state;
+        }
+        const tab = allTabs(source.session.editorLayout).find((entry) => entry.id === tabId);
+        if (!tab || !isFileTab(tab)) {
+          return state;
+        }
+        const document = source.documents.find((doc) => doc.id === tab.documentId);
+        if (!document) {
+          return state;
+        }
+        const existing = document.filePath
+          ? findFileTabForNormalizedPath(target.snapshot, normalizePathSync(document.filePath))
+          : null;
+        if (existing && document.isDirty) {
+          return state;
+        }
+        const nextSource = removeFileTabFromSnapshot(
+          source,
+          tab.id,
+          document.id,
+          source.session.lastActiveWindowId,
+        );
+        let nextTarget = target.snapshot;
+        if (existing) {
+          movedTabId = existing.tabId;
+        } else {
+          movedTabId = nextTabId();
+          nextTarget = addFileTabWithDocument(target.snapshot, document, movedTabId);
+        }
+        return patchContextById(
+          patchContextById(state, sourceId, () => nextSource),
+          groupId,
+          () => nextTarget,
+        );
+      });
+      return movedTabId;
     },
     migrateTabGroupFileTabToWorkspace(
       normalizedPath: string,

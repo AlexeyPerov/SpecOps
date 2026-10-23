@@ -365,3 +365,62 @@ describe("window tab groups", () => {
     expect(appState.switchContext("tabs-404")).toBe(false);
   });
 });
+
+describe("tab group actions", () => {
+  beforeEach(() => {
+    appState.resetAppState();
+  });
+
+  it("creates numbered groups with unique default names and activates them", () => {
+    const second = appState.createTabGroup();
+    const third = appState.createTabGroup("  Review  ");
+    const fourth = appState.createTabGroup();
+    const { contexts } = appState.getSnapshot();
+    expect([second, third, fourth]).toEqual(["tabs-2", "tabs-3", "tabs-4"]);
+    expect(contexts.tabGroups.map((group) => group.name)).toEqual(["Tabs", "Tabs 2", "Review", "Tabs 3"]);
+    expect(contexts.activeContextId).toBe(fourth);
+    expect(allTabs(contexts.tabGroups[3].snapshot.session.editorLayout)).toHaveLength(1);
+  });
+
+  it("renames groups but ignores blank or unknown names", () => {
+    const id = appState.createTabGroup("Drafts");
+    expect(appState.renameTabGroup(id, " Archive ")).toBe(true);
+    expect(appState.renameTabGroup(id, "   ")).toBe(false);
+    expect(appState.renameTabGroup("tabs-99", "Ghost")).toBe(false);
+    expect(appState.getSnapshot().contexts.tabGroups[1].name).toBe("Archive");
+  });
+
+  it("never removes the default group and hands focus to it when the active group goes away", () => {
+    const drafts = appState.createTabGroup("Drafts");
+    const review = appState.createTabGroup("Review");
+    expect(appState.removeTabGroup(DEFAULT_TAB_GROUP_ID)).toBe(false);
+    appState.switchContext(drafts);
+    expect(appState.removeTabGroup(review)).toBe(true);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(drafts);
+    expect(appState.removeTabGroup(drafts)).toBe(true);
+    const { contexts } = appState.getSnapshot();
+    expect(contexts.tabGroups.map((group) => group.id)).toEqual([DEFAULT_TAB_GROUP_ID]);
+    expect(contexts.activeContextId).toBe(DEFAULT_TAB_GROUP_ID);
+  });
+
+  it("targets the active group, else the last used group, else the default group", () => {
+    const drafts = appState.createTabGroup("Drafts");
+    expect(appState.getTargetTabGroupId()).toBe(drafts);
+    const workspace = appState.addWorkspace("/tmp/ws")!;
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(workspace);
+    expect(appState.getTargetTabGroupId()).toBe(drafts);
+    expect(appState.closeWorkspace(workspace)).toBe(true);
+    expect(appState.getSnapshot().contexts.activeContextId).toBe(drafts);
+    appState.removeTabGroup(drafts);
+    appState.addWorkspace("/tmp/ws-2");
+    expect(appState.getTargetTabGroupId()).toBe(DEFAULT_TAB_GROUP_ID);
+  });
+
+  it("reports dirty documents of one group only", () => {
+    const drafts = appState.createTabGroup("Drafts");
+    const documentId = appState.getActiveDocuments()[0].id;
+    appState.setDocumentContent(documentId, "unsaved");
+    expect(appState.getTabGroupDirtyDocuments(drafts).map((doc) => doc.id)).toEqual([documentId]);
+    expect(appState.getTabGroupDirtyDocuments(DEFAULT_TAB_GROUP_ID)).toEqual([]);
+  });
+});

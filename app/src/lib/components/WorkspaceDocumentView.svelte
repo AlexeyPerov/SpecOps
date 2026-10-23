@@ -4,26 +4,36 @@
   import { renderDocumentMarkdown } from "../services/markdownImageSrc";
   import DOMPurify from "dompurify";
   import { subscribeWorkspacePreferences } from "../services/workspacePreferences";
-  import { documentStorage, refreshDocument, workspaceDocumentsRevision, workspaceDocumentSnapshot, loadWorkspaceDocument, editWorkspaceDocument, saveWorkspaceDocument, reloadWorkspaceDocument, type WorkspaceDocumentKind } from "../services/workspaceDocuments";
+  import { documentStorage, refreshDocument, workspaceDocumentsRevision, workspaceDocumentSnapshot, loadWorkspaceDocument, editWorkspaceDocument, saveWorkspaceDocument, reloadWorkspaceDocument, type DocumentScope, type WorkspaceDocumentKind } from "../services/workspaceDocuments";
+  import { getProjectCatalog, subscribeProjectCatalog } from "../services/workspaceCatalog";
   import { emptyTaskBook, serializeTaskBook } from "../services/workspaceTasks";
   import TaskBookView from "./TaskBookView.svelte";
   import { requestConfirm } from "../services/confirmDialogUi";
-  let { root, kind, paneId, contextId, notify }: { root: string | null; kind: WorkspaceDocumentKind; paneId: string; contextId: import("../domain/contracts").ContextId; notify: (message: string) => void } = $props();
+  let { root, documentId = null, kind, paneId, contextId, notify }: { root: string | null; documentId?: string | null; kind: WorkspaceDocumentKind; paneId: string; contextId: import("../domain/contracts").ContextId; notify: (message: string) => void } = $props();
+  // Workspace documents are scoped by root; app-wide ones by their catalog id.
+  const scope = $derived<DocumentScope | null>(root ?? (documentId ? { documentId } : null));
+  let catalog = $state.raw(getProjectCatalog());
+  $effect(() => untrack(() => subscribeProjectCatalog((next) => { catalog = next; })));
+  const globalDocument = $derived(documentId ? catalog.documents?.[documentId] ?? null : null);
+  // A deleted document must not be recreated by loading or saving it again.
+  const deleted = $derived(root === null && !globalDocument);
   let mode = $state<"content" | "source" | null>(null);
   let storageRevision = $state(0);
   $effect(() => {
-    const workspace = root;
-    let selectedStorage = documentStorage(workspace);
+    const target = scope;
+    if (!target) return;
+    let selectedStorage = documentStorage(target);
     return untrack(() => subscribeWorkspacePreferences(() => {
-      const next = documentStorage(workspace);
+      const next = documentStorage(target);
       if (next !== selectedStorage) { selectedStorage = next; storageRevision++; }
     }));
   });
   $effect(() => {
-    const workspace = root; const documentKind = kind; void storageRevision;
-    untrack(() => { void loadWorkspaceDocument(workspace, documentKind, documentStorage(workspace), true).catch((error) => notify(String(error))); });
+    const target = scope; const documentKind = kind; void storageRevision;
+    if (!target || deleted) return;
+    untrack(() => { void loadWorkspaceDocument(target, documentKind, documentStorage(target), true).catch((error) => notify(String(error))); });
   });
-  const record = $derived.by(() => { void $workspaceDocumentsRevision; void storageRevision; return workspaceDocumentSnapshot(root, kind); });
+  const record = $derived.by(() => { void $workspaceDocumentsRevision; void storageRevision; return scope && !deleted ? workspaceDocumentSnapshot(scope, kind) : null; });
   // Service records are mutable; a fresh view snapshot propagates every revision.
   const recordView = $derived.by(() => { void $workspaceDocumentsRevision; return record ? { ...record } : null; });
   const content = $derived(recordView?.content ?? (kind === "tasks" ? serializeTaskBook(emptyTaskBook()) : ""));
@@ -44,7 +54,7 @@
 <svelte:window onfocus={refresh} />
 <div class="workspace-document">
   <header>
-    <strong title={root ?? "Shared across all windows"}>{root === null ? "" : "Workspace "}{kind === "tasks" ? "Tasks" : "Notes"}</strong>
+    <strong title={root ?? "Shared across all windows"}>{root === null ? globalDocument?.name ?? (kind === "tasks" ? "Tasks" : "Notes") : `Workspace ${kind === "tasks" ? "Tasks" : "Notes"}`}</strong>
     {#if kind === "notes"}
       <button class="btn btn-sm btn-ghost" type="button" aria-pressed={displayMode === "content"} onclick={() => mode = "content"}>Preview</button>
       <button class="btn btn-sm btn-ghost" type="button" aria-pressed={displayMode === "source"} onclick={() => mode = "source"}>Edit</button>
@@ -59,9 +69,10 @@
       <button class="btn btn-sm" type="button" onclick={() => { void resolveConflict(false); }}>Keep local contents</button>
     </div>
   {/if}
-  {#if !recordView || (recordView.loading && !recordView.path)}<p>Loading…</p>
+  {#if deleted}<p class="deleted" role="status">This document was deleted.</p>
+  {:else if !recordView || (recordView.loading && !recordView.path)}<p>Loading…</p>
   {:else if kind === "notes" && displayMode === "source"}
-    <EditorSurface {content} documentId={`workspace-${kind}`} {paneId} {contextId} language="markdown" wrapLines={true} onDocumentDirty={edit} onStatusMessage={notify} />
+    <EditorSurface {content} documentId={documentId ? `global-document-${documentId}` : `workspace-${kind}`} {paneId} {contextId} language="markdown" wrapLines={true} onDocumentDirty={edit} onStatusMessage={notify} />
   {:else if kind === "tasks"}
     {#key recordView.path}<TaskBookView {content} onchange={edit} {notify} />{/key}
   {:else}
@@ -74,4 +85,5 @@
   small { margin-left: auto; color: var(--color-text-secondary); }
   .preview { padding: 16px; overflow: auto; }
   .error { color: var(--color-danger); padding: 12px; overflow-wrap: anywhere; }
+  .deleted { padding: 12px; color: var(--color-text-secondary); }
 </style>

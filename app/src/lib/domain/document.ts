@@ -104,10 +104,12 @@ export interface SessionTabState {
 /**
  * A non-document, non-session editor-pane tab. View tabs render a chrome-less
  * surface such as Settings or Themes inside the editor pane (they are opened
- * as notepad tabs rather than as popups/panels).
+ * as tab group tabs rather than as popups/panels).
  *
  * `subTab` carries an optional target within the view — e.g. a settings
- * section id for deep links from elsewhere in the app.
+ * section id for deep links from elsewhere in the app. `globalDocumentId`
+ * names the app-wide document a Tasks/Notes tab shows; workspace Tasks/Notes
+ * tabs omit it.
  */
 export interface ViewTabState {
   id: string;
@@ -115,6 +117,7 @@ export interface ViewTabState {
   view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control" | "workspace-tasks" | "workspace-notes";
   pinned: boolean;
   subTab?: string;
+  globalDocumentId?: string;
 }
 
 export type TabState = FileTabState | SessionTabState | ViewTabState;
@@ -157,8 +160,16 @@ export function createViewTab(
   view: "settings" | "themes" | "workspace-settings" | "workspace-manager" | "version-control" | "workspace-tasks" | "workspace-notes",
   pinned = false,
   subTab?: string,
+  globalDocumentId?: string,
 ): ViewTabState {
-  return { id, kind: "view", view, pinned, ...(subTab ? { subTab } : {}) };
+  return {
+    id,
+    kind: "view",
+    view,
+    pinned,
+    ...(subTab ? { subTab } : {}),
+    ...(globalDocumentId ? { globalDocumentId } : {}),
+  };
 }
 
 /**
@@ -179,6 +190,7 @@ export function tryNormalizeTabState(
         agentId?: unknown;
         view?: unknown;
         subTab?: unknown;
+        globalDocumentId?: unknown;
       }),
 ): TabState | null {
   if (tab.kind === "session" && typeof tab.sessionId === "string") {
@@ -207,7 +219,8 @@ export function tryNormalizeTabState(
       tab.view === "version-control" || tab.view === "workspace-tasks" || tab.view === "workspace-notes")
   ) {
     const subTab = typeof tab.subTab === "string" ? tab.subTab : undefined;
-    return createViewTab(tab.id, tab.view, tab.pinned ?? false, subTab);
+    const globalDocumentId = typeof tab.globalDocumentId === "string" ? tab.globalDocumentId : undefined;
+    return createViewTab(tab.id, tab.view, tab.pinned ?? false, subTab, globalDocumentId);
   }
   if ("documentId" in tab && typeof tab.documentId === "string") {
     const fileTab = tab as Omit<FileTabState, "kind"> & { kind?: unknown };
@@ -226,6 +239,7 @@ export function normalizeTabState(
         agentId?: unknown;
         view?: unknown;
         subTab?: unknown;
+        globalDocumentId?: unknown;
       }),
 ): TabState {
   const normalized = tryNormalizeTabState(tab);
@@ -244,6 +258,7 @@ export function tabDocumentId(
         agentId?: unknown;
         view?: unknown;
         subTab?: unknown;
+        globalDocumentId?: unknown;
       })
     | undefined
     | null,

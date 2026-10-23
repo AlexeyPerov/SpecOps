@@ -6,7 +6,7 @@ import {
   createNewWindowWithTransfer,
   generateWindowLabel,
   resolveNewWindowBounds,
-  resolveNewNotepadWindowBounds,
+  resolveNewTabGroupWindowBounds,
   WINDOW_EVENT_TRANSFER_TAB,
   WINDOW_EVENT_WINDOW_READY,
 } from "./windowManager";
@@ -140,14 +140,14 @@ describe("resolveNewWindowBounds", () => {
 describe("compact note window bounds", () => {
   it("uses the current work area in logical pixels and ignores parent maximization", async () => {
     vi.mocked(currentMonitor).mockResolvedValueOnce({ scaleFactor: 2, workArea: { size: { width: 5120, height: 2880 }, position: { x: 100, y: 40 } } } as never);
-    const bounds = await resolveNewNotepadWindowBounds();
+    const bounds = await resolveNewTabGroupWindowBounds();
     expect(bounds.maximized).toBe(false);
     expect(bounds.width * bounds.height / (2560 * 1440)).toBeCloseTo(0.15, 2);
     expect(bounds.height).toBeGreaterThan(bounds.width);
     expect(bounds.x).toBeGreaterThanOrEqual(50);
   });
   it("uses a compact fallback without monitor information", async () => {
-    expect(await resolveNewNotepadWindowBounds()).toMatchObject({ width: 520, height: 640, maximized: false });
+    expect(await resolveNewTabGroupWindowBounds()).toMatchObject({ width: 520, height: 640, maximized: false });
   });
 });
 

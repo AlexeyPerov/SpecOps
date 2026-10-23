@@ -38,6 +38,7 @@
     WindowContextState,
   } from "../domain/contracts";
   import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
+  import type { RailTabGroup } from "../services/railTabGroups";
   import { appState } from "../state/appState";
   import { isGitIntegrationEnabled } from "../services/gitIntegrationSettings";
   import {
@@ -61,14 +62,13 @@
     activeContextId: ContextId;
     sessionsEnabled: boolean;
     panelWidthPx: number;
-    notepadOpenTabCount: number;
-    notepadRecentTabs: { tabId: string; label: string }[];
+    tabGroups: RailTabGroup[];
     onSelectContext: (contextId: ContextId) => void;
     onAddWorkspace: () => void;
     onOpenWorkspaceManager: () => void;
     onPanelWidthChange: (width: number) => void;
     onReorderWorkspaces: (fromIndex: number, toIndex: number) => void;
-    onSelectNotepadTab: (tabId: string) => void;
+    onSelectTabGroupTab: (groupId: ContextId, tabId: string) => void;
   }
 
   export interface AppShellSessionsSidebarProps {
@@ -606,8 +606,7 @@
         activeContextId={activityRail.activeContextId}
         sessionsEnabled={activityRail.sessionsEnabled}
         panelWidthPx={activityRail.panelWidthPx}
-        notepadOpenTabCount={activityRail.notepadOpenTabCount}
-        notepadRecentTabs={activityRail.notepadRecentTabs}
+        tabGroups={activityRail.tabGroups}
         {gitIntegrationEnabled}
         onSelectContext={activityRail.onSelectContext}
         onOpenVersionControl={workspaceActions.onOpenVersionControl}
@@ -619,7 +618,7 @@
         onOpenWorkspaceManager={activityRail.onOpenWorkspaceManager}
         onPanelWidthChange={activityRail.onPanelWidthChange}
         onReorderWorkspaces={activityRail.onReorderWorkspaces}
-        onSelectNotepadTab={activityRail.onSelectNotepadTab}
+        onSelectTabGroupTab={activityRail.onSelectTabGroupTab}
       />
     {/if}
     {#if sessionsSidebar.show && !compactNotepad}

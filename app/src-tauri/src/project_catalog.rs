@@ -33,6 +33,14 @@ struct Folder {
     name: String,
     order: f64,
 }
+/// App-wide Tasks or Notes document; its files live in `global-documents/<id>`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+struct Document {
+    id: String,
+    kind: String,
+    name: String,
+    order: f64,
+}
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Catalog {
@@ -41,6 +49,8 @@ struct Catalog {
     projects: BTreeMap<String, Project>,
     folders: BTreeMap<String, Folder>,
     saved_contexts: BTreeMap<String, Value>,
+    #[serde(default)]
+    documents: BTreeMap<String, Document>,
 }
 impl Default for Catalog {
     fn default() -> Self {
@@ -50,6 +60,7 @@ impl Default for Catalog {
             projects: BTreeMap::new(),
             folders: BTreeMap::new(),
             saved_contexts: BTreeMap::new(),
+            documents: BTreeMap::new(),
         }
     }
 }
@@ -89,6 +100,15 @@ fn validate(c: &Catalog) -> Result<(), String> {
     for (id, f) in &c.folders {
         if id != &f.id || id.is_empty() || f.name.trim().is_empty() {
             return Err("Invalid project folder".into());
+        }
+    }
+    for (id, d) in &c.documents {
+        if id != &d.id
+            || !crate::workspace_documents::is_global_document_id(id)
+            || !matches!(d.kind.as_str(), "tasks" | "notes")
+            || d.name.trim().is_empty()
+        {
+            return Err("Invalid catalog document".into());
         }
     }
     for (id, context) in &c.saved_contexts {
@@ -352,6 +372,61 @@ fn apply(c: &mut Catalog, mutation: &Value) -> Result<(), String> {
             c.projects.remove(id);
             c.saved_contexts.remove(id);
         }
+        "putDocument" => {
+            let mut document: Document = serde_json::from_value(mutation["document"].clone())
+                .map_err(|e| e.to_string())?;
+            if let Some(existing) = c.documents.get(&document.id) {
+                if existing.kind != document.kind {
+                    return Err("Document kind cannot change".into());
+                }
+                document.order = existing.order;
+            } else {
+                document.order = c
+                    .documents
+                    .values()
+                    .filter(|d| d.kind == document.kind)
+                    .map(|d| d.order)
+                    .fold(-1.0, f64::max)
+                    + 1.0;
+            }
+            c.documents.insert(document.id.clone(), document);
+        }
+        "renameDocument" => {
+            c.documents
+                .get_mut(id)
+                .ok_or("Document is not registered")?
+                .name = mutation["name"]
+                .as_str()
+                .ok_or("Document name required")?
+                .trim()
+                .to_string();
+        }
+        "moveDocument" => {
+            let kind = c
+                .documents
+                .get(id)
+                .ok_or("Document is not registered")?
+                .kind
+                .clone();
+            let mut documents: Vec<_> = c.documents.values().filter(|d| d.kind == kind).collect();
+            documents.sort_by(|a, b| a.order.total_cmp(&b.order).then(a.id.cmp(&b.id)));
+            let mut ids: Vec<_> = documents
+                .into_iter()
+                .filter(|d| d.id != id)
+                .map(|d| d.id.clone())
+                .collect();
+            let before = mutation.get("beforeId").and_then(Value::as_str);
+            let index = before
+                .and_then(|before| ids.iter().position(|candidate| candidate == before))
+                .unwrap_or(ids.len());
+            ids.insert(index, id.to_string());
+            for (index, id) in ids.into_iter().enumerate() {
+                c.documents.get_mut(&id).unwrap().order = index as f64;
+            }
+        }
+        "removeDocument" => {
+            c.documents.remove(id);
+        }
         _ => return Err("Unknown catalog mutation".into()),
     }
     validate(c)
@@ -452,6 +527,14 @@ fn transact_with_owner_check(
         &root.join("project-catalog.json"),
         &serde_json::to_vec(&next).map_err(|e| e.to_string())?,
     )?;
+    // Deleted documents lose their files only after the catalog stops listing them.
+    for id in previous.documents.keys() {
+        if !next.documents.contains_key(id) {
+            if let Err(error) = crate::workspace_documents::remove_global_document_files(root, id) {
+                eprintln!("[spec-ops] failed to remove document files for {id}: {error}");
+            }
+        }
+    }
     // Keep references reachable from the current primary and its last-good backup.
     // Old immutable payloads and failed-transaction orphans are now safe to remove.
     let retained: std::collections::HashSet<_> = next
@@ -650,6 +733,51 @@ mod tests {
     }
     fn register(root: &str) -> Value {
         json!({ "type": "register", "project": { "id": identity(root), "rootPath": root, "name": "Project", "folderId": null, "order": 0, "pinned": false, "pinnedOrder": 0, "hiddenFromRail": false, "documentStorage": "app" } })
+    }
+    fn put_document(id: &str, kind: &str, name: &str) -> Value {
+        json!({ "type": "putDocument", "document": { "id": id, "kind": kind, "name": name, "order": 0 } })
+    }
+    #[test]
+    fn documents_order_per_kind_rename_move_and_remove_with_files() {
+        let temp = Temp::new();
+        let catalog = transact(
+            &temp.0,
+            &[
+                put_document("t1", "tasks", "Work"),
+                put_document("n1", "notes", "Ideas"),
+                put_document("t2", "tasks", "Home"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(catalog.documents["t1"].order, 0.0);
+        assert_eq!(catalog.documents["n1"].order, 0.0);
+        assert_eq!(catalog.documents["t2"].order, 1.0);
+        let catalog = transact(
+            &temp.0,
+            &[
+                json!({"type":"renameDocument","id":"t2","name":"  Errands "}),
+                json!({"type":"moveDocument","id":"t2","beforeId":"t1"}),
+            ],
+        )
+        .unwrap();
+        assert_eq!(catalog.documents["t2"].name, "Errands");
+        assert!(catalog.documents["t2"].order < catalog.documents["t1"].order);
+        assert!(transact(&temp.0, &[put_document("t1", "notes", "Work")])
+            .unwrap_err()
+            .contains("kind"));
+        for invalid in [
+            put_document("../x", "tasks", "Bad"),
+            put_document("x", "other", "Bad"),
+            put_document("x", "tasks", " "),
+        ] {
+            assert!(transact(&temp.0, &[invalid]).is_err());
+        }
+        let directory = temp.0.join("global-documents/t1");
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join("tasks.json"), "{}").unwrap();
+        let catalog = transact(&temp.0, &[json!({"type":"removeDocument","id":"t1"})]).unwrap();
+        assert!(!catalog.documents.contains_key("t1"));
+        assert!(!directory.exists());
     }
     #[test]
     fn persists_and_deduplicates_normalized_identity() {

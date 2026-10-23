@@ -232,14 +232,15 @@ export function nextSelectedTabAfterBulkClose(
   return recomputeSelectedTabId(previousTabs, remainingTabs, previousSelectedTabId, preferredTabId);
 }
 
-/** Remove every view tab of the given kind from one workspace/tab group/chat context. */
+/** Remove every matching view tab from one workspace/tab group/chat context. */
 export function closeViewTabsInContext(
   ctx: ContextSnapshot,
-  view: ViewTabState["view"],
+  view: ViewTabState["view"] | ((tab: ViewTabState) => boolean),
 ): ContextSnapshot {
+  const matches = typeof view === "function" ? view : (tab: ViewTabState) => tab.view === view;
   const tabIdsToClose = allTabs(ctx.session.editorLayout)
     .map((tab) => normalizeTabState(tab))
-    .filter((tab) => isViewTab(tab) && tab.view === view)
+    .filter((tab) => isViewTab(tab) && matches(tab))
     .map((tab) => tab.id);
 
   if (tabIdsToClose.length === 0) {
@@ -269,16 +270,16 @@ export function closeViewTabsInContext(
   };
 }
 
-/** Close matching view tabs in every workspace context. */
+/** Close matching view tabs in every tab group and workspace context. */
 export function closeAllViewTabsInState(
   state: AppDomainState,
-  view: ViewTabState["view"],
+  view: ViewTabState["view"] | ((tab: ViewTabState) => boolean),
 ): AppDomainState {
   let next = state;
-  for (const workspace of state.contexts.workspaces) {
-    const patched = closeViewTabsInContext(workspace.snapshot, view);
-    if (patched !== workspace.snapshot) {
-      next = patchContextById(next, workspace.id, () => patched);
+  for (const entry of [...state.contexts.tabGroups, ...state.contexts.workspaces]) {
+    const patched = closeViewTabsInContext(entry.snapshot, view);
+    if (patched !== entry.snapshot) {
+      next = patchContextById(next, entry.id, () => patched);
     }
   }
   return next;

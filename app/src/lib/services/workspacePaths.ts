@@ -1,6 +1,5 @@
 import { normalizePathForStorage, normalizePathSync } from "./diskFingerprint";
 import { appState } from "../state/appState";
-import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
 
 /**
  * Collapse `.` / `..` segments and duplicate slashes on an already
@@ -71,7 +70,7 @@ function normalizePathPreservingCase(path: string): string {
  * - Returns true for root itself and any descendant path under the same root
  * - Resolves `.` / `..` before the prefix check so `<root>/../outside` is rejected
  * - Uses `normalizePathSync` for slash/case comparison keys (macOS + Windows fold)
- * - Callers should switch to Notepad before opening/saving files outside the active workspace root
+ * - Callers should switch to a tab group before opening/saving files outside the active workspace root
  */
 export function isPathUnderRoot(filePath: string, workspaceRoot: string): boolean {
   const normalizedPath = normalizePathForContainment(filePath);
@@ -107,13 +106,13 @@ export function ensureTabGroupForOutsidePath(path: string): {
   if (isPathUnderRoot(path, activeWorkspaceRoot)) {
     return { switchedToTabGroup: false, activeWorkspaceRoot };
   }
-  const switched = appState.switchContext(DEFAULT_TAB_GROUP_ID);
+  const switched = appState.switchContext(appState.getTargetTabGroupId());
   return { switchedToTabGroup: switched, activeWorkspaceRoot };
 }
 
 export function runInTabGroupContext<T>(fn: () => Promise<T> | T): Promise<T> | T {
   if (!appState.isTabGroupActive()) {
-    appState.switchContext(DEFAULT_TAB_GROUP_ID);
+    appState.switchContext(appState.getTargetTabGroupId());
   }
   return fn();
 }

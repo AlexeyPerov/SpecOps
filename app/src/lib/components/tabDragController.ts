@@ -67,9 +67,23 @@ export interface TabDragControllerDeps {
     toPaneId: string,
     toIndex: number,
   ) => void;
+  /**
+   * Move the dragged tab into the window tab group whose sidebar row
+   * (`data-tab-group-drop`) is under the pointer on release.
+   */
+  onMoveToTabGroup?: (tabId: string, groupId: string) => void;
   getWindowId: () => string;
   notify: (message: string) => void;
   onStateChange: (state: TabDragState) => void;
+}
+
+const TAB_GROUP_DROP_HOVER_CLASS = "file-drop-context-hover";
+
+function tabGroupDropTargetAt(clientX: number, clientY: number): HTMLElement | null {
+  if (typeof document === "undefined" || typeof document.elementFromPoint !== "function") {
+    return null;
+  }
+  return document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>("[data-tab-group-drop]") ?? null;
 }
 
 function createInitialState(): TabDragState {
@@ -270,10 +284,21 @@ export function createTabDragController(deps: TabDragControllerDeps) {
     applyDragLayout();
   }
 
+  let hoveredTabGroupEl: HTMLElement | null = null;
+  function setTabGroupHover(target: HTMLElement | null): void {
+    if (target === hoveredTabGroupEl) {
+      return;
+    }
+    hoveredTabGroupEl?.classList.remove(TAB_GROUP_DROP_HOVER_CLASS);
+    target?.classList.add(TAB_GROUP_DROP_HOVER_CLASS);
+    hoveredTabGroupEl = target;
+  }
+
   function finishDrag(commitReorder: boolean): void {
     if (state.isFinishingDrag) {
       return;
     }
+    setTabGroupHover(null);
     // Apply any coalesced layout update so dropIndex reflects the latest pointer.
     flushDragLayout();
     state.isFinishingDrag = true;
@@ -304,6 +329,17 @@ export function createTabDragController(deps: TabDragControllerDeps) {
           node.releasePointerCapture(activePointerId);
         }
       }
+    }
+
+    const tabGroupId =
+      commitReorder && wasDrag && activeTabId && deps.onMoveToTabGroup
+        ? tabGroupDropTargetAt(pointerX, pointerY)?.dataset.tabGroupDrop
+        : undefined;
+    if (activeTabId && tabGroupId) {
+      deps.onMoveToTabGroup?.(activeTabId, tabGroupId);
+      state.isFinishingDrag = false;
+      emitState();
+      return;
     }
 
     // Phase 5 — cross-pane move takes priority over reorder/tear-off. Only
@@ -376,6 +412,9 @@ export function createTabDragController(deps: TabDragControllerDeps) {
     }
 
     state.didDrag = true;
+    if (deps.onMoveToTabGroup) {
+      setTabGroupHover(tabGroupDropTargetAt(event.clientX, event.clientY));
+    }
     // Coalesce tab/pane getBoundingClientRect walks to one rAF per frame (M64).
     scheduleDragLayout();
   }
@@ -440,6 +479,7 @@ export function createTabDragController(deps: TabDragControllerDeps) {
   }
 
   function destroy(): void {
+    setTabGroupHover(null);
     finishDrag(false);
   }
 

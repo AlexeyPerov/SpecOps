@@ -5,8 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { emptyTaskBook, serializeTaskBook } from "./workspaceTasks";
 const io = vi.hoisted(() => ({ storage: "app" as "app" | "project", files: new Map<string, string>(), fail: false }));
 vi.mock("./workspacePreferences", () => ({ getWorkspaceDocumentStorage: () => io.storage, setWorkspaceDocumentStorage: async (_root: string, storage: "app" | "project") => { io.storage = storage; } }));
-vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async (command: string, args: { root: string | null; kind: string; storage: string; content: string; expected: string | null }) => {
-  const key = `${args.root}/${args.storage}/${args.kind}`;
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async (command: string, args: { root: string | null; document: string | null; kind: string; storage: string; content: string; expected: string | null }) => {
+  const key = `${args.root ?? `doc:${args.document}`}/${args.storage}/${args.kind}`;
   if (command === "workspace_document_read") return { path: key, content: io.files.get(key) ?? null };
   if (command === "workspace_document_save") {
     if (io.fail) throw new Error("Disk full");
@@ -14,7 +14,8 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async (command: string, a
     io.files.set(key, args.content);
   }
 }) }));
-import { createWorkspaceDocument, editWorkspaceDocument, flushWorkspaceDocuments, loadWorkspaceDocument, reloadWorkspaceDocument, refreshDocument, workspaceDocumentSnapshot } from "./workspaceDocuments";
+import { createWorkspaceDocument, discardGlobalDocument, editWorkspaceDocument, flushWorkspaceDocuments, loadWorkspaceDocument, reloadWorkspaceDocument, refreshDocument, workspaceDocumentSnapshot, type DocumentScope } from "./workspaceDocuments";
+const fileKey = (scope: DocumentScope, storage: string, kind: string) => `${typeof scope === "string" ? scope : `doc:${scope.documentId}`}/${storage}/${kind}`;
 beforeEach(() => { io.fail = false; io.storage = "app"; io.files.clear(); });
 describe("workspace document storage", () => {
   it("does not create files on inspection and creates separate JSON tasks only on request", async () => {
@@ -24,15 +25,16 @@ describe("workspace document storage", () => {
     expect(io.files.get("/lazy/app/tasks")).toBe(serializeTaskBook(emptyTaskBook()));
     expect(io.files.has("/lazy/app/notes")).toBe(false);
   });
-  it.each([null, '/lazy-first-edit'])('creates Tasks on the first edit with a missing-file expectation (%s)', async (root) => {
-    const record = await loadWorkspaceDocument(root, 'tasks');
-    await flushWorkspaceDocuments(root ?? undefined);
+  it.each<DocumentScope>([{ documentId: 'global' }, '/lazy-first-edit'])('creates Tasks on the first edit with a missing-file expectation (%o)', async (scope) => {
+    const root = typeof scope === 'string' ? scope : undefined;
+    const record = await loadWorkspaceDocument(scope, 'tasks');
+    await flushWorkspaceDocuments(root);
     expect(io.files.size).toBe(0);
     const content = serializeTaskBook({ ...emptyTaskBook(), lists: [{ id: 'first', title: 'First', groupId: null }] });
     editWorkspaceDocument(record, content);
     expect(record.saved).toBeNull();
-    await flushWorkspaceDocuments(root ?? undefined);
-    expect(io.files.get(`${root}/app/tasks`)).toBe(content);
+    await flushWorkspaceDocuments(root);
+    expect(io.files.get(fileKey(scope, 'app', 'tasks'))).toBe(content);
   });
   it('creates missing Notes from the first text edit without inserting a heading', async () => {
     const record = await loadWorkspaceDocument('/lazy-note', 'notes');
@@ -65,11 +67,25 @@ describe("workspace document storage", () => {
   });
   it("keeps global documents in app storage and separate from project documents", async () => {
     io.storage = "project";
-    await createWorkspaceDocument(null, "notes");
-    expect(io.files.get("null/app/notes")).toBe("# Notes\n\n");
-    expect(workspaceDocumentSnapshot(null, "notes")?.storage).toBe("app");
+    await createWorkspaceDocument({ documentId: "one" }, "notes");
+    expect(io.files.get("doc:one/app/notes")).toBe("# Notes\n\n");
+    expect(workspaceDocumentSnapshot({ documentId: "one" }, "notes")?.storage).toBe("app");
     await createWorkspaceDocument("/global-separation", "notes");
     expect(io.files.get("/global-separation/project/notes")).toBe("# Notes\n\n");
+  });
+  it("keeps each app-wide document separate and forgets a deleted one", async () => {
+    const first = await loadWorkspaceDocument({ documentId: "first" }, "notes");
+    const second = await loadWorkspaceDocument({ documentId: "second" }, "notes");
+    editWorkspaceDocument(first, "one"); editWorkspaceDocument(second, "two");
+    await flushWorkspaceDocuments();
+    expect(io.files.get("doc:first/app/notes")).toBe("one");
+    expect(io.files.get("doc:second/app/notes")).toBe("two");
+    editWorkspaceDocument(first, "pending");
+    await discardGlobalDocument("first");
+    expect(workspaceDocumentSnapshot({ documentId: "first" }, "notes")).toBeNull();
+    await flushWorkspaceDocuments();
+    expect(io.files.get("doc:first/app/notes")).toBe("one");
+    expect(workspaceDocumentSnapshot({ documentId: "second" }, "notes")?.content).toBe("two");
   });
   it("refreshes clean copies and protects dirty edits from another window", async () => {
     await createWorkspaceDocument("/remote", "notes");

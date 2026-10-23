@@ -2,7 +2,7 @@ import { emitTo } from "@tauri-apps/api/event";
 import { WebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { appState } from "../state/appState";
 import type { ContextId, DiskFingerprint } from "../domain/contracts";
-import { allTabs, DEFAULT_TAB_GROUP_ID, isFileTab, isTabGroupId } from "../domain/contracts";
+import { allTabs, isFileTab, isTabGroupId } from "../domain/contracts";
 import { normalizePathSync } from "./diskFingerprint";
 import { claimOpenFile, pruneOpenFileRegistryWindows } from "./openFileRegistry";
 import { initializeDocumentDiskState } from "./externalFileChanges";
@@ -107,7 +107,7 @@ export async function requestOpenPath(
     !isTabGroupId(activeContextId) &&
     !isPathUnderRoot(path, activeWorkspaceRoot)
   ) {
-    switchedToTabGroup = appState.switchContext(DEFAULT_TAB_GROUP_ID);
+    switchedToTabGroup = appState.switchContext(appState.getTargetTabGroupId());
   }
 
   return { kind: "needs_read", path, switchedToTabGroup };

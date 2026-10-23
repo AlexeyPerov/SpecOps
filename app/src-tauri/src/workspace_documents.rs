@@ -19,20 +19,53 @@ pub struct WorkspaceDocument {
 fn document_path(
     app: &tauri::AppHandle,
     root: Option<&str>,
+    document: Option<&str>,
     storage: &str,
     kind: &str,
 ) -> Result<PathBuf, String> {
     document_path_at(
         &app.path().app_data_dir().map_err(|e| e.to_string())?,
         root,
+        document,
         storage,
         kind,
     )
 }
 
+/// Catalog ids of app-wide Tasks/Notes documents; also their directory names.
+pub fn is_global_document_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+/// Directory holding one app-wide document under the application data root.
+pub fn global_document_directory(data: &Path, id: &str) -> Result<PathBuf, String> {
+    if !is_global_document_id(id) {
+        return Err("Invalid document id.".into());
+    }
+    Ok(data.join("global-documents").join(id))
+}
+
+/// Remove an app-wide document's files after its catalog entry is gone.
+pub fn remove_global_document_files(data: &Path, id: &str) -> Result<(), String> {
+    let _lock = DOCUMENT_LOCK.lock().map_err(|e| e.to_string())?;
+    let directory = global_document_directory(data, id)?;
+    if fs::symlink_metadata(&directory).is_ok_and(|m| m.file_type().is_symlink()) {
+        return fs::remove_file(&directory).map_err(|e| e.to_string());
+    }
+    match fs::remove_dir_all(&directory) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error.to_string()),
+        _ => Ok(()),
+    }
+}
+
 fn document_path_at(
     data: &Path,
     root: Option<&str>,
+    document: Option<&str>,
     storage: &str,
     kind: &str,
 ) -> Result<PathBuf, String> {
@@ -78,7 +111,11 @@ fn document_path_at(
         if storage != "app" {
             return Err("Global documents use application storage.".into());
         }
-        data.join("spec-ops/global-documents").join(filename)
+        global_document_directory(
+            &data.join("spec-ops"),
+            document.ok_or("Global documents require a document id.")?,
+        )?
+        .join(filename)
     };
     if fs::symlink_metadata(&target).is_ok_and(|m| m.file_type().is_symlink() || !m.is_file()) {
         return Err("Workspace document must be a regular file.".into());
@@ -193,12 +230,13 @@ fn save(path: &PathBuf, content: &str, expected: Option<&str>) -> Result<(), Str
 pub async fn workspace_document_read(
     app: tauri::AppHandle,
     root: Option<String>,
+    document: Option<String>,
     storage: String,
     kind: String,
 ) -> Result<WorkspaceDocument, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let _lock = DOCUMENT_LOCK.lock().map_err(|e| e.to_string())?;
-        let path = document_path(&app, root.as_deref(), &storage, &kind)?;
+        let path = document_path(&app, root.as_deref(), document.as_deref(), &storage, &kind)?;
         Ok(WorkspaceDocument {
             content: read(&path)?,
             path: path.to_string_lossy().into_owned(),
@@ -211,6 +249,7 @@ pub async fn workspace_document_read(
 pub async fn workspace_document_save(
     app: tauri::AppHandle,
     root: Option<String>,
+    document: Option<String>,
     storage: String,
     kind: String,
     content: String,
@@ -219,7 +258,7 @@ pub async fn workspace_document_save(
     tauri::async_runtime::spawn_blocking(move || {
         let _lock = DOCUMENT_LOCK.lock().map_err(|e| e.to_string())?;
         validate_document(&kind, &content)?;
-        let path = document_path(&app, root.as_deref(), &storage, &kind)?;
+        let path = document_path(&app, root.as_deref(), document.as_deref(), &storage, &kind)?;
         save(&path, &content, expected.as_deref())?;
         let _ = app.emit(
             "workspace-document-changed",
@@ -248,10 +287,10 @@ pub async fn workspace_documents_transfer(
         }
         let mut documents = Vec::new();
         for kind in ["tasks", "notes"] {
-            let from = document_path(&app, root.as_deref(), &source, kind)?;
+            let from = document_path(&app, root.as_deref(), None, &source, kind)?;
             if let Some(content) = read(&from)? {
                 validate_document(kind, &content)?;
-                let to = document_path(&app, root.as_deref(), &target, kind)?;
+                let to = document_path(&app, root.as_deref(), None, &target, kind)?;
                 let previous = read(&to)?;
                 if previous.is_some() && !replace {
                     return Err("Destination documents already exist.".into());
@@ -329,18 +368,25 @@ mod tests {
         let data = dir.join("data");
         fs::create_dir_all(&root).unwrap();
         let canonical = fs::canonicalize(&root).unwrap();
-        let project = document_path_at(&data, root.to_str(), "project", "tasks").unwrap();
+        let project = document_path_at(&data, root.to_str(), None, "project", "tasks").unwrap();
         assert_eq!(project, canonical.join(".specops/tasks.json"));
-        let global = document_path_at(&data, None, "app", "tasks").unwrap();
-        assert!(global.ends_with("global-documents/tasks.json"));
-        let local = document_path_at(&data, root.to_str(), "app", "tasks").unwrap();
+        let global = document_path_at(&data, None, Some("doc-1"), "app", "tasks").unwrap();
+        assert!(global.ends_with("spec-ops/global-documents/doc-1/tasks.json"));
+        let other = document_path_at(&data, None, Some("doc-2"), "app", "tasks").unwrap();
+        assert_ne!(global, other);
+        let local = document_path_at(&data, root.to_str(), None, "app", "tasks").unwrap();
         assert_ne!(global, local);
         assert!(!data.exists());
         assert!(!canonical.join(".specops").exists());
-        assert!(document_path_at(&data, None, "project", "tasks").is_err());
-        assert!(document_path_at(&data, Some("relative"), "app", "notes").is_err());
-        assert!(document_path_at(&data, None, "app", "unknown").is_err());
-        let notes = document_path_at(&data, root.to_str(), "project", "notes").unwrap();
+        assert!(document_path_at(&data, None, Some("doc-1"), "project", "tasks").is_err());
+        assert!(document_path_at(&data, None, None, "app", "tasks").is_err());
+        let long = "x".repeat(65);
+        for id in ["", "../escape", "a/b", "a.b", long.as_str()] {
+            assert!(document_path_at(&data, None, Some(id), "app", "notes").is_err());
+        }
+        assert!(document_path_at(&data, Some("relative"), None, "app", "notes").is_err());
+        assert!(document_path_at(&data, None, Some("doc-1"), "app", "unknown").is_err());
+        let notes = document_path_at(&data, root.to_str(), None, "project", "notes").unwrap();
         assert!(notes.ends_with(".specops/notes.md"));
         fs::remove_dir_all(dir).unwrap();
     }
@@ -353,7 +399,9 @@ mod tests {
         fs::create_dir_all(dir.join("project")).unwrap();
         fs::create_dir_all(dir.join("elsewhere")).unwrap();
         std::os::unix::fs::symlink(dir.join("elsewhere"), dir.join("project/.specops")).unwrap();
-        assert!(document_path_at(&dir, dir.join("project").to_str(), "project", "tasks").is_err());
+        assert!(
+            document_path_at(&dir, dir.join("project").to_str(), None, "project", "tasks").is_err()
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

@@ -39,6 +39,7 @@
     WindowContextState,
   } from "../domain/contracts";
   import { isTabGroupId } from "../domain/contracts";
+  import type { RailTabGroup } from "../services/railTabGroups";
   import type { ProjectTreeControllerState } from "../services/projectTreeController";
   import type { createProjectTreeController } from "../services/projectTreeController";
   import type { AppShellDocumentView } from "../services/appShellDocumentView";
@@ -144,8 +145,7 @@
     showSessionsSidebar: boolean;
     isSessionTabActive: boolean;
     currentWindowId: string;
-    notepadOpenTabCount: number;
-    notepadRecentTabs: { tabId: string; label: string }[];
+    railTabGroups: RailTabGroup[];
     fileDropTargetPaneId: string | null;
     statusMessage: string;
     openSessionIds: ReadonlySet<string>;
@@ -170,7 +170,7 @@
 
     // --- Misc page-owned helpers ---
     notify: (message: string) => void;
-    handleSelectNotepadTab: (tabId: string) => void;
+    handleSelectTabGroupTab: (groupId: ContextId, tabId: string) => void;
 
     // --- Picker input snapshots fed into OverlayHost ---
     quickOpenCatalogSnapshot: WorkspaceFileCatalogSnapshot;
@@ -224,8 +224,7 @@
     showSessionsSidebar,
     isSessionTabActive,
     currentWindowId,
-    notepadOpenTabCount,
-    notepadRecentTabs,
+    railTabGroups,
     fileDropTargetPaneId,
     statusMessage,
     openSessionIds,
@@ -240,7 +239,7 @@
     runtimeReady,
     overlayHost,
     notify,
-    handleSelectNotepadTab,
+    handleSelectTabGroupTab,
     quickOpenCatalogSnapshot,
     quickOpenRecencyInputs,
     commandPaletteEntries,
@@ -603,14 +602,13 @@
     activeContextId,
     sessionsEnabled,
     panelWidthPx: normalizeActivityRailWidthPx(activityRailWidthPx),
-    notepadOpenTabCount,
-    notepadRecentTabs,
+    tabGroups: railTabGroups,
     onSelectContext: handleSelectContext,
     onAddWorkspace: handleAddWorkspace,
     onOpenWorkspaceManager: handleOpenWorkspaceManager,
     onPanelWidthChange: layoutHandlers.handleActivityRailWidthChange,
     onReorderWorkspaces: handleReorderWorkspaces,
-    onSelectNotepadTab: handleSelectNotepadTab,
+    onSelectTabGroupTab: handleSelectTabGroupTab,
   }}
   sessionsSidebar={{
     show: Boolean(activeWorkspaceRoot) && sessionsEnabled && hasReadyAgents,

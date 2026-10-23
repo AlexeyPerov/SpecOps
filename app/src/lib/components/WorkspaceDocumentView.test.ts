@@ -18,6 +18,13 @@ vi.mock('../services/workspaceDocuments', async () => {
     saveWorkspaceDocument: async () => {}, reloadWorkspaceDocument: async () => {},
   };
 });
+vi.mock('../services/workspaceCatalog', async (original) => {
+  const catalog = { version: 1, revision: 1, projects: {}, folders: {}, savedContexts: {}, documents: {
+    'doc-tasks': { id: 'doc-tasks', kind: 'tasks', name: 'Tasks', order: 0 },
+    'doc-notes': { id: 'doc-notes', kind: 'notes', name: 'Notes', order: 0 },
+  } };
+  return { ...await original<typeof import('../services/workspaceCatalog')>(), getProjectCatalog: () => catalog, subscribeProjectCatalog: () => () => {} };
+});
 import { serializeTaskBook, type TaskBook } from '../services/workspaceTasks';
 import { workspaceDocumentsRevision } from '../services/workspaceDocuments';
 import WorkspaceDocumentView from './WorkspaceDocumentView.svelte';
@@ -26,7 +33,7 @@ let target: HTMLElement;
 afterEach(async () => { if (view) await unmount(view); view = undefined; target?.remove(); });
 async function render(kind: 'tasks' | 'notes', root: string | null = '/project') {
   target = window.document.createElement('div'); window.document.body.append(target);
-  view = mount(WorkspaceDocumentView, { target, props: { root, kind, contextId: root === null ? 'tabs-default' : 'ws-1', paneId: 'pane-1', notify: vi.fn() } });
+  view = mount(WorkspaceDocumentView, { target, props: { root, documentId: root === null ? `doc-${kind}` : null, kind, contextId: root === null ? 'tabs-default' : 'ws-1', paneId: 'pane-1', notify: vi.fn() } });
   await tick();
 }
 describe('workspace document views', () => {

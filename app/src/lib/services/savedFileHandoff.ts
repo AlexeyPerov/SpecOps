@@ -1,5 +1,4 @@
 import type { DiskFingerprint } from "../domain/contracts";
-import { DEFAULT_TAB_GROUP_ID } from "../domain/contracts";
 import { appState } from "../state/appState";
 import { findDocumentContext } from "../state/appState/contextHelpers";
 import { claimOpenFile, renameOpenFileRegistry } from "./openFileRegistry";
@@ -45,7 +44,7 @@ export async function handoffSavedFileToTabGroup({
   const liveContent = currentDoc?.content ?? content;
 
   appState.closeTabForce(sourceTabId);
-  appState.switchContext(DEFAULT_TAB_GROUP_ID);
+  appState.switchContext(appState.getTargetTabGroupId());
   const documentId = appState.openTransferredTab({
     filePath,
     content: liveContent,

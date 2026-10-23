@@ -51,7 +51,7 @@
     Restrict files to their context
   </label>
   <p class="settings-section-note">
-    When on, files outside the workspace open in Notepad and workspace files stay in workspaces.
+    When on, files outside the workspace open in a tab group and workspace files stay in workspaces.
     When off, files open in whichever context you are in; each file still has only one tab.
   </p>
 </section>

@@ -5,6 +5,7 @@ import type {
   ContextSnapshot,
   DocumentState,
   TabGroupEntry,
+  TabGroupId,
   WindowBounds,
   WindowSessionSnapshot,
   WorkspaceLayoutState,
@@ -15,6 +16,7 @@ import {
   createFileTab,
   DEFAULT_TAB_GROUP_ID,
   DEFAULT_TAB_GROUP_NAME,
+  findTabGroup,
   isTabGroupId,
   createSinglePaneLayout,
   ensureUniquePaneIds,
@@ -36,6 +38,7 @@ import {
   getContextSnapshotById,
   nextDocAndTabIds,
   nextDocId,
+  nextTabGroupId,
   nextTabId,
   nextWorkspaceId,
   normalizeWorkspaceEntries,
@@ -125,6 +128,15 @@ export function createWorkspaceContextsSlice(deps: {
     };
   }
 
+  // Last tab group this window activated: files opened while a workspace is
+  // active and Tasks/Notes tabs land there.
+  let lastTabGroupId: TabGroupId = DEFAULT_TAB_GROUP_ID;
+  function targetTabGroupId(state: AppDomainState): TabGroupId {
+    const active = state.contexts.activeContextId;
+    if (isTabGroupId(active) && findTabGroup(state.contexts.tabGroups, active)) return active;
+    return findTabGroup(state.contexts.tabGroups, lastTabGroupId) ? lastTabGroupId : DEFAULT_TAB_GROUP_ID;
+  }
+
   let activationHistory: ContextId[] = [];
   function confirmActivation(contextId: ContextId): void {
     const state = getSnapshot();
@@ -136,7 +148,7 @@ export function createWorkspaceContextsSlice(deps: {
     }
   }
   const slice = {
-    clearWorkspaceActivationHistory(): void { activationHistory = []; },
+    clearWorkspaceActivationHistory(): void { activationHistory = []; lastTabGroupId = DEFAULT_TAB_GROUP_ID; },
     confirmWorkspaceActivation(contextId: ContextId): void { confirmActivation(contextId); },
     getWorkspaceActivationHistory(): ContextId[] {
       const ids = new Set(getSnapshot().contexts.workspaces.map(entry => entry.id));
@@ -181,6 +193,7 @@ export function createWorkspaceContextsSlice(deps: {
         activityRailWidthPx: railWidth,
       });
       activationHistory = isTabGroupId(activeContextId) ? [] : [activeContextId];
+      lastTabGroupId = isTabGroupId(activeContextId) ? activeContextId : DEFAULT_TAB_GROUP_ID;
       applyTheme(preservedTheme);
     },
     getWindowSessionSnapshot(): WindowSessionSnapshot {
@@ -213,6 +226,84 @@ export function createWorkspaceContextsSlice(deps: {
     isTabGroupActive() {
       return isTabGroupId(getSnapshot().contexts.activeContextId);
     },
+    /** The active tab group, else the window's last used group, else the default group. */
+    getTargetTabGroupId(): TabGroupId {
+      return targetTabGroupId(getSnapshot());
+    },
+    createTabGroup(name?: string): TabGroupId {
+      const id = nextTabGroupId();
+      update((state) => {
+        const names = new Set(state.contexts.tabGroups.map((group) => group.name));
+        let fallbackName = DEFAULT_TAB_GROUP_NAME;
+        for (let index = 2; names.has(fallbackName); index += 1) {
+          fallbackName = `${DEFAULT_TAB_GROUP_NAME} ${index}`;
+        }
+        return {
+          ...state,
+          contexts: {
+            ...state.contexts,
+            activeContextId: id,
+            tabGroups: [
+              ...state.contexts.tabGroups,
+              {
+                id,
+                name: name?.trim() || fallbackName,
+                snapshot: fallbackContextSnapshot(getActiveSession(state).lastActiveWindowId),
+              },
+            ],
+          },
+          editor: { ...state.editor, previewMode: "editor" },
+        };
+      });
+      lastTabGroupId = id;
+      return id;
+    },
+    renameTabGroup(id: ContextId, name: string): boolean {
+      const trimmed = name.trim();
+      let renamed = false;
+      update((state) => {
+        const group = findTabGroup(state.contexts.tabGroups, id);
+        if (!trimmed || !group || group.name === trimmed) return state;
+        renamed = true;
+        return {
+          ...state,
+          contexts: {
+            ...state.contexts,
+            tabGroups: state.contexts.tabGroups.map((entry) => entry.id === id ? { ...entry, name: trimmed } : entry),
+          },
+        };
+      });
+      return renamed;
+    },
+    getTabGroupDirtyDocuments(id: ContextId): DocumentState[] {
+      const group = findTabGroup(getSnapshot().contexts.tabGroups, id);
+      return group?.snapshot.documents.filter((documentState) => documentState.isDirty) ?? [];
+    },
+    /**
+     * Remove a tab group without prompting; unsaved-buffer confirmation is the
+     * caller's. The default group cannot be removed. An active group hands
+     * focus to the default group.
+     */
+    removeTabGroup(id: ContextId): boolean {
+      if (id === DEFAULT_TAB_GROUP_ID) return false;
+      let removed = false;
+      update((state) => {
+        if (!findTabGroup(state.contexts.tabGroups, id)) return state;
+        removed = true;
+        const active = state.contexts.activeContextId === id;
+        return {
+          ...state,
+          contexts: {
+            ...state.contexts,
+            activeContextId: active ? DEFAULT_TAB_GROUP_ID : state.contexts.activeContextId,
+            tabGroups: state.contexts.tabGroups.filter((group) => group.id !== id),
+          },
+          editor: active ? { ...state.editor, previewMode: "editor" } : state.editor,
+        };
+      });
+      if (removed && lastTabGroupId === id) lastTabGroupId = DEFAULT_TAB_GROUP_ID;
+      return removed;
+    },
     getWorkspaceRoot(contextId?: ContextId): string | null {
       const state = getSnapshot();
       const targetId = contextId ?? state.contexts.activeContextId;
@@ -244,7 +335,10 @@ export function createWorkspaceContextsSlice(deps: {
           },
         };
       });
-      if (switched) confirmActivation(contextId);
+      if (switched) {
+        if (isTabGroupId(contextId)) lastTabGroupId = contextId;
+        confirmActivation(contextId);
+      }
       return switched;
     },
     addWorkspace(rootPath: string, options: { deferActivation?: boolean } = {}): ContextId | null {
@@ -331,7 +425,7 @@ export function createWorkspaceContextsSlice(deps: {
         // Workspace order is user-visible and persisted, so the first remaining
         // entry is a deterministic successor when the active workspace closes.
         const activeContextId = closingActiveWorkspace
-          ? (workspaces[0]?.id ?? DEFAULT_TAB_GROUP_ID)
+          ? (workspaces[0]?.id ?? targetTabGroupId(state))
           : state.contexts.activeContextId;
         return {
           ...state,

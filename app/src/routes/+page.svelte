@@ -56,8 +56,6 @@
   import type { AppDomainState } from "../lib/domain/contracts";
   import {
     allTabs,
-    DEFAULT_TAB_GROUP_ID,
-    defaultTabGroupSnapshot,
     getSessionActiveTab,
     getSessionSelectedTabId,
     isFileTab,
@@ -75,7 +73,7 @@
     type WorkspaceFileCatalogRegistry,
   } from "../lib/services/workspaceFileCatalogRegistry";
   import { probeWorkspaceReadAccess, statPathKind } from "../lib/services/fileSystem";
-  import { formatNotepadTabLabel } from "../lib/services/notepadTabLabel";
+  import { createRailTabGroupsSelector } from "../lib/services/railTabGroups";
   import { listEnabledMarkdownSnippetsMemoized } from "../lib/editor/markdownSnippetSettings";
   import { buildCommandAvailabilitySnapshot } from "../lib/commands/availability";
   import { buildPaletteSnapshot } from "../lib/commands/catalog";
@@ -469,53 +467,10 @@
       isSessionTabActive,
     );
   });
-  /** How many open notepad files the rail card lists at most. */
-  const NOTEPAD_RAIL_TAB_LIMIT = 3;
-  // Notepad rail card data — reads the notepad context directly so it is
-  // available regardless of which context is currently active. Most recently
-  // opened file tabs in append order (newest-opened last), capped at
-  // NOTEPAD_RAIL_TAB_LIMIT so the card cannot push the workspace list down the
-  // rail.
-  const notepadSnapshot = $derived(defaultTabGroupSnapshot($appContexts));
-  const notepadSession = $derived(notepadSnapshot.session);
-  const notepadOpenTabCount = $derived(allTabs(notepadSession.editorLayout).length);
-  // P03-08-24f: memoize on the notepad session + documents references so the
-  // card's tab list keeps its array identity across unrelated app-state emits
-  // (cursor moves, other workspaces' edits). Re-derives only when the notepad
-  // session or documents actually change.
-  let notepadRecentTabsInput: {
-    session: typeof notepadSession;
-    documents: import("../lib/domain/contracts").DocumentState[];
-  } | null = null;
-  let notepadRecentTabsOutput: { tabId: string; label: string }[] = [];
-  const notepadRecentTabs = $derived.by(() => {
-    const notepadDocs = notepadSnapshot.documents;
-    if (
-      notepadRecentTabsInput &&
-      notepadRecentTabsInput.session === notepadSession &&
-      notepadRecentTabsInput.documents === notepadDocs
-    ) {
-      return notepadRecentTabsOutput;
-    }
-    const fileTabs = allTabs(notepadSession.editorLayout)
-      .filter(isFileTab)
-      .filter((tab) => {
-        const doc = notepadDocs.find((documentState) => documentState.id === tab.documentId);
-        // Skip untitled/unsaved docs (no on-disk path) so the card only lists
-        // real saved files.
-        return Boolean(doc?.filePath);
-      });
-    const recent = fileTabs.slice(-NOTEPAD_RAIL_TAB_LIMIT);
-    notepadRecentTabsOutput = recent.map((tab) => {
-      const doc = notepadDocs.find((documentState) => documentState.id === tab.documentId);
-      return {
-        tabId: tab.id,
-        label: formatNotepadTabLabel(doc?.filePath ?? null, doc?.title ?? ""),
-      };
-    });
-    notepadRecentTabsInput = { session: notepadSession, documents: notepadDocs };
-    return notepadRecentTabsOutput;
-  });
+  // Sidebar rows for the window's tab groups; rows keep their identity until
+  // their group changes.
+  const selectRailTabGroups = createRailTabGroupsSelector();
+  const railTabGroups = $derived(selectRailTabGroups($appContexts.tabGroups));
   // Phase 4: the active document is the active pane's selected FILE tab's
   // document. Session / view tabs and empty panes resolve to `undefined`
   // (previously this fell back to documents[0], which could surface an
@@ -582,9 +537,9 @@
     }
   });
 
-  /** Switches to the notepad context and selects the given tab. */
-  function handleSelectNotepadTab(tabId: string): void {
-    appState.switchContext(DEFAULT_TAB_GROUP_ID);
+  /** Switches to a tab group and selects the given tab. */
+  function handleSelectTabGroupTab(groupId: ContextId, tabId: string): void {
+    appState.switchContext(groupId);
     appState.selectTab(tabId);
   }
 
@@ -971,8 +926,7 @@
   {isSessionTabActive}
   {currentWindowId}
   {runtimeReady}
-  {notepadOpenTabCount}
-  {notepadRecentTabs}
+  {railTabGroups}
   {fileDropTargetPaneId}
   {statusMessage}
   {openSessionIds}
@@ -986,7 +940,7 @@
   {workspaceFileCatalogRegistry}
   overlayHost={overlayHost}
   {notify}
-  {handleSelectNotepadTab}
+  {handleSelectTabGroupTab}
   {quickOpenCatalogSnapshot}
   {quickOpenRecencyInputs}
   {commandPaletteEntries}

@@ -28,31 +28,89 @@ function workspace(index: number, rootPath: string): WorkspaceEntry {
     editorLayout: createSinglePaneLayout([], null), lastActiveWindowId: "main", windowBounds: null, lastActiveSessionId: null,
   } } };
 }
-beforeEach(() => { _resetProjectCatalogForTests(); vi.mocked(invoke).mockReset(); localStorage.clear(); vi.mocked(readLiveWorkspaceWindowOwners).mockResolvedValue({}); vi.mocked(addWorkspaceToWindow).mockClear(); vi.mocked(invoke).mockResolvedValue({version:1, revision:1, projects:{}, folders:{}, savedContexts:{}}); });
+beforeEach(() => { _resetProjectCatalogForTests(); vi.mocked(invoke).mockReset(); localStorage.clear(); vi.mocked(readLiveWorkspaceWindowOwners).mockResolvedValue({}); vi.mocked(addWorkspaceToWindow).mockClear(); vi.mocked(invoke).mockResolvedValue({version:1, revision:1, projects:{}, folders:{}, savedContexts:{}, documents:{}}); });
 describe("ActivityRail", () => {
-  it.each([48, 240])('opens global document tabs from either rail width (%s)', async (width) => {
-    const snapshot = appState.getSnapshot();
-    let active: ContextId = 'ws-9';
-    const read = vi.spyOn(appState, 'getSnapshot').mockImplementation(() => ({ ...snapshot, contexts: { ...snapshot.contexts, activeContextId: active } }));
+  async function loadDocuments(): Promise<void> {
+    vi.mocked(invoke).mockResolvedValue({ version:1, revision:2, projects:{}, folders:{}, savedContexts:{}, documents:{
+      plan: { id:'plan', kind:'tasks', name:'Plan', order:0 },
+      later: { id:'later', kind:'tasks', name:'Later', order:1 },
+      ideas: { id:'ideas', kind:'notes', name:'Ideas', order:0 },
+    } });
+    await loadProjectCatalog();
+  }
+  it.each([48, 240])('opens app-wide documents in the target tab group from either rail width (%s)', async (width) => {
+    await loadDocuments();
+    const target = vi.spyOn(appState, 'getTargetTabGroupId').mockReturnValue('tabs-default');
+    const switchContext = vi.spyOn(appState, 'switchContext').mockReturnValue(true);
     const open = vi.spyOn(appState, 'openOrFocusViewTab').mockImplementation(() => {});
-    const select = vi.fn((id: ContextId) => { active = id; });
     try {
-      const { host } = mountComponent(ActivityRail, { panelWidthPx: width, onSelectContext: select }); await tick();
-      host.querySelector<HTMLButtonElement>('[aria-label="Tasks"]')!.click();
-      expect(select).toHaveBeenCalledWith('tabs-default'); expect(open).toHaveBeenLastCalledWith('workspace-tasks');
-      host.querySelector<HTMLButtonElement>('[aria-label="Notes"]')!.click();
-      expect(open).toHaveBeenLastCalledWith('workspace-notes');
-    } finally { read.mockRestore(); open.mockRestore(); }
+      const { host } = mountComponent(ActivityRail, { panelWidthPx: width }); await tick();
+      host.querySelector<HTMLButtonElement>('[aria-label="Tasks Later"]')!.click();
+      expect(switchContext).toHaveBeenCalledWith('tabs-default');
+      expect(open).toHaveBeenLastCalledWith('workspace-tasks', undefined, 'later');
+      host.querySelector<HTMLButtonElement>('[aria-label="Notes Ideas"]')!.click();
+      expect(open).toHaveBeenLastCalledWith('workspace-notes', undefined, 'ideas');
+      const tasks = [...host.querySelectorAll<HTMLElement>('[data-global-document-id]')].map(element => element.dataset.globalDocumentId);
+      expect(tasks).toEqual(['plan', 'later', 'ideas']);
+    } finally { target.mockRestore(); switchContext.mockRestore(); open.mockRestore(); }
   });
   it('does not open a document in the wrong scope if context switching is blocked', async () => {
+    await loadDocuments();
     const snapshot = appState.getSnapshot();
     const read = vi.spyOn(appState, 'getSnapshot').mockReturnValue({ ...snapshot, contexts: { ...snapshot.contexts, activeContextId: 'ws-9' } });
+    const switchContext = vi.spyOn(appState, 'switchContext').mockReturnValue(false);
     const open = vi.spyOn(appState, 'openOrFocusViewTab').mockImplementation(() => {});
     try {
-      const { host } = mountComponent(ActivityRail, { onSelectContext: () => {} }); await tick();
-      host.querySelector<HTMLButtonElement>('[aria-label="Tasks"]')!.click();
+      const { host } = mountComponent(ActivityRail, {}); await tick();
+      host.querySelector<HTMLButtonElement>('[aria-label="Tasks Plan"]')!.click();
       expect(open).not.toHaveBeenCalled();
-    } finally { read.mockRestore(); open.mockRestore(); }
+    } finally { read.mockRestore(); switchContext.mockRestore(); open.mockRestore(); }
+  });
+  it.each([48, 240])('lists tab groups, selects them and protects the default group from deletion (%s)', async (width) => {
+    const select = vi.fn();
+    const selectTab = vi.fn();
+    const tabGroups = [
+      { id: 'tabs-default' as const, name: 'Tabs', tabCount: 2, recentTabs: [{ tabId: 'tab-7', label: 'notes/a.md' }] },
+      { id: 'tabs-2' as const, name: 'Drafts', tabCount: 1, recentTabs: [] },
+    ];
+    const { host } = mountComponent(ActivityRail, { panelWidthPx: width, tabGroups, activeContextId: 'tabs-2' as ContextId, onSelectContext: select, onSelectTabGroupTab: selectTab }); await tick();
+    const rows = [...host.querySelectorAll<HTMLButtonElement>('[data-tab-group-id]')];
+    expect(rows.map(row => row.dataset.tabGroupId)).toEqual(['tabs-default', 'tabs-2']);
+    expect(rows.map(row => row.dataset.tabGroupDrop)).toEqual(['tabs-default', 'tabs-2']);
+    expect(rows[1].getAttribute('aria-current')).toBe('true');
+    rows[0].click();
+    expect(select).toHaveBeenCalledWith('tabs-default');
+    if (width === 240) {
+      host.querySelector<HTMLElement>('.rail-tab-group-tab')!.click();
+      expect(selectTab).toHaveBeenCalledWith('tabs-default', 'tab-7');
+    }
+    rows[0].dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 })); await tick();
+    const menuItems = [...document.querySelectorAll<HTMLButtonElement>('.rail-catalog-menu button')];
+    expect(menuItems.map(item => item.textContent)).toEqual(['Rename', 'Delete']);
+    expect(menuItems[1].disabled).toBe(true);
+  });
+  it('creates and renames tab groups through the name form', async () => {
+    const create = vi.spyOn(appState, 'createTabGroup').mockReturnValue('tabs-3');
+    const rename = vi.spyOn(appState, 'renameTabGroup').mockReturnValue(true);
+    try {
+      const tabGroups = [
+        { id: 'tabs-default' as const, name: 'Tabs', tabCount: 1, recentTabs: [] },
+        { id: 'tabs-2' as const, name: 'Drafts', tabCount: 1, recentTabs: [] },
+      ];
+      const { host } = mountComponent(ActivityRail, { panelWidthPx: 240, tabGroups }); await tick();
+      host.querySelector<HTMLButtonElement>('[aria-label="New tab group"]')!.click(); await tick();
+      const input = host.querySelector<HTMLInputElement>('.rail-entity-form input')!;
+      input.value = 'Review'; input.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+      input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await tick();
+      expect(create).toHaveBeenCalledWith('Review');
+      host.querySelector<HTMLButtonElement>('[data-tab-group-id="tabs-2"]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 })); await tick();
+      [...document.querySelectorAll<HTMLButtonElement>('.rail-catalog-menu button')].find(item => item.textContent === 'Rename')!.click(); await tick();
+      const renameInput = host.querySelector<HTMLInputElement>('.rail-entity-form input')!;
+      expect(renameInput.value).toBe('Drafts');
+      renameInput.value = 'Archive'; renameInput.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+      renameInput.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await tick();
+      expect(rename).toHaveBeenCalledWith('tabs-2', 'Archive');
+    } finally { create.mockRestore(); rename.mockRestore(); }
   });
   it('temporarily reveals collapsed matches and restores collapse on Escape without Git or catalog writes', async () => {
     const project = { ...catalogProjectForRoot('/team/hidden-app'), folderId: 'team' };

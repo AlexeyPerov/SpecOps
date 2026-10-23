@@ -118,9 +118,9 @@ export function canCopyRelativePath(
 }
 
 /**
- * Multi-window placement is a Notepad-only policy (a workspace tab belongs to
- * its workspace context, and the receiving window adopts transfers into its own
- * Notepad), so the menu entry is offered only for Notepad file tabs.
+ * Multi-window placement is a tab-group-only policy (a workspace tab belongs to
+ * its workspace context, and the receiving window adopts transfers into one of
+ * its own tab groups), so the menu entry is offered only for tab group file tabs.
  */
 export function canOpenTabInNewWindow(
   tab: TabState | null,

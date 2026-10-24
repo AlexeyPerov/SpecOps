@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-24 20:49 MSK — Fix unused Git test helper warning
+
+- Compile `register_active_git_command_with_kind` only for tests, where it is used, removing the native build's dead-code warning.
+- Discard an unused UTF-8 status value in the stream truncation test, removing its unused-variable warning.
+
 ## 2026-10-24 20:48 MSK — Release 0.4.0
 
 - Bumped application version from 0.3.0 to 0.4.0.

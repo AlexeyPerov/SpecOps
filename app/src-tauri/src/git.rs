@@ -561,6 +561,7 @@ fn cleanup_stale_index_lock_if_unowned(repo_root: &Path) {
     }
 }
 
+#[cfg(test)]
 fn register_active_git_command_with_kind(
     command_id: &str,
     repo_root: PathBuf,
@@ -2213,7 +2214,7 @@ mod tests {
         let oversized: Vec<u8> = (0..1024).flat_map(|_| pattern.iter().copied()).collect();
         let cap = 16; // even — guaranteed to land mid-character for 2-byte "é"
         let mut cursor = Cursor::new(oversized.clone().into_boxed_slice());
-        let (text, had_invalid_utf8) =
+        let (text, _) =
             read_limited_stream(&mut cursor, cap).expect("truncates, not errors");
         // Must not panic and must remain valid UTF-8 (decode_utf8 guarantees this,
         // but the assertion documents the F2 invariant).

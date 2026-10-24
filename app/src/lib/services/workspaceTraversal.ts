@@ -90,6 +90,9 @@ export function relativePathFromRoot(absolutePath: string, workspaceRoot: string
 }
 
 export interface EnumerateOpenableFilesOptions {
+  /** Tree filters may include hidden entries, while heavy directories remain excluded. */
+  showHidden?: boolean;
+  acceptsPath?: (path: string) => boolean;
   /** Return true to abort; checked between directories. */
   isCancelled?: () => boolean;
   /** Skip symlink entries (default true — shared with project tree). */
@@ -113,17 +116,17 @@ export interface EnumerateOpenableFilesResult {
  * a partial catalog, not an unbounded walk.
  */
 const MAX_TRAVERSAL_DEPTH = 64;
-const MAX_ENUMERATED_FILES = 100_000;
+const MAX_TRAVERSAL_ENTRIES = 100_000;
 /** Directory listings in flight at once during enumeration. */
 const TRAVERSAL_CONCURRENCY = 8;
 
 type PendingDirectory = { path: string; depth: number };
 
 /**
- * Recursively enumerate openable file paths under a workspace root.
+ * Recursively enumerate matching file paths under a workspace root.
  * Does not read file contents. Unreadable directories are skipped and recorded.
  */
-export async function enumerateOpenableWorkspaceFiles(
+export async function enumerateWorkspaceFiles(
   rootPath: string,
   options: EnumerateOpenableFilesOptions = {},
 ): Promise<EnumerateOpenableFilesResult> {
@@ -132,6 +135,7 @@ export async function enumerateOpenableWorkspaceFiles(
   const paths: string[] = [];
   const partialErrors: string[] = [];
   let truncated = false;
+  let visitedEntries = 0;
   const readDirFn =
     options.readDir ??
     (async (directoryPath: string) => {
@@ -156,16 +160,19 @@ export async function enumerateOpenableWorkspaceFiles(
       if (options.isCancelled?.()) {
         return;
       }
-      if (paths.length >= MAX_ENUMERATED_FILES) {
+      if (visitedEntries >= MAX_TRAVERSAL_ENTRIES) {
         truncated = true;
         return;
       }
+      visitedEntries += 1;
+      // A single very wide directory must not monopolize the WebView thread.
+      if (visitedEntries % 2048 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
       const entry = raw as WorkspaceListEntry;
       if (skipSymlinks && entry.isSymlink) {
         continue;
       }
       if (entry.isDirectory) {
-        if (shouldSkipDirectoryEntry(entry)) {
+        if (options.showHidden ? (entryIsHidden(entry) || shouldSkipHeavyDirectoryName(entry.name)) : shouldSkipDirectoryEntry(entry)) {
           continue;
         }
         if (depth >= MAX_TRAVERSAL_DEPTH) {
@@ -175,11 +182,11 @@ export async function enumerateOpenableWorkspaceFiles(
         pending.push({ path: joinDirectoryPath(directoryPath, entry.name), depth: depth + 1 });
         continue;
       }
-      if (shouldSkipFileEntry(entry)) {
+      if (options.showHidden ? entryIsHidden(entry) : shouldSkipFileEntry(entry)) {
         continue;
       }
       const path = joinDirectoryPath(directoryPath, entry.name);
-      if (isOpenableFilePath(path)) {
+      if ((options.acceptsPath ?? isOpenableFilePath)(path)) {
         paths.push(path);
       }
     }
@@ -193,7 +200,7 @@ export async function enumerateOpenableWorkspaceFiles(
     let active = 0;
     const pump = (): void => {
       const stopped =
-        options.isCancelled?.() === true || paths.length >= MAX_ENUMERATED_FILES;
+        options.isCancelled?.() === true || visitedEntries >= MAX_TRAVERSAL_ENTRIES;
       while (!stopped && active < TRAVERSAL_CONCURRENCY && pending.length > 0) {
         const next = pending.pop()!;
         active += 1;
@@ -203,7 +210,7 @@ export async function enumerateOpenableWorkspaceFiles(
         });
       }
       if (active === 0 && (stopped || pending.length === 0)) {
-        if (paths.length >= MAX_ENUMERATED_FILES && pending.length > 0) {
+        if (visitedEntries >= MAX_TRAVERSAL_ENTRIES && pending.length > 0) {
           truncated = true;
         }
         resolve();
@@ -217,4 +224,11 @@ export async function enumerateOpenableWorkspaceFiles(
   }
   paths.sort((a, b) => a.localeCompare(b));
   return { paths, partialErrors, cancelled: false, truncated };
+}
+
+/** Editor catalog keeps its existing file eligibility independently of tree filters. */
+export function enumerateOpenableWorkspaceFiles(
+  rootPath: string, options: EnumerateOpenableFilesOptions = {},
+): Promise<EnumerateOpenableFilesResult> {
+  return enumerateWorkspaceFiles(rootPath, { ...options, acceptsPath: isOpenableFilePath });
 }

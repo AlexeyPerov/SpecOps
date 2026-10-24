@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, untrack, tick } from "svelte";
+  import { readDir } from "@tauri-apps/plugin-fs";
   import WorkspaceDocumentsLinks from "./WorkspaceDocumentsLinks.svelte";
   import ProjectTreeView from "./ProjectTreeView.svelte";
   import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
@@ -28,6 +29,10 @@
   import { flattenProjectTree } from "../services/projectTreeFlatten";
   import { selectProjectPaths } from "../services/projectSelection";
   import { moveProjectEntries, deleteProjectEntries } from "../services/projectBulkOperations";
+  import { createProjectTypeFilter, filterProjectNodes, PROJECT_FILE_FILTERS, type ProjectFileFilter, type ProjectFilterSnapshot } from "../services/projectTypeFilter";
+  import { createProjectSizes, projectSizeLabel, projectSizeTitle, type ProjectSizeMode, type ProjectSizeEntry } from "../services/projectSizes";
+  import { subscribeProjectPaneChanges } from "../services/projectPaneChanges";
+  import type { WorkspaceListEntry } from "../services/workspaceTraversal";
   import RefreshIcon from "./icons/RefreshIcon.svelte";
   import SearchIcon from "./icons/SearchIcon.svelte";
 
@@ -37,13 +42,7 @@
     expandedPaths?: ReadonlySet<string>;
     childrenByPath?: ReadonlyMap<string, ProjectTreeNode[]>;
     loadingPaths?: ReadonlySet<string>;
-    /**
-     * Every openable file in the workspace, used by the `.md` filter to keep the
-     * folders that contain Markdown files. Null while the list is not known yet
-     * (still enumerating), so the filter keeps every folder instead of hiding
-     * nested Markdown files.
-     */
-    markdownPaths?: readonly string[] | null;
+    readProjectDirectory?: (path: string) => Promise<WorkspaceListEntry[]>;
     activeFilePath?: string | null;
     /** M5-T3 — git change status badges (absolute path → status). */
     statusByPath?: ReadonlyMap<string, FileChangeStatus> | null;
@@ -76,7 +75,6 @@
     /** Phase 6 — reports the hovered pane during a file drag (for affordance). */
     onFileDropPaneChange?: (paneId: string | null) => void;
     onOpenFileInContext?: (filePath: string, contextId: ContextId) => void | Promise<void>;
-    onMarkdownFilterEnable?: () => void;
   }
 
   let {
@@ -85,7 +83,7 @@
     expandedPaths = emptySet<string>(),
     childrenByPath = emptyMap<string, ProjectTreeNode[]>(),
     loadingPaths = emptySet<string>(),
-    markdownPaths = null,
+    readProjectDirectory,
     activeFilePath = null,
     statusByPath = null,
     showHidden = false,
@@ -110,7 +108,6 @@
     onOpenFileInPane = null,
     onFileDropPaneChange = () => {},
     onOpenFileInContext,
-    onMarkdownFilterEnable = () => {},
   }: Props = $props();
 
   let selectedPaths = $state<Set<string>>(new Set());
@@ -228,54 +225,54 @@
   let gitLogPopover = $state<GitLogPopover | undefined>(undefined);
   let displayWidth = $state(DEFAULT_PROJECT_PANEL_WIDTH_PX);
   let isResizing = $state(false);
-  let markdownOnly = $state(false);
+  let fileFilter = $state<ProjectFileFilter>("all");
+  let sizeMode = $state<ProjectSizeMode>("off");
+  let sizeEntries = $state.raw<ReadonlyMap<string, ProjectSizeEntry>>(new Map());
+  let filterSnapshot = $state.raw<ProjectFilterSnapshot>({ directories: null, unknownDirectories: [], loading: false, incomplete: false });
+  let paneVisible = $state(true);
+  const rootSize = $derived(sizeEntries.get(normalizePathSync(workspaceRoot).replace(/\/+$/, "")));
+  const typeFilter = createProjectTypeFilter({
+    readDir: (path) => (readProjectDirectory ?? readDir)(path),
+    publish: (snapshot) => { filterSnapshot = snapshot; },
+  });
+  const sizes = createProjectSizes({ publish: (entries) => { sizeEntries = entries; }, notify: (message) => notify(message) });
+  $effect(() => { typeFilter.configure(workspaceRoot, fileFilter, showHidden, !collapsed && paneVisible); });
+  $effect(() => { sizes.configure(workspaceRoot, sizeMode, !collapsed && paneVisible); });
+  $effect(() => {
+    const visibility = () => { paneVisible = !document.hidden; };
+    const focus = () => { if (!document.hidden) sizes.refresh(); };
+    visibility();
+    document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("focus", focus);
+    return () => { document.removeEventListener("visibilitychange", visibility); window.removeEventListener("focus", focus); };
+  });
+  const unsubscribePaneChanges = subscribeProjectPaneChanges((path, kind) => {
+    typeFilter.changed(path, kind);
+    sizes.changed(path);
+  });
+  onDestroy(() => { unsubscribePaneChanges(); typeFilter.dispose(); sizes.dispose(); });
+  function refreshPane(): void {
+    onRefresh();
+    typeFilter.refresh();
+    sizes.refresh();
+  }
+  function calculateFolderSize(path: string): void {
+    sizeMode = "folders";
+    sizes.configure(workspaceRoot, "folders", !collapsed && paneVisible);
+    void sizes.calculate(path);
+  }
   let draft = $state<{
     kind: "file" | "directory";
     parentDirPath: string;
     defaultValue: string;
   } | null>(null);
 
-  /**
-   * Comparison keys of every folder that has a Markdown file somewhere below
-   * it, or null while the workspace file list is still loading.
-   */
-  const markdownDirectoryKeys = $derived.by(() => {
-    if (!markdownPaths) return null;
-    const rootKey = normalizePathSync(workspaceRoot);
-    const dirs = new Set<string>();
-    for (const filePath of markdownPaths) {
-      if (!filePath.toLowerCase().endsWith(".md")) continue;
-      let cursor = normalizePathSync(filePath).replace(/\/[^/]+$/, "");
-      while (cursor.length > rootKey.length && !dirs.has(cursor)) {
-        dirs.add(cursor);
-        const parent = cursor.replace(/\/[^/]+$/, "");
-        if (parent === cursor) break;
-        cursor = parent;
-      }
-    }
-    return dirs;
-  });
-
-  $effect(() => {
-    // The file list backing the filter is per workspace: switching workspaces
-    // with the filter on must start enumerating the new one too.
-    void workspaceRoot;
-    if (markdownOnly) untrack(onMarkdownFilterEnable);
-  });
-
   function filterNodes(nodes: readonly ProjectTreeNode[]): ProjectTreeNode[] {
-    if (!markdownOnly) return [...nodes];
-    const dirs = markdownDirectoryKeys;
-    return nodes.filter((node) =>
-      node.kind === "file"
-        ? node.path.toLowerCase().endsWith(".md")
-        : !dirs || dirs.has(normalizePathSync(node.path)),
-    );
+    return filterProjectNodes(nodes, fileFilter, filterSnapshot);
   }
-
   const visibleRootNodes = $derived(filterNodes(rootNodes));
   const visibleChildrenByPath = $derived.by(() => {
-    if (!markdownOnly) return childrenByPath;
+    if (fileFilter === "all") return childrenByPath;
     const next = new Map<string, ProjectTreeNode[]>();
     for (const [path, nodes] of childrenByPath) next.set(path, filterNodes(nodes));
     return next;
@@ -459,7 +456,7 @@
     draft = {
       kind,
       parentDirPath,
-      defaultValue: kind === "directory" ? "New Folder" : markdownOnly ? "untitled.md" : "untitled.txt",
+      defaultValue: kind === "directory" ? "New Folder" : fileFilter === "markdown" ? "untitled.md" : "untitled.txt",
     };
   }
 
@@ -515,20 +512,25 @@
         <div class="tree-actions-menu">
           <button type="button" onclick={(event) => { expandOneLevel(); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Expand one level</button>
           <button type="button" disabled={expandedPaths.size === 0} onclick={(event) => { onCollapseAll(); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Collapse all</button>
+          <label class="project-size-mode">File sizes
+            <select aria-label="Project file sizes" bind:value={sizeMode}>
+              <option value="off">Off</option>
+              <option value="files">Files</option>
+              <option value="folders">Files and folders</option>
+            </select>
+          </label>
+
         </div>
       </details>
-      <button class="btn btn-sm btn-ghost" type="button" onclick={onRefresh} title="Refresh tree">
+      <button class="btn btn-sm btn-ghost" type="button" onclick={refreshPane} title="Refresh tree">
         <RefreshIcon size={14} />
       </button>
-      <button
-        class={`btn btn-sm btn-ghost ${markdownOnly ? "project-panel-filter-active" : ""}`}
-        type="button"
-        aria-pressed={markdownOnly}
-        title={markdownOnly ? "Show all files" : "Show Markdown files only"}
-        onclick={() => {
-          markdownOnly = !markdownOnly;
-        }}
-      >.md</button>
+      <div class="project-panel-filter-bar">
+      <select class:project-panel-filter-active={fileFilter !== "all"} class="project-file-filter" aria-label="Filter project files" bind:value={fileFilter}>
+        {#each PROJECT_FILE_FILTERS as option (option.value)}
+          <option value={option.value}>{option.label}</option>
+        {/each}
+      </select>
       <button
         class="btn btn-sm btn-ghost"
         type="button"
@@ -537,9 +539,10 @@
       >
         {showHidden ? "Hidden: On" : "Hidden: Off"}
       </button>
+      </div>
     {/if}
     <button
-      class="btn btn-sm btn-ghost"
+      class="btn btn-sm btn-ghost project-panel-collapse"
       type="button"
       onclick={() => onToggleCollapsed(!collapsed)}
       title={collapsed ? "Expand panel" : "Collapse panel"}
@@ -557,6 +560,15 @@
       onscroll={handleBodyScroll}
       oncontextmenu={handleContextMenuRoot}
     >
+      {#if fileFilter !== "all" && (filterSnapshot.loading || filterSnapshot.incomplete)}
+        <div class="project-filter-status" role="status">{filterSnapshot.loading ? "Finding matching files…" : "Some folders could not be indexed; results may be incomplete."}</div>
+      {/if}
+      {#if sizeMode === "folders" && rootSize}
+        <div class="project-root-size" title={projectSizeTitle(rootSize)}>
+          <span>Project size: {projectSizeLabel(rootSize)}</span>
+          <button type="button" class="btn btn-sm btn-ghost" onclick={() => rootSize.loading ? sizes.cancel(workspaceRoot) : calculateFolderSize(workspaceRoot)}>{rootSize.loading ? "Cancel" : "Recalculate"}</button>
+        </div>
+      {/if}
       <WorkspaceDocumentsLinks root={workspaceRoot} refreshToken={rootNodes} />
       {#if favorites.length > 0}
         <section class="project-favorites" aria-label="Favorites">
@@ -594,6 +606,9 @@
         {activeFilePath}
         {statusByPath}
         {favoritePaths}
+        {sizeMode}
+        {sizeEntries}
+        onVisibleFiles={(paths) => sizes.visibleFiles(paths)}
         revealPath={favoriteRevealPath}
         {onToggleDirectory}
         {onOpenFile}
@@ -627,6 +642,9 @@
   onNewFolder={(parent) => startDraft("directory", parent)}
   onRename={onRenameEntry}
   onDelete={onDeleteEntry}
+  onCalculateFolderSize={calculateFolderSize}
+  onCancelFolderSize={(path) => sizes.cancel(path)}
+  {sizeEntries}
   busy={mutationRunning}
   onMoveSelected={(entries) => { void mutateSelected("move", entries); }}
   onDeleteSelected={(entries) => { void mutateSelected("delete", entries); }}
@@ -637,6 +655,14 @@
 <GitLogPopover bind:this={gitLogPopover} onOpenCommit={openCommitInVersionControl} />
 
 <style>
+  .project-root-size { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; font-size: 11px; color: var(--color-text-secondary); }
+  .project-panel-collapse { grid-column: 6; grid-row: 1; }
+  .project-panel-filter-bar { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; gap: 6px; padding-bottom: 5px; }
+  .project-file-filter { min-width: 0; flex: 1; background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); font: inherit; font-size: 11px; padding: 3px; }
+  .project-size-mode { display: flex; flex-direction: column; gap: 4px; padding: 6px; color: var(--color-text-primary); }
+  .project-size-mode select { font: inherit; color: inherit; background: var(--color-surface-1); }
+  .project-filter-status { padding: 6px; font-size: 11px; color: var(--color-text-secondary); }
+
   .tree-actions { position: relative; }
   .tree-actions summary { list-style: none; cursor: pointer; }
   .tree-actions summary::-webkit-details-marker { display: none; }
@@ -687,14 +713,17 @@
   }
 
   .project-panel-header {
-    height: var(--tab-header-height);
+    min-height: var(--tab-header-height);
     border-bottom: 1px solid var(--color-border-subtle);
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) repeat(5, auto);
     align-items: center;
-    gap: var(--space-4);
-    padding: 0 var(--space-6);
+    gap: 2px;
+    padding: 4px 6px 0;
     min-width: 0;
   }
+
+  .project-panel-collapsed .project-panel-header { padding: 0; }
 
   .project-panel-title {
     flex: 1;

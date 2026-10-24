@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { ProjectSizeEntry } from "../services/projectSizes";
+  import { emptyMap } from "../collections/emptyCollections";
   import { normalizePathSync } from "../services/diskFingerprint";
   import { onDestroy } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
@@ -17,6 +19,9 @@
   }
 
   interface Props {
+    sizeEntries?: ReadonlyMap<string, ProjectSizeEntry>;
+    onCalculateFolderSize?: (path: string) => void;
+    onCancelFolderSize?: (path: string) => void;
     busy?: boolean;
     notify?: (message: string) => void;
     onMoveSelected?: (entries: readonly ProjectTreeNode[]) => void;
@@ -37,6 +42,9 @@
   }
 
   let {
+    sizeEntries = emptyMap<string, ProjectSizeEntry>(),
+    onCalculateFolderSize,
+    onCancelFolderSize,
     busy = false,
     notify = () => {},
     onMoveSelected = () => {},
@@ -177,6 +185,14 @@
     tabindex="-1"
     onpointerdown={(event) => event.stopPropagation()}
   >
+    {#if !multiple && !isFile && onCalculateFolderSize}
+      {@const folderPath = nodePath ?? parentDirPath}
+      {@const folderSize = sizeEntries.get(normalizePathSync(folderPath).replace(/\/+$/, ""))}
+      <button class="project-tree-context-item" type="button" role="menuitem"
+        onclick={() => { if (folderSize?.loading) onCancelFolderSize?.(folderPath); else onCalculateFolderSize?.(folderPath); closeContextMenu(); }}>
+        {folderSize?.loading ? "Cancel size calculation" : folderSize ? "Recalculate folder size" : "Calculate folder size"}
+      </button>
+    {/if}
     {#if !multiple && isFile && nodePath}
       <button
         class="project-tree-context-item"

@@ -80,3 +80,21 @@ it("decorates closed ancestors and keeps favorites visible alongside Git status"
   expect(file.querySelector(".project-tree-star")).not.toBeNull();
   expect(file.querySelector(".project-tree-status-badge")?.textContent).toBe("M");
 });
+
+it("requests viewport metadata rather than every expanded file", async () => {
+  const visible = vi.fn();
+  const overflow = document.body.style.overflowY;
+  document.body.style.overflowY = "auto";
+  const { host } = mountComponent(ProjectTreeView, {
+    workspaceRoot: "/project", sizeMode: "files" as const,
+    nodes: Array.from({ length: 10_000 }, (_, n) => ({ name: `${n}.dds`, path: `/project/${n}.dds`, kind: "file" as const })),
+    onVisibleFiles: visible,
+  });
+  flushSync(); await tick();
+  const requested = visible.mock.calls.at(-1)![0] as string[];
+  expect(requested.length).toBeGreaterThan(0);
+  expect(requested.length).toBeLessThan(100);
+  expect(host.querySelectorAll(".project-tree-size").length).toBeGreaterThan(0);
+  expect(host.querySelectorAll("[data-path]").length).toBeLessThan(100);
+  document.body.style.overflowY = overflow;
+});

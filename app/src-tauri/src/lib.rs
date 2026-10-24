@@ -9,6 +9,7 @@ mod git_askpass;
 mod handoff;
 mod session_fs;
 mod project_move;
+mod project_sizes;
 mod project_catalog;
 mod workspace_documents;
 
@@ -93,6 +94,7 @@ fn quit_app(app_handle: tauri::AppHandle) {
 pub fn run() {
     let app = tauri::Builder::default()
         .manage(FileWatcherState::new())
+        .manage(project_sizes::ProjectSizesState::default())
         .manage(AgentHostState::new())
         .setup(|app| {
             let component_manager =
@@ -127,6 +129,9 @@ pub fn run() {
             handoff::handoff_write_journal,
             handoff::handoff_read_journal,
             project_move::project_move_entry,
+            project_sizes::project_file_sizes,
+            project_sizes::project_start_folder_size,
+            project_sizes::project_cancel_folder_size,
             workspace_documents::workspace_document_read,
             workspace_documents::workspace_document_save,
             workspace_documents::workspace_documents_transfer,

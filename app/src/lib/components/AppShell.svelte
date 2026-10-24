@@ -96,7 +96,7 @@
       string,
       import("../domain/fileChanges").FileChangeStatus
     > | null;
-    markdownPaths?: readonly string[] | null;
+    readProjectDirectory?: (path: string) => Promise<import("../services/workspaceTraversal").WorkspaceListEntry[]>;
     collapsed: boolean;
     panelWidthPx: number;
     onRefresh: () => void | Promise<void>;
@@ -122,7 +122,6 @@
     /** Phase 6 — reports the hovered pane during a file drag (for affordance). */
     onFileDropPaneChange?: (paneId: string | null) => void;
     onOpenFileInContext?: (filePath: string, contextId: ContextId) => void | Promise<void>;
-    onMarkdownFilterEnable?: () => void;
     notify: (message: string) => void;
   }
 
@@ -707,7 +706,7 @@
         loadingPaths={projectTree.state.loadingPaths}
         activeFilePath={projectTree.activeFilePath}
         statusByPath={projectTree.statusByPath ?? null}
-        markdownPaths={projectTree.markdownPaths ?? null}
+        readProjectDirectory={projectTree.readProjectDirectory}
         showHidden={projectTree.state.showHidden}
         collapsed={projectTree.collapsed}
         panelWidthPx={projectTree.panelWidthPx}
@@ -728,7 +727,6 @@
         getPaneElements={projectTree.getPaneElements ? handleProjectGetPaneElements : emptyPaneElements}
         onOpenFileInPane={projectTree.onOpenFileInPane ?? null}
         onOpenFileInContext={projectTree.onOpenFileInContext}
-        onMarkdownFilterEnable={projectTree.onMarkdownFilterEnable}
         onFileDropPaneChange={handleProjectFileDropPaneChange}
         notify={projectTree.notify}
       />

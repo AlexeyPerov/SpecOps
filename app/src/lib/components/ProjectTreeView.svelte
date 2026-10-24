@@ -1,7 +1,8 @@
 <script lang="ts">
   import { normalizePathSync } from "../services/diskFingerprint";
   import { projectTreeChangeTones } from "../services/projectTreeDecorations";
-  import { onDestroy } from "svelte";
+  import { projectSizeLabel, projectSizeTitle, type ProjectSizeEntry, type ProjectSizeMode } from "../services/projectSizes";
+  import { onDestroy, untrack } from "svelte";
   import type { ProjectTreeNode } from "../services/projectTree";
   import type { ContextId } from "../domain/contracts";
   import type { FileChangeStatus } from "../domain/fileChanges";
@@ -30,6 +31,9 @@
    */
 
   interface Props {
+    sizeMode?: ProjectSizeMode;
+    sizeEntries?: ReadonlyMap<string, ProjectSizeEntry>;
+    onVisibleFiles?: (paths: string[]) => void;
     selectedPaths?: ReadonlySet<string>;
     onSelectPath?: (event: MouseEvent, path: string, visiblePaths: string[]) => void;
     onSelectAll?: (paths: string[]) => void;
@@ -66,6 +70,9 @@
   }
 
   let {
+    sizeMode = "off",
+    sizeEntries = emptyMap<string, ProjectSizeEntry>(),
+    onVisibleFiles = () => {},
     selectedPaths = emptySet<string>(),
     onSelectPath = () => {},
     onSelectAll = () => {},
@@ -341,6 +348,7 @@
 
   let listEl = $state<HTMLElement | null>(null);
   let scrollParent = $state<HTMLElement | null>(null);
+  let scrollParentMeasured = $state(false);
   let scrollTop = $state(0);
   let viewportHeight = $state(800);
   let listOffsetTop = $state(0);
@@ -366,6 +374,7 @@
     }
     const parent = findScrollParent(el);
     scrollParent = parent;
+    scrollParentMeasured = true;
     if (!parent) {
       return;
     }
@@ -439,7 +448,8 @@
 
   const visibleRange = $derived.by(() => {
     const total = displayRows.length;
-    if (!scrollParent || total <= VIRTUALIZE_ROW_THRESHOLD) {
+    // Window the first paint too, before the scroll ancestor has been measured.
+    if ((scrollParentMeasured && !scrollParent) || total <= VIRTUALIZE_ROW_THRESHOLD) {
       return { start: 0, end: total };
     }
     const localTop = Math.max(0, scrollTop - listOffsetTop);
@@ -452,6 +462,16 @@
   });
 
   const visibleRows = $derived(displayRows.slice(visibleRange.start, visibleRange.end));
+  // Metadata follows the viewport even when the short tree does not need DOM windowing.
+  const metadataPaths = $derived.by(() => {
+    if (sizeMode === "off") return [];
+    const localTop = Math.max(0, scrollTop - listOffsetTop);
+    const start = Math.max(0, Math.floor(localTop / rowPitch) - OVERSCAN_ROWS);
+    const end = Math.min(displayRows.length, Math.ceil((localTop + viewportHeight) / rowPitch) + OVERSCAN_ROWS);
+    return displayRows.slice(start, end).flatMap((row) => row.kind === "node" && row.node.kind === "file" ? [row.node.path] : []);
+  });
+  $effect(() => { const paths = metadataPaths; untrack(() => onVisibleFiles(paths)); });
+
   // Spacers sit in the same CSS grid as rows, so each spacer also contributes
   // one `gap`. Subtract that gap so windowed scroll height matches the
   // unwindowed list (F72).
@@ -595,6 +615,10 @@
               <ProjectFileIcon name={row.node.name} colored={coloredFileIcons} />
             {/if}
             <span class={`project-tree-label project-tree-label-${labelTone} ${changeTone ? `project-tree-label-${changeTone}` : ""}`}>{row.node.name}</span>
+            {#if sizeMode !== "off" && (row.node.kind === "file" || sizeMode === "folders")}
+              {@const size = sizeEntries.get(normalizePathSync(row.node.path).replace(/\/+$/, ""))}
+              <span class="project-tree-size" class:project-tree-size-stale={size?.stale} title={projectSizeTitle(size, row.node.kind === "directory")}>{projectSizeLabel(size)}</span>
+            {/if}
             {#if favoritePaths.has(normalizePathSync(row.node.path))}
               <span class="project-tree-star" title="Favorite" aria-label="Favorite">★</span>
             {/if}
@@ -616,6 +640,9 @@
 </div>
 
 <style>
+  .project-tree-size { flex: 0 0 auto; margin-left: auto; padding-left: 8px; font-size: 10px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .project-tree-size-stale { opacity: .7; }
+
   .project-tree-row-selected { background: var(--color-hover); outline: 1px solid var(--color-border-subtle); outline-offset: -1px; }
   .project-tree-view {
     min-height: 0;
@@ -631,6 +658,7 @@
     margin: 0;
     padding: 0;
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--project-tree-row-spacing);
   }
 

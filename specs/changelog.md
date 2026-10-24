@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-24 23:07 MSK — Compact project filter button and selection menu
+
+- Replace the wide project-file select with a 24px funnel button in the header. Clicking it opens a viewport-clamped menu with All files, Markdown, and Images and textures; the selected mode has a checkmark and active filtering highlights the trigger. The header returns to a single row, with tighter spacing and abbreviated hidden-file text on narrow panels.
+- The menu supports arrow keys, Home/End, selection, Escape with focus restoration, and outside-click dismissal. File enumeration and size behavior are unchanged.
+- Validation: all 12 focused project-pane tests passed, including filter selection, active state, Escape/focus restoration and existing size controls; Svelte/type checks and the production frontend build passed. Browser fixture checks verified the 180px and 276px headers, menu bounds, selection, keyboard navigation and outside-click dismissal. The installed desktop application was not launched.
+
 ## 2026-10-24 20:49 MSK — Fix unused Git test helper warning
 
 - Compile `register_active_git_command_with_kind` only for tests, where it is used, removing the native build's dead-code warning.

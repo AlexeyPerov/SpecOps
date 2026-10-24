@@ -2,6 +2,7 @@
   import { onDestroy, untrack, tick } from "svelte";
   import { readDir } from "@tauri-apps/plugin-fs";
   import WorkspaceDocumentsLinks from "./WorkspaceDocumentsLinks.svelte";
+  import ProjectFileFilterMenu from "./ProjectFileFilterMenu.svelte";
   import ProjectTreeView from "./ProjectTreeView.svelte";
   import ProjectTreeContextMenu from "./ProjectTreeContextMenu.svelte";
   import GitLogPopover from "./GitLogPopover.svelte";
@@ -29,7 +30,7 @@
   import { flattenProjectTree } from "../services/projectTreeFlatten";
   import { selectProjectPaths } from "../services/projectSelection";
   import { moveProjectEntries, deleteProjectEntries } from "../services/projectBulkOperations";
-  import { createProjectTypeFilter, filterProjectNodes, PROJECT_FILE_FILTERS, type ProjectFileFilter, type ProjectFilterSnapshot } from "../services/projectTypeFilter";
+  import { createProjectTypeFilter, filterProjectNodes, type ProjectFileFilter, type ProjectFilterSnapshot } from "../services/projectTypeFilter";
   import { createProjectSizes, projectSizeLabel, projectSizeTitle, type ProjectSizeMode, type ProjectSizeEntry } from "../services/projectSizes";
   import { subscribeProjectPaneChanges } from "../services/projectPaneChanges";
   import type { WorkspaceListEntry } from "../services/workspaceTraversal";
@@ -489,7 +490,7 @@
       onpointerdown={handleResizeStart}
     ></div>
   {/if}
-  <header class="project-panel-header">
+  <header class="project-panel-header" class:project-panel-header-compact={displayWidth < 300}>
     {#if !collapsed}
       <div class="project-panel-title" title={workspaceRoot}>{basename(workspaceRoot)}</div>
       <button
@@ -525,21 +526,16 @@
       <button class="btn btn-sm btn-ghost" type="button" onclick={refreshPane} title="Refresh tree">
         <RefreshIcon size={14} />
       </button>
-      <div class="project-panel-filter-bar">
-      <select class:project-panel-filter-active={fileFilter !== "all"} class="project-file-filter" aria-label="Filter project files" bind:value={fileFilter}>
-        {#each PROJECT_FILE_FILTERS as option (option.value)}
-          <option value={option.value}>{option.label}</option>
-        {/each}
-      </select>
+      <ProjectFileFilterMenu value={fileFilter} onSelect={(value) => { fileFilter = value; }} />
       <button
         class="btn btn-sm btn-ghost"
         type="button"
         onclick={() => onToggleHidden(!showHidden)}
+        aria-label={showHidden ? "Hide hidden files" : "Show hidden files"}
         title={showHidden ? "Hide hidden files" : "Show hidden files"}
       >
-        {showHidden ? "Hidden: On" : "Hidden: Off"}
+        <span class="project-panel-hidden-prefix">Hidden: </span>{showHidden ? "On" : "Off"}
       </button>
-      </div>
     {/if}
     <button
       class="btn btn-sm btn-ghost project-panel-collapse"
@@ -656,9 +652,9 @@
 
 <style>
   .project-root-size { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; font-size: 11px; color: var(--color-text-secondary); }
-  .project-panel-collapse { grid-column: 6; grid-row: 1; }
-  .project-panel-filter-bar { grid-column: 1 / -1; grid-row: 2; display: flex; align-items: center; gap: 6px; padding-bottom: 5px; }
-  .project-file-filter { min-width: 0; flex: 1; background: var(--color-surface-1); color: var(--color-text-primary); border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); font: inherit; font-size: 11px; padding: 3px; }
+  .project-panel-hidden-prefix { margin-right: 3px; }
+  .project-panel-header-compact .project-panel-hidden-prefix { display: none; }
+  .project-panel-header-compact .btn { padding-inline: 2px; }
   .project-size-mode { display: flex; flex-direction: column; gap: 4px; padding: 6px; color: var(--color-text-primary); }
   .project-size-mode select { font: inherit; color: inherit; background: var(--color-surface-1); }
   .project-filter-status { padding: 6px; font-size: 11px; color: var(--color-text-secondary); }
@@ -715,11 +711,10 @@
   .project-panel-header {
     min-height: var(--tab-header-height);
     border-bottom: 1px solid var(--color-border-subtle);
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) repeat(5, auto);
+    display: flex;
     align-items: center;
     gap: 2px;
-    padding: 4px 6px 0;
+    padding: 0 6px;
     min-width: 0;
   }
 
@@ -743,11 +738,6 @@
 
   .project-panel-header .btn:hover:not(:disabled) {
     color: var(--color-text-primary);
-  }
-
-  .project-panel-filter-active {
-    color: var(--color-text-primary) !important;
-    background: var(--color-pressed) !important;
   }
 
   .project-panel-body {

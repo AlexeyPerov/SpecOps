@@ -43,6 +43,14 @@ struct Document {
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct RailPlacement {
+    folder_id: Option<String>,
+    pinned: bool,
+    order: f64,
+    pinned_order: f64,
+}
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Catalog {
     version: u32,
     revision: u64,
@@ -51,6 +59,8 @@ struct Catalog {
     saved_contexts: BTreeMap<String, Value>,
     #[serde(default)]
     documents: BTreeMap<String, Document>,
+    #[serde(default)]
+    rail_items: BTreeMap<String, RailPlacement>,
 }
 impl Default for Catalog {
     fn default() -> Self {
@@ -61,6 +71,7 @@ impl Default for Catalog {
             folders: BTreeMap::new(),
             saved_contexts: BTreeMap::new(),
             documents: BTreeMap::new(),
+            rail_items: BTreeMap::new(),
         }
     }
 }
@@ -109,6 +120,17 @@ fn validate(c: &Catalog) -> Result<(), String> {
             || d.name.trim().is_empty()
         {
             return Err("Invalid catalog document".into());
+        }
+    }
+    for placement in c.rail_items.values() {
+        if !placement.order.is_finite()
+            || !placement.pinned_order.is_finite()
+            || placement
+                .folder_id
+                .as_ref()
+                .is_some_and(|id| !c.folders.contains_key(id))
+        {
+            return Err("Invalid sidebar placement".into());
         }
     }
     for (id, context) in &c.saved_contexts {
@@ -278,6 +300,60 @@ fn apply(c: &mut Catalog, mutation: &Value) -> Result<(), String> {
         .ok_or("Catalog mutation type required")?;
     let id = mutation.get("id").and_then(Value::as_str).unwrap_or("");
     match kind {
+        "organizeRailItem" => {
+            if id.is_empty() {
+                return Err("Sidebar item required".into());
+            }
+            let placement: RailPlacement =
+                serde_json::from_value(mutation["placement"].clone()).map_err(|e| e.to_string())?;
+            if let Some(document_id) = id.strip_prefix("document:") {
+                if !c.documents.contains_key(document_id) {
+                    return Err("Document is not registered".into());
+                }
+            } else if let Some(folder_id) = id.strip_prefix("folder:") {
+                if !c.folders.contains_key(folder_id)
+                    || placement.folder_id.is_some()
+                    || placement.pinned
+                {
+                    return Err("Folders must remain at the sidebar root".into());
+                }
+            } else if let Some(group_key) = id.strip_prefix("tabGroup:") {
+                let parts: Vec<String> =
+                    serde_json::from_str(group_key).map_err(|_| "Invalid tab group identity")?;
+                if parts.len() != 2
+                    || parts[0].is_empty()
+                    || !(parts[1] == "tabs-default"
+                        || parts[1]
+                            .strip_prefix("tabs-")
+                            .is_some_and(|suffix| suffix.parse::<u64>().is_ok()))
+                {
+                    return Err("Invalid tab group identity".into());
+                }
+            } else if !id.starts_with("workspace:")
+                || mutation.get("projectId").and_then(Value::as_str).is_none()
+            {
+                return Err("Invalid sidebar identity".into());
+            }
+            if let Some(project_id) = mutation.get("projectId").and_then(Value::as_str) {
+                if id != format!("workspace:{project_id}") {
+                    return Err("Sidebar project identity mismatch".into());
+                }
+                let project = c
+                    .projects
+                    .get_mut(project_id)
+                    .ok_or("Project is not registered")?;
+                project.folder_id = placement.folder_id.clone();
+                project.pinned = placement.pinned;
+                project.order = placement.order;
+                project.pinned_order = placement.pinned_order;
+            }
+            if !id.starts_with("workspace:") {
+                c.rail_items.insert(id.to_string(), placement);
+            }
+        }
+        "removeRailItem" => {
+            c.rail_items.remove(id);
+        }
         "register" => {
             let mut project: Project =
                 serde_json::from_value(mutation["project"].clone()).map_err(|e| e.to_string())?;
@@ -345,19 +421,46 @@ fn apply(c: &mut Catalog, mutation: &Value) -> Result<(), String> {
             c.folders.insert(folder.id.clone(), folder);
         }
         "removeFolder" => {
-            let moved = sorted_projects(c, Some(id), false);
+            let mut moved: Vec<(String, f64)> = c
+                .projects
+                .values()
+                .filter(|p| p.folder_id.as_deref() == Some(id))
+                .map(|p| (format!("workspace:{}", p.id), p.order))
+                .chain(
+                    c.rail_items
+                        .iter()
+                        .filter(|(_, p)| p.folder_id.as_deref() == Some(id))
+                        .map(|(key, p)| (key.clone(), p.order)),
+                )
+                .collect();
+            moved.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)));
+            c.folders.remove(id);
+            c.rail_items.remove(&format!("folder:{id}"));
             let mut order = c
                 .projects
                 .values()
                 .filter(|p| p.folder_id.is_none())
                 .map(|p| p.order)
+                .chain(
+                    c.rail_items
+                        .values()
+                        .filter(|p| p.folder_id.is_none())
+                        .map(|p| p.order),
+                )
+                .chain(c.folders.values().map(|f| 1000.0 + f.order))
                 .fold(-1.0, f64::max)
                 + 1.0;
-            c.folders.remove(id);
-            for id in moved {
-                let p = c.projects.get_mut(&id).unwrap();
-                p.folder_id = None;
-                p.order = order;
+            for (key, _) in moved {
+                if let Some(project) = key
+                    .strip_prefix("workspace:")
+                    .and_then(|id| c.projects.get_mut(id))
+                {
+                    project.folder_id = None;
+                    project.order = order;
+                } else if let Some(placement) = c.rail_items.get_mut(&key) {
+                    placement.folder_id = None;
+                    placement.order = order;
+                }
                 order += 1.0;
             }
         }
@@ -370,11 +473,12 @@ fn apply(c: &mut Catalog, mutation: &Value) -> Result<(), String> {
         }
         "removeProject" => {
             c.projects.remove(id);
+            c.rail_items.remove(&format!("workspace:{id}"));
             c.saved_contexts.remove(id);
         }
         "putDocument" => {
-            let mut document: Document = serde_json::from_value(mutation["document"].clone())
-                .map_err(|e| e.to_string())?;
+            let mut document: Document =
+                serde_json::from_value(mutation["document"].clone()).map_err(|e| e.to_string())?;
             if let Some(existing) = c.documents.get(&document.id) {
                 if existing.kind != document.kind {
                     return Err("Document kind cannot change".into());
@@ -426,6 +530,7 @@ fn apply(c: &mut Catalog, mutation: &Value) -> Result<(), String> {
         }
         "removeDocument" => {
             c.documents.remove(id);
+            c.rail_items.remove(&format!("document:{id}"));
         }
         _ => return Err("Unknown catalog mutation".into()),
     }
@@ -779,6 +884,120 @@ mod tests {
         assert!(!catalog.documents.contains_key("t1"));
         assert!(!directory.exists());
     }
+    fn organize(
+        id: &str,
+        folder: Option<&str>,
+        pinned: bool,
+        order: f64,
+        pinned_order: f64,
+    ) -> Value {
+        json!({"type":"organizeRailItem","id":id,"placement":{"folderId":folder,"pinned":pinned,"order":order,"pinnedOrder":pinned_order}})
+    }
+    #[test]
+    fn sidebar_placements_persist_all_types_and_window_group_identity() {
+        let temp = Temp::new();
+        let group = "tabGroup:[\"main\",\"tabs-2\"]";
+        let other_group = "tabGroup:[\"other\",\"tabs-2\"]";
+        let mut project = organize("workspace:/app", Some("team"), true, 2.0, 4.0);
+        project["projectId"] = json!("/app");
+        let catalog = transact(
+            &temp.0,
+            &[
+                register("/app"),
+                put_document("t1", "tasks", "Plan"),
+                put_document("n1", "notes", "Ideas"),
+                json!({"type":"putFolder","folder":{"id":"team","name":"Team","order":0}}),
+                project,
+                organize("document:t1", Some("team"), true, 1.0, 3.0),
+                organize("document:n1", Some("team"), false, 3.0, 0.0),
+                organize(group, Some("team"), true, 0.0, 2.0),
+                organize(other_group, None, false, 8.0, 0.0),
+            ],
+        )
+        .unwrap();
+        assert_eq!(catalog.projects["/app"].folder_id.as_deref(), Some("team"));
+        assert!(catalog.projects["/app"].pinned);
+        let reloaded = transact(&temp.0, &[]).unwrap();
+        assert_eq!(catalog, reloaded);
+        let unpinned = transact(
+            &temp.0,
+            &[organize("document:t1", Some("team"), false, 1.0, 3.0)],
+        )
+        .unwrap();
+        assert_eq!(
+            unpinned.rail_items["document:t1"].folder_id.as_deref(),
+            Some("team")
+        );
+        assert_eq!(unpinned.rail_items["document:t1"].order, 1.0);
+        assert!(!unpinned.rail_items[other_group].pinned);
+        assert_eq!(unpinned.rail_items[other_group].folder_id, None);
+        let removed = transact(&temp.0, &[json!({"type":"removeRailItem","id":group})]).unwrap();
+        assert!(!removed.rail_items.contains_key(group));
+        assert!(removed.rail_items.contains_key(other_group));
+    }
+    #[test]
+    fn deleting_shared_folder_keeps_every_item_and_pin_and_cleans_document_placement() {
+        let temp = Temp::new();
+        let group = "tabGroup:[\"main\",\"tabs-default\"]";
+        let mut project = organize("workspace:/app", Some("team"), true, 2.0, 4.0);
+        project["projectId"] = json!("/app");
+        transact(
+            &temp.0,
+            &[
+                register("/app"),
+                put_document("t1", "tasks", "Plan"),
+                put_document("n1", "notes", "Ideas"),
+                json!({"type":"putFolder","folder":{"id":"team","name":"Team","order":0}}),
+                project,
+                organize("document:t1", Some("team"), true, 1.0, 3.0),
+                organize("document:n1", Some("team"), false, 3.0, 0.0),
+                organize(group, Some("team"), false, 0.0, 0.0),
+                organize("folder:team", None, false, 4.0, 0.0),
+            ],
+        )
+        .unwrap();
+        let catalog = transact(&temp.0, &[json!({"type":"removeFolder","id":"team"})]).unwrap();
+        assert_eq!(catalog.projects.len(), 1);
+        assert_eq!(catalog.documents.len(), 2);
+        assert!(catalog.folders.is_empty());
+        assert!(catalog
+            .rail_items
+            .values()
+            .all(|placement| placement.folder_id.is_none()));
+        assert!(catalog.projects["/app"].pinned);
+        assert!(catalog.rail_items["document:t1"].pinned);
+        assert!(catalog.rail_items[group].order < catalog.rail_items["document:t1"].order);
+        assert!(catalog.rail_items["document:t1"].order < catalog.projects["/app"].order);
+        assert!(catalog.projects["/app"].order < catalog.rail_items["document:n1"].order);
+        assert!(!catalog.rail_items.contains_key("workspace:/app"));
+        assert!(!catalog.rail_items.contains_key("folder:team"));
+        let deleted = transact(&temp.0, &[json!({"type":"removeDocument","id":"t1"})]).unwrap();
+        assert!(!deleted.rail_items.contains_key("document:t1"));
+        assert!(deleted.rail_items.contains_key("document:n1"));
+    }
+    #[test]
+    fn sidebar_rejects_missing_folders_nested_folders_and_invalid_identities_atomically() {
+        let temp = Temp::new();
+        let original = transact(
+            &temp.0,
+            &[
+                put_document("t1", "tasks", "Plan"),
+                json!({"type":"putFolder","folder":{"id":"team","name":"Team","order":0}}),
+            ],
+        )
+        .unwrap();
+        for invalid in [
+            organize("document:t1", Some("missing"), false, 0.0, 0.0),
+            organize("document:missing", None, false, 0.0, 0.0),
+            organize("folder:team", Some("team"), false, 0.0, 0.0),
+            organize("folder:team", None, true, 0.0, 0.0),
+            organize("tabGroup:bad", None, false, 0.0, 0.0),
+            organize("workspace:/app", None, false, 0.0, 0.0),
+        ] {
+            assert!(transact(&temp.0, &[invalid]).is_err());
+            assert_eq!(transact(&temp.0, &[]).unwrap(), original);
+        }
+    }
     #[test]
     fn persists_and_deduplicates_normalized_identity() {
         let temp = Temp::new();
@@ -817,12 +1036,22 @@ mod tests {
         let temp = Temp::new();
         let first = transact_with_status(&temp.0, &[register("/project")]).unwrap();
         assert!(first.1);
-        let modified = fs::metadata(temp.0.join("project-catalog.json")).unwrap().modified().unwrap();
+        let modified = fs::metadata(temp.0.join("project-catalog.json"))
+            .unwrap()
+            .modified()
+            .unwrap();
         let patch = json!({ "type": "updateProject", "id": "/project", "patch": { "hiddenFromRail": false } });
-        let (catalog, changed) = transact_with_status(&temp.0, &[register("/project"), patch]).unwrap();
+        let (catalog, changed) =
+            transact_with_status(&temp.0, &[register("/project"), patch]).unwrap();
         assert!(!changed);
         assert_eq!(catalog.revision, first.0.revision);
-        assert_eq!(fs::metadata(temp.0.join("project-catalog.json")).unwrap().modified().unwrap(), modified);
+        assert_eq!(
+            fs::metadata(temp.0.join("project-catalog.json"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+            modified
+        );
     }
     #[test]
     fn concurrent_windows_merge_changes_under_os_lock() {

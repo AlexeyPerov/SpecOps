@@ -218,8 +218,8 @@ export function createWorkspaceRailDragController(deps: WorkspaceRailDragControl
       state.workspaceRects = next;
       return;
     }
-    for (const node of railWorkspacesEl.querySelectorAll<HTMLElement>("[data-workspace-id]")) {
-      const workspaceId = node.dataset.workspaceId as string | undefined;
+    for (const node of railWorkspacesEl.querySelectorAll<HTMLElement>("[data-rail-item-id], [data-workspace-id]")) {
+      const workspaceId = (node.dataset.railItemId ?? node.dataset.workspaceId) as string | undefined;
       if (!workspaceId) {
         continue;
       }
@@ -269,8 +269,8 @@ export function createWorkspaceRailDragController(deps: WorkspaceRailDragControl
     removePointerListeners();
     const railWorkspacesEl = deps.getRailWorkspacesEl();
     if (activePointerId !== null) {
-      for (const node of railWorkspacesEl?.querySelectorAll<HTMLElement>("[data-workspace-id]") ?? []) {
-        if (node.hasPointerCapture(activePointerId)) {
+      for (const node of railWorkspacesEl?.querySelectorAll<HTMLElement>("[data-rail-item-id], [data-workspace-id]") ?? []) {
+        if (node.hasPointerCapture?.(activePointerId)) {
           node.releasePointerCapture(activePointerId);
         }
       }

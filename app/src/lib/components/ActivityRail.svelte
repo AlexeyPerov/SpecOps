@@ -25,26 +25,25 @@
   import { startPointerDrag } from "./pointerDrag";
   import { appState } from "../state/appState";
   import { appActiveSession } from "../state/appStateSelectors";
-  import NotepadIcon from "./icons/NotepadIcon.svelte";
+  import RailTypeIcon from "./icons/RailTypeIcon.svelte";
+  import { unifiedRailItems, sortRailItems, railItemMatches, railPlacement, tabGroupRailKey, type RailItem } from "../services/unifiedRail";
+  import { openFolderDialog } from "../services/fileSystem";
   import AddIcon from "./icons/AddIcon.svelte";
   import ListIcon from "./icons/ListIcon.svelte";
   import { getProjectCatalog, projectIdentity, subscribeProjectCatalog, updateOpenWorkspaceCatalog, type CatalogMutation } from "../services/workspaceCatalog";
   import { listen } from '@tauri-apps/api/event';
   import { addWorkspaceToWindow } from '../services/addWorkspaceToWindow';
   import { readLiveWorkspaceWindowOwners, WORKSPACE_PLACEMENT_CHANGED, type WorkspaceWindowOwners } from '../services/workspaceWindowPlacement';
-  import { workspaceRailSections, readRailWindowPreferences, writeRailWindowPreferences, type RailProject, type RailSection } from '../services/workspaceRailSections';
+  import { workspaceRailSections, readRailWindowPreferences, writeRailWindowPreferences, type RailProject } from '../services/workspaceRailSections';
   import { clampFixedOverlayPosition } from './clampFixedOverlayPosition';
   import { distinguishingProjectPaths, projectName, projectColor, projectIcon } from "./workspaceRailPresentation";
   import type { RailTabGroup } from "../services/railTabGroups";
   import { removeTabGroupWithConfirm } from "../services/tabGroupCloseFlow";
-  import type { GlobalDocument } from "../domain/projectCatalog";
+  import type { GlobalDocument, RailPlacement } from "../domain/projectCatalog";
   import {
-    GLOBAL_DOCUMENT_KINDS,
     createGlobalDocument,
     deleteGlobalDocument,
     globalDocumentKindLabel,
-    globalDocumentsOfKind,
-    moveGlobalDocument,
     openGlobalDocument,
     renameGlobalDocument,
   } from "../services/globalDocuments";
@@ -236,7 +235,7 @@
       listen('tauri://destroyed', refresh), listen('tauri://created', refresh)]) : Promise.resolve([]);
     return () => { disposed = true; window.removeEventListener('focus', refresh); void releases.then(list => list.forEach(release => release())); };
   });
-  const sections = $derived(workspaceRailSections(catalog, workspaces, owners, currentWindowId, searchQuery));
+  const sections = $derived(workspaceRailSections(catalog, workspaces, owners, currentWindowId));
   const railProjects = $derived(sections.flatMap(section => section.projects));
   // A cold catalog read may finish after mount; restore after its rows exist.
   $effect(() => {
@@ -245,10 +244,30 @@
     workspaces.length;
     void tick().then(() => { if (railWorkspacesEl && restoredWindow === id) railWorkspacesEl.scrollTop = readRailWindowPreferences(id).scrollTop; });
   });
-  function sectionCollapsed(section: RailSection): boolean { return !searchQuery.trim() && collapsed.includes(section.id); }
-  const workspacesForRender = $derived(sections.filter(section => !sectionCollapsed(section)).flatMap(section => section.projects));
+  const items = $derived(unifiedRailItems(catalog, railProjects, tabGroups, currentWindowId));
+  const matchingItems = $derived(items.filter(item => railItemMatches(item, searchQuery)));
+  const pinnedItems = $derived(sortRailItems(matchingItems.filter(item => item.pinned), true));
+  const rootItems = $derived(sortRailItems(items.filter(item => !item.pinned && !item.folderId &&
+    (railItemMatches(item, searchQuery) || (item.kind === 'folder' && matchingItems.some(child => !child.pinned && child.folderId === item.folder.id))))));
+  const visibleItems = $derived([...pinnedItems, ...rootItems.flatMap(item => item.kind === 'folder' && !folderCollapsed(item.folder.id)
+    ? [item, ...folderChildren(item.folder.id)] : [item])]);
+  const workspacesForRender = $derived(visibleItems.map(item => ({ id: item.key, rootPath: item.kind === 'workspace' ? item.project.rootPath : '' })));
   const dragEnabled = $derived(manualOrder && !searchQuery.trim());
-  const draggedWorkspace = $derived(railProjects.find(project => project.id === dragState.dragWorkspaceId) ?? null);
+  const draggedItem = $derived(items.find(item => item.key === dragState.dragWorkspaceId));
+  function folderCollapsed(id: string): boolean { return !searchQuery.trim() && collapsed.includes(`folder:${id}`); }
+  function folderChildren(id: string): RailItem[] {
+    const folderMatches = items.some(item => item.kind === 'folder' && item.folder.id === id && railItemMatches(item, searchQuery));
+    return sortRailItems(items.filter(item => !item.pinned && item.folderId === id && (folderMatches || railItemMatches(item, searchQuery))));
+  }
+  function revealFolder(id: string | null): void {
+    if (!id || !folderCollapsed(id)) return;
+    collapsed = collapsed.filter(key => key !== `folder:${id}`); saveRailPreferences();
+  }
+  function toggleFolder(id: string): void {
+    const key = `folder:${id}`;
+    collapsed = collapsed.includes(key) ? collapsed.filter(value => value !== key) : [...collapsed, key];
+    saveRailPreferences();
+  }
   function commit(mutations: CatalogMutation[]) {
     return updateOpenWorkspaceCatalog(workspaces, mutations).catch(error => { onError(String(error)); return null; });
   }
@@ -257,45 +276,90 @@
     else void addWorkspaceToWindow(project.rootPath).catch(error => onError(String(error)));
     closeMenu();
   }
-  function sectionForProject(id: string): RailSection | undefined { return sections.find(section => section.projects.some(project => project.id === id)); }
-  function moveToSection(project: RailProject, section: RailSection, beforeId: string | null = null): void {
-    const windowId = currentWindowId;
-    const movedToFolder = !!section.folderId && sectionForProject(project.id)?.id !== section.id;
-    void commit([{ type: 'moveProject', id: project.id, ...(section.pinned ? { pinned: true } : { folderId: section.folderId, pinned: false }), beforeId }]).then(next => {
-      if (!next || !movedToFolder || currentWindowId !== windowId || !collapsed.includes(section.id)) return;
-      const destination = workspaceRailSections(next, workspaces, owners, windowId).find(entry => entry.id === section.id);
-      if (destination?.projects.length !== 1 || destination.projects[0].id !== project.id) return;
-      collapsed = collapsed.filter(id => id !== section.id);
-      saveRailPreferences();
+  function selectItem(item: RailItem): void {
+    if (item.kind === 'workspace') selectProject(item.project);
+    else if (item.kind === 'tabGroup') onSelectContext(item.group.id);
+    else if (item.kind === 'folder') toggleFolder(item.folder.id);
+    else openGlobalDocument(item.document.id);
+  }
+  async function placeItem(item: RailItem, patch: Partial<RailPlacement>): Promise<void> {
+    const next = await commit([{ type: 'organizeRailItem', id: item.key, placement: { ...railPlacement(item), ...patch },
+      ...(item.kind === 'workspace' ? { projectId: item.project.id } : {}) }]);
+    if (next) revealFolder(patch.folderId ?? null);
+  }
+  function toggleItemPin(item: RailItem): void {
+    void placeItem(item, { pinned: !item.pinned, ...(item.pinned ? {} : { pinnedOrder: Math.max(-1, ...items.filter(row => row.pinned).map(row => row.pinnedOrder)) + 1 }) });
+    closeMenu();
+  }
+  function moveItem(item: RailItem, folderId: string | null, pinned: boolean, beforeKey: string | null = null): void {
+    if (item.kind === 'folder' && (folderId || pinned)) return;
+    const siblings = sortRailItems(items.filter(row => row.key !== item.key && (pinned ? row.pinned : !row.pinned && row.folderId === folderId)), pinned);
+    const index = beforeKey ? siblings.findIndex(row => row.key === beforeKey) : siblings.length;
+    const at = index < 0 ? siblings.length : index;
+    siblings.splice(at, 0, item);
+    const mutations: CatalogMutation[] = siblings.map((row, index) => ({
+      type: 'organizeRailItem', id: row.key,
+      placement: { ...railPlacement(row), ...(pinned ? { pinned: true, pinnedOrder: index } : { folderId, pinned: false, order: index }) },
+      ...(row.kind === 'workspace' ? { projectId: row.project.id } : {}),
+    }));
+    void commit(mutations).then(next => {
+      if (next && !pinned) revealFolder(folderId);
     });
+    closeMenu();
   }
-  function reorderProject(project: RailProject, direction: -1 | 1): void {
-    const section = sectionForProject(project.id); if (!section || !dragEnabled) return;
-    const index = section.projects.findIndex(entry => entry.id === project.id);
-    if (index + direction < 0 || index + direction >= section.projects.length) return;
-    const beforeId = direction < 0 ? section.projects[index - 1].id : section.projects[index + 2]?.id ?? null;
-    moveToSection(project, section, beforeId); closeMenu();
+  function reorderItem(item: RailItem, direction: -1 | 1): void {
+    const siblings = sortRailItems(items.filter(row => item.pinned ? row.pinned : !row.pinned && row.folderId === item.folderId), item.pinned);
+    const index = siblings.findIndex(row => row.key === item.key);
+    if (index + direction < 0 || index + direction >= siblings.length) return;
+    moveItem(item, item.folderId, item.pinned, direction < 0 ? siblings[index - 1].key : siblings[index + 2]?.key ?? null);
   }
-  function dropProject(id: string, x: number, y: number): void {
+  function dropItem(key: string, x: number, y: number): void {
     if (!dragEnabled) return;
-    const project = railProjects.find(project => project.id === id); if (!project) return;
-    const target = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-rail-section]');
-    const section = sections.find(section => section.id === target?.dataset.railSection); if (!section) return;
-    const nodes = [...target!.querySelectorAll<HTMLElement>('[data-workspace-id]')].filter(node => node.dataset.workspaceId !== id);
-    const before = nodes.find(node => { const rect = node.getBoundingClientRect(); return y < rect.top + rect.height / 2; });
-    moveToSection(project, section, before?.dataset.workspaceId ?? null);
+    const item = items.find(row => row.key === key); if (!item) return;
+    const target = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-rail-item-id], [data-rail-zone]');
+    if (!target) return;
+    const destination = items.find(row => row.key === target.dataset.railItemId);
+    if (destination?.key === key) return;
+    if (destination?.kind === 'folder' && item.kind !== 'folder') {
+      const rect = target.getBoundingClientRect();
+      if (y >= rect.top + rect.height * .25 && y <= rect.bottom - rect.height * .25) {
+        moveItem(item, destination.folder.id, false); return;
+      }
+    }
+    const pinned = destination?.pinned ?? target.dataset.railZone === 'pinned';
+    const folderId = destination?.folderId ?? (target.dataset.railZone?.startsWith('folder:') ? target.dataset.railZone.slice(7) : null);
+    const siblings = sortRailItems(items.filter(row => row.key !== key && (pinned ? row.pinned : !row.pinned && row.folderId === folderId)), pinned);
+    let beforeKey = destination?.key ?? null;
+    if (destination && y > target.getBoundingClientRect().top + target.getBoundingClientRect().height / 2) {
+      beforeKey = siblings[siblings.findIndex(row => row.key === destination.key) + 1]?.key ?? null;
+    }
+    moveItem(item, folderId, pinned, beforeKey);
   }
-  function toggleSection(section: RailSection): void {
-    collapsed = collapsed.includes(section.id) ? collapsed.filter(id => id !== section.id) : [...collapsed, section.id];
-    saveRailPreferences();
+  function pointerItem(event: PointerEvent, item: RailItem): void {
+    if ((event.target as HTMLElement).closest('[role=button]') && event.target !== event.currentTarget) return;
+    if (dragEnabled) dragController.pointerDown(event, { id: item.key, rootPath: item.kind === 'workspace' ? item.project.rootPath : '' },
+      workspacesForRender.findIndex(row => row.id === item.key));
   }
-  type RailMenuTarget = { project?: RailProject; section?: RailSection; projectsOnly?: boolean; tabGroup?: RailTabGroup; globalDocument?: GlobalDocument };
+  function itemKeydown(event: KeyboardEvent, item: RailItem): void {
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openItemMenu(event, item);
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (event.altKey) { if (dragEnabled) reorderItem(item, event.key === 'ArrowUp' ? -1 : 1); return; }
+      const rows = [...(railWorkspacesEl?.querySelectorAll<HTMLElement>('[data-rail-item-id]') ?? [])];
+      rows[rows.indexOf(event.currentTarget as HTMLElement) + (event.key === 'ArrowUp' ? -1 : 1)]?.focus();
+    } else if (event.key === 'Escape' && searchQuery) { event.preventDefault(); searchQuery = ''; }
+  }
+  function openItemMenu(event: MouseEvent | KeyboardEvent, item: RailItem): void {
+    openMenu(event, { item, ...(item.kind === 'workspace' ? { project: item.project } : item.kind === 'tabGroup' ? { tabGroup: item.group } : item.kind === 'folder' ? {} : { globalDocument: item.document }) });
+  }
+  type RailMenuTarget = { item?: RailItem; project?: RailProject; tabGroup?: RailTabGroup; globalDocument?: GlobalDocument };
   let menu = $state<(RailMenuTarget & { x: number; y: number }) | null>(null);
   let menuEl = $state<HTMLDivElement | null>(null);
   let menuTrigger: HTMLElement | null = null;
   // Suppress every workspace tooltip while any rail menu is open so the
   // tooltip never overlaps the menu.
-  const workspaceTooltipSuppressed = $derived(menu !== null);
+  let createOpen = $state(false);
+  const workspaceTooltipSuppressed = $derived(menu !== null || createOpen);
   function closeMenu(): void { if (!menu) return; const trigger = menuTrigger; menu = null; void tick().then(() => trigger?.focus()); }
   function openMenu(event: MouseEvent | KeyboardEvent, value: RailMenuTarget): void {
     event.preventDefault();
@@ -305,7 +369,7 @@
       y: event instanceof MouseEvent && event.clientY ? event.clientY : rect.top };
     void tick().then(() => menuEl?.querySelector<HTMLElement>('button,input')?.focus());
   }
-  function windowPointerDown(event: PointerEvent): void { if (menu && !menuEl?.contains(event.target as Node)) menu = null; }
+  function windowPointerDown(event: PointerEvent): void { if (menu && !menuEl?.contains(event.target as Node)) menu = null; if (createOpen && !createEl?.contains(event.target as Node) && !createTrigger?.contains(event.target as Node)) closeCreate(); }
   function menuKeydown(event: KeyboardEvent): void {
     if (event.key === 'Escape') { event.preventDefault(); closeMenu(); }
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
@@ -330,11 +394,14 @@
   // Tab groups (this window) and app-wide Tasks/Notes documents share one name form.
   type EntityKind = 'tabGroup' | 'tasks' | 'notes';
   let entityName = $state('');
-  let entityEdit = $state<{ kind: EntityKind; id: string | null } | null>(null);
+  let entityEdit = $state<{ kind: EntityKind; id: string | null; folderId: string | null } | null>(null);
   function entityLabel(kind: EntityKind): string { return kind === 'tabGroup' ? 'Tab group' : globalDocumentKindLabel(kind); }
   function editEntity(kind: EntityKind, id: string | null, name = ''): void {
-    entityName = name; entityEdit = { kind, id }; menu = null;
+    entityName = name; entityEdit = { kind, id, folderId: createFolderId }; menu = null;
     void tick().then(() => activityRailEl?.querySelector<HTMLInputElement>('.rail-entity-form input')?.focus());
+  }
+  function nextItemOrder(folderId: string | null): number {
+    return Math.max(-1, ...items.filter(item => item.folderId === folderId).map(item => item.order)) + 1;
   }
   async function saveEntity(): Promise<void> {
     const edit = entityEdit; const name = entityName.trim();
@@ -342,11 +409,16 @@
     entityEdit = null;
     try {
       if (edit.kind === 'tabGroup') {
-        if (edit.id) appState.renameTabGroup(edit.id as ContextId, name); else appState.createTabGroup(name);
+        if (edit.id) appState.renameTabGroup(edit.id as ContextId, name);
+        else {
+          const id = appState.createTabGroup(name);
+          if (await commit([{ type: 'organizeRailItem', id: tabGroupRailKey(currentWindowId, id), placement: { folderId: edit.folderId, pinned: false, order: nextItemOrder(edit.folderId), pinnedOrder: 0 } }])) revealFolder(edit.folderId);
+        }
       } else if (edit.id) {
         await renameGlobalDocument(edit.id, name);
       } else {
         const document = await createGlobalDocument(edit.kind, name);
+        if (await commit([{ type: 'organizeRailItem', id: `document:${document.id}`, placement: { folderId: edit.folderId, pinned: false, order: nextItemOrder(edit.folderId), pinnedOrder: 0 } }])) revealFolder(edit.folderId);
         openGlobalDocument(document.id);
       }
     } catch (error) { onError(String(error)); }
@@ -361,7 +433,6 @@
       confirmLabel: 'Delete', cancelLabel: 'Cancel', danger: true })) return;
     await deleteGlobalDocument(document.id);
   }
-  const globalDocumentSections = $derived(GLOBAL_DOCUMENT_KINDS.map(kind => ({ kind, documents: globalDocumentsOfKind(catalog, kind) })));
   const activeGlobalDocumentId = $derived.by(() => {
     if (!isTabGroupId(activeContextId)) return null;
     const layout = $appActiveSession.editorLayout;
@@ -369,9 +440,6 @@
     const tab = pane?.tabs.find(entry => entry.id === pane.selectedTabId);
     return tab?.kind === 'view' ? tab.globalDocumentId ?? null : null;
   });
-  function togglePinned(project: RailProject): void {
-    commit([{ type: 'moveProject', id: project.id, pinned: !project.pinned }]);
-  }
   // Workspace actions that open a tab, window or dialog elsewhere: close the
   // menu without returning focus to the rail row.
   function runWorkspaceAction(contextId: ContextId, action: ((id: ContextId) => unknown) | undefined): void {
@@ -392,18 +460,6 @@
     if (root) for (const kind of DOCUMENT_KINDS) void loadWorkspaceDocument(root, kind, undefined, true).catch(() => {});
   });
   const menuDocuments = $derived.by(() => { void $workspaceDocumentsRevision; return menuRoot ? DOCUMENT_KINDS.map(kind => workspaceDocumentSnapshot(menuRoot, kind)) : []; });
-  let draggedFolder = $state<string | null>(null);
-  function dropFolder(event: DragEvent, section: RailSection): void {
-    event.preventDefault();
-    if (dragEnabled && draggedFolder && section.folderId && draggedFolder !== section.folderId) {
-      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      const folders = sections.filter(section => section.folderId);
-      const index = folders.findIndex(folder => folder.id === section.id);
-      const beforeId = event.clientY > rect.top + rect.height / 2 ? folders[index + 1]?.folderId ?? null : section.folderId;
-      commit([{ type: 'moveFolder', id: draggedFolder, beforeId }]);
-    }
-    draggedFolder = null;
-  }
   const ghostLeft = $derived(
     dragState.activityRailRect && dragState.dragWorkspaceRect
       ? dragState.dragPointerX - dragState.dragOffsetX - dragState.activityRailRect.left
@@ -415,15 +471,27 @@
       : 0,
   );
 
+  let dropHint = $state<{ key: string; position: 'before' | 'after' | 'inside' } | null>(null);
   const dragController = createWorkspaceRailDragController({
     getWorkspaces: () => workspacesForRender,
     getRailWorkspacesEl: () => railWorkspacesEl,
     getActivityRailEl: () => activityRailEl,
-    onSelect: (id) => { const project = railProjects.find(project => project.id === id); if (project) selectProject(project); },
+    onSelect: (id) => { const item = items.find(item => item.key === id); if (item) selectItem(item); },
     onReorder: (fromIndex, toIndex) => onReorderWorkspaces(fromIndex, toIndex),
-    onDrop: dropProject,
+    onDrop: dropItem,
     onStateChange: (nextState) => {
       dragState = nextState;
+      dropHint = null;
+      if (nextState.didDrag) {
+        const target = document.elementFromPoint(nextState.dragPointerX, nextState.dragPointerY)?.closest<HTMLElement>('[data-rail-item-id], [data-rail-zone]');
+        const key = target?.dataset.railItemId;
+        const item = items.find(row => row.key === key);
+        if (target && item && key !== nextState.dragWorkspaceId) {
+          const rect = target.getBoundingClientRect();
+          const inside = item.kind === 'folder' && draggedItem?.kind !== 'folder' && nextState.dragPointerY >= rect.top + rect.height * .25 && nextState.dragPointerY <= rect.bottom - rect.height * .25;
+          dropHint = { key: item.key, position: inside ? 'inside' : nextState.dragPointerY < rect.top + rect.height / 2 ? 'before' : 'after' };
+        }
+      }
     },
   });
 
@@ -472,17 +540,40 @@
     const sessions = sessionsEnabled ? ` · Sessions: ${sessionCountsByRoot.get(workspace.rootPath) ?? 0}` : "";
     return `${workspace.rootPath} · ${gitFor(workspace.rootPath).detail}${sessions} · Tabs: ${tabCountsByRoot.get(workspace.rootPath) ?? 0}`;
   }
-  function workspaceKeydown(event: KeyboardEvent, workspace: RailProject): void {
-    if (event.key === 'Escape' && searchQuery) { event.preventDefault(); event.stopPropagation(); searchQuery = ''; return; }
-    if (!event.altKey && !event.ctrlKey && !event.metaKey && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
-      event.preventDefault(); const rows = [...(railWorkspacesEl?.querySelectorAll<HTMLButtonElement>('[data-workspace-id]') ?? [])];
-      const index = rows.indexOf(event.currentTarget as HTMLButtonElement); rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus(); return;
-    }
-    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openMenu(event, { project: workspace });
-    else if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
-      event.preventDefault(); if (dragEnabled) reorderProject(workspace, event.key === 'ArrowUp' ? -1 : 1);
-    }
+  let createEl = $state<HTMLDivElement | null>(null);
+  let createTrigger = $state<HTMLButtonElement | null>(null);
+  let createFolderId = $state<string | null>(null);
+  const createOptions = [
+    { kind: 'workspace', name: 'Workspace', detail: 'Open a project folder' },
+    { kind: 'tabGroup', name: 'Tab group', detail: 'Collect tabs in this window' },
+    { kind: 'tasks', name: 'Tasks', detail: 'Create a task list' },
+    { kind: 'notes', name: 'Notes', detail: 'Create a note' },
+    { kind: 'folder', name: 'Folder', detail: 'Organize sidebar items' },
+  ] as const;
+  function showCreate(folderId: string | null = null): void {
+    menu = null; createFolderId = folderId; createOpen = true;
+    void tick().then(() => createEl?.querySelector<HTMLButtonElement>('button')?.focus());
   }
+  function closeCreate(): void { createOpen = false; void tick().then(() => createTrigger?.focus()); }
+  async function chooseCreate(kind: typeof createOptions[number]['kind']): Promise<void> {
+    createOpen = false;
+    if (kind === 'folder') { editFolder(null); return; }
+    if (kind !== 'workspace') { editEntity(kind, null); return; }
+    if (!createFolderId) { onAddWorkspace(); return; }
+    const folderId = createFolderId;
+    try {
+      const root = await openFolderDialog(); if (!root) return;
+      await addWorkspaceToWindow(root);
+      const project = getProjectCatalog().projects[projectIdentity(root)];
+      if (project && await commit([{ type: 'moveProject', id: project.id, folderId }])) revealFolder(folderId);
+    } catch (error) { onError(String(error)); }
+  }
+  $effect(() => {
+    if (!createOpen || !createEl || !createTrigger) return;
+    const rect = createTrigger.getBoundingClientRect();
+    const pos = clampFixedOverlayPosition(rect.left, rect.top - createEl.offsetHeight - 8, createEl.offsetWidth, createEl.offsetHeight);
+    createEl.style.left = `${pos.x}px`; createEl.style.top = `${pos.y}px`;
+  });
   function resizeKeydown(event: KeyboardEvent): void {
     const widths: Record<string, number> = { ArrowLeft: displayWidth - 16, ArrowRight: displayWidth + 16,
       Home: MIN_ACTIVITY_RAIL_WIDTH_PX, End: MAX_ACTIVITY_RAIL_WIDTH_PX };
@@ -533,37 +624,142 @@
   });
 </script>
 
-<svelte:window onpointerdown={windowPointerDown} onkeydown={(event) => { if (menu && event.key === "Escape") closeMenu(); }} />
+<svelte:window onpointerdown={windowPointerDown} onkeydown={(event) => { if (event.key === "Escape") { if (menu) closeMenu(); if (createOpen) closeCreate(); } }} />
 
 <aside
   class={`activity-rail${expanded ? " activity-rail-expanded" : ""}${isResizing ? " activity-rail-resizing" : ""}`}
+  class:rail-dragging={dragState.didDrag}
   aria-label="Activity rail"
   bind:this={activityRailEl}
   style={`width:${displayWidth}px`}
 >
-  <section class="rail-section rail-entity-section" aria-label="Tab groups">
-    <div class="rail-section-heading rail-entity-heading">
-      {#if expanded}<span class="rail-section-name rail-entity-title">Tab groups</span>{/if}
-      <button type="button" class="rail-section-more rail-entity-add" aria-label="New tab group" title="New tab group"
-        onclick={() => editEntity('tabGroup', null)}>+</button>
+  {#if entityEdit}
+    <form class="rail-folder-form rail-entity-form" onsubmit={(event) => { event.preventDefault(); void saveEntity(); }}>
+      <input aria-label={`${entityLabel(entityEdit.kind)} name`} placeholder={`${entityLabel(entityEdit.kind)} name`} bind:value={entityName}
+        onkeydown={(event) => { if (event.key === 'Escape') entityEdit = null; }} />
+      <button type="submit" disabled={!entityName.trim()}>{entityEdit.id ? 'Rename' : 'Create'}</button><button type="button" onclick={() => entityEdit = null}>Cancel</button>
+    </form>
+  {/if}
+
+  {#if !expanded}<button type="button" class="rail-button" aria-label="Search sidebar" title="Search sidebar" onclick={() => { railSearchOpen = !railSearchOpen; void tick().then(() => railSearchInput?.focus()); }}>⌕</button>{/if}
+  {#if expanded || railSearchOpen}
+    <input bind:this={railSearchInput} class="rail-search" class:rail-search-compact={!expanded} aria-label="Search sidebar" placeholder="Search name or path…" bind:value={searchQuery}
+      onkeydown={(event) => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); searchQuery = ''; railSearchOpen = false; }
+        if (event.key === 'ArrowDown' || event.key === 'Enter') { event.preventDefault(); railWorkspacesEl?.querySelector<HTMLButtonElement>('[data-rail-item-id]')?.focus(); }
+      }} />
+  {/if}
+  {#if folderEdit}
+    <form class="rail-folder-form" onsubmit={(event) => { event.preventDefault(); saveFolder(); }}>
+      <input aria-label="Folder name" bind:value={folderName} onkeydown={(event) => { if (event.key === 'Escape') folderEdit = null; }} />
+      <button type="submit" disabled={!folderName.trim()}>Save</button><button type="button" onclick={() => folderEdit = null}>Cancel</button>
+    </form>
+  {/if}
+  <div class={`rail-workspaces${expanded ? " rail-workspaces-expanded" : ""}`} bind:this={railWorkspacesEl} onscroll={saveRailPreferences}>
+    {#if !visibleItems.length}<p class="rail-empty" role="status">{searchQuery.trim() ? 'No matching items' : 'Add your first item with +'}</p>{/if}
+    <div class="rail-zone" data-rail-zone="pinned" aria-label="Pinned items">
+      {#each pinnedItems as item (item.key)}{@render itemRow(item)}{/each}
     </div>
-    {#each tabGroups as group (group.id)}
-      {@const active = activeContextId === group.id}
+    <div class="rail-zone rail-root-zone" data-rail-zone="root">
+      {#each rootItems as item (item.key)}
+        {#if item.kind === 'folder'}
+          <section class="rail-section" data-rail-drop={dropHint?.key === item.key ? dropHint.position : undefined} data-rail-section={item.key} data-rail-zone={item.key} aria-label={`${item.name}, ${folderChildren(item.folder.id).length} items`}>
+            <button class="rail-section-toggle" type="button" data-rail-item-id={item.key}
+              aria-label={`${item.name}, ${folderChildren(item.folder.id).length} items`} aria-expanded={!folderCollapsed(item.folder.id)} title={item.name}
+              onpointerdown={(event) => pointerItem(event, item)}
+              onclick={(event) => { if (!dragEnabled || event.detail === 0) toggleFolder(item.folder.id); }}
+              oncontextmenu={(event) => openItemMenu(event, item)} onkeydown={(event) => itemKeydown(event, item)}>
+              <span aria-hidden="true">{folderCollapsed(item.folder.id) ? '▸' : '▾'}</span><RailTypeIcon kind="folder" />
+              {#if expanded}<span class="rail-section-name">{item.name}</span>{/if}<span class="rail-section-count">{folderChildren(item.folder.id).length}</span>
+            </button>
+            {#if !folderCollapsed(item.folder.id)}
+              <div class="rail-folder-children" data-rail-zone={item.key}>
+                {#each folderChildren(item.folder.id) as child (child.key)}{@render itemRow(child)}{/each}
+                {#if !folderChildren(item.folder.id).length && expanded}<span class="rail-folder-empty">Drop items here</span>{/if}
+              </div>
+            {/if}
+          </section>
+        {:else}{@render itemRow(item)}{/if}
+      {/each}
+    </div>
+  </div>
+  {#if dragState.didDrag && draggedItem}
+    <div class="rail-drag-ghost" aria-hidden="true" style={`left:${ghostLeft}px;top:${ghostTop}px;width:${dragState.dragWorkspaceRect?.width ?? 32}px`}>
+      <RailTypeIcon kind={draggedItem.kind} />{#if expanded}<span>{draggedItem.name}</span>{/if}
+    </div>
+  {/if}
+
+  {#snippet itemRow(item: RailItem)}
+    <div class="rail-project-entry" data-rail-drop={dropHint?.key === item.key ? dropHint.position : undefined} class:rail-project-dragging={dragState.didDrag && item.key === dragState.dragWorkspaceId}>
+      {#if item.kind === 'workspace'}
+        {@const workspace = item.project}
+        <div use:observeGitRow={workspace.rootPath}>
+        <HoverTooltip
+          label={workspaceName(workspace)}
+          detail={workspaceDetail(workspace)}
+          delayMs={WORKSPACE_TOOLTIP_DELAY_MS}
+          suppress={workspaceTooltipSuppressed}
+        >
+          <button
+            class={expanded
+              ? `rail-workspace-card rail-workspace-row ${activeContextId === workspace.contextId ? "rail-workspace-card-active" : ""}`
+              : `rail-button rail-button-workspace ${activeContextId === workspace.contextId ? "rail-button-active" : ""}`}
+            style:--project-color={workspaceColor(workspace) ?? "var(--color-accent)"}
+            data-file-drop-context={workspace.contextId}
+            data-workspace-id={workspace.id}
+            data-rail-item-id={item.key}
+            type="button"
+            aria-label={`Workspace ${workspaceName(workspace)}, ${workspace.rootPath}, ${gitFor(workspace.rootPath).detail}`}
+            aria-current={activeContextId === workspace.contextId ? "true" : undefined}
+            oncontextmenu={(event) => {
+              event.preventDefault();
+              openItemMenu(event, item);
+            }}
+            onkeydown={(event) => itemKeydown(event, item)}
+            onpointerdown={(event) => pointerItem(event, item)}
+            onclick={(event) => { if (!dragEnabled || event.detail === 0) selectItem(item); }}
+          >
+            <span class={expanded ? "rail-workspace-avatar" : "rail-workspace-initial"} aria-hidden="true">{workspaceInitial(workspace)}</span>
+            {#if expanded}
+              <span class="rail-workspace-info">
+                <span class="rail-workspace-heading">
+                  <span class="rail-workspace-name">{workspaceName(workspace)}</span>
+                  {#if shortPaths.has(workspace.id)}
+                    <span class="rail-workspace-distinction" title={workspace.rootPath}>{shortPaths.get(workspace.id)}</span>
+                  {/if}
+                </span>
+                {#if gitFor(workspace.rootPath).text}
+                  <span class="rail-workspace-git" class:rail-git-conflict={gitCells.get(workspace.rootPath)?.summary?.hasConflicts} aria-hidden="true">⎇ <span>{gitFor(workspace.rootPath).text}</span></span>
+                {/if}
+              </span>
+            {:else if gitFor(workspace.rootPath).mark}
+              <span class="rail-workspace-git-mark" class:rail-git-conflict={gitCells.get(workspace.rootPath)?.summary?.hasConflicts} aria-hidden="true">{gitFor(workspace.rootPath).mark}</span>
+            {/if}
+          </button>
+        </HoverTooltip>
+        <button class="rail-git-action" type="button" aria-label={`Version Control for ${workspaceName(workspace)}`}
+          title={`Version Control — ${gitFor(workspace.rootPath).detail}`} onclick={() => void openProjectVersionControl(workspace)}>⎇</button>
+        </div>
+      {:else if item.kind === 'tabGroup'}
+        {@const group = item.group}
+        {@const active = activeContextId === group.id && !activeGlobalDocumentId}
       {#if expanded}
         <button
-          class={`rail-workspace-card rail-tab-group-card ${active ? "rail-workspace-card-active" : ""}`}
+          class={`rail-workspace-card rail-workspace-row rail-tab-group-card ${active ? "rail-workspace-card-active" : ""}`}
           data-file-drop-context={group.id}
           data-tab-group-drop={group.id}
           data-tab-group-id={group.id}
+            data-rail-item-id={item.key}
           type="button"
           aria-label={`Tab group ${group.name}, ${group.tabCount} tabs`}
           aria-current={active ? "true" : undefined}
-          onclick={() => onSelectContext(group.id)}
-          oncontextmenu={(event) => openMenu(event, { tabGroup: group })}
-          onkeydown={(event) => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openMenu(event, { tabGroup: group }); }}
+          onpointerdown={(event) => pointerItem(event, item)}
+          onclick={(event) => { if (!dragEnabled || event.detail === 0) selectItem(item); }}
+          oncontextmenu={(event) => openItemMenu(event, item)}
+          onkeydown={(event) => itemKeydown(event, item)}
         >
           <span class="rail-workspace-avatar rail-tab-group-avatar" aria-hidden="true">
-            {#if group.id === DEFAULT_TAB_GROUP_ID}<NotepadIcon size={16} />{:else}{group.name.trim().charAt(0).toUpperCase() || "#"}{/if}
+            <RailTypeIcon kind="tabGroup" />
           </span>
           <span class="rail-workspace-info">
             <span class="rail-workspace-heading"><span class="rail-workspace-name">{group.name}</span></span>
@@ -604,179 +800,43 @@
             data-file-drop-context={group.id}
             data-tab-group-drop={group.id}
             data-tab-group-id={group.id}
+            data-rail-item-id={item.key}
             type="button"
             aria-label={`Tab group ${group.name}, ${group.tabCount} tabs`}
             aria-current={active ? "true" : undefined}
-            onclick={() => onSelectContext(group.id)}
-            oncontextmenu={(event) => openMenu(event, { tabGroup: group })}
+            onpointerdown={(event) => pointerItem(event, item)}
+          onclick={(event) => { if (!dragEnabled || event.detail === 0) selectItem(item); }}
+            oncontextmenu={(event) => openItemMenu(event, item)}
           >
-            {#if group.id === DEFAULT_TAB_GROUP_ID}<NotepadIcon size={16} />{:else}<span class="rail-workspace-initial">{group.name.trim().charAt(0).toUpperCase() || "#"}</span>{/if}
+            <RailTypeIcon kind="tabGroup" />
           </button>
         </HoverTooltip>
       {/if}
-    {/each}
-  </section>
 
-  {#each globalDocumentSections as section (section.kind)}
-    {@const label = globalDocumentKindLabel(section.kind)}
-    <section class="rail-section rail-entity-section" aria-label={label}>
-      <div class="rail-section-heading rail-entity-heading">
-        {#if expanded}<span class="rail-section-name rail-entity-title">{label}</span>{/if}
-        <button type="button" class="rail-section-more rail-entity-add" aria-label={`New ${label}`} title={`New ${label}`}
-          onclick={() => editEntity(section.kind, null)}>+</button>
-      </div>
-      {#each section.documents as document (document.id)}
-        {@const active = activeGlobalDocumentId === document.id}
-        <HoverTooltip label={document.name} suppress={workspaceTooltipSuppressed || expanded}>
-          <button type="button"
-            class={expanded ? `global-document-link ${active ? "global-document-link-active" : ""}` : `rail-button ${active ? "rail-button-active" : ""}`}
-            data-global-document-id={document.id}
-            aria-label={`${label} ${document.name}`}
-            aria-current={active ? "true" : undefined}
-            onclick={() => { openGlobalDocument(document.id); }}
-            oncontextmenu={(event) => openMenu(event, { globalDocument: document })}
-            onkeydown={(event) => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openMenu(event, { globalDocument: document }); }}>
-            <span aria-hidden="true">{section.kind === "tasks" ? "☑" : "▤"}</span>{#if expanded}<span class="global-document-name">{document.name}</span>{/if}
+      {:else if item.kind !== 'folder'}
+        {@const active = activeGlobalDocumentId === item.document.id}
+        <HoverTooltip label={item.name} detail={globalDocumentKindLabel(item.kind)} suppress={workspaceTooltipSuppressed}>
+          <button class={expanded ? `rail-workspace-card rail-workspace-row ${active ? 'rail-workspace-card-active' : ''}` : `rail-button ${active ? 'rail-button-active' : ''}`}
+            data-rail-item-id={item.key} data-global-document-id={item.document.id} type="button"
+            aria-label={`${globalDocumentKindLabel(item.kind)} ${item.name}`} aria-current={active ? 'true' : undefined}
+            onpointerdown={(event) => pointerItem(event, item)} onclick={(event) => { if (!dragEnabled || event.detail === 0) selectItem(item); }}
+            oncontextmenu={(event) => openItemMenu(event, item)} onkeydown={(event) => itemKeydown(event, item)}>
+            <span class={expanded ? 'rail-workspace-avatar' : 'rail-workspace-initial'} aria-hidden="true"><RailTypeIcon kind={item.kind} /></span>
+            {#if expanded}<span class="rail-workspace-info"><span class="rail-workspace-name">{item.name}</span></span>{/if}
           </button>
         </HoverTooltip>
-      {/each}
-    </section>
-  {/each}
-  {#if entityEdit}
-    <form class="rail-folder-form rail-entity-form" onsubmit={(event) => { event.preventDefault(); void saveEntity(); }}>
-      <input aria-label={`${entityLabel(entityEdit.kind)} name`} placeholder={`${entityLabel(entityEdit.kind)} name`} bind:value={entityName}
-        onkeydown={(event) => { if (event.key === 'Escape') entityEdit = null; }} />
-      <button type="submit" disabled={!entityName.trim()}>{entityEdit.id ? 'Rename' : 'Create'}</button><button type="button" onclick={() => entityEdit = null}>Cancel</button>
-    </form>
-  {/if}
-
-  {#if !expanded}<button type="button" class="rail-button" aria-label="Search workspaces" title="Search workspaces" onclick={() => { railSearchOpen = !railSearchOpen; void tick().then(() => railSearchInput?.focus()); }}>⌕</button>{/if}
-  {#if expanded || railSearchOpen}
-    <input bind:this={railSearchInput} class="rail-search" class:rail-search-compact={!expanded} aria-label="Search workspaces" placeholder="Search name or path…" bind:value={searchQuery}
-      onkeydown={(event) => {
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); searchQuery = ''; railSearchOpen = false; }
-        if (event.key === 'ArrowDown' || event.key === 'Enter') { event.preventDefault(); railWorkspacesEl?.querySelector<HTMLButtonElement>('[data-workspace-id]')?.focus(); }
-      }} />
-  {/if}
-  {#if folderEdit}
-    <form class="rail-folder-form" onsubmit={(event) => { event.preventDefault(); saveFolder(); }}>
-      <input aria-label="Folder name" bind:value={folderName} onkeydown={(event) => { if (event.key === 'Escape') folderEdit = null; }} />
-      <button type="submit" disabled={!folderName.trim()}>Save</button><button type="button" onclick={() => folderEdit = null}>Cancel</button>
-    </form>
-  {/if}
-  <div class={`rail-workspaces${expanded ? " rail-workspaces-expanded" : ""}`} bind:this={railWorkspacesEl} onscroll={saveRailPreferences}>
-    {#if railProjects.length === 0}<p class="rail-empty" role="status">{searchQuery.trim() ? 'No matching projects' : 'No projects in the sidebar'}</p>{/if}
-    {#each sections.filter(section => !searchQuery.trim() || section.projects.length > 0) as section (section.id)}
-      <section class="rail-section" data-rail-section={section.id} aria-label={`${section.name}, ${section.projects.length} projects`}>
-        <div class="rail-section-heading">
-          <button class="rail-section-toggle" type="button" aria-label={`${section.name}, ${section.projects.length} projects`}
-            aria-expanded={!sectionCollapsed(section)} title={`${section.name} (${section.projects.length})`}
-            draggable={dragEnabled && !!section.folderId}
-            ondragstart={(event) => { draggedFolder = section.folderId; event.dataTransfer?.setData('text/plain', section.folderId ?? ''); }}
-            ondragend={() => draggedFolder = null}
-            ondragover={(event) => { if (dragEnabled && draggedFolder && section.folderId) event.preventDefault(); }}
-            ondrop={(event) => dropFolder(event, section)}
-            oncontextmenu={(event) => openMenu(event, { section })}
-            onkeydown={(event) => { if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) openMenu(event, { section }); }}
-            onclick={(event) => { if (!expanded && sectionCollapsed(section)) openMenu(event, { section, projectsOnly: true }); else toggleSection(section); }}>
-            <span aria-hidden="true">{sectionCollapsed(section) ? '▸' : '▾'}</span>
-            {#if expanded}<span class="rail-section-name">{section.name}</span>{:else}<span aria-hidden="true">{section.pinned ? '★' : section.folderId ? '▣' : '·'}</span>{/if}
-            <span class="rail-section-count">{section.projects.length}</span>
-          </button>
-          {#if expanded}<button type="button" class="rail-section-more" aria-label={`Actions for ${section.name}`} onclick={(event) => openMenu(event, { section })}>…</button>{/if}
-        </div>
-        {#if !sectionCollapsed(section)}
-    {#each section.projects as workspace (workspace.id)}
-        <div class="rail-project-entry" class:rail-project-dragging={dragState.didDrag && workspace.id === dragState.dragWorkspaceId} use:observeGitRow={workspace.rootPath}>
-        <HoverTooltip
-          label={workspaceName(workspace)}
-          detail={workspaceDetail(workspace)}
-          delayMs={WORKSPACE_TOOLTIP_DELAY_MS}
-          suppress={workspaceTooltipSuppressed}
-        >
-          <button
-            class={expanded
-              ? `rail-workspace-card rail-workspace-row ${activeContextId === workspace.contextId ? "rail-workspace-card-active" : ""}`
-              : `rail-button rail-button-workspace ${activeContextId === workspace.contextId ? "rail-button-active" : ""}`}
-            style:--project-color={workspaceColor(workspace) ?? "var(--color-accent)"}
-            data-file-drop-context={workspace.contextId}
-            data-workspace-id={workspace.id}
-            type="button"
-            aria-label={`Workspace ${workspaceName(workspace)}, ${workspace.rootPath}, ${gitFor(workspace.rootPath).detail}`}
-            aria-current={activeContextId === workspace.contextId ? "true" : undefined}
-            oncontextmenu={(event) => {
-              event.preventDefault();
-              openMenu(event, { project: workspace });
-            }}
-            onkeydown={(event) => workspaceKeydown(event, workspace)}
-            onpointerdown={(event) => {
-              if (dragEnabled) dragController.pointerDown(event, workspace,
-                workspacesForRender.findIndex((entry) => entry.id === workspace.id));
-            }}
-            onclick={(event) => {
-              // Pointer selection is committed by the drag controller; native
-              // keyboard and assistive clicks have no pointer sequence.
-              if (!dragEnabled || event.detail === 0) selectProject(workspace);
-            }}
-          >
-            <span class={expanded ? "rail-workspace-avatar" : "rail-workspace-initial"} aria-hidden="true">{workspaceInitial(workspace)}</span>
-            {#if expanded}
-              <span class="rail-workspace-info">
-                <span class="rail-workspace-heading">
-                  <span class="rail-workspace-name">{workspaceName(workspace)}</span>
-                  {#if shortPaths.has(workspace.id)}
-                    <span class="rail-workspace-distinction" title={workspace.rootPath}>{shortPaths.get(workspace.id)}</span>
-                  {/if}
-                </span>
-                {#if gitFor(workspace.rootPath).text}
-                  <span class="rail-workspace-git" class:rail-git-conflict={gitCells.get(workspace.rootPath)?.summary?.hasConflicts} aria-hidden="true">⎇ <span>{gitFor(workspace.rootPath).text}</span></span>
-                {/if}
-              </span>
-            {:else if gitFor(workspace.rootPath).mark}
-              <span class="rail-workspace-git-mark" class:rail-git-conflict={gitCells.get(workspace.rootPath)?.summary?.hasConflicts} aria-hidden="true">{gitFor(workspace.rootPath).mark}</span>
-            {/if}
-          </button>
-        </HoverTooltip>
-        <button class="rail-git-action" type="button" aria-label={`Version Control for ${workspaceName(workspace)}`}
-          title={`Version Control — ${gitFor(workspace.rootPath).detail}`} onclick={() => void openProjectVersionControl(workspace)}>⎇</button>
-        <button class="rail-pin-action" class:rail-pin-action-pinned={workspace.pinned} type="button"
-          aria-label={`${workspace.pinned ? 'Unpin' : 'Pin'} ${workspaceName(workspace)}`} aria-pressed={workspace.pinned}
-          title={workspace.pinned ? 'Unpin' : 'Pin'} onclick={() => togglePinned(workspace)}>{workspace.pinned ? '★' : '☆'}</button>
-        </div>
-    {/each}
-        {/if}
-      </section>
-    {/each}
-    {#if railProjects.length === 0}<p class="rail-empty">{searchQuery.trim() ? 'No matching projects' : 'No projects'}</p>{/if}
-  </div>
-
-  {#if dragState.didDrag && draggedWorkspace}
-    <button
-      class="rail-button rail-button-workspace rail-button-workspace-ghost"
-      type="button"
-      aria-hidden="true"
-      tabindex="-1"
-      style:--project-color={workspaceColor(draggedWorkspace) ?? "var(--color-accent)"}
-      style={`left:${ghostLeft}px; top:${ghostTop}px; width:${dragState.dragWorkspaceRect?.width ?? 32}px; height:${dragState.dragWorkspaceRect?.height ?? 32}px;`}
-    >
-      <span class="rail-workspace-initial">{workspaceInitial(draggedWorkspace)}</span>
-    </button>
-  {/if}
-
+      {/if}
+      {#if item.kind !== 'folder'}
+        <button class="rail-pin-action" class:rail-pin-action-pinned={item.pinned} type="button" aria-label={`${item.pinned ? 'Unpin' : 'Pin'} ${item.name}`}
+          aria-pressed={item.pinned} title={item.pinned ? 'Unpin' : 'Pin'} onclick={() => toggleItemPin(item)}>{item.pinned ? '★' : '☆'}</button>
+      {/if}
+    </div>
+  {/snippet}
   <div class="rail-footer-stack">
     <HoverTooltip label="Refresh visible Git summaries"><button class="rail-button" type="button" aria-label="Refresh visible Git summaries"
       disabled={gitRefreshBusy || visibleGitPaths.size === 0} onclick={() => void refreshVisibleGit()}>↻</button></HoverTooltip>
-    <HoverTooltip label="Create folder"><button class="rail-button" type="button" aria-label="Create folder" onclick={() => editFolder(null)}>▣+</button></HoverTooltip>
-    <HoverTooltip label="Add Workspace">
-      <button
-        class="rail-button rail-button-add"
-        type="button"
-        aria-label="Add Workspace"
-        onclick={onAddWorkspace}
-      >
-        <AddIcon size={16} />
-      </button>
-    </HoverTooltip>
+    <HoverTooltip label="Create…"><button bind:this={createTrigger} class="rail-button rail-button-add" type="button" aria-label="Create…" aria-haspopup="dialog" aria-expanded={createOpen}
+      onclick={() => { if (createOpen) closeCreate(); else showCreate(); }}><AddIcon size={16} /></button></HoverTooltip>
     <HoverTooltip label="Workspace Manager">
       <button
         class="rail-button rail-button-manager"
@@ -795,7 +855,7 @@
     class="activity-rail-resize-handle"
     role="slider"
     aria-orientation="horizontal"
-    aria-label="Resize workspaces sidebar"
+    aria-label="Resize sidebar"
     tabindex="0"
     aria-valuemin={MIN_ACTIVITY_RAIL_WIDTH_PX}
     aria-valuemax={MAX_ACTIVITY_RAIL_WIDTH_PX}
@@ -807,8 +867,19 @@
 </aside>
 
 {#if menu}
-  <div class="rail-catalog-menu" role="menu" tabindex="-1" aria-label="Workspace organization" bind:this={menuEl}
+  <div class="rail-catalog-menu" role="menu" tabindex="-1" aria-label="Sidebar organization" bind:this={menuEl}
     style={`left:${menu.x}px;top:${menu.y}px`} onkeydown={menuKeydown}>
+    {#if menu.item && menu.item.kind !== 'folder'}
+      {@const item = menu.item}
+      <button type="button" role="menuitem" onclick={() => toggleItemPin(item)}>{item.pinned ? 'Unpin' : 'Pin'}</button>
+      <button type="button" role="menuitem" disabled={!item.folderId} onclick={() => { void placeItem(item, { folderId: null }); closeMenu(); }}>Move to root</button>
+      {#each Object.values(catalog.folders) as folder (folder.id)}
+        <button type="button" role="menuitem" disabled={item.folderId === folder.id} onclick={() => { void placeItem(item, { folderId: folder.id }); closeMenu(); }}>Move to {folder.name}</button>
+      {/each}
+      <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => { reorderItem(item, -1); closeMenu(); }}>Move Up</button>
+      <button type="button" role="menuitem" disabled={!dragEnabled} onclick={() => { reorderItem(item, 1); closeMenu(); }}>Move Down</button>
+      <div class="rail-menu-separator" role="separator"></div>
+    {/if}
     {#if menu.project}
       {@const project = menu.project}
       {@const contextId = project.contextId}
@@ -836,44 +907,67 @@
       <button type="button" role="menuitem" onclick={() => editEntity('tabGroup', group.id, group.name)}>Rename</button>
       <button type="button" role="menuitem" disabled={group.id === DEFAULT_TAB_GROUP_ID}
         title={group.id === DEFAULT_TAB_GROUP_ID ? 'The default tab group cannot be deleted' : undefined}
-        onclick={() => runEntityAction(() => removeTabGroupWithConfirm(group.id, onError))}>Delete</button>
+        onclick={() => runEntityAction(async () => {
+          if (await removeTabGroupWithConfirm(group.id, onError)) await commit([{ type: 'removeRailItem', id: tabGroupRailKey(currentWindowId, group.id) }]);
+        })}>Delete</button>
     {:else if menu.globalDocument}
       {@const document = menu.globalDocument}
-      {@const siblings = globalDocumentsOfKind(catalog, document.kind)}
-      {@const index = siblings.findIndex(entry => entry.id === document.id)}
       <button type="button" role="menuitem" onclick={() => runEntityAction(() => openGlobalDocument(document.id))}>Open</button>
       <button type="button" role="menuitem" onclick={() => editEntity(document.kind, document.id, document.name)}>Rename</button>
-      <button type="button" role="menuitem" disabled={index <= 0} onclick={() => runEntityAction(() => moveGlobalDocument(document.id, -1))}>Move Up</button>
-      <button type="button" role="menuitem" disabled={index < 0 || index >= siblings.length - 1} onclick={() => runEntityAction(() => moveGlobalDocument(document.id, 1))}>Move Down</button>
       <div class="rail-menu-separator" role="separator"></div>
       <button type="button" role="menuitem" onclick={() => runEntityAction(() => confirmDeleteGlobalDocument(document))}>Delete</button>
-    {:else if menu.section}
-      {@const section = menu.section}
-      {#if menu.projectsOnly}
-        {#each section.projects as project (project.id)}<button type="button" role="menuitem" title={project.rootPath} onclick={() => selectProject(project)}>{project.name}</button>{/each}
-      {/if}
-      <button type="button" role="menuitem" onclick={() => { toggleSection(section); closeMenu(); }}>{sectionCollapsed(section) ? 'Expand' : 'Collapse'}</button>
-      {#if section.folderId}
-        <button type="button" role="menuitem" onclick={() => editFolder(section.folderId)}>Rename folder</button>
-        <button type="button" role="menuitem" onclick={() => { commit([{ type: 'removeFolder', id: section.folderId! }]); closeMenu(); }}>Delete folder (keep projects)</button>
-      {/if}
-      <button type="button" role="menuitem" onclick={() => editFolder(null)}>Create folder</button>
+    {:else if menu.item?.kind === 'folder'}
+      {@const folder = menu.item.folder}
+      <button type="button" role="menuitem" onclick={() => showCreate(folder.id)}>Create in folder…</button>
+      <button type="button" role="menuitem" onclick={() => { toggleFolder(folder.id); closeMenu(); }}>{folderCollapsed(folder.id) ? 'Expand' : 'Collapse'}</button>
+      <button type="button" role="menuitem" onclick={() => editFolder(folder.id)}>Rename folder</button>
+      <button type="button" role="menuitem" onclick={() => { reorderItem(menu!.item!, -1); closeMenu(); }}>Move Up</button>
+      <button type="button" role="menuitem" onclick={() => { reorderItem(menu!.item!, 1); closeMenu(); }}>Move Down</button>
+      <button type="button" role="menuitem" onclick={() => { commit([{ type: 'removeFolder', id: folder.id }]); closeMenu(); }}>Delete folder (keep items)</button>
     {/if}
   </div>
 {/if}
 
+{#if createOpen}
+  <div class="rail-create-popup" role="dialog" aria-label="What would you like to create?" tabindex="-1" bind:this={createEl}
+    onkeydown={(event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeCreate(); }
+      const buttons = [...(createEl?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowDown' ? 2 : event.key === 'ArrowUp' ? -2 : 0;
+      if (step) { event.preventDefault(); buttons[(index + step + buttons.length) % buttons.length]?.focus(); }
+      if (event.key === 'Tab') { event.preventDefault(); buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus(); }
+    }}>
+    <strong>What would you like to create?</strong>
+    {#if createFolderId}<p class="rail-create-location">In {catalog.folders[createFolderId]?.name}</p>{/if}
+    <div class="rail-create-grid">
+      {#each createOptions.filter(option => !createFolderId || option.kind !== 'folder') as option (option.kind)}
+        <button type="button" onclick={() => void chooseCreate(option.kind)}><RailTypeIcon kind={option.kind} size={24} /><span>{option.name}</span><small>{option.detail}</small></button>
+      {/each}
+    </div>
+  </div>
+{/if}
+
 <style>
-  .global-document-link { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; color: var(--color-text-primary); background: transparent; border: 0; border-radius: 5px; cursor: pointer; text-align: left; font: inherit; }
-  .global-document-link:hover { background: var(--color-hover); }
-  .global-document-link-active { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
-  .global-document-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .rail-entity-section { gap: 2px; }
-  .rail-entity-heading { justify-content: center; min-height: 22px; }
-  .activity-rail-expanded .rail-entity-heading { justify-content: space-between; padding: 0 2px 0 6px; }
-  .rail-entity-title { font-size: 10px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: .04em; }
-  .rail-entity-add { font-size: 14px; line-height: 1; padding: 2px 6px; border-radius: var(--radius-sm); }
-  .rail-entity-add:hover { background: var(--color-hover); color: var(--color-text-primary); }
-  .rail-project-entry { position: relative; width: 100%; flex-shrink: 0; }
+  .rail-dragging [data-rail-zone="pinned"] { min-height: 20px; border: 1px dashed var(--color-border-subtle); border-radius: var(--radius-sm); }
+  [data-rail-drop="before"] { box-shadow: 0 -2px var(--color-accent); }
+  [data-rail-drop="after"] { box-shadow: 0 2px var(--color-accent); }
+  [data-rail-drop="inside"] { outline: 1px solid var(--color-accent); outline-offset: -1px; border-radius: var(--radius-sm); background: var(--color-hover); }
+  .rail-zone { width: 100%; display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+  .rail-root-zone { flex: 1; min-height: 48px; }
+  .rail-folder-children { width: 100%; min-height: 12px; }
+  .activity-rail-expanded .rail-folder-children { padding-left: 10px; border-left: 1px solid var(--color-border-subtle); box-sizing: border-box; }
+  .rail-folder-empty { padding: 8px; display: block; color: var(--color-text-muted); font-size: 11px; }
+  .rail-create-popup { position: fixed; z-index: 100; width: min(360px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; padding: 16px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-md); background: var(--color-surface-1); color: var(--color-text-primary); box-shadow: var(--shadow-overlay); box-sizing: border-box; }
+  .rail-create-location { margin: 6px 0 0; color: var(--color-text-secondary); font-size: 12px; }
+  .rail-create-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .rail-create-grid button { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-surface-2); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .rail-create-grid button:hover { background: var(--color-hover); border-color: var(--color-accent); }
+  .rail-create-grid button:focus-visible { outline: 2px solid var(--color-focus-ring); }
+  .rail-create-grid small { color: var(--color-text-secondary); font-size: 11px; }
+  .rail-drag-ghost { position: absolute; z-index: 50; display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--color-surface-2); color: var(--color-text-primary); border: 1px solid var(--color-accent); border-radius: var(--radius-sm); pointer-events: none; opacity: .9; box-sizing: border-box; }
+
+  .rail-project-entry { --project-color: var(--color-accent); position: relative; width: 100%; flex-shrink: 0; }
   .rail-git-action { position: absolute; right: 0; top: 0; padding: 0; width: 16px; height: 16px; font-size: 11px; border: 0; border-radius: 3px; background: var(--color-surface-1); color: var(--color-text-secondary); cursor: pointer; }
   .rail-git-action:focus-visible { outline: 2px solid var(--color-focus-ring); }
   .rail-git-action:hover { background: var(--color-hover); }
@@ -892,12 +986,11 @@
   .rail-project-dragging { opacity: 0.35; }
   .rail-section { width: 100%; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   .activity-rail-expanded .rail-section { align-items: stretch; }
-  .rail-section-heading { display: flex; width: 100%; align-items: center; min-width: 0; }
-  .rail-section-toggle, .rail-section-more { color: var(--color-text-secondary); background: transparent; border: 0; font: inherit; font-size: 10px; cursor: pointer; }
-  .rail-section-toggle { min-width: 0; width: 100%; display: flex; align-items: center; gap: 3px; min-height: 24px; padding: 2px; }
+  .rail-section-toggle { color: var(--color-text-secondary); background: transparent; border: 0; font: inherit; font-size: 10px; cursor: pointer; }
+  .rail-section-toggle { box-sizing: border-box; min-width: 0; width: 100%; display: flex; align-items: center; gap: 3px; min-height: 24px; padding: 2px; }
   .rail-section-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: left; }
   .rail-section-count { opacity: .75; }
-  .rail-section-toggle:focus-visible, .rail-section-more:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: -2px; }
+  .rail-section-toggle:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: -2px; }
   .rail-catalog-menu { position: fixed; z-index: 2000; display: flex; flex-direction: column; min-width: 190px; max-width: min(360px, 95vw); max-height: 90vh; overflow-y: auto; padding: 4px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-surface-1); box-shadow: var(--shadow-overlay); }
   .rail-catalog-menu button { flex-shrink: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-primary); font: inherit; font-size: 12px; padding: 6px 8px; text-align: left; cursor: pointer; }
   .rail-catalog-menu button:hover, .rail-catalog-menu button:focus-visible { background: var(--color-hover); outline: 2px solid var(--color-focus-ring); outline-offset: -2px; }
@@ -917,10 +1010,7 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-2);
-    /* Collapsed mode: a small 2px top offset keeps the first tab group button off the
-       top border; a tight gap keeps its divider near the editor tab-bar bottom
-       line (~var(--tab-header-height) down the rail). Expanded mode overrides
-       these below. */
+    /* Keep compact items clear of the top border. */
     padding: var(--space-1) var(--space-1);
   }
 
@@ -935,9 +1025,7 @@
     background: color-mix(in srgb, var(--color-accent) 18%, transparent);
   }
 
-  /* Expanded rail behaves like a column panel: left-aligned content, room for
-     the wider info cards. Top padding + gap are kept tight so the tab group
-     region stays compact. */
+  /* Expanded rows share a compact left-aligned column. */
   .activity-rail-expanded {
     align-items: stretch;
     gap: var(--space-2);
@@ -1190,16 +1278,15 @@
   /* ---- Expanded tab group card (reuses .rail-workspace-card layout; only the
      avatar and tab-link styling below are tab-group-specific content). ---- */
   .rail-tab-group-avatar {
-    /* The default group's avatar holds an icon, not initials — keep it centered. */
+    /* Group avatars use the same type icon at either sidebar width. */
     text-transform: none;
   }
 
   /* The min-height that keeps workspace cards uniform is dropped: a tab group
      card grows with the number of listed files instead. */
   .rail-tab-group-card {
-    min-height: 0;
-    padding-top: var(--space-1);
-    padding-bottom: var(--space-2);
+    height: auto;
+    min-height: 46px;
   }
 
   /* Open files are a vertical list, not the wrapped stat row the workspace

@@ -35,13 +35,13 @@ const emit = (path: string, snapshot: WorkspaceGitSummarySnapshot) => fixtures.c
 const summary = { branchName: 'topic', isDetached: false, isUnborn: false, isDirty: true, hasConflicts: true, aheadBehind: { ahead: 2, behind: 1 } };
 beforeEach(() => { fixtures.consumers = []; Observer.all = []; vi.clearAllMocks(); _resetProjectCatalogForTests(); localStorage.clear(); vi.mocked(invoke).mockResolvedValue({version:1,revision:1,projects:{},folders:{},savedContexts:{}}); });
 describe('rail Git demand and presentation', () => {
-  it('cold 30-project rail demands only active and intersecting roots, releasing rows on collapse', async () => {
+  it('cold 30-project rail demands only active and intersecting roots, releasing filtered rows', async () => {
     const {host,unmount} = mountComponent(ActivityRail, {workspaces:Array.from({length:30},(_,i)=>workspace(i)),activeContextId:'ws-29' as const,panelWidthPx:240}); await tick();
     expect(demanded().map(c=>[c.path,c.demand.priority])).toEqual([['/projects/29','active']]);
     expect(Observer.all).toHaveLength(30);expect(Observer.all[0].options?.root).toBe(host.querySelector('.rail-workspaces'));
     Observer.all[0].visible(true); Observer.all[1].visible(true); await tick();expect(demanded()).toHaveLength(3);
     Observer.all[0].visible(false); await tick(); expect(demanded()).toHaveLength(2);
-    host.querySelector('[data-workspace-id]')!.closest('section')!.querySelector<HTMLButtonElement>('.rail-section-toggle')!.click(); await tick();
+    const search = host.querySelector<HTMLInputElement>('.rail-search')!; search.value = 'no-matches'; search.dispatchEvent(new Event('input', { bubbles: true })); await tick();
     expect(demanded().map(c=>c.path)).toEqual(['/projects/29']);
     unmount(); await tick(); expect(demanded()).toHaveLength(0);
   });

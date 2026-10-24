@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-24 15:02 MSK — Unify sidebar items, shared folders and creation
+
+- Sidebar: workspaces, window tab groups and app-wide Tasks/Notes share one searchable list without category, Pinned or Without folder headings. Workspace avatars and Git summaries remain; other types have distinct icons and consistent row sizing in expanded and compact modes.
+- Organization: all four types support shared single-level folders, pin/unpin, mixed manual order, pointer dragging and keyboard/context-menu actions. Pinned items appear once at the top and remember their home folder and order. Search reveals collapsed matches without changing saved collapse state. Deleting a folder preserves every item, its pin state and relative mixed order at the root.
+- Creation: the bottom plus opens a keyboard-accessible grid for Workspace, Tab group, Tasks, Notes and Folder. Folder menus create items directly inside the selected folder and reveal the result. The popup closes on Escape or outside click and restores trigger focus. Active documents no longer also highlight their containing group.
+- Persistence: catalog transactions store sidebar placement by typed identity, with tab groups scoped to their owning window. Workspace placement uses canonical project fields so manager actions stay in sync. Document/group deletion clears its placement. No data migration is added. Updated workspace-tools.md.
+- Validation: the full frontend suite passed (3391 tests); all 42 focused sidebar/catalog/drag tests passed. The native suite passed sequentially (193 passed, 1 previously ignored); the final catalog run passed all 22 tests, including shared placement, folder deletion order and invalid-transaction rollback. One parallel native run hit an unrelated component-manager Busy error; the sequential run passed. Svelte/type checks reported zero errors/warnings and the production frontend build passed. Browser previews verified expanded/compact layouts, creation cards, Escape/focus handling and popup bounds; the native desktop app was not rebuilt or launched.
+
 ## 2026-10-23 14:22 MSK — Preserve Notes line breaks and open in Edit
 
 - Notes: Preview preserves single line breaks within Markdown paragraphs. The document renderer accepts a per-call line-break option, enabled for Notes; ordinary Markdown document previews retain their existing behavior.

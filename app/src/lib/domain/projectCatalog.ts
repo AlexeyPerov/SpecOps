@@ -40,6 +40,13 @@ export interface GlobalDocument {
   name: string;
   order: number;
 }
+/** Shared sidebar placement; tab-group keys include their owning window. */
+export interface RailPlacement {
+  folderId: string | null;
+  pinned: boolean;
+  order: number;
+  pinnedOrder: number;
+}
 export interface ProjectCatalog {
   version: 1;
   revision: number;
@@ -47,4 +54,5 @@ export interface ProjectCatalog {
   folders: Record<string, ProjectFolder>;
   savedContexts: Record<ProjectId, SavedProjectContext>;
   documents: Record<string, GlobalDocument>;
+  railItems?: Record<string, RailPlacement>;
 }

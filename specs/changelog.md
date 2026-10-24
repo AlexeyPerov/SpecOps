@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-24 20:48 MSK — Release 0.4.0
+
+- Bumped application version from 0.3.0 to 0.4.0.
+
 ## 2026-10-24 15:32 MSK — Add project file-type filters and on-demand sizes
 
 - Project pane: replace the Markdown toggle with All files, Markdown, and Images and textures. Image filtering also recognizes TGA, DDS, KTX/KTX2, HDR, EXR, TIFF, PSD and PSB without opening or decoding files. A lazy cancellable type index shares directory listings with the tree, respects its hidden/heavy-directory policy, preserves matching ancestors and unknown branches, and reports incomplete enumeration. Editor and Quick Open eligibility stays separate.

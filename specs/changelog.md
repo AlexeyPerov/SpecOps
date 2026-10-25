@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-25 07:20 MSK — Release 0.4.1
+
+- Bumped application version from 0.4.0 to 0.4.1.
+
 ## 2026-10-24 23:07 MSK — Compact project filter button and selection menu
 
 - Replace the wide project-file select with a 24px funnel button in the header. Clicking it opens a viewport-clamped menu with All files, Markdown, and Images and textures; the selected mode has a checkmark and active filtering highlights the trigger. The header returns to a single row, with tighter spacing and abbreviated hidden-file text on narrow panels.

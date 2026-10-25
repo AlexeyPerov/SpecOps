@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-25 09:37 MSK — Reduce native development build artifacts
+
+- Limit development debug information to line tables for application code and disable debug information for dependencies. Keep incremental compilation enabled; test builds inherit the development settings and release settings are unchanged.
+- Validation: offline Cargo metadata parsing and diff whitespace checks pass. No build artifacts were generated or cleaned.
+
 ## 2026-10-25 07:20 MSK — Release 0.4.1
 
 - Bumped application version from 0.4.0 to 0.4.1.

@@ -15,6 +15,12 @@ edition = "2021"
 name = "app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

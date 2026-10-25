@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import HtmlPreviewPane from "./HtmlPreviewPane.svelte";
   import DocumentEditor from "./DocumentEditor.svelte";
   import type { EditorLanguageId } from "../editor/editorLanguage";
   import { createMarkdownSplitScrollSync } from "../services/markdownSplitScrollSync";
@@ -70,7 +71,10 @@
     waitForLayout: () => tick(),
   });
 
-  const markdownModesAvailable = $derived(markdownEnabled && content.length > 0);
+  const htmlEnabled = $derived(language === "html");
+  let htmlMode = $state<"preview" | "source">("preview");
+
+  const markdownModesAvailable = $derived(!htmlEnabled && markdownEnabled && content.length > 0);
 
   const markdownViewMode = $derived(
     !markdownModesAvailable
@@ -114,6 +118,30 @@
 </script>
 
 <div class="markdown-layout">
+  {#if htmlEnabled}
+    <div class="markdown-mode-bar">
+      <div class="markdown-mode-actions">
+        <button
+          class="btn btn-sm btn-ghost"
+          class:mode-button-active={htmlMode === "preview"}
+          type="button"
+          aria-pressed={htmlMode === "preview"}
+          onclick={() => { htmlMode = "preview"; }}
+        >preview</button>
+        <button
+          class="btn btn-sm btn-ghost"
+          class:mode-button-active={htmlMode === "source"}
+          type="button"
+          aria-pressed={htmlMode === "source"}
+          onclick={() => { htmlMode = "source"; }}
+        >source</button>
+      </div>
+      <span class="html-preview-hint">Static HTML · scripts disabled</span>
+    </div>
+  {/if}
+  {#if htmlEnabled && htmlMode === "preview" && visible}
+    <HtmlPreviewPane {content} filePath={documentFilePath} {windowId} notify={onStatusMessage} />
+  {/if}
   {#if markdownModesAvailable}
     <div class="markdown-mode-bar">
       <div class="markdown-mode-actions">
@@ -153,7 +181,7 @@
       {@html markdownHtml}
     </div>
   {:else}
-    <div class:markdown-split={markdownModesAvailable && markdownViewMode === "split"} class="markdown-body">
+    <div class:html-source-hidden={htmlEnabled && htmlMode === "preview"} class:markdown-split={markdownModesAvailable && markdownViewMode === "split"} class="markdown-body">
       <div class="markdown-editor-pane" class:markdown-editor-single={markdownViewMode !== "split"} bind:this={markdownEditorPaneEl}>
         <DocumentEditor
           {content}
@@ -173,7 +201,7 @@
           {onStatusMessage}
           {onUntitledTitleRefresh}
           {onScrollTopChange}
-          {visible}
+          visible={visible && (!htmlEnabled || htmlMode === "source")}
         />
       </div>
       {#if markdownModesAvailable && markdownViewMode === "split"}
@@ -192,6 +220,15 @@
 </div>
 
 <style>
+  .html-source-hidden {
+    display: none !important;
+  }
+
+  .html-preview-hint {
+    font-size: var(--font-size-status);
+    color: var(--color-text-secondary);
+  }
+
   .markdown-layout {
     display: flex;
     flex-direction: column;

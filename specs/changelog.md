@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-25 13:48 MSK — Preview HTML documents in file tabs
+
+- HTML and HTM files open in a static HTML preview in ordinary file tabs, with preview/source controls. Source editing keeps its mounted editor, and preview rendering follows buffer changes with a short debounce; inactive tabs suspend the preview.
+- Preserve document styles and relative image, stylesheet and font URLs through the scoped asset protocol, restoring path separators for browser URL resolution. Local links open through the existing file-tab flow, external links use the browser, and fragment links scroll within the preview.
+- Isolate the page in a sandbox without scripts, forms or popups; remove active embedded content, source base tags and redirect policies. Permit scoped local styles/fonts in the app CSP and apply a restrictive document policy to the preview. No persisted schema or data migration changes.
+- Validation: 16 focused component and link tests pass, including mode switching without editor replacement, buffer updates/debounce cancellation, relative assets, active-content removal, link interception and fragment navigation. Svelte/type checks and production frontend build pass. A browser fixture using the supplied local gallery rendered all 34 images with its own CSS and working fragment navigation under the app CSP; the native asset transport was mocked. The installed desktop application was not rebuilt or launched.
+
 ## 2026-10-25 09:37 MSK — Reduce native development build artifacts
 
 - Limit development debug information to line tables for application code and disable debug information for dependencies. Keep incremental compilation enabled; test builds inherit the development settings and release settings are unchanged.

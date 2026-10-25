@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-25 14:44 MSK — Release 0.4.2
+
+- Bumped application version from 0.4.1 to 0.4.2.
+
 ## 2026-10-25 13:48 MSK — Preview HTML documents in file tabs
 
 - HTML and HTM files open in a static HTML preview in ordinary file tabs, with preview/source controls. Source editing keeps its mounted editor, and preview rendering follows buffer changes with a short debounce; inactive tabs suspend the preview.

@@ -1,6 +1,6 @@
 [package]
 name = "spec-ops"
-version = "0.4.1"
+version = "0.4.2"
 description = "SpecOps desktop workspace for notes, specs, and project files"
 authors = ["Alexey Perov"]
 license = "MIT"

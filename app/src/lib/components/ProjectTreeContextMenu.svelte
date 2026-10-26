@@ -99,6 +99,8 @@
 
   function handleKeyDown(event: KeyboardEvent): void {
     if (contextMenu && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
       closeContextMenu();
     }
   }
@@ -128,7 +130,7 @@
       return;
     }
     try {
-      await navigator.clipboard.writeText(targets.map((node) => node.path).join("\n"));
+      await navigator.clipboard.writeText(targets.map((node) => multiple ? `- ${node.path}` : node.path).join("\n"));
     } catch {
       notify("Could not copy paths to clipboard.");
     }
@@ -141,7 +143,7 @@
       return;
     }
     try {
-      await navigator.clipboard.writeText(targets.map((node) => workspaceRelativePath(node.path, workspaceRoot)).filter((path) => path !== null).join("\n"));
+      await navigator.clipboard.writeText(targets.map((node) => workspaceRelativePath(node.path, workspaceRoot)).filter((path) => path !== null).map((path) => multiple ? `- ${path}` : path).join("\n"));
     } catch {
       notify("Could not copy paths to clipboard.");
     }
@@ -258,7 +260,7 @@
           void copyPath();
         }}
       >
-        {multiple ? "Copy Paths" : "Copy Path"}
+        {multiple ? "Copy Path List" : "Copy Path"}
       </button>
       {#if workspaceRoot}
         <button
@@ -273,7 +275,7 @@
             void copyRelativePath();
           }}
         >
-          {multiple ? "Copy Relative Paths" : "Copy Relative Path"}
+          {multiple ? "Copy Relative Path List" : "Copy Relative Path"}
         </button>
       {/if}
     {/if}

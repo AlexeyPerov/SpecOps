@@ -265,3 +265,17 @@ describe('unified activity rail', () => {
     expect(onPanelWidthChange).toHaveBeenCalledWith(520); expect(host.querySelector('.rail-workspace-row')).not.toBeNull();
   });
 });
+
+it('groups workspace shortcuts before organization actions', async () => {
+  await seed();
+  const settings = vi.fn();
+  const { host } = mountComponent(ActivityRail, { workspaces: [workspace(1, '/app')], onOpenSettings: settings, gitIntegrationEnabled: true });
+  await tick();
+  await context(host.querySelector('[data-workspace-id="/app"]')!);
+  const menu = host.querySelector('[role="menu"]')!;
+  const items = [...menu.querySelectorAll('[role="menuitem"]')];
+  expect(items.slice(0, 3).map(item => item.textContent?.trim())).toEqual(['Version Control', 'Settings', 'Copy Path']);
+  expect(items[2].nextElementSibling?.getAttribute('role')).toBe('separator');
+  button('Settings', menu).click(); await tick();
+  expect(settings).toHaveBeenCalledWith('ws-1');
+});

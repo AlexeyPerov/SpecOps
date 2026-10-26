@@ -869,6 +869,13 @@
 {#if menu}
   <div class="rail-catalog-menu" role="menu" tabindex="-1" aria-label="Sidebar organization" bind:this={menuEl}
     style={`left:${menu.x}px;top:${menu.y}px`} onkeydown={menuKeydown}>
+    {#if menu.project}
+      {@const project = menu.project}
+      {#if gitIntegrationEnabled}<button type="button" role="menuitem" onclick={() => void openProjectVersionControl(project)}>Version Control</button>{/if}
+      {#if project.contextId && onOpenSettings}<button type="button" role="menuitem" onclick={() => runWorkspaceAction(project.contextId!, onOpenSettings)}>Settings</button>{/if}
+      <button type="button" role="menuitem" onclick={() => void copyProjectPath(project)}>Copy Path</button>
+      <div class="rail-menu-separator" role="separator"></div>
+    {/if}
     {#if menu.item && menu.item.kind !== 'folder'}
       {@const item = menu.item}
       <button type="button" role="menuitem" onclick={() => toggleItemPin(item)}>{item.pinned ? 'Unpin' : 'Pin'}</button>
@@ -886,7 +893,6 @@
       {#if !contextId}
         <button type="button" role="menuitem" onclick={() => selectProject(project)}>Open Workspace</button>
       {:else}
-        {#if onOpenSettings}<button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, onOpenSettings)}>Settings</button>{/if}
         {#if onMoveToWindow}
           <button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, id => onMoveToWindow(id, true))}>Open in Separate Window</button>
           <button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, id => onMoveToWindow(id, false))}>Move to Window…</button>
@@ -897,8 +903,6 @@
           {/each}
         {/if}
       {/if}
-      {#if gitIntegrationEnabled}<button type="button" role="menuitem" onclick={() => void openProjectVersionControl(project)}>Version Control</button>{/if}
-      <button type="button" role="menuitem" onclick={() => void copyProjectPath(project)}>Copy Path</button>
       <div class="rail-menu-separator" role="separator"></div>
       <button type="button" role="menuitem" onclick={() => { commit([{ type: 'updateProject', id: project.id, patch: { hiddenFromRail: true } }]); closeMenu(); }}>Hide from Sidebar</button>
       {#if contextId && onCloseWorkspace}<button type="button" role="menuitem" onclick={() => runWorkspaceAction(contextId, onCloseWorkspace)}>Close Workspace</button>{/if}

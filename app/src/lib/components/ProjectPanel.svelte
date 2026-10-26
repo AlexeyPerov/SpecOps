@@ -111,12 +111,18 @@
     onOpenFileInContext,
   }: Props = $props();
 
+  let multipleSelection = $state(false);
   let selectedPaths = $state<Set<string>>(new Set());
   let selectionAnchor = $state<string | null>(null);
   let mutationRunning = $state(false);
-  $effect(() => { void workspaceRoot; selectedPaths = new Set(); selectionAnchor = null; });
+  $effect(() => { void workspaceRoot; multipleSelection = false; selectedPaths = new Set(); selectionAnchor = null; });
+  function clearSelection(): void {
+    multipleSelection = false;
+    selectedPaths = new Set();
+    selectionAnchor = null;
+  }
   function selectPath(event: MouseEvent, path: string, visiblePaths: string[]): void {
-    const next = selectProjectPaths(selectedPaths, selectionAnchor, path, visiblePaths, { shift: event.shiftKey, toggle: event.metaKey || event.ctrlKey });
+    const next = selectProjectPaths(selectedPaths, selectionAnchor, path, visiblePaths, { shift: event.shiftKey, toggle: multipleSelection || event.metaKey || event.ctrlKey });
     selectedPaths = next.paths; selectionAnchor = next.anchor;
   }
   async function mutateSelected(kind: "move" | "delete", entries: readonly ProjectTreeNode[]): Promise<void> {
@@ -472,7 +478,11 @@
 </script>
 
 <svelte:window
-  onkeydown={(event) => { if (event.key === "Escape") treeActionsEl?.removeAttribute("open"); }}
+  onkeydown={(event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    if (treeActionsEl?.open) treeActionsEl.removeAttribute("open");
+    else if (multipleSelection) clearSelection();
+  }}
   onpointerdown={(event) => { if (event.target instanceof Node && !treeActionsEl?.contains(event.target)) treeActionsEl?.removeAttribute("open"); }}
 />
 
@@ -513,6 +523,7 @@
         <div class="tree-actions-menu">
           <button type="button" onclick={(event) => { expandOneLevel(); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Expand one level</button>
           <button type="button" disabled={expandedPaths.size === 0} onclick={(event) => { onCollapseAll(); event.currentTarget.closest("details")?.removeAttribute("open"); }}>Collapse all</button>
+          <button type="button" aria-pressed={multipleSelection} onclick={() => { multipleSelection = !multipleSelection; selectedPaths = new Set(); selectionAnchor = null; treeActionsEl?.removeAttribute("open"); }}>{multipleSelection ? "Exit multiple selection" : "Select multiple items"}</button>
           <label class="project-size-mode">File sizes
             <select aria-label="Project file sizes" bind:value={sizeMode}>
               <option value="off">Off</option>
@@ -531,10 +542,16 @@
         class="btn btn-sm btn-ghost"
         type="button"
         onclick={() => onToggleHidden(!showHidden)}
+        aria-pressed={showHidden}
+        class:project-panel-hidden-active={showHidden}
         aria-label={showHidden ? "Hide hidden files" : "Show hidden files"}
         title={showHidden ? "Hide hidden files" : "Show hidden files"}
       >
-        <span class="project-panel-hidden-prefix">Hidden: </span>{showHidden ? "On" : "Off"}
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8 12.2 12.5 8 12.5 1.5 8 1.5 8Z" stroke="currentColor" stroke-width="1.2" />
+          <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2" />
+          {#if !showHidden}<path d="m2 2 12 12" stroke="currentColor" stroke-width="1.2" />{/if}
+        </svg>
       </button>
     {/if}
     <button
@@ -565,6 +582,12 @@
           <button type="button" class="btn btn-sm btn-ghost" onclick={() => rootSize.loading ? sizes.cancel(workspaceRoot) : calculateFolderSize(workspaceRoot)}>{rootSize.loading ? "Cancel" : "Recalculate"}</button>
         </div>
       {/if}
+      {#if multipleSelection || selectedNodes.length > 1}
+        <div class="project-selection-bar">
+          <span role="status">{selectedNodes.length} selected</span>
+          <button type="button" class="btn btn-sm btn-ghost" onclick={clearSelection}>Done</button>
+        </div>
+      {/if}
       <WorkspaceDocumentsLinks root={workspaceRoot} refreshToken={rootNodes} />
       {#if favorites.length > 0}
         <section class="project-favorites" aria-label="Favorites">
@@ -590,9 +613,10 @@
       {/if}
       <ProjectTreeView
         {selectedPaths}
+        {multipleSelection}
         onSelectPath={selectPath}
         onSelectAll={(paths) => { selectedPaths = new Set(paths); selectionAnchor = paths[0] ?? null; }}
-        onClearSelection={() => { selectedPaths = new Set(); selectionAnchor = null; }}
+        onClearSelection={clearSelection}
         coloredFileIcons={$appSettings.coloredProjectFileIcons}
         nodes={visibleRootNodes}
         {workspaceRoot}
@@ -652,8 +676,8 @@
 
 <style>
   .project-root-size { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; font-size: 11px; color: var(--color-text-secondary); }
-  .project-panel-hidden-prefix { margin-right: 3px; }
-  .project-panel-header-compact .project-panel-hidden-prefix { display: none; }
+  .project-selection-bar { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; font-size: 11px; color: var(--color-text-secondary); border-bottom: 1px solid var(--color-border-subtle); }
+  .project-panel-header .project-panel-hidden-active { color: var(--color-text-primary); background: var(--color-hover); }
   .project-panel-header-compact .btn { padding-inline: 2px; }
   .project-size-mode { display: flex; flex-direction: column; gap: 4px; padding: 6px; color: var(--color-text-primary); }
   .project-size-mode select { font: inherit; color: inherit; background: var(--color-surface-1); }

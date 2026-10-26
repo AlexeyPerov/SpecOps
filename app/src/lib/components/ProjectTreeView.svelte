@@ -34,6 +34,7 @@
     sizeMode?: ProjectSizeMode;
     sizeEntries?: ReadonlyMap<string, ProjectSizeEntry>;
     onVisibleFiles?: (paths: string[]) => void;
+    multipleSelection?: boolean;
     selectedPaths?: ReadonlySet<string>;
     onSelectPath?: (event: MouseEvent, path: string, visiblePaths: string[]) => void;
     onSelectAll?: (paths: string[]) => void;
@@ -73,6 +74,7 @@
     sizeMode = "off",
     sizeEntries = emptyMap<string, ProjectSizeEntry>(),
     onVisibleFiles = () => {},
+    multipleSelection = false,
     selectedPaths = emptySet<string>(),
     onSelectPath = () => {},
     onSelectAll = () => {},
@@ -199,7 +201,7 @@
     // Right-clicks (and other non-primary buttons) bail without setting
     // pointerId; attaching anyway left pointermove dispatching for the panel's
     // lifetime because pointerup early-returns on a null pointerId (M63).
-    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+    if (multipleSelection || event.metaKey || event.ctrlKey || event.shiftKey) return;
     if (!dragController.handlePointerDown(event, node)) {
       return;
     }
@@ -226,7 +228,7 @@
    * as the pane's preview tab, so this promotes that tab to an ordinary one.
    */
   function handleRowDoubleClick(row: Extract<ProjectTreeRow, { kind: "node" }>): void {
-    if (row.node.kind !== "file") {
+    if (multipleSelection || row.node.kind !== "file") {
       return;
     }
     onKeepFile(row.node.path);
@@ -234,8 +236,12 @@
 
   function handleRowClick(event: MouseEvent, row: Extract<ProjectTreeRow, { kind: "node" }>): void {
     if (ignoreNextActivation) { shouldIgnoreActivation(); return; }
+    if (multipleSelection && row.node.kind === "directory" && event.target instanceof Element && event.target.closest(".tree-chevron")) {
+      if (row.canExpand) handleToggleDirectory(row.node.path);
+      return;
+    }
     onSelectPath(event, row.node.path, rows.flatMap((item) => item.kind === "node" ? [item.node.path] : []));
-    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+    if (multipleSelection || event.metaKey || event.ctrlKey || event.shiftKey) return;
     if (row.node.kind === "directory") {
       if (!row.canExpand) {
         return;
@@ -609,6 +615,9 @@
             onpointerenter={() => handlePointerEnter(row.node)}
             onpointerleave={handlePointerLeave}
           >
+            {#if multipleSelection}
+              <span class="project-tree-selection-check" aria-hidden="true">{selectedPaths.has(row.node.path) ? "☑" : "☐"}</span>
+            {/if}
             {#if row.node.kind === "directory"}
               <TreeChevron expanded={row.expanded && row.canExpand} visible={row.canExpand} />
             {:else}
@@ -640,6 +649,7 @@
 </div>
 
 <style>
+  .project-tree-selection-check { flex: 0 0 14px; color: var(--color-text-secondary); }
   .project-tree-size { flex: 0 0 auto; margin-left: auto; padding-left: 8px; font-size: 10px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .project-tree-size-stale { opacity: .7; }
 

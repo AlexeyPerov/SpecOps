@@ -57,9 +57,9 @@ it("selects a range without activating files and copies all relative paths in tr
   expect(open.mock.calls).toEqual([["/repo/a"]]);
   expect(host.querySelectorAll('[role="treeitem"][aria-selected="true"]')).toHaveLength(3);
   host.querySelector<HTMLButtonElement>('[data-path="/repo/b"]')!.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); flushSync();
-  [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) => button.textContent?.trim() === "Copy Relative Paths")!.click();
+  [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) => button.textContent?.trim() === "Copy Relative Path List")!.click();
   await tick();
-  expect(clipboard).toHaveBeenCalledWith("a\nb\nc");
+  expect(clipboard).toHaveBeenCalledWith("- a\n- b\n- c");
 });
 
 it.each([
@@ -89,4 +89,54 @@ it.each([
   await tick(); await tick(); flushSync();
   expect(create).toHaveBeenCalledWith("/users/alexeyperov/documents/notes", name);
   expect(host.querySelector(`input[aria-label="${inputLabel}"]`)).toBeNull();
+});
+
+it("selects without opening files, copies a path list and exits with Escape", async () => {
+  favorites.entries = [];
+  const open = vi.fn(), keep = vi.fn(), toggle = vi.fn();
+  const clipboard = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: clipboard } });
+  const nodes = [dir("/repo/docs"), ...["a", "b"].map((name) => ({ name, path: `/repo/${name}`, kind: "file" as const }))];
+  const { host } = mountComponent(ProjectPanel, { workspaceRoot: "/repo", rootNodes: nodes, onOpenFile: open, onKeepFile: keep, onToggleDirectory: toggle });
+  flushSync();
+  const action = (label: string) => [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === label)!;
+  const row = (path: string) => host.querySelector<HTMLButtonElement>(`[data-path="${path}"]`)!;
+  action("Select multiple items").click(); flushSync();
+  row("/repo/a").click(); row("/repo/b").click(); flushSync();
+  expect(host.querySelector('[role="status"]')?.textContent).toBe("2 selected");
+  row("/repo/b").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+  expect(open).not.toHaveBeenCalled(); expect(keep).not.toHaveBeenCalled();
+  row("/repo/docs").querySelector(".tree-chevron path")!.dispatchEvent(new MouseEvent("click", { bubbles: true })); flushSync();
+  expect(toggle).toHaveBeenCalledWith("/repo/docs");
+  expect(host.querySelectorAll('[role="treeitem"][aria-selected="true"]')).toHaveLength(2);
+  row("/repo/a").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); flushSync();
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true })); flushSync();
+  expect(host.querySelector('[role="menu"]')).toBeNull();
+  expect(host.querySelector('[role="status"]')?.textContent).toBe("2 selected");
+  row("/repo/a").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true })); flushSync();
+  action("Copy Path List").click(); await tick(); flushSync();
+  expect(clipboard).toHaveBeenCalledWith("- /repo/a\n- /repo/b");
+  row("/repo/a").click(); flushSync();
+  expect(host.querySelector('[role="status"]')?.textContent).toBe("1 selected");
+  row("/repo/b").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); flushSync();
+  expect(host.querySelector(".project-selection-bar")).toBeNull();
+  expect(host.querySelector(".project-tree-selection-check")).toBeNull();
+  row("/repo/b").click(); flushSync();
+  expect(open).toHaveBeenCalledWith("/repo/b");
+  action("Select multiple items").click(); flushSync();
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); flushSync();
+  expect(host.querySelector(".project-selection-bar")).toBeNull();
+});
+
+it("shows an icon with a tooltip and pressed state for hidden files", () => {
+  favorites.entries = [];
+  const toggle = vi.fn();
+  const { host } = mountComponent(ProjectPanel, { workspaceRoot: "/repo", showHidden: true, onToggleHidden: toggle });
+  flushSync();
+  const button = host.querySelector<HTMLButtonElement>('button[aria-label="Hide hidden files"]')!;
+  expect(button.title).toBe("Hide hidden files");
+  expect(button.getAttribute("aria-pressed")).toBe("true");
+  expect(button.textContent?.trim()).toBe("");
+  expect(button.querySelector("svg")).not.toBeNull();
+  button.click(); expect(toggle).toHaveBeenCalledWith(false);
 });

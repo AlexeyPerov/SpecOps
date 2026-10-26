@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-26 12:49 MSK — Workspace shortcuts and compact project selection
+
+- Group Version Control, Settings, and Copy Path at the top of the workspace context menu, above a separator and organization actions.
+- Replace the project pane's hidden-file text toggle with an eye icon, action tooltip, pressed state, and active highlight.
+- Add Select multiple items to the tree actions menu. This temporary mode shows selection marks and a count, toggles rows without opening files or starting drags, and keeps folder expansion available through chevrons. Done or Escape clears selection and exits; Cmd/Ctrl and Shift selection remain available without entering the mode.
+- Group context menus offer Copy Path List and Copy Relative Path List in visible tree order, with each path on its own line prefixed by `- `. Existing group move, delete, and favorite operations remain available.
+- Validation: 44 focused component and selection tests pass; Svelte/type checks report no errors or warnings; production frontend build passes. The installed desktop application was not rebuilt or launched.
+
 ## 2026-10-25 14:44 MSK — Release 0.4.2
 
 - Bumped application version from 0.4.1 to 0.4.2.

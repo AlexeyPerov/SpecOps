@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-26 13:11 MSK — Release 0.4.3
+
+- Bumped application version from 0.4.2 to 0.4.3.
+
 ## 2026-10-26 12:49 MSK — Workspace shortcuts and compact project selection
 
 - Group Version Control, Settings, and Copy Path at the top of the workspace context menu, above a separator and organization actions.

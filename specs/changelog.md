@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-29 16:31 MSK — Faster bulk deletes and anchored delete confirmation
+
+- Deleting folders from the project panel no longer floods every window with one watcher event per removed file. The app mutes watcher events under a subtree right before deleting it (a sliding 3 s window, lifted by any create there); the subtree root's own remove is still reported. Independently, a debounced watcher batch drops removes whose parent directory was removed in the same batch, and a directory remove now runs the external-change check for open documents under it.
+- Project favorites skip the file write and change broadcast when a delete or move touches no favorite, and the file-type filter publishes its invalidation once per watcher burst instead of once per path.
+- The delete confirmation opens as a bubble beside the rows being deleted (right of the panel, falling back to left/below/above and clamped on screen) with no dimmed backdrop. Escape, a click outside or a window resize cancels; the Delete button takes focus. Prompts without an anchor keep the centered dialog. The prompt names the single file or folder, or lists up to eight names for a multi-item delete.
+- Validation: Rust watcher tests (19) pass, including new batch-collapse and subtree-suppression cases; full Vitest suite (3422) passes, including placement and anchored-bubble tests; Svelte/type checks report no errors or warnings. The desktop application was not rebuilt or launched, so the lag fix was not measured in the running app.
+
 ## 2026-10-26 13:11 MSK — Release 0.4.3
 
 - Bumped application version from 0.4.2 to 0.4.3.

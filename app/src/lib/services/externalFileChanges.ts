@@ -4,6 +4,7 @@ import { appState } from "../state/appState";
 import {
   allContextSnapshots,
   findDocumentByNormalizedPathAllContexts,
+  openNormalizedPathsUnderAllContexts,
   findDocumentContext,
   getActiveDocuments,
   getActiveSession,
@@ -21,6 +22,7 @@ import { mapWithConcurrency } from "./mapWithConcurrency";
 import { elapsedMs, logPerfTiming, nowMs } from "./perfDiagnostics";
 import { getErrorMessage } from "../commands/commandErrors";
 import { logDiagnostic } from "./logging";
+import type { FileWatcherEventKind } from "./fileWatcher";
 
 export type { ExternalCheckResult, ExternalCheckTrigger } from "./externalFileChangesTypes";
 
@@ -596,19 +598,34 @@ export async function runFocusExternalChecks(): Promise<void> {
   await flushDirtyPrompts(runtimeState, deferredDirtyDocumentIds);
 }
 
-export async function runWatcherExternalCheck(normalizedOrRawPath: string): Promise<void> {
+export async function runWatcherExternalCheck(
+  normalizedOrRawPath: string,
+  kind?: FileWatcherEventKind,
+): Promise<void> {
   const snapshot = appState.getSnapshot();
   if (!shouldRunAutomaticCheck(snapshot.settings.externalFiles, "watcher")) {
     return;
   }
   const normalized = normalizePathSync(normalizedOrRawPath);
-  // Resolve the owning context for the watched path so a background-workspace
-  // document is reloaded/marked even when its workspace is not the active
-  // context. (Only the blind focus scan skips background docs — see
-  // checkDocumentExternalChangesInner.)
-  const match = findDocumentByNormalizedPathAllContexts(snapshot, normalized);
-  if (match) {
-    await checkDocumentExternalChanges(match.documentId, "watcher");
+  // The watcher reports a removed directory once, not once per file inside it,
+  // so a remove also checks the open documents under that path.
+  const paths =
+    kind === "remove"
+      ? [normalized, ...openNormalizedPathsUnderAllContexts(snapshot, normalized)]
+      : [normalized];
+  let checked = false;
+  for (const path of paths) {
+    // Resolve the owning context for the watched path so a background-workspace
+    // document is reloaded/marked even when its workspace is not the active
+    // context. (Only the blind focus scan skips background docs — see
+    // checkDocumentExternalChangesInner.)
+    const match = findDocumentByNormalizedPathAllContexts(snapshot, path);
+    if (match) {
+      await checkDocumentExternalChanges(match.documentId, "watcher");
+      checked = true;
+    }
+  }
+  if (checked) {
     await flushDirtyPrompts(runtimeState, deferredDirtyDocumentIds);
   }
 }

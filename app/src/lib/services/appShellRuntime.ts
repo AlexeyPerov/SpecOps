@@ -604,7 +604,7 @@ async function startAppShellRuntimeInner(
       invalidateWorkspaceGitSummary(event.payload.path);
       const kind = normalizeFileWatcherKind(event.payload.kind);
       options.onFilesystemChange?.(event.payload.path, kind);
-      await runWatcherExternalCheck(event.payload.path);
+      await runWatcherExternalCheck(event.payload.path, kind);
     },
   );
   cleanupCallbacks.push(unlistenFileChanged);

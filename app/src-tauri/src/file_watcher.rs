@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 
 pub const FILE_WATCHER_ERROR_EVENT: &str = "spec-ops/fs/watcher-error";
@@ -119,7 +119,16 @@ struct FileWatcherInner {
     app_handle: Option<AppHandle>,
     restart_requested: Arc<AtomicBool>,
     health: Arc<Mutex<WatcherHealth>>,
+    /// Subtrees the app is deleting itself, keyed by frontend path, with the
+    /// time the suppression lapses. Events strictly below one are dropped
+    /// (except creates): the frontend reports the subtree once, and a recursive
+    /// delete would otherwise send every window one event per removed file.
+    suppressed_subtrees: Arc<Mutex<HashMap<PathBuf, Instant>>>,
 }
+
+/// Sliding window: refreshed by every event it swallows, so a long recursive
+/// delete stays covered until its last event has gone by.
+const SUPPRESSED_SUBTREE_TTL: Duration = Duration::from_secs(3);
 
 impl FileWatcherState {
     pub fn new() -> Self {
@@ -135,6 +144,7 @@ impl FileWatcherState {
                 app_handle: None,
                 restart_requested: Arc::new(AtomicBool::new(false)),
                 health: Arc::new(Mutex::new(WatcherHealth::default())),
+                suppressed_subtrees: Arc::new(Mutex::new(HashMap::new())),
             })),
         }
     }
@@ -217,6 +227,45 @@ fn path_has_ignored_component_below_roots(path: &Path, roots: &[&str]) -> bool {
     })
 }
 
+/// Paths reported as removed in one debounced batch.
+fn removed_paths<'a>(events: impl Iterator<Item = &'a notify::Event>) -> HashSet<&'a Path> {
+    events
+        .filter(|event| matches!(event.kind, EventKind::Remove(_)))
+        .flat_map(|event| event.paths.iter().map(PathBuf::as_path))
+        .collect()
+}
+
+fn has_strict_ancestor_in(path: &Path, set: &HashSet<&Path>) -> bool {
+    !set.is_empty() && path.ancestors().skip(1).any(|ancestor| set.contains(ancestor))
+}
+
+/// Whether an event falls inside a subtree the app is deleting. A create at or
+/// under a suppressed root means it is being repopulated, so the suppression is
+/// lifted instead.
+fn is_suppressed_subtree_event(
+    map: &mut HashMap<PathBuf, Instant>,
+    path: &Path,
+    kind: FileChangeKind,
+    now: Instant,
+) -> bool {
+    if map.is_empty() {
+        return false;
+    }
+    if kind == FileChangeKind::Create {
+        for ancestor in path.ancestors() {
+            map.remove(ancestor);
+        }
+        return false;
+    }
+    for ancestor in path.ancestors().skip(1) {
+        if let Some(until) = map.get_mut(ancestor) {
+            *until = now + SUPPRESSED_SUBTREE_TTL;
+            return true;
+        }
+    }
+    false
+}
+
 /// Rewrite a notify-emitted path so it uses the frontend-registered root prefix.
 ///
 /// Without this, a workspace rooted at `/tmp/proj` (symlink → `/private/tmp/proj`)
@@ -297,6 +346,7 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
     let canonical_to_original = Arc::clone(&inner.canonical_to_original);
     let restart_requested = Arc::clone(&inner.restart_requested);
     let health = Arc::clone(&inner.health);
+    let suppressed_subtrees = Arc::clone(&inner.suppressed_subtrees);
 
     // No file-ID cache: events are emitted per path, so rename correlation is
     // unused, and the cache stats every created path and scans its whole map on
@@ -328,7 +378,13 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
                 .lock()
                 .map(|guard| guard.clone())
                 .unwrap_or_default();
-            for event in events {
+            let removed_in_batch = removed_paths(events.iter().map(|event| &event.event));
+            let mut suppressed = suppressed_subtrees.lock().ok();
+            let now = Instant::now();
+            if let Some(map) = suppressed.as_deref_mut() {
+                map.retain(|_, until| *until > now);
+            }
+            for event in &events {
                 // An overflow can carry no paths. Ask the frontend to reconcile
                 // the tree and re-arm watches rather than treating it as a no-op.
                 if event.need_rescan() {
@@ -341,9 +397,18 @@ fn ensure_debouncer(inner: &mut FileWatcherInner) -> Result<(), String> {
                 }
                 let kind = FileChangeKind::from(event.kind);
                 for path in &event.paths {
+                    // A removed directory already covers everything under it.
+                    if kind == FileChangeKind::Remove && has_strict_ancestor_in(path, &removed_in_batch) {
+                        continue;
+                    }
                     let Some(path_str) = event_path_for_frontend(path, &rewrite_map) else {
                         continue;
                     };
+                    if let Some(map) = suppressed.as_deref_mut() {
+                        if is_suppressed_subtree_event(map, Path::new(&path_str), kind, now) {
+                            continue;
+                        }
+                    }
                     if let Ok(mut health) = health.lock() {
                         health.last_event_at = Some(timestamp_millis());
                     }
@@ -751,6 +816,26 @@ pub fn window_destroyed(app: &AppHandle, label: &str) {
         }
     });
 }
+/// Called right before the app deletes `paths` recursively: watcher events for
+/// their contents are dropped for every window. The roots' own remove events
+/// still go out.
+#[tauri::command]
+pub fn suppress_watcher_subtree_events(
+    paths: Vec<String>,
+    state: State<'_, FileWatcherState>,
+) -> Result<(), String> {
+    let suppressed = {
+        let inner = state.inner.lock().map_err(|error| error.to_string())?;
+        Arc::clone(&inner.suppressed_subtrees)
+    };
+    let mut map = suppressed.lock().map_err(|error| error.to_string())?;
+    let until = Instant::now() + SUPPRESSED_SUBTREE_TTL;
+    for path in paths {
+        map.insert(PathBuf::from(path), until);
+    }
+    Ok(())
+}
+
 #[tauri::command(async)]
 pub async fn get_file_watcher_diagnostics(
     state: State<'_, FileWatcherState>,
@@ -788,6 +873,34 @@ mod tests {
             notify::Config::default(),
         )
         .expect("create debouncer")
+    }
+
+    #[test]
+    fn removes_under_a_removed_directory_are_collapsed() {
+        let events = vec![
+            notify::Event::new(EventKind::Remove(nev::RemoveKind::File)).add_path(PathBuf::from("/ws/a/x.md")),
+            notify::Event::new(EventKind::Remove(nev::RemoveKind::Folder)).add_path(PathBuf::from("/ws/a")),
+            notify::Event::new(EventKind::Remove(nev::RemoveKind::File)).add_path(PathBuf::from("/ws/b.md")),
+        ];
+        let removed = removed_paths(events.iter());
+        assert!(has_strict_ancestor_in(Path::new("/ws/a/x.md"), &removed));
+        assert!(has_strict_ancestor_in(Path::new("/ws/a/deep/y.md"), &removed));
+        assert!(!has_strict_ancestor_in(Path::new("/ws/a"), &removed));
+        assert!(!has_strict_ancestor_in(Path::new("/ws/b.md"), &removed));
+        assert!(!has_strict_ancestor_in(Path::new("/ws/ab/c.md"), &removed));
+    }
+
+    #[test]
+    fn suppressed_subtree_drops_descendants_until_recreated() {
+        let now = Instant::now();
+        let mut map = HashMap::from([(PathBuf::from("/ws/a"), now + SUPPRESSED_SUBTREE_TTL)]);
+        assert!(is_suppressed_subtree_event(&mut map, Path::new("/ws/a/x.md"), FileChangeKind::Remove, now));
+        assert!(is_suppressed_subtree_event(&mut map, Path::new("/ws/a/d"), FileChangeKind::Modify, now));
+        assert!(!is_suppressed_subtree_event(&mut map, Path::new("/ws/a"), FileChangeKind::Remove, now));
+        assert!(!is_suppressed_subtree_event(&mut map, Path::new("/ws/ab/x.md"), FileChangeKind::Remove, now));
+        assert!(!is_suppressed_subtree_event(&mut map, Path::new("/ws/a"), FileChangeKind::Create, now));
+        assert!(map.is_empty());
+        assert!(!is_suppressed_subtree_event(&mut map, Path::new("/ws/a/x.md"), FileChangeKind::Remove, now));
     }
 
     /// Regression: one unwatchable path used to abort the whole sync via `?` before the

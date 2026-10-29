@@ -29,3 +29,16 @@ export async function clearFileWatcherPaths(): Promise<void> {
 export async function syncProjectTreeWatcher(roots: readonly string[]): Promise<void> {
   await invoke("sync_project_tree_watcher", { roots });
 }
+
+/**
+ * Mutes watcher events under directories the app is about to delete
+ * recursively, so a large delete is reported once per root instead of once per
+ * file to every window. Best-effort: the events are only redundant.
+ */
+export async function suppressWatcherSubtreeEvents(paths: readonly string[]): Promise<void> {
+  try {
+    await invoke("suppress_watcher_subtree_events", { paths });
+  } catch {
+    // Without suppression the per-file events still arrive and are handled.
+  }
+}

@@ -23,6 +23,7 @@ import {
   syncDocumentsAfterPathRelocation,
 } from "./relocateWorkspacePaths";
 import { isPathUnderRoot } from "./workspacePaths";
+import { suppressWatcherSubtreeEvents } from "./fileWatcher";
 import { decodeTextFile, encodeTextFile, type DocumentLineEnding } from "./textEncoding";
 
 export type ProjectFileOpResult =
@@ -336,6 +337,7 @@ export async function deleteProjectEntry(
     return { ok: false, reason: "Cannot delete the workspace root." };
   }
   try {
+    await suppressWatcherSubtreeEvents([entryPath]);
     await remove(entryPath, { recursive: true });
     await relocateProjectFavorites(workspaceRoot, entryPath, null).catch(() => {});
     markDocumentsMissingUnderPath(workspaceRoot, entryPath);

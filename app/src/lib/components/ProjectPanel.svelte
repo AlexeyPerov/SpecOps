@@ -30,6 +30,7 @@
   import { flattenProjectTree } from "../services/projectTreeFlatten";
   import { selectProjectPaths } from "../services/projectSelection";
   import { moveProjectEntries, deleteProjectEntries } from "../services/projectBulkOperations";
+  import type { ConfirmAnchor } from "../services/confirmDialogUi";
   import { createProjectTypeFilter, filterProjectNodes, type ProjectFileFilter, type ProjectFilterSnapshot } from "../services/projectTypeFilter";
   import { createProjectSizes, projectSizeLabel, projectSizeTitle, type ProjectSizeMode, type ProjectSizeEntry } from "../services/projectSizes";
   import { subscribeProjectPaneChanges } from "../services/projectPaneChanges";
@@ -125,13 +126,32 @@
     const next = selectProjectPaths(selectedPaths, selectionAnchor, path, visiblePaths, { shift: event.shiftKey, toggle: multipleSelection || event.metaKey || event.ctrlKey });
     selectedPaths = next.paths; selectionAnchor = next.anchor;
   }
+  /** Viewport rect around the visible rows of `entries`, clipped to the tree's scroll area. */
+  function visibleRowsRect(entries: readonly ProjectTreeNode[]): ConfirmAnchor | undefined {
+    const body = panelBodyEl;
+    if (!body) return undefined;
+    const paths = new Set(entries.map((entry) => entry.path));
+    const bounds = body.getBoundingClientRect();
+    let rect: ConfirmAnchor | undefined;
+    for (const row of body.querySelectorAll<HTMLElement>("[data-path]")) {
+      if (!paths.has(row.dataset.path ?? "")) continue;
+      const r = row.getBoundingClientRect();
+      const top = Math.max(r.top, bounds.top);
+      const bottom = Math.min(r.bottom, bounds.bottom);
+      if (bottom <= top) continue;
+      rect = rect
+        ? { left: Math.min(rect.left, r.left), top: Math.min(rect.top, top), right: Math.max(rect.right, r.right), bottom: Math.max(rect.bottom, bottom) }
+        : { left: r.left, top, right: r.right, bottom };
+    }
+    return rect;
+  }
   async function mutateSelected(kind: "move" | "delete", entries: readonly ProjectTreeNode[]): Promise<void> {
     if (mutationRunning) return;
     mutationRunning = true;
     const root = workspaceRoot;
     try {
       if (kind === "move") await moveProjectEntries(root, entries, notify);
-      else await deleteProjectEntries(root, entries, notify);
+      else await deleteProjectEntries(root, entries, notify, visibleRowsRect(entries));
       if (workspaceRoot === root) selectedPaths = new Set();
       onRefresh();
     } catch (error) { notify(String(error)); }

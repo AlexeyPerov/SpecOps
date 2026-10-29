@@ -103,7 +103,8 @@ export function createProjectTypeFilter(deps: {
       if (!enabled || filter === "all" || kind === "modify" || (key !== rootKey && !key.startsWith(`${rootKey}/`))) return;
       invalidated = true;
       // Existing results cannot prove absence while directory structure is changing.
-      publish({ ...snapshot, directories: null });
+      // A watcher burst publishes that once, not once per path.
+      if (snapshot.directories !== null) publish({ ...snapshot, directories: null });
       clearTimeout(timer);
       timer = setTimeout(() => { void run(); }, 400);
     },

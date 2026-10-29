@@ -51,7 +51,11 @@ async function mutate(root: string, change: (entries: ProjectTreeNode[]) => Proj
   await withProjectFavoritesLock(async () => {
     const file = await readFavorites();
     const key = normalizePathSync(root);
-    file[key] = change(file[key] ?? []);
+    const before = file[key] ?? [];
+    const after = change(before);
+    // Deletes and moves relocate favorites for every entry; most touch none.
+    if (JSON.stringify(after) === JSON.stringify(before)) return;
+    file[key] = after;
     await atomicWriteTextFile(await filePath(), JSON.stringify(file));
     await emit(EVENT, { root: key });
   });

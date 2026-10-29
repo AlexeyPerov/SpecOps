@@ -441,6 +441,17 @@ export function findDocumentContext(
  * the document, and its tab id so side-effect flows can target the correct
  * workspace without requiring it to be the active context.
  */
+/** Normalized paths of open documents strictly under `normalizedDirectory`, in any context. */
+export function openNormalizedPathsUnderAllContexts(
+  state: AppDomainState,
+  normalizedDirectory: string,
+): string[] {
+  const prefix = `${normalizedDirectory.replace(/\/+$/, "")}/`;
+  return [...getContextLookupIndex(state).pathToContextId.keys()].filter((path) =>
+    path.startsWith(prefix),
+  );
+}
+
 export function findDocumentByNormalizedPathAllContexts(
   state: AppDomainState,
   normalizedPath: string,

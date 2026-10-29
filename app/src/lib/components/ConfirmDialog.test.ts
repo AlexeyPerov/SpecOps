@@ -83,4 +83,30 @@ describe("ConfirmDialog", () => {
     confirmButton.click();
     await expect(second).resolves.toBe(true);
   });
+  it("opens an anchored request as a bubble without the dimmed backdrop", async () => {
+    mountComponent(ConfirmDialog, {});
+    await tick();
+
+    const anchor = { left: 0, top: 100, right: 240, bottom: 122 };
+    const confirmed = requestConfirm({ message: "Delete?", confirmLabel: "Delete", danger: true, anchor });
+    await tick();
+
+    expect(document.querySelector(".dialog-shell-backdrop")).toBeNull();
+    const confirmButton = document.querySelector<HTMLButtonElement>(".confirm-popover button.btn-danger");
+    expect(confirmButton?.textContent?.trim()).toBe("Delete");
+    confirmButton!.click();
+    await expect(confirmed).resolves.toBe(true);
+
+    const dismissed = requestConfirm({ message: "Delete?", anchor });
+    await tick();
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await expect(dismissed).resolves.toBe(false);
+
+    const escaped = requestConfirm({ message: "Delete?", anchor });
+    await tick();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await expect(escaped).resolves.toBe(false);
+    await tick();
+    expect(document.querySelector(".confirm-popover")).toBeNull();
+  });
 });

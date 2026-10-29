@@ -154,6 +154,7 @@ pub fn run() {
             git::remove_stale_index_lock,
             file_watcher::sync_file_watcher_paths,
             file_watcher::sync_project_tree_watcher,
+            file_watcher::suppress_watcher_subtree_events,
             session_fs::session_fs_supported,
             session_fs::session_fs_mkdir,
             session_fs::session_fs_stat_mtime_ms,

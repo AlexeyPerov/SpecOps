@@ -5,7 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { ProjectTreeNode } from "./projectTree";
 import { topLevelProjectEntries } from "./projectSelection";
 import { requestChoice } from "./choiceDialog";
-import { requestConfirm } from "./confirmDialogUi";
+import { requestConfirm, type ConfirmAnchor } from "./confirmDialogUi";
 import { deleteProjectEntry } from "./projectFileOps";
 import { syncOpenDocumentsAfterRelocation } from "./relocateWorkspacePaths";
 import { relocateProjectFavorites } from "./projectFavorites";
@@ -59,9 +59,10 @@ export async function moveProjectEntries(root: string, entries: readonly Project
   notify(`Moved ${moved} item(s)${skipped ? `, skipped ${skipped}` : ""}${errors.length ? `. ${errors.join("\n")}` : "."}`);
 }
 
-export async function deleteProjectEntries(root: string, entries: readonly ProjectTreeNode[], notify: (message: string) => void): Promise<void> {
+/** Shows the confirmation beside `anchor` (the rows being deleted) when given. */
+export async function deleteProjectEntries(root: string, entries: readonly ProjectTreeNode[], notify: (message: string) => void, anchor?: ConfirmAnchor): Promise<void> {
   const targets = topLevelProjectEntries(entries);
-  if (!targets.length || !(await requestConfirm({ title: "Delete selected items", message: `Permanently delete ${targets.length} item(s)?\n${targets.map((entry) => entry.name).join("\n")}`, confirmLabel: "Delete", danger: true }))) return;
+  if (!targets.length || !(await requestConfirm({ ...deleteConfirmText(targets), confirmLabel: "Delete", danger: true, anchor }))) return;
   let deleted = 0;
   const errors: string[] = [];
   for (const entry of targets) {
@@ -72,4 +73,19 @@ export async function deleteProjectEntries(root: string, entries: readonly Proje
     } else errors.push(`${entry.name}: ${result.reason}`);
   }
   notify(`Deleted ${deleted} item(s)${errors.length ? `. ${errors.join("\n")}` : "."}`);
+}
+
+const DELETE_CONFIRM_LISTED_NAMES = 8;
+
+function deleteConfirmText(targets: readonly ProjectTreeNode[]): { title: string; message: string } {
+  if (targets.length === 1) {
+    const [entry] = targets;
+    return { title: `Delete ${entry!.kind === "directory" ? "folder" : "file"} “${entry!.name}”?`, message: "This cannot be undone." };
+  }
+  const names = targets.slice(0, DELETE_CONFIRM_LISTED_NAMES).map((entry) => entry.name);
+  const more = targets.length - names.length;
+  return {
+    title: `Delete ${targets.length} items?`,
+    message: `${names.join("\n")}${more > 0 ? `\n…and ${more} more` : ""}\n\nThis cannot be undone.`,
+  };
 }

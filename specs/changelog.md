@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-29 19:59 MSK — Image previews pick up files changed on disk
+
+- An image tab kept showing the first version of the file it opened: external-change checks skipped image tabs, so their disk fingerprint never moved, and the preview always loaded the same asset URL, which the webview answered from its cache — even after closing and reopening the tab.
+- Watcher, focus, tab-activation, startup and manual checks now stat image tabs and store the new fingerprint when the file changed (no prompt and no content read; missing/reappearing files are tracked as for text). A manual reload of an image tab also refreshes the fingerprint.
+- The image preview appends `?v=<mtime>-<size>` to its asset URL (the asset protocol ignores the query), so a new fingerprint makes the webview fetch the current bytes; the blob fallback is reset at the same time.
+- Validation: Svelte/type checks report no errors or warnings; full Vitest suite passes (344 files, 3437 tests), including new image-tab change-check and URL-version tests. The desktop application was not rebuilt or launched, so the refreshed preview was not checked on screen.
+
 ## 2026-10-29 17:40 MSK — Anchored prompts, inline renames, agent requests in chat
 
 - `DialogShell` gains an anchored mode: given the rect of what a prompt is about, it opens as a bubble beside it (right, then left, below, above; clamped on screen) with an arrow and no dimmed backdrop. Escape, a click outside or a window resize dismisses it. Anchor helpers and placement live in `promptAnchor.ts`; the separate confirm bubble component is folded into this.

@@ -30,3 +30,15 @@ export function mimeTypeForImagePath(filePath: string): string {
   }
   return "application/octet-stream";
 }
+
+/**
+ * Appends a cache-busting `v` query to an asset URL. The asset protocol serves
+ * files by path and ignores the query, so only the webview cache sees it.
+ */
+export function withImageVersion(src: string, version: string): string {
+  if (!version) {
+    return src;
+  }
+  const separator = src.includes("?") ? "&" : "?";
+  return `${src}${separator}v=${encodeURIComponent(version)}`;
+}

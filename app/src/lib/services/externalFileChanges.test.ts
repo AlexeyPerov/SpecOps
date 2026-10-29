@@ -252,6 +252,28 @@ describe("checkDocumentExternalChanges", () => {
     ).toBe(false);
   });
 
+  it("moves an image tab's fingerprint forward when the file changes on disk", async () => {
+    appState.openFileInTab("/tmp/art.png", "", "image");
+    const documentId = appState.findDocumentIdByPath("/tmp/art.png")!;
+    appState.setDocumentDiskState(documentId, { diskFingerprint: fp1, fileMissing: false });
+    statMock.mockResolvedValue(fp2);
+
+    await expect(checkDocumentExternalChanges(documentId, "watcher")).resolves.toBe("reloaded");
+    const document = appState.getActiveDocuments().find((doc) => doc.id === documentId);
+    expect(document?.diskFingerprint).toEqual(fp2);
+    expect(readFileMock).not.toHaveBeenCalled();
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves an unchanged image tab alone", async () => {
+    appState.openFileInTab("/tmp/same.png", "", "image");
+    const documentId = appState.findDocumentIdByPath("/tmp/same.png")!;
+    appState.setDocumentDiskState(documentId, { diskFingerprint: fp1, fileMissing: false });
+    statMock.mockResolvedValue(fp1);
+
+    await expect(checkDocumentExternalChanges(documentId, "tab")).resolves.toBe("unchanged");
+  });
+
   it("skips untitled documents", async () => {
     appState.createTab();
     await expect(checkDocumentExternalChanges("doc-2", "watcher")).resolves.toBe("skipped");

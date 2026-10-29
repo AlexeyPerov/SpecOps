@@ -100,6 +100,12 @@ async function reloadDocumentFromDisk(
 
   const contentKind = inferFileContentKind(filePath, bytes);
   if (contentKind === "image") {
+    // No buffer to replace; the new fingerprint is what makes the preview
+    // pane drop its cached image and load the file again.
+    appState.setDocumentDiskStateForContext(contextId, documentId, {
+      diskFingerprint: fingerprint,
+      fileMissing: false,
+    });
     return;
   }
   if (contentKind === "binary") {
@@ -294,6 +300,51 @@ export async function checkDocumentExternalChangesWithRuntime(
   return checkPromise;
 }
 
+/**
+ * Image tabs have no buffer to reload or protect, so a disk change only moves
+ * the stored fingerprint forward. The preview pane keys its image URL on that
+ * fingerprint, which is what gets the webview to fetch the new bytes.
+ */
+async function refreshImageDocumentDiskState(
+  documentId: string,
+  filePath: string,
+): Promise<ExternalCheckResult> {
+  let currentFingerprint: DiskFingerprint;
+  try {
+    currentFingerprint = await statDiskFingerprint(filePath);
+  } catch (error: unknown) {
+    if (isFileMissingError(error)) {
+      const missingOwner = findDocumentContext(appState.getSnapshot(), documentId);
+      if (missingOwner && !missingOwner.document.fileMissing) {
+        appState.setDocumentDiskStateForContext(missingOwner.contextId, documentId, {
+          diskFingerprint: missingOwner.document.diskFingerprint,
+          fileMissing: true,
+        });
+      }
+      return "missing";
+    }
+    if (isFsScopePermissionError(error)) {
+      removeInaccessibleDocumentTab(documentId, filePath, error);
+      return "skipped";
+    }
+    throw error;
+  }
+
+  const freshOwner = findDocumentContext(appState.getSnapshot(), documentId);
+  if (!freshOwner || freshOwner.document.filePath !== filePath) {
+    return "skipped";
+  }
+  const { document } = freshOwner;
+  if (!document.fileMissing && !diskChanged(document.diskFingerprint, currentFingerprint)) {
+    return "unchanged";
+  }
+  appState.setDocumentDiskStateForContext(freshOwner.contextId, documentId, {
+    diskFingerprint: currentFingerprint,
+    fileMissing: false,
+  });
+  return "reloaded";
+}
+
 async function checkDocumentExternalChangesInner(
   runtime: RuntimeState,
   deferredDirtyDocumentIds: Set<string>,
@@ -320,12 +371,16 @@ async function checkDocumentExternalChangesInner(
     return "skipped";
   }
 
-  if (documentState.contentKind !== "text") {
+  if (documentState.contentKind !== "text" && documentState.contentKind !== "image") {
     return "skipped";
   }
 
   if (trigger !== "manual" && !shouldRunAutomaticCheck(snapshot.settings.externalFiles, trigger)) {
     return "skipped";
+  }
+
+  if (documentState.contentKind === "image") {
+    return refreshImageDocumentDiskState(documentId, filePath);
   }
 
   if (runtime.dialogOpenForDocument.has(documentId)) {

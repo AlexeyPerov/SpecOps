@@ -218,6 +218,10 @@
   // asking for it here was a second full markdown parse per keystroke whose result was
   // thrown away.
   const documentView = $derived(deriveAppShellDocumentViewMemoized(paneDocument));
+  const imagePreviewVersion = $derived.by(() => {
+    const fingerprint = paneDocument?.diskFingerprint;
+    return fingerprint ? `${fingerprint.mtimeMs}-${fingerprint.sizeBytes}` : "";
+  });
 
   // ---- Markdown preview content ---------------------------------------------
   // A markdown parse is proportional to document length and the render memo is keyed
@@ -536,6 +540,7 @@
       filePath={paneDocument?.filePath ?? null}
       title={paneDocument?.title ?? "Image"}
       sizeBytes={documentView.previewFileSizeBytes}
+      version={imagePreviewVersion}
     />
   {:else if documentView.isBinaryDocument}
     <BinaryFilePane

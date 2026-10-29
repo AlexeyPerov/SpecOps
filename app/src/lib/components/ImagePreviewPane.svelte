@@ -2,24 +2,32 @@
   import { convertFileSrc } from "@tauri-apps/api/core";
   import { readFile } from "@tauri-apps/plugin-fs";
   import { untrack } from "svelte";
-  import { mimeTypeForImagePath } from "../services/imagePreviewSrc";
+  import { mimeTypeForImagePath, withImageVersion } from "../services/imagePreviewSrc";
 
   interface Props {
     filePath?: string | null;
     title?: string;
     sizeBytes?: number;
+    /**
+     * Changes whenever the file changes on disk. The webview caches asset URLs
+     * by address, so this is appended to the URL to make it load the new bytes.
+     */
+    version?: string;
   }
 
-  let { filePath = null, title = "Image", sizeBytes = 0 }: Props = $props();
+  let { filePath = null, title = "Image", sizeBytes = 0, version = "" }: Props = $props();
 
   let blobObjectUrl = $state<string | null>(null);
   let loadFailed = $state(false);
 
-  const tauriSrc = $derived(filePath ? convertFileSrc(filePath) : null);
+  const tauriSrc = $derived(
+    filePath ? withImageVersion(convertFileSrc(filePath), version) : null,
+  );
   const resolvedSrc = $derived(blobObjectUrl ?? tauriSrc);
 
   $effect(() => {
     filePath;
+    version;
     untrack(() => {
       if (blobObjectUrl) {
         URL.revokeObjectURL(blobObjectUrl);

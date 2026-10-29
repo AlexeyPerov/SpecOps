@@ -1,4 +1,6 @@
 <script lang="ts">
+  import DialogShell from "./DialogShell.svelte";
+  import type { PromptAnchor } from "../services/promptAnchor";
   import { tick } from "svelte";
   import {
     registerTagPushPromptRunner,
@@ -13,7 +15,7 @@
   let selectedRemote = $state("");
   let pushToAll = $state(false);
   let submitting = $state(false);
-  let backdropEl = $state<HTMLDivElement | null>(null);
+  let anchor = $state<PromptAnchor | null>(null);
   let confirmButtonEl = $state<HTMLButtonElement | null>(null);
 
   let resolvePrompt: ((value: TagPushPromptResult | null) => void) | null = null;
@@ -29,6 +31,7 @@
       selectedRemote = defaultRemote?.name ?? request.remotes[0]?.name ?? "";
       pushToAll = false;
       submitting = false;
+      anchor = request.anchor ?? null;
       resolvePrompt = resolve;
       open = true;
       void tick().then(() => {
@@ -70,106 +73,55 @@
     finish(null);
   }
 
-  function handleBackdropPointerDown(event: PointerEvent): void {
-    if (event.target === backdropEl) {
-      cancel();
-    }
-  }
-
-  function handleDialogKeydown(event: KeyboardEvent): void {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      cancel();
-    }
-  }
-
   $effect(() => {
     registerTagPushPromptRunner(showPrompt);
     return () => registerTagPushPromptRunner(null);
   });
 </script>
 
-{#if open}
-  <div
-    bind:this={backdropEl}
-    class="tag-push-prompt-backdrop"
-    role="presentation"
-    onpointerdown={handleBackdropPointerDown}
-  >
-    <div
-      class="tag-push-prompt"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="tag-push-prompt-title"
-      tabindex="-1"
-      onkeydown={handleDialogKeydown}
+<DialogShell
+  {open}
+  title="Push tag"
+  {anchor}
+  width={anchor ? 320 : 400}
+  onDismiss={cancel}
+  panelClass="tag-push-prompt"
+>
+  <p class="tag-push-prompt-label">Tag</p>
+  <p class="tag-push-prompt-tag">{tagName}</p>
+  <label class="tag-push-prompt-field">
+    <span class="tag-push-prompt-field-label">Remote</span>
+    <select
+      class="tag-push-prompt-select"
+      bind:value={selectedRemote}
+      disabled={pushToAll || submitting}
     >
-      <h2 id="tag-push-prompt-title" class="tag-push-prompt-title">Push tag</h2>
-      <p class="tag-push-prompt-label">Tag</p>
-      <p class="tag-push-prompt-tag">{tagName}</p>
-      <label class="tag-push-prompt-field">
-        <span class="tag-push-prompt-field-label">Remote</span>
-        <select
-          class="tag-push-prompt-select"
-          bind:value={selectedRemote}
-          disabled={pushToAll || submitting}
-        >
-          {#each remotes as remote (remote.name)}
-            <option value={remote.name}>{remote.name}</option>
-          {/each}
-        </select>
-      </label>
-      <label class="tag-push-prompt-checkbox">
-        <input type="checkbox" bind:checked={pushToAll} disabled={submitting} />
-        <span>Push to all remotes</span>
-      </label>
-      <div class="tag-push-prompt-actions">
-        <button type="button" class="toolbar-button" disabled={submitting} onclick={cancel}>
-          Cancel
-        </button>
-        <button
-          bind:this={confirmButtonEl}
-          type="button"
-          class="toolbar-button"
-          disabled={submitting}
-          onclick={confirm}
-        >
-          {submitting ? "Pushing…" : "Push"}
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
+      {#each remotes as remote (remote.name)}
+        <option value={remote.name}>{remote.name}</option>
+      {/each}
+    </select>
+  </label>
+  <label class="tag-push-prompt-checkbox">
+    <input type="checkbox" bind:checked={pushToAll} disabled={submitting} />
+    <span>Push to all remotes</span>
+  </label>
+  {#snippet actions()}
+    <button type="button" class="toolbar-button" disabled={submitting} onclick={cancel}>
+      Cancel
+    </button>
+    <button
+      bind:this={confirmButtonEl}
+      type="button"
+      class="toolbar-button"
+      disabled={submitting}
+      onclick={confirm}
+    >
+      {submitting ? "Pushing…" : "Push"}
+    </button>
+  {/snippet}
+</DialogShell>
 
 <style>
-  .tag-push-prompt-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 1200;
-    display: grid;
-    place-items: center;
-    background: var(--color-surface-overlay);
-  }
-
-  .tag-push-prompt {
-    width: min(400px, calc(100vw - 2 * var(--space-12)));
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-md);
-    background: var(--color-surface-1);
-    box-shadow: var(--shadow-overlay);
-    padding: var(--space-10);
-    display: grid;
-    gap: var(--space-6);
-  }
-
-  .tag-push-prompt-title {
-    margin: 0;
-    font-size: var(--font-size-status);
-    font-weight: 600;
-    color: var(--color-text-primary);
-  }
-
   .tag-push-prompt-label {
     margin: 0;
     font-size: 0.8125rem;
@@ -213,10 +165,4 @@
     cursor: pointer;
   }
 
-  .tag-push-prompt-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-6);
-    margin-top: var(--space-4);
-  }
 </style>

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-29 17:40 MSK — Anchored prompts, inline renames, agent requests in chat
+
+- `DialogShell` gains an anchored mode: given the rect of what a prompt is about, it opens as a bubble beside it (right, then left, below, above; clamped on screen) with an arrow and no dimmed backdrop. Escape, a click outside or a window resize dismisses it. Anchor helpers and placement live in `promptAnchor.ts`; the separate confirm bubble component is folded into this.
+- Short confirmations now open beside their trigger: deleting a file from a tab's context menu, a Task/Note in the rail, a session from the sidebar or the chat header, a Markdown snippet; dropping a stash; initializing a repository; Replace All in Find in Project (when the panel's button is on screen); reloading or replacing a workspace document. The tab-delete and repository-init prompts move from native system dialogs to the in-app confirm.
+- Stash drop, tag push and the three local-changes prompts (checkout, pull, stash apply) are rebuilt on `DialogShell`. Tag push/delete, checkout, stash apply and stash drop anchor to their buttons; the pull prompt stays centered because it follows the pull dialog.
+- Renaming a project-tree entry edits the row inline (file names selected up to the extension; Enter or blur commits, Escape cancels; a failed rename keeps the field open). Session titles are renamed inline in the sessions sidebar. Creating a branch, tag or stash asks for the name in a bubble at the button.
+- Agent permission and question requests appear as inline cards under the message list of the session that asked, instead of window-wide modals. Pending requests are kept per workspace and session, survive the chat being closed, and are dismissed when the turn is stopped or the request is superseded. Escape denies or cancels while focus is in a card; Enter submits a choice, Cmd/Ctrl+Enter submits typed text.
+- Removed the unused project-tree single-delete handler that used a native dialog.
+- Validation: Svelte/type checks report no errors or warnings; full Vitest suite passes (344 files, 3433 tests), including new placement, anchored-confirm, inline-rename and request-card tests. The desktop application was not rebuilt or launched, so bubble placement, inline editors and request cards were not checked on screen.
+
 ## 2026-10-29 16:31 MSK — Faster bulk deletes and anchored delete confirmation
 
 - Deleting folders from the project panel no longer floods every window with one watcher event per removed file. The app mutes watcher events under a subtree right before deleting it (a sliding 3 s window, lifted by any create there); the subtree root's own remove is still reported. Independently, a debounced watcher batch drops removes whose parent directory was removed in the same batch, and a directory remove now runs the external-change check for open documents under it.

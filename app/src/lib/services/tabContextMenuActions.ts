@@ -1,4 +1,5 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
+import { requestConfirm } from "./confirmDialogUi";
+import { anchorFromElement } from "./promptAnchor";
 import type { DocumentState, TabState } from "../domain/contracts";
 import { isFileTab } from "../domain/contracts";
 import { appState } from "../state/appState";
@@ -199,12 +200,18 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
       return;
     }
     const entryLabel = tabDoc.filePath.replaceAll("\\", "/").split("/").pop() ?? tabDoc.filePath;
+    const tabEl = contextTab
+      ? document.querySelector(`[data-tab-id="${CSS.escape(contextTab.id)}"]`)
+      : null;
+    // The bubble points at the tab, so the menu goes away first.
+    deps.closeContextMenu();
     try {
-      const confirmed = await confirm(`Delete file "${entryLabel}"?`, {
-        title: "Delete",
-        okLabel: "Delete",
-        cancelLabel: "Cancel",
-        kind: "warning",
+      const confirmed = await requestConfirm({
+        title: `Delete file “${entryLabel}”?`,
+        message: "This cannot be undone.",
+        confirmLabel: "Delete",
+        danger: true,
+        anchor: anchorFromElement(tabEl),
       });
       if (!confirmed) {
         return;
@@ -218,8 +225,6 @@ export function createTabContextMenuHandlers(deps: TabContextMenuHandlerDeps) {
       }
     } catch {
       // best-effort from the tab menu
-    } finally {
-      deps.closeContextMenu();
     }
   }
 

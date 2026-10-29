@@ -1,9 +1,7 @@
-import { confirm } from "@tauri-apps/plugin-dialog";
 import type { ProjectTreeNode } from "./projectTree";
 import {
   createProjectFile,
   createProjectFolder,
-  deleteProjectEntry,
   moveProjectEntry,
   parentDirForRefresh,
   renameProjectEntry,
@@ -309,22 +307,15 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     return true;
   }
 
+  /** Applies an inline rename; false keeps the tree row in edit mode. */
   async function handleRenameProjectEntry(
     path: string,
     kind: ProjectTreeNode["kind"],
-  ): Promise<void> {
+    name: string,
+  ): Promise<boolean> {
     const activeWorkspaceRoot = getActiveWorkspaceRoot();
     if (!activeWorkspaceRoot) {
-      return;
-    }
-    const currentName = path.replaceAll("\\", "/").split("/").pop() ?? path;
-    const name = await promptEntryName({
-      title: "Rename",
-      defaultValue: currentName,
-      confirmLabel: "Rename",
-    });
-    if (name === null) {
-      return;
+      return true;
     }
     const result = await renameProjectEntry(
       activeWorkspaceRoot,
@@ -334,41 +325,14 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     );
     if (!result.ok) {
       notify(result.reason);
-      return;
+      return false;
     }
     notify(`Renamed to ${name}`);
     await afterProjectTreeMutation(path, result.path);
     if (kind === "file") {
       await handleOpenProjectTreeFile(result.path);
     }
-  }
-
-  async function handleDeleteProjectEntry(
-    path: string,
-    kind: ProjectTreeNode["kind"],
-  ): Promise<void> {
-    const activeWorkspaceRoot = getActiveWorkspaceRoot();
-    if (!activeWorkspaceRoot) {
-      return;
-    }
-    const label = kind === "directory" ? "folder" : "file";
-    const entryLabel = path.replaceAll("\\", "/").split("/").pop() ?? path;
-    const confirmed = await confirm(`Delete ${label} "${entryLabel}"?`, {
-      title: "Delete",
-      okLabel: "Delete",
-      cancelLabel: "Cancel",
-      kind: "warning",
-    });
-    if (!confirmed) {
-      return;
-    }
-    const result = await deleteProjectEntry(activeWorkspaceRoot, path);
-    if (!result.ok) {
-      notify(result.reason);
-      return;
-    }
-    notify("Deleted");
-    await afterProjectTreeMutation(path);
+    return true;
   }
 
   async function toggleProjectTreeHidden(next: boolean): Promise<void> {
@@ -394,7 +358,6 @@ export function createAppShellProjectTreeHandlers(deps: AppShellProjectTreeHandl
     handleNewProjectFile,
     handleNewProjectFolder,
     handleRenameProjectEntry,
-    handleDeleteProjectEntry,
     toggleProjectTreeHidden,
   };
 }

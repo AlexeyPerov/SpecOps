@@ -38,7 +38,6 @@
     onNewFile?: (parentDirPath: string) => void;
     onNewFolder?: (parentDirPath: string) => void;
     onRename?: (path: string, kind: ProjectTreeNode["kind"]) => void;
-    onDelete?: (path: string, kind: ProjectTreeNode["kind"]) => void;
   }
 
   let {
@@ -59,7 +58,6 @@
     onNewFile = () => {},
     onNewFolder = () => {},
     onRename = () => {},
-    onDelete = () => {},
   }: Props = $props();
 
   let contextMenu = $state<{ x: number; y: number; target: ProjectTreeContextTarget } | null>(null);

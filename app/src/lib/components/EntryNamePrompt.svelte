@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { registerEntryNamePromptRunner, type EntryNamePromptRequest } from "../services/entryNamePrompt";
+  import type { PromptAnchor } from "../services/promptAnchor";
   import DialogShell from "./DialogShell.svelte";
 
   interface Props {
@@ -13,6 +14,7 @@
   let title = $state("");
   let value = $state("");
   let confirmLabel = $state("OK");
+  let anchor = $state<PromptAnchor | null>(null);
   let inputEl = $state<HTMLInputElement | null>(null);
 
   let resolvePrompt: ((value: string | null) => void) | null = null;
@@ -25,6 +27,7 @@
       title = request.title;
       value = request.defaultValue;
       confirmLabel = request.confirmLabel ?? "OK";
+      anchor = request.anchor ?? null;
       resolvePrompt = resolve;
       open = true;
       void tick().then(() => {
@@ -69,7 +72,7 @@
   });
 </script>
 
-<DialogShell {open} {title} width={360} onDismiss={cancel}>
+<DialogShell {open} {title} {anchor} width={anchor ? 300 : 360} onDismiss={cancel}>
   <form
     class="entry-name-prompt-form"
     onsubmit={(event) => {

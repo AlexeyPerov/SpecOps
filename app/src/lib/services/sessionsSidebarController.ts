@@ -4,6 +4,7 @@ import {
   normalizePanelWidthPx,
 } from "./panelLayout";
 import { requestConfirm } from "./confirmDialogUi";
+import type { PromptAnchor } from "./promptAnchor";
 
 export type SessionsSidebarControllerDeps = {
   getCollapsed: () => boolean;
@@ -14,8 +15,8 @@ export type SessionsSidebarControllerDeps = {
   onToggleCollapsed: (next: boolean) => void;
   onNewSession: () => void;
   onDeleteSession: (sessionId: string) => void;
-  /** Rename — delegated to the handler (prompt + local-store update). */
-  onRenameSession: (sessionId: string) => void | Promise<void>;
+  /** Rename — the sidebar edits the title inline; the handler stores it. */
+  onRenameSession: (sessionId: string, title: string) => void | Promise<void>;
 };
 
 export function clampSessionsSidebarWidth(next: number): number {
@@ -96,12 +97,14 @@ export function createSessionsSidebarController(deps: SessionsSidebarControllerD
     sessionId: string,
     title: string,
     entrySingularLabel: string,
+    anchor?: PromptAnchor,
   ): Promise<void> {
     const confirmed = await requestConfirm({
       title: `Delete ${entrySingularLabel}`,
       message: `Delete ${entrySingularLabel} "${title}"? This cannot be undone.`,
       confirmLabel: "Delete",
       danger: true,
+      anchor,
     });
     if (!confirmed) {
       return;
@@ -109,9 +112,9 @@ export function createSessionsSidebarController(deps: SessionsSidebarControllerD
     deps.onDeleteSession(sessionId);
   }
 
-  /** Delegates to the handler which prompts + updates the local store. */
-  function renameSession(sessionId: string): void | Promise<void> {
-    return deps.onRenameSession(sessionId);
+  /** Delegates the inline-edited title to the handler (local-store update). */
+  function renameSession(sessionId: string, title: string): void | Promise<void> {
+    return deps.onRenameSession(sessionId, title);
   }
 
   return {

@@ -1,9 +1,18 @@
+import type { PromptAnchor } from "./promptAnchor";
+
 export type LocalChangesPullChoice =
   | { type: "cancel" }
   | { type: "block" }
   | { type: "stash-and-pull" };
 
-type LocalChangesPullPromptRunner = () => Promise<LocalChangesPullChoice | null>;
+export interface LocalChangesPullPromptRequest {
+  /** Open as a bubble beside this rect (e.g. the Pull button). */
+  anchor?: PromptAnchor;
+}
+
+type LocalChangesPullPromptRunner = (
+  request: LocalChangesPullPromptRequest,
+) => Promise<LocalChangesPullChoice | null>;
 
 let runner: LocalChangesPullPromptRunner | null = null;
 
@@ -13,9 +22,11 @@ export function registerLocalChangesPullPromptRunner(
   runner = next;
 }
 
-export function promptLocalChangesPull(): Promise<LocalChangesPullChoice | null> {
+export function promptLocalChangesPull(
+  request: LocalChangesPullPromptRequest = {},
+): Promise<LocalChangesPullChoice | null> {
   if (!runner) {
     return Promise.resolve(null);
   }
-  return runner();
+  return runner(request);
 }

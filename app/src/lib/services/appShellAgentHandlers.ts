@@ -7,7 +7,6 @@ import {
 import { appState } from "../state/appState";
 import { chatStore } from "../state/chatStore";
 import { closeTabWithUnsavedPrompt } from "./closeTabFlow";
-import { promptEntryName } from "./entryNamePrompt";
 import { getAgentHostClient, resetAgentHostEnsureCache } from "./agentHostRuntime";
 import {
   nextSidebarSessionId,
@@ -192,22 +191,17 @@ export function createAppShellAgentHandlers(deps: AppShellAgentHandlersDeps) {
   // module doc). Rename is local-store only.
 
   /**
-   * Rename the active (or specified) session tab. Prompts for a new title,
-   * then updates the local session index. The runtime is not involved — the
-   * host protocol has no session-rename method.
+   * Apply a title edited inline in the sessions sidebar to the local session
+   * index. The runtime is not involved — the host protocol has no
+   * session-rename method.
    */
-  async function handleRenameSession(sessionId: string): Promise<void> {
+  async function handleRenameSession(sessionId: string, next: string): Promise<void> {
     const workspaceRoot = chatStore.getActiveWorkspaceRoot();
     if (!workspaceRoot) {
       return;
     }
     const currentTitle = chatStore.getSessionTitle(sessionId) ?? "";
-    const next = await promptEntryName({
-      title: "Rename session",
-      defaultValue: currentTitle,
-      confirmLabel: "Rename",
-    });
-    if (!next || next.trim().length === 0 || next.trim() === currentTitle.trim()) {
+    if (next.trim().length === 0 || next.trim() === currentTitle.trim()) {
       return;
     }
     chatStore.renameSession(sessionId, next, workspaceRoot);

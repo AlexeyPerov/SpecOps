@@ -31,6 +31,7 @@ import {
   type SearchQuery,
 } from "../../editor/searchQuery";
 import { requestConfirm } from "../../services/confirmDialogUi";
+import { anchorFromElement } from "../../services/promptAnchor";
 import {
   decideReplaceAllForPath,
   syncOpenDocumentAfterReplace as syncOpenDocumentAfterReplaceService,
@@ -226,6 +227,9 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       message: `Replace ${totalMatches} match${totalMatches === 1 ? "" : "es"} in ${totalFiles} file${totalFiles === 1 ? "" : "s"}?`,
       confirmLabel: "Replace All",
       danger: true,
+      // Beside the panel's Replace All button when it is on screen (the
+      // command can also run from the keyboard).
+      anchor: anchorFromElement(document.querySelector("[data-project-replace-all]")),
     });
     if (!confirmed) {
       return;

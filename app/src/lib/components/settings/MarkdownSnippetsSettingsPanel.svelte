@@ -15,6 +15,7 @@
     type SnippetFieldError,
   } from "../../editor/markdownSnippetSettings";
   import { requestConfirm } from "../../services/confirmDialogUi";
+  import { anchorFromEvent } from "../../services/promptAnchor";
   import { appState } from "../../state/appState";
 
   const snapshot = $derived($appState);
@@ -83,7 +84,7 @@
     }
   }
 
-  async function removeSelected(): Promise<void> {
+  async function removeSelected(event?: MouseEvent): Promise<void> {
     if (!selected || selected.source !== "user") {
       return;
     }
@@ -92,6 +93,7 @@
       message: `Delete “${selected.name}”? This cannot be undone.`,
       confirmLabel: "Delete",
       danger: true,
+      anchor: anchorFromEvent(event),
     });
     if (!confirmed) {
       return;
@@ -282,7 +284,7 @@
           <button type="button" class="btn btn-secondary" onclick={duplicateSelected}>
             Duplicate
           </button>
-          <button type="button" class="btn btn-danger" onclick={() => void removeSelected()}>
+          <button type="button" class="btn btn-danger" onclick={(event) => void removeSelected(event)}>
             Delete
           </button>
           {#if saveMessage}

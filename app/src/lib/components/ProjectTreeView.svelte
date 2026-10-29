@@ -50,6 +50,11 @@
     draft?: { kind: "file" | "directory"; parentDirPath: string; defaultValue: string } | null;
     onCommitDraft?: (name: string) => Promise<boolean>;
     onCancelDraft?: () => void;
+    /** Row shown as an inline name editor instead of its label. */
+    renamingPath?: string | null;
+    /** Resolves false to keep editing (the rename failed and was reported). */
+    onCommitRename?: (name: string) => Promise<boolean>;
+    onCancelRename?: () => void;
     activeFilePath?: string | null;
     /** M5-T3 — absolute path → git change status, for badges. */
     statusByPath?: ReadonlyMap<string, FileChangeStatus> | null;
@@ -90,6 +95,9 @@
     draft = null,
     onCommitDraft = async () => false,
     onCancelDraft = () => {},
+    renamingPath = null,
+    onCommitRename = async () => true,
+    onCancelRename = () => {},
     activeFilePath = null,
     statusByPath = null,
     onToggleDirectory = () => {},
@@ -352,6 +360,54 @@
     }
   }
 
+  let renameValue = $state("");
+  let committingRename = $state(false);
+  let renameInputEl = $state<HTMLInputElement | null>(null);
+  $effect(() => {
+    const path = renamingPath;
+    renameValue = path ? (path.replaceAll("\\", "/").split("/").pop() ?? "") : "";
+  });
+
+  /** Focus the rename field with the name selected up to its extension. */
+  function focusRenameInput(node: HTMLInputElement, kind: ProjectTreeNode["kind"]): void {
+    queueMicrotask(() => {
+      node.focus();
+      const dot = node.value.lastIndexOf(".");
+      node.setSelectionRange(0, kind === "file" && dot > 0 ? dot : node.value.length);
+    });
+  }
+
+  async function commitRename(): Promise<void> {
+    if (committingRename) return;
+    const name = renameValue.trim();
+    if (!name) {
+      onCancelRename();
+      return;
+    }
+    committingRename = true;
+    let renamed = true;
+    try {
+      renamed = await onCommitRename(name);
+    } finally {
+      committingRename = false;
+    }
+    // A failed rename was reported; keep the field open for another try.
+    if (!renamed) queueMicrotask(() => renameInputEl?.focus());
+  }
+
+  function handleRenameKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onCancelRename();
+      return;
+    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    void commitRename();
+  }
+
   let listEl = $state<HTMLElement | null>(null);
   let scrollParent = $state<HTMLElement | null>(null);
   let scrollParentMeasured = $state(false);
@@ -589,6 +645,30 @@
           data-tree-row
         >
           Loading...
+        </li>
+      {:else if row.node.path === renamingPath}
+        <li
+          class="project-tree-draft"
+          style={`--node-depth:${row.depth}`}
+          role="treeitem"
+          aria-level={row.depth + 1}
+          aria-selected={false}
+          data-tree-row
+        >
+          {#if row.node.kind === "directory"}
+            <TreeChevron expanded={row.expanded && row.canExpand} visible={row.canExpand} />
+          {:else}
+            <ProjectFileIcon name={renameValue} colored={coloredFileIcons} />
+          {/if}
+          <input
+            bind:this={renameInputEl}
+            use:focusRenameInput={row.node.kind}
+            bind:value={renameValue}
+            aria-label={`Rename ${row.node.name}`}
+            disabled={committingRename}
+            onkeydown={handleRenameKeydown}
+            onblur={() => { if (!committingRename) void commitRename(); }}
+          />
         </li>
       {:else}
         {@const labelTone = classifyProjectTreeLabelTone(row.node.name, row.node.kind)}

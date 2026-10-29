@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, tick } from "svelte";
+  import { placeAnchoredPopover, type AnchoredPlacement, type PromptAnchor } from "../services/promptAnchor";
 
   /**
    * Shared dialog chrome (R4). Provides the backdrop + centered panel,
@@ -23,6 +24,11 @@
    *   (default true). Callers that must suppress dismiss while busy pass false.
    * - On open, focus moves into the panel; the previously-focused element is
    *   restored when the dialog closes or the component unmounts (best-effort).
+   *
+   * Anchored mode (`anchor` set): the panel opens as a non-modal bubble beside
+   * the anchor rect, with an arrow and no dimmed backdrop. A pointer-down
+   * outside the panel or a window resize dismisses it (same `onDismiss` /
+   * `dismissOnBackdrop` rules as the backdrop).
    */
   interface Props {
     open: boolean;
@@ -39,6 +45,8 @@
     titleId?: string;
     children?: import("svelte").Snippet;
     actions?: import("svelte").Snippet;
+    /** Viewport rect to open beside, as a bubble without a backdrop. */
+    anchor?: PromptAnchor | null;
   }
 
   let {
@@ -51,9 +59,11 @@
     titleId,
     children,
     actions,
+    anchor = null,
   }: Props = $props();
 
   let panelEl = $state<HTMLDivElement | null>(null);
+  let placement = $state<AnchoredPlacement | null>(null);
   let previouslyFocused: HTMLElement | null = null;
 
   const FOCUSABLE_SELECTOR =
@@ -175,12 +185,77 @@
     };
   });
 
+  // Anchored mode: measure the rendered bubble, then move it beside the anchor.
+  $effect(() => {
+    const el = panelEl;
+    if (!open || !anchor || !el) {
+      placement = null;
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    placement = placeAnchoredPopover(
+      anchor,
+      { width: rect.width, height: rect.height },
+      { width: window.innerWidth, height: window.innerHeight },
+    );
+  });
+
+  function handleOutsidePointerDown(event: PointerEvent): void {
+    if (!dismissOnBackdrop || !onDismiss || !panelEl || !isTopmostDialogPanel(panelEl)) {
+      return;
+    }
+    if (event.target instanceof Node && panelEl.contains(event.target)) {
+      return;
+    }
+    onDismiss();
+  }
+
+  function handleResize(): void {
+    onDismiss?.();
+  }
+
+  $effect(() => {
+    if (!open || !anchor) {
+      return;
+    }
+    window.addEventListener("pointerdown", handleOutsidePointerDown, true);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("pointerdown", handleOutsidePointerDown, true);
+      window.removeEventListener("resize", handleResize);
+    };
+  });
+
   onDestroy(() => {
     restorePreviousFocus();
   });
 </script>
 
-{#if open}
+{#snippet panelContent()}
+  <h2 id={resolvedTitleId} class="dialog-shell-title">{title}</h2>
+  {#if children}{@render children()}{/if}
+  {#if actions}
+    <div class="dialog-shell-actions">
+      {@render actions()}
+    </div>
+  {/if}
+{/snippet}
+
+{#if open && anchor}
+  <div
+    bind:this={panelEl}
+    class={`dialog-shell-panel dialog-shell-anchored ${panelClass}`}
+    class:dialog-shell-placed={placement !== null}
+    data-side={placement?.side ?? "right"}
+    style={`--dialog-shell-width:${panelWidth};${placement ? ` left:${placement.left}px; top:${placement.top}px; --dialog-shell-arrow:${placement.arrow}px;` : ""}`}
+    role="dialog"
+    aria-modal="false"
+    aria-labelledby={resolvedTitleId}
+    tabindex="-1"
+  >
+    {@render panelContent()}
+  </div>
+{:else if open}
   <div
     class="dialog-shell-backdrop"
     role="presentation"
@@ -195,13 +270,7 @@
       aria-labelledby={resolvedTitleId}
       tabindex="-1"
     >
-      <h2 id={resolvedTitleId} class="dialog-shell-title">{title}</h2>
-      {#if children}{@render children()}{/if}
-      {#if actions}
-        <div class="dialog-shell-actions">
-          {@render actions()}
-        </div>
-      {/if}
+      {@render panelContent()}
     </div>
   </div>
 {/if}
@@ -250,5 +319,71 @@
     justify-content: flex-end;
     gap: var(--space-6);
     margin-top: var(--space-2);
+  }
+
+  /* Anchored bubble: no backdrop, placed beside the anchor after measuring. */
+  .dialog-shell-anchored {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1200;
+    width: min(var(--dialog-shell-width), calc(100vw - 16px));
+    max-height: calc(100vh - 16px);
+    padding: var(--space-6);
+    gap: var(--space-4);
+    overflow: visible;
+    opacity: 0;
+  }
+
+  .dialog-shell-anchored.dialog-shell-placed {
+    opacity: 1;
+  }
+
+  .dialog-shell-anchored .dialog-shell-title {
+    font-size: var(--font-size-ui);
+  }
+
+  .dialog-shell-anchored .dialog-shell-actions {
+    gap: var(--space-4);
+    margin-top: 0;
+  }
+
+  /* Arrow: a rotated square sharing the panel border, on the anchor side. */
+  .dialog-shell-anchored::before {
+    content: "";
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-border-subtle);
+    transform: rotate(45deg);
+  }
+
+  .dialog-shell-anchored[data-side="right"]::before {
+    left: -5px;
+    top: calc(var(--dialog-shell-arrow, 16px) - 5px);
+    border-top-color: transparent;
+    border-right-color: transparent;
+  }
+
+  .dialog-shell-anchored[data-side="left"]::before {
+    right: -5px;
+    top: calc(var(--dialog-shell-arrow, 16px) - 5px);
+    border-bottom-color: transparent;
+    border-left-color: transparent;
+  }
+
+  .dialog-shell-anchored[data-side="below"]::before {
+    top: -5px;
+    left: calc(var(--dialog-shell-arrow, 16px) - 5px);
+    border-bottom-color: transparent;
+    border-right-color: transparent;
+  }
+
+  .dialog-shell-anchored[data-side="above"]::before {
+    bottom: -5px;
+    left: calc(var(--dialog-shell-arrow, 16px) - 5px);
+    border-top-color: transparent;
+    border-left-color: transparent;
   }
 </style>

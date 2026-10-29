@@ -1,3 +1,5 @@
+import type { PromptAnchor } from "./promptAnchor";
+
 export type LocalChangesCheckoutChoice =
   | { type: "cancel" }
   | { type: "block" }
@@ -5,6 +7,8 @@ export type LocalChangesCheckoutChoice =
 
 export interface LocalChangesCheckoutPromptRequest {
   branchName: string;
+  /** Open as a bubble beside this rect (e.g. the button that asked). */
+  anchor?: PromptAnchor;
 }
 
 type LocalChangesCheckoutPromptRunner = (

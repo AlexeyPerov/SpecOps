@@ -13,6 +13,7 @@
   } from "../git/gitService";
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
   import { promptEntryName } from "../services/entryNamePrompt";
+  import { anchorFromEvent } from "../services/promptAnchor";
   import { promptLocalChangesStashApply } from "../services/localChangesStashApplyPrompt";
   import { promptStashDrop } from "../services/stashDropPrompt";
   import type { SaveDocumentDeps } from "../services/documentSave";
@@ -112,13 +113,15 @@
     }
   }
 
-  async function handleCreateStash(): Promise<void> {
+  async function handleCreateStash(event?: MouseEvent): Promise<void> {
+    const anchor = anchorFromEvent(event);
     if (actionBusy || readOnly) {
       return;
     }
 
     const stashMessage = await promptEntryName({
       title: "Create stash",
+      anchor,
       defaultValue: "WIP",
       confirmLabel: "Stash",
     });
@@ -153,7 +156,8 @@
     }
   }
 
-  async function handleApplyStash(): Promise<void> {
+  async function handleApplyStash(event?: MouseEvent): Promise<void> {
+    const anchor = anchorFromEvent(event);
     if (!selectedSummary || actionBusy || readOnly) {
       return;
     }
@@ -180,7 +184,7 @@
 
       const dirty = await isWorkingTreeDirty(repoRoot);
       if (dirty) {
-        const choice = await promptLocalChangesStashApply({ stashRef });
+        const choice = await promptLocalChangesStashApply({ stashRef, anchor });
         if (!choice || choice.type === "cancel") {
           return;
         }
@@ -228,7 +232,8 @@
     }
   }
 
-  async function handleDropStash(): Promise<void> {
+  async function handleDropStash(event?: MouseEvent): Promise<void> {
+    const anchor = anchorFromEvent(event);
     if (!selectedSummary || actionBusy || readOnly) {
       return;
     }
@@ -241,6 +246,7 @@
     const result = await promptStashDrop({
       stashRef,
       message: stashSummaryLine(selectedSummary),
+      anchor,
     });
     if (!result) {
       return;

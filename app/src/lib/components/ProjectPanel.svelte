@@ -30,7 +30,7 @@
   import { flattenProjectTree } from "../services/projectTreeFlatten";
   import { selectProjectPaths } from "../services/projectSelection";
   import { moveProjectEntries, deleteProjectEntries } from "../services/projectBulkOperations";
-  import type { ConfirmAnchor } from "../services/confirmDialogUi";
+  import type { PromptAnchor } from "../services/promptAnchor";
   import { createProjectTypeFilter, filterProjectNodes, type ProjectFileFilter, type ProjectFilterSnapshot } from "../services/projectTypeFilter";
   import { createProjectSizes, projectSizeLabel, projectSizeTitle, type ProjectSizeMode, type ProjectSizeEntry } from "../services/projectSizes";
   import { subscribeProjectPaneChanges } from "../services/projectPaneChanges";
@@ -65,8 +65,8 @@
     onMoveEntry?: (sourcePath: string, destDirPath: string) => Promise<void>;
     onNewFile?: (parentDirPath: string, name: string) => Promise<boolean>;
     onNewFolder?: (parentDirPath: string, name: string) => Promise<boolean>;
-    onRenameEntry?: (path: string, kind: ProjectTreeNode["kind"]) => void;
-    onDeleteEntry?: (path: string, kind: ProjectTreeNode["kind"]) => void;
+    /** Inline rename; resolves false to keep the row editing (e.g. name taken). */
+    onRenameEntry?: (path: string, kind: ProjectTreeNode["kind"], name: string) => Promise<boolean>;
     notify?: (message: string) => void;
     /** Phase 6 — live pane elements for file→pane DnD. */
     getPaneElements?: () => PaneDropTargetElements[];
@@ -103,8 +103,7 @@
     onMoveEntry = async () => {},
     onNewFile = async () => false,
     onNewFolder = async () => false,
-    onRenameEntry = () => {},
-    onDeleteEntry = () => {},
+    onRenameEntry = async () => true,
     notify = () => {},
     getPaneElements = () => [],
     onOpenFileInPane = null,
@@ -127,12 +126,12 @@
     selectedPaths = next.paths; selectionAnchor = next.anchor;
   }
   /** Viewport rect around the visible rows of `entries`, clipped to the tree's scroll area. */
-  function visibleRowsRect(entries: readonly ProjectTreeNode[]): ConfirmAnchor | undefined {
+  function visibleRowsRect(entries: readonly ProjectTreeNode[]): PromptAnchor | undefined {
     const body = panelBodyEl;
     if (!body) return undefined;
     const paths = new Set(entries.map((entry) => entry.path));
     const bounds = body.getBoundingClientRect();
-    let rect: ConfirmAnchor | undefined;
+    let rect: PromptAnchor | undefined;
     for (const row of body.querySelectorAll<HTMLElement>("[data-path]")) {
       if (!paths.has(row.dataset.path ?? "")) continue;
       const r = row.getBoundingClientRect();
@@ -293,6 +292,17 @@
     parentDirPath: string;
     defaultValue: string;
   } | null>(null);
+  let renaming = $state<{ path: string; kind: ProjectTreeNode["kind"] } | null>(null);
+  $effect(() => { void workspaceRoot; renaming = null; });
+  async function commitRename(name: string): Promise<boolean> {
+    const target = renaming;
+    if (!target) return true;
+    const currentName = target.path.replaceAll("\\", "/").split("/").pop() ?? target.path;
+    if (name === currentName) { renaming = null; return true; }
+    const renamed = await onRenameEntry(target.path, target.kind, name);
+    if (renamed && renaming === target) renaming = null;
+    return renamed;
+  }
 
   function filterNodes(nodes: readonly ProjectTreeNode[]): ProjectTreeNode[] {
     return filterProjectNodes(nodes, fileFilter, filterSnapshot);
@@ -480,6 +490,7 @@
   }
 
   function startDraft(kind: "file" | "directory", parentDirPath: string): void {
+    renaming = null;
     draft = {
       kind,
       parentDirPath,
@@ -664,6 +675,9 @@
         {draft}
         onCommitDraft={commitDraft}
         onCancelDraft={() => (draft = null)}
+        renamingPath={renaming?.path ?? null}
+        onCommitRename={commitRename}
+        onCancelRename={() => (renaming = null)}
       />
       <div class="project-panel-create-area" aria-hidden="true"></div>
     </div>
@@ -680,8 +694,7 @@
   onOpenFile={onOpenFile}
   onNewFile={(parent) => startDraft("file", parent)}
   onNewFolder={(parent) => startDraft("directory", parent)}
-  onRename={onRenameEntry}
-  onDelete={onDeleteEntry}
+  onRename={(path, kind) => { draft = null; renaming = { path, kind }; }}
   onCalculateFolderSize={calculateFolderSize}
   onCancelFolderSize={(path) => sizes.cancel(path)}
   {sizeEntries}

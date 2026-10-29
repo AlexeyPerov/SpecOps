@@ -643,7 +643,6 @@
     onNewFile: projectTreeHandlers.handleNewProjectFile,
     onNewFolder: projectTreeHandlers.handleNewProjectFolder,
     onRenameEntry: projectTreeHandlers.handleRenameProjectEntry,
-    onDeleteEntry: projectTreeHandlers.handleDeleteProjectEntry,
     getPaneElements: handleProjectTreeGetPaneElements,
     onOpenFileInPane: projectTreeHandlers.handleOpenProjectTreeFileInPane,
     onOpenFileInContext: projectTreeHandlers.handleOpenProjectTreeFileInContext,

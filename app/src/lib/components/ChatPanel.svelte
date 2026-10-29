@@ -28,6 +28,7 @@
   import { draftEntryTitleForScope } from "../services/chatSessions";
     import { openSettingsDialog } from "../services/settingsDialogUi";
   import { requestConfirm } from "../services/confirmDialogUi";
+  import { anchorFromEvent, type PromptAnchor } from "../services/promptAnchor";
   import { extractSessionTotals } from "../ai/chatSteps";
   import { abortTurn } from "../ai/chatSendPipeline";
   import {
@@ -41,6 +42,8 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
   import ChatBlockedState from "./ChatBlockedState.svelte";
   import ChatComposer from "./ChatComposer.svelte";
   import ChatMessageList from "./ChatMessageList.svelte";
+  import SessionRequestCards from "./SessionRequestCards.svelte";
+  import { activeSessionId as activeSessionIdOf } from "../state/chatStore/workspace";
   import SessionTotalBadge from "./SessionTotalBadge.svelte";
 
   interface Props {
@@ -110,6 +113,9 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
   });
   const canDeleteSession = $derived(activeSessionId !== null);
   const workspaceRootPath = $derived(chatStore.getActiveWorkspaceRoot() ?? "");
+  // Session whose pending agent requests are answered inline in this chat.
+  const promptRoot = $derived($chatStore.activeChatScopeKey);
+  const promptSessionId = $derived(activeSessionIdOf($chatStore));
   const nativeControlBusy = $derived(Boolean(activeSessionId && $chatStore.workspaces[workspaceRootPath]?.runtimeBySessionId[activeSessionId]?.nativeOperation));
 
   // --- Neutral runtime identity + catalogs (host discovery / catalogs) -----
@@ -236,7 +242,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
     return PROVIDER_REQUEST_FAILURE_RECOVERY;
   }
 
-  async function deleteSession(): Promise<void> {
+  async function deleteSession(anchor?: PromptAnchor): Promise<void> {
     if (!canDeleteSession || !activeSessionId) {
       return;
     }
@@ -245,6 +251,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
       message: `Delete session "${activeAgentTitle}"? This removes the session and its history. This cannot be undone.`,
       confirmLabel: "Delete",
       danger: true,
+      anchor,
     });
     if (!confirmed) {
       return;
@@ -300,7 +307,7 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
         <button
           type="button"
           class="chat-delete-button"
-          onclick={() => void deleteSession()}
+          onclick={(event) => void deleteSession(anchorFromEvent(event))}
           disabled={isBlocked || isGenerating || nativeControlBusy}
         >
           Delete session
@@ -334,6 +341,8 @@ import { agentRuntimeDescriptor, isAgentRuntimeId, type AgentRuntimeId } from ".
       emptyActionLabel={emptySetupAction?.label}
       onEmptyAction={emptySetupAction?.onClick}
     />
+
+    <SessionRequestCards root={promptRoot} sessionId={promptSessionId} />
 
     <ConnectionProfilePanel
       {runtimeId}

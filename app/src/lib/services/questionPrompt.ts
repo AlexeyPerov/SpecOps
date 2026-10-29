@@ -1,42 +1,39 @@
-export interface QuestionPromptChoice {
-  label: string;
-  selected: boolean;
-}
+import {
+  createSessionPromptQueue,
+  type SessionPromptEntry,
+  type SessionPromptTarget,
+} from "./sessionPromptQueue";
 
-export interface QuestionPromptRequest {
+export interface QuestionPromptRequest extends SessionPromptTarget {
   questionId: string;
   prompt: string;
   choices: string[];
   payload: unknown;
-  signal?: AbortSignal;
 }
 
 export type QuestionPromptResult =
   | { type: "reply"; answers: string[][] }
   | { type: "reject" };
 
-type QuestionPromptRunner = (request: QuestionPromptRequest) => Promise<QuestionPromptResult>;
+export type PendingQuestionPrompt = SessionPromptEntry<QuestionPromptRequest>;
 
-let runner: QuestionPromptRunner | null = null;
-const pending = new Map<string, { request: QuestionPromptRequest; deliver: () => void }>();
+/**
+ * Pending agent questions keyed by owning session. The session's chat renders
+ * the entry as an inline card and answers it through `answerQuestionPrompt`.
+ */
+export const pendingQuestionPrompts = createSessionPromptQueue<QuestionPromptRequest, QuestionPromptResult>({
+  type: "reject",
+});
 
-export function registerQuestionPromptRunner(next: QuestionPromptRunner | null): void {
-  runner = next;
-  if (next) for (const entry of pending.values()) entry.deliver();
+/**
+ * Ask the user a question in the requesting session's chat. Resolves with
+ * `reject` when the request is aborted or superseded by a newer question for
+ * the same session.
+ */
+export function promptQuestion(request: QuestionPromptRequest): Promise<QuestionPromptResult> {
+  return pendingQuestionPrompts.request(request);
 }
 
-export function promptQuestion(request: QuestionPromptRequest): Promise<QuestionPromptResult> {
-  if (!runner) {
-    return Promise.resolve({ type: "reject" });
-  }
-  if (request.signal?.aborted) return Promise.resolve({ type: "reject" });
-  return new Promise(resolve => {
-    let settled = false;
-    const finish = (value: QuestionPromptResult) => { if (settled) return; settled = true; pending.delete(request.questionId); request.signal?.removeEventListener('abort', abort); resolve(value); };
-    const abort = () => finish({ type: "reject" });
-    const deliver = () => { if (runner && !settled) void runner(request).then(finish, abort); };
-    pending.set(request.questionId, { request, deliver });
-    request.signal?.addEventListener('abort', abort, { once: true });
-    deliver();
-  });
+export function answerQuestionPrompt(entry: Pick<PendingQuestionPrompt, "key" | "seq">, result: QuestionPromptResult): boolean {
+  return pendingQuestionPrompts.respond(entry, result);
 }

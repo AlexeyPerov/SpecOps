@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { PromptAnchor } from "../services/promptAnchor";
   import { tick } from "svelte";
   import {
     registerTagDeletePromptRunner,
@@ -16,6 +17,7 @@
   let submitting = $state(false);
   let confirmButtonEl = $state<HTMLButtonElement | null>(null);
 
+  let anchor = $state<PromptAnchor | null>(null);
   let resolvePrompt: ((value: TagDeletePromptResult | null) => void) | null = null;
 
   async function showPrompt(
@@ -31,6 +33,7 @@
       selectedRemote = defaultRemote?.name ?? "";
       deleteFromAll = false;
       submitting = false;
+      anchor = request.anchor ?? null;
       resolvePrompt = resolve;
       open = true;
       void tick().then(() => {
@@ -80,7 +83,8 @@
 <DialogShell
   {open}
   title="Delete tag"
-  width={420}
+  {anchor}
+  width={anchor ? 320 : 420}
   onDismiss={cancel}
   dismissOnBackdrop={!submitting}
 >

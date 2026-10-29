@@ -48,6 +48,7 @@
     renameGlobalDocument,
   } from "../services/globalDocuments";
   import { requestConfirm } from "../services/confirmDialogUi";
+  import { anchorFromElement, type PromptAnchor } from "../services/promptAnchor";
   import { loadWorkspaceDocument, workspaceDocumentSnapshot, workspaceDocumentsRevision, type WorkspaceDocumentKind } from "../services/workspaceDocuments";
   import { subscribeWorkspacePreferences } from "../services/workspacePreferences";
 
@@ -427,10 +428,10 @@
     menu = null;
     void Promise.resolve().then(action).catch(error => onError(String(error)));
   }
-  async function confirmDeleteGlobalDocument(document: GlobalDocument): Promise<void> {
+  async function confirmDeleteGlobalDocument(document: GlobalDocument, anchor?: PromptAnchor): Promise<void> {
     if (!await requestConfirm({ title: `Delete ${globalDocumentKindLabel(document.kind)}`,
       message: `Delete "${document.name}"? Its file is removed and this cannot be undone.`,
-      confirmLabel: 'Delete', cancelLabel: 'Cancel', danger: true })) return;
+      confirmLabel: 'Delete', cancelLabel: 'Cancel', danger: true, anchor })) return;
     await deleteGlobalDocument(document.id);
   }
   const activeGlobalDocumentId = $derived.by(() => {
@@ -919,7 +920,7 @@
       <button type="button" role="menuitem" onclick={() => runEntityAction(() => openGlobalDocument(document.id))}>Open</button>
       <button type="button" role="menuitem" onclick={() => editEntity(document.kind, document.id, document.name)}>Rename</button>
       <div class="rail-menu-separator" role="separator"></div>
-      <button type="button" role="menuitem" onclick={() => runEntityAction(() => confirmDeleteGlobalDocument(document))}>Delete</button>
+      <button type="button" role="menuitem" onclick={() => { const anchor = anchorFromElement(menuTrigger); runEntityAction(() => confirmDeleteGlobalDocument(document, anchor)); }}>Delete</button>
     {:else if menu.item?.kind === 'folder'}
       {@const folder = menu.item.folder}
       <button type="button" role="menuitem" onclick={() => showCreate(folder.id)}>Create in folder…</button>

@@ -13,8 +13,6 @@
   import StashDropPrompt from "./StashDropPrompt.svelte";
   import PreGitAutosavePrompt from "./PreGitAutosavePrompt.svelte";
   import RevertPreviewDialog from "./RevertPreviewDialog.svelte";
-  import PermissionPrompt from "./PermissionPrompt.svelte";
-  import QuestionPrompt from "./QuestionPrompt.svelte";
   import EditorGridLayout from "./EditorGridLayout.svelte";
   import EditorPaneContent from "./EditorPaneContent.svelte";
   import ActivityRail from "./ActivityRail.svelte";
@@ -83,8 +81,8 @@
     onSelectSession: (sessionId: string) => void;
     onNewSession: () => void;
     onDeleteSession: (sessionId: string) => void | Promise<void>;
-    /** Rename the agent tab (local store only). */
-    onRenameSession?: (sessionId: string) => void | Promise<void>;
+    /** Apply a title edited inline in the sidebar (local store only). */
+    onRenameSession?: (sessionId: string, title: string) => void | Promise<void>;
   }
 
   export interface AppShellProjectTreeProps {
@@ -113,8 +111,8 @@
     onMoveEntry: (sourcePath: string, destDirPath: string) => Promise<void>;
     onNewFile: (parentDirPath: string, name: string) => Promise<boolean>;
     onNewFolder: (parentDirPath: string, name: string) => Promise<boolean>;
-    onRenameEntry: (path: string, kind: ProjectTreeNode["kind"]) => void | Promise<void>;
-    onDeleteEntry: (path: string, kind: ProjectTreeNode["kind"]) => void | Promise<void>;
+    /** Inline rename from the tree; resolves false to keep the row editing. */
+    onRenameEntry: (path: string, kind: ProjectTreeNode["kind"], name: string) => Promise<boolean>;
     /** Phase 6 — live editor pane elements for file→pane DnD hit-testing. */
     getPaneElements?: () => import("./paneDropTargets").PaneDropTargetElements[];
     /** Phase 6 — open a file into a specific pane (file drag drop). */
@@ -482,15 +480,9 @@
   function handleProjectRenameEntry(
     path: string,
     kind: ProjectTreeNode["kind"],
-  ): void {
-    void projectTree.onRenameEntry(path, kind);
-  }
-
-  function handleProjectDeleteEntry(
-    path: string,
-    kind: ProjectTreeNode["kind"],
-  ): void {
-    void projectTree.onDeleteEntry(path, kind);
+    name: string,
+  ): Promise<boolean> {
+    return projectTree.onRenameEntry(path, kind, name);
   }
 
   function handleProjectGetPaneElements(): import("./paneDropTargets").PaneDropTargetElements[] {
@@ -723,7 +715,6 @@
         onNewFile={handleProjectNewFile}
         onNewFolder={handleProjectNewFolder}
         onRenameEntry={handleProjectRenameEntry}
-        onDeleteEntry={handleProjectDeleteEntry}
         getPaneElements={projectTree.getPaneElements ? handleProjectGetPaneElements : emptyPaneElements}
         onOpenFileInPane={projectTree.onOpenFileInPane ?? null}
         onOpenFileInContext={projectTree.onOpenFileInContext}
@@ -923,8 +914,6 @@
      these props as `undefined`, so the dead template blocks that used to live
      here were removed — keeping them would mount a second instance of each the
      moment any caller ever wired the prop. -->
-<PermissionPrompt />
-<QuestionPrompt />
 <ConfirmDialog />
 <ChoiceDialog />
 

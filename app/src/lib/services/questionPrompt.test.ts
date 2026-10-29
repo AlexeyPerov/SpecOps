@@ -1,97 +1,51 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { get } from "svelte/store";
 import {
+  answerQuestionPrompt,
+  pendingQuestionPrompts,
   promptQuestion,
-  registerQuestionPromptRunner,
-  type QuestionPromptResult,
 } from "./questionPrompt";
 
-function mockRunner(
-  result: QuestionPromptResult,
-): (request: { questionId: string; prompt: string; choices: string[]; payload: unknown }) => Promise<QuestionPromptResult> {
-  return vi.fn().mockResolvedValue(result);
-}
+const ROOT = "/work/question";
 
 describe("questionPrompt", () => {
   afterEach(() => {
-    registerQuestionPromptRunner(null);
+    pendingQuestionPrompts.rejectAll();
   });
 
-  it("rejects by default when no runner is registered", async () => {
-    const result = await promptQuestion({
+  it("queues the question for its session and resolves with the answer", async () => {
+    const pending = promptQuestion({
+      sessionId: "session-1",
+      root: ROOT,
       questionId: "q-1",
-      prompt: "Which framework?",
-      choices: ["React", "Svelte"],
-      payload: null,
-    });
-    expect(result).toEqual({ type: "reject" });
-  });
-
-  it("delegates to the registered runner", async () => {
-    const runner = mockRunner({ type: "reply", answers: [["React"]] });
-    registerQuestionPromptRunner(runner);
-
-    const result = await promptQuestion({
-      questionId: "q-2",
-      prompt: "Pick one",
+      prompt: "Which?",
       choices: ["A", "B"],
-      payload: { context: "test" },
+      payload: { multiSelect: false },
     });
+    const entry = get(pendingQuestionPrompts.forSession(ROOT, "session-1"))!;
+    expect(entry.request).toMatchObject({ questionId: "q-1", prompt: "Which?", choices: ["A", "B"] });
+    expect(get(pendingQuestionPrompts.forSession(ROOT, "session-2"))).toBeNull();
 
-    expect(result).toEqual({ type: "reply", answers: [["React"]] });
-    expect(runner).toHaveBeenCalledWith({
-      questionId: "q-2",
-      prompt: "Pick one",
-      choices: ["A", "B"],
-      payload: { context: "test" },
-    });
+    answerQuestionPrompt(entry, { type: "reply", answers: [["B"]] });
+    await expect(pending).resolves.toEqual({ type: "reply", answers: [["B"]] });
+    expect(get(pendingQuestionPrompts)).toEqual({});
   });
 
-  it("unregistering the runner causes prompts to reject by default", async () => {
-    const runner = mockRunner({ type: "reply", answers: [["X"]] });
-    registerQuestionPromptRunner(runner);
-
-    const result1 = await promptQuestion({
-      questionId: "q-3",
-      prompt: "Before unregister",
-      choices: [],
-      payload: null,
-    });
-    expect(result1).toEqual({ type: "reply", answers: [["X"]] });
-
-    registerQuestionPromptRunner(null);
-
-    const result2 = await promptQuestion({
-      questionId: "q-4",
-      prompt: "After unregister",
-      choices: [],
-      payload: null,
-    });
-    expect(result2).toEqual({ type: "reject" });
+  it("rejects when the signal aborts", async () => {
+    const controller = new AbortController();
+    const pending = promptQuestion({ sessionId: "s", root: ROOT, questionId: "q-2", prompt: "?", choices: [], payload: {}, signal: controller.signal });
+    controller.abort();
+    await expect(pending).resolves.toEqual({ type: "reject" });
+    expect(get(pendingQuestionPrompts)).toEqual({});
   });
 
-  it("supports registering a new runner replacing the old one", async () => {
-    const runner1 = mockRunner({ type: "reply", answers: [["A"]] });
-    const runner2 = mockRunner({ type: "reply", answers: [["B"]] });
-    registerQuestionPromptRunner(runner1);
-
-    const result1 = await promptQuestion({
-      questionId: "q-5",
-      prompt: "First runner",
-      choices: ["A"],
-      payload: null,
-    });
-    expect(result1).toEqual({ type: "reply", answers: [["A"]] });
-    expect(runner1).toHaveBeenCalledTimes(1);
-
-    registerQuestionPromptRunner(runner2);
-
-    const result2 = await promptQuestion({
-      questionId: "q-6",
-      prompt: "Second runner",
-      choices: ["B"],
-      payload: null,
-    });
-    expect(result2).toEqual({ type: "reply", answers: [["B"]] });
-    expect(runner2).toHaveBeenCalledTimes(1);
+  it("a newer question for the same session supersedes the pending one", async () => {
+    const first = promptQuestion({ sessionId: "s", root: ROOT, questionId: "q-3", prompt: "First", choices: [], payload: {} });
+    const second = promptQuestion({ sessionId: "s", root: ROOT, questionId: "q-4", prompt: "Second", choices: [], payload: {} });
+    await expect(first).resolves.toEqual({ type: "reject" });
+    const entry = get(pendingQuestionPrompts.forSession(ROOT, "s"))!;
+    expect(entry.request.prompt).toBe("Second");
+    answerQuestionPrompt(entry, { type: "reply", answers: [["ok"]] });
+    await expect(second).resolves.toEqual({ type: "reply", answers: [["ok"]] });
   });
 });

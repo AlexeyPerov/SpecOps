@@ -1,12 +1,11 @@
 <script lang="ts">
   import { tick } from "svelte";
   import DialogShell from "./DialogShell.svelte";
-  import ConfirmPopover from "./ConfirmPopover.svelte";
   import {
     registerConfirmRunner,
-    type ConfirmAnchor,
     type ConfirmRequest,
   } from "../services/confirmDialogUi";
+  import type { PromptAnchor } from "../services/promptAnchor";
 
   /**
    * M3 (R4) — self-registering host for the promise-based confirm API.
@@ -22,7 +21,7 @@
   let confirmLabel = $state("Confirm");
   let cancelLabel = $state("Cancel");
   let danger = $state(false);
-  let anchor = $state<ConfirmAnchor | null>(null);
+  let anchor = $state<PromptAnchor | null>(null);
   let confirmButtonEl = $state<HTMLButtonElement | null>(null);
 
   let resolvePrompt: ((value: boolean) => void) | null = null;
@@ -42,7 +41,6 @@
       anchor = request.anchor ?? null;
       resolvePrompt = resolve;
       open = true;
-      // The anchored bubble focuses its own primary button once placed.
       void tick().then(() => {
         confirmButtonEl?.focus();
       });
@@ -70,20 +68,7 @@
   });
 </script>
 
-{#if open && anchor}
-  <ConfirmPopover
-    {anchor}
-    {title}
-    {message}
-    {confirmLabel}
-    {cancelLabel}
-    {danger}
-    onConfirm={confirm}
-    onCancel={cancel}
-  />
-{/if}
-
-<DialogShell open={open && !anchor} {title} width={420} onDismiss={cancel}>
+<DialogShell {open} {title} {anchor} width={anchor ? 320 : 420} onDismiss={cancel}>
   <p class="confirm-dialog-message">{message}</p>
   {#snippet actions()}
     <button type="button" class="btn btn-secondary" onclick={cancel}>
@@ -106,6 +91,9 @@
     font-size: var(--font-size-ui);
     line-height: 1.5;
     color: var(--color-text-primary);
+    white-space: pre-line;
     word-break: break-word;
+    max-height: 50vh;
+    overflow-y: auto;
   }
 </style>

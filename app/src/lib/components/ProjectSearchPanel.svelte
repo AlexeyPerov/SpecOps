@@ -324,6 +324,7 @@
             class="search-control-btn search-control-btn-wide"
             disabled={running || !canReplace}
             title="Replace all matches across the workspace"
+            data-project-replace-all
             onclick={() => onReplaceAll?.()}
           >
             Replace All

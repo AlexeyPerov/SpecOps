@@ -35,7 +35,10 @@ import {
 } from "./chatSendPipeline";
 import { registerConfirmRunner } from "../services/confirmDialogUi";
 import { appState } from "../state/appState";
-import { registerPermissionPromptRunner } from "../services/permissionPrompt";
+import { setPermissionPromptAutoAnswer, setQuestionPromptAutoAnswer } from "../services/_testSessionPrompts";
+import { get } from "svelte/store";
+import { answerQuestionPrompt, pendingQuestionPrompts } from "../services/questionPrompt";
+import { pendingPermissionPrompts } from "../services/permissionPrompt";
 
 interface FakeHostHarness {
   client: AgentHostClient;
@@ -115,7 +118,8 @@ describe("chatSendPipeline (host-backed turns)", () => {
   let harness: FakeHostHarness;
 
   beforeEach(() => {
-    registerPermissionPromptRunner(null);
+    setPermissionPromptAutoAnswer(null);
+    setQuestionPromptAutoAnswer(null);
     registerConfirmRunner(null);
     appState.resetAppState();
     chatStore.reset();
@@ -205,7 +209,7 @@ describe("chatSendPipeline (host-backed turns)", () => {
       yield event({ type: 'permission.requested', seq: 2, turnId: request.turnId, request: { permissionId: 'permission-1', label: 'Read', payload: {} } });
       await paused;
     });
-    registerPermissionPromptRunner(() => new Promise(() => {}));
+    setPermissionPromptAutoAnswer(null);
     const source = executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'turn-test-1' });
     await vi.waitFor(() => expect(chatStore.getRuntimeState(sessionId).isWaitingForPermission).toBe(true));
     expect(workspaceTurnDescriptors(root)[0].fold.content).toBe('before');
@@ -218,7 +222,7 @@ describe("chatSendPipeline (host-backed turns)", () => {
     chatStore.reset();
     chatStore.adoptWorkspaceState(root, adopted);
     chatStore.setActiveWorkspaceRoot(root);
-    registerPermissionPromptRunner(async () => ({ reply: 'once' }));
+    setPermissionPromptAutoAnswer(async () => ({ reply: 'once' }));
     const resumed = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: checkpoint.turnId,
       continuation: { checkpoint, events: { async *[Symbol.asyncIterator]() {
         yield* checkpoint.pending;
@@ -240,7 +244,7 @@ describe("chatSendPipeline (host-backed turns)", () => {
     const pendingReply = new Promise<void>(resolve => { finishReply = resolve; });
     const pendingTurn = new Promise<void>(resolve => { finishTurn = resolve; });
     harness.replyPermission.mockImplementation(() => pendingReply);
-    registerPermissionPromptRunner(async () => ({ reply: 'once' }));
+    setPermissionPromptAutoAnswer(async () => ({ reply: 'once' }));
     vi.spyOn(harness.client, 'sendTurn').mockImplementation(async function* (request) {
       yield event({ type: 'permission.requested', seq: 1, turnId: request.turnId, request: { permissionId: 'permission-reply', label: 'Read', payload: {} } });
       await pendingTurn;
@@ -316,7 +320,7 @@ describe("chatSendPipeline (host-backed turns)", () => {
       }),
       event({ type: "turn.finished", turnId: "turn-test-1" as SpecOpsTurnId }),
     ]);
-    registerPermissionPromptRunner(async () => ({ reply: "once" }));
+    setPermissionPromptAutoAnswer(async () => ({ reply: "once" }));
 
     try {
       const result = await executeProviderTurn({
@@ -334,8 +338,45 @@ describe("chatSendPipeline (host-backed turns)", () => {
         }),
       );
     } finally {
-      registerPermissionPromptRunner(null);
+      setPermissionPromptAutoAnswer(null);
     }
+  });
+
+  it("queues permission requests for the asking session and dismisses them when the turn is stopped", async () => {
+    const root = "/work/host-pipeline";
+    const sessionId = await seedThreadWithUserMessage();
+    vi.spyOn(harness.client, "sendTurn").mockImplementation(async function* (request) {
+      yield event({ type: "permission.requested", seq: 1, turnId: request.turnId, request: { permissionId: "perm-stop", label: "Run", payload: {} } });
+      await new Promise(() => {});
+    });
+    const response = executeProviderTurn({ root, activeSessionId: sessionId, turnId: "turn-test-1" });
+    await vi.waitFor(() => expect(get(pendingPermissionPrompts.forSession(root, sessionId))?.request.permissionId).toBe("perm-stop"));
+    expect(chatStore.getRuntimeState(sessionId).isWaitingForPermission).toBe(true);
+    abortTurn(sessionId, root);
+    expect((await response).ok).toBe(false);
+    expect(get(pendingPermissionPrompts)).toEqual({});
+    expect(chatStore.getRuntimeState(sessionId).isWaitingForPermission).toBe(false);
+    expect(harness.replyPermission).not.toHaveBeenCalled();
+  });
+
+  it("continues the turn after the session's question card is answered", async () => {
+    const root = "/work/host-pipeline";
+    const sessionId = await seedThreadWithUserMessage();
+    let replied!: () => void;
+    const answered = new Promise<void>(resolve => { replied = resolve; });
+    harness.replyQuestion.mockImplementation(async () => { replied(); });
+    vi.spyOn(harness.client, "sendTurn").mockImplementation(async function* (request) {
+      yield event({ type: "question.requested", seq: 1, turnId: request.turnId, request: { questionId: "q-1", prompt: "Which?", choices: ["A", "B"] } });
+      await answered;
+      yield event({ type: "turn.finished", seq: 2, turnId: request.turnId });
+    });
+    const response = executeProviderTurn({ root, activeSessionId: sessionId, turnId: "turn-test-1" });
+    await vi.waitFor(() => expect(get(pendingQuestionPrompts.forSession(root, sessionId))).not.toBeNull());
+    expect(chatStore.getRuntimeState(sessionId).isWaitingForQuestion).toBe(true);
+    answerQuestionPrompt(get(pendingQuestionPrompts.forSession(root, sessionId))!, { type: "reply", answers: [["B"]] });
+    expect((await response).ok).toBe(true);
+    expect(harness.replyQuestion).toHaveBeenCalledWith(expect.objectContaining({ questionId: "q-1", answer: "B" }));
+    expect(chatStore.getRuntimeState(sessionId).isWaitingForQuestion).toBe(false);
   });
 
   it("fails the turn with a user-facing message on turn.failed", async () => {

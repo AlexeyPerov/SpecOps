@@ -169,6 +169,19 @@ function assertTurnStillActive(root: string, sessionId: string, turnId: string):
   }
 }
 
+/** Abort controller that also aborts when `parent` does. */
+function linkedAbortController(parent: AbortSignal): AbortController {
+  const controller = new AbortController();
+  if (parent.aborted) {
+    controller.abort();
+    return controller;
+  }
+  const forward = () => controller.abort();
+  parent.addEventListener("abort", forward, { once: true });
+  controller.signal.addEventListener("abort", () => parent.removeEventListener("abort", forward), { once: true });
+  return controller;
+}
+
 async function awaitWithTurnCancellation<T>(
   input: {
     root: string;
@@ -522,17 +535,22 @@ export async function executeProviderTurn(params: {
       if (event.type === "permission.requested") {
         assertTurnStillActive(root, activeSessionId, turnId);
         chatStore.setWaitingForPermission(activeSessionId, true, root);
+        const permissionPrompt = linkedAbortController(observed.signal);
         const result = await awaitWithTurnCancellation({
           root,
           sessionId: activeSessionId,
           turnId,
           pending: promptPermission({
-            signal: observed.signal,
+            signal: permissionPrompt.signal,
+            sessionId: activeSessionId,
+            root,
             permissionId: event.request.permissionId,
             label: event.request.label,
             payload: event.request.payload,
           }),
         }).finally(() => {
+          // Dismiss the inline card when the turn is cancelled while waiting.
+          permissionPrompt.abort();
           chatStore.setWaitingForPermission(activeSessionId, false, root);
         });
         if (live.detached) throw new Error("Turn moved to another window");
@@ -551,18 +569,22 @@ export async function executeProviderTurn(params: {
       if (event.type === "question.requested") {
         assertTurnStillActive(root, activeSessionId, turnId);
         chatStore.setWaitingForQuestion(activeSessionId, true, root);
+        const questionPrompt = linkedAbortController(observed.signal);
         const result = await awaitWithTurnCancellation({
           root,
           sessionId: activeSessionId,
           turnId,
           pending: promptQuestion({
-            signal: observed.signal,
+            signal: questionPrompt.signal,
+            sessionId: activeSessionId,
+            root,
             questionId: event.request.questionId,
             prompt: event.request.prompt,
             choices: [...(event.request.choices ?? [])],
             payload: event.request.payload,
           }),
         }).finally(() => {
+          questionPrompt.abort();
           chatStore.setWaitingForQuestion(activeSessionId, false, root);
         });
         if (live.detached) throw new Error("Turn moved to another window");

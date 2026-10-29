@@ -19,6 +19,7 @@
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
   import { logDiagnostic } from "../services/logging";
   import { promptEntryName } from "../services/entryNamePrompt";
+  import { anchorFromEvent } from "../services/promptAnchor";
   import { promptTagDelete } from "../services/tagDeletePrompt";
   import { promptTagPush } from "../services/tagPushPrompt";
 
@@ -200,13 +201,15 @@
     }
   }
 
-  async function handleCreateTag(): Promise<void> {
+  async function handleCreateTag(event?: MouseEvent): Promise<void> {
+    const anchor = anchorFromEvent(event);
     if (!canCreate) {
       return;
     }
 
     const name = await promptEntryName({
       title: "Create tag",
+      anchor,
       defaultValue: "",
       confirmLabel: "Create",
     });
@@ -243,7 +246,8 @@
     return crypto.randomUUID();
   }
 
-  async function handlePushTag(): Promise<void> {
+  async function handlePushTag(event?: MouseEvent): Promise<void> {
+    const anchor = anchorFromEvent(event);
     const tagName = selectedTag;
     if (!tagName || !canPush) {
       return;
@@ -264,7 +268,7 @@
       return;
     }
 
-    const result = await promptTagPush({ tagName, remotes: remoteRows });
+    const result = await promptTagPush({ tagName, remotes: remoteRows, anchor });
     if (!result) {
       return;
     }
@@ -295,7 +299,8 @@
     }
   }
 
-  async function handleDeleteTag(): Promise<void> {
+  async function handleDeleteTag(event?: MouseEvent): Promise<void> {
+    const anchor = anchorFromEvent(event);
     const tagName = selectedTag;
     if (!tagName || !canDelete) {
       return;
@@ -310,7 +315,7 @@
       }
     }
 
-    const result = await promptTagDelete({ tagName, remotes: remoteRows });
+    const result = await promptTagDelete({ tagName, remotes: remoteRows, anchor });
     if (!result) {
       return;
     }

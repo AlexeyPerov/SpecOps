@@ -229,14 +229,13 @@ describe("createAppShellAgentHandlers.handleRenameSession", () => {
   });
 
   it("renames locally when a new title is confirmed", async () => {
-    entryNamePromptMock.mockResolvedValue("Renamed session");
     const notify = vi.fn();
     const handlers = createAppShellAgentHandlers({
       getCurrentWindowId: () => "main",
       notify,
     });
 
-    await handlers.handleRenameSession("agent-a");
+    await handlers.handleRenameSession("agent-a", "Renamed session");
 
     expect(chatStoreMock.renameSession).toHaveBeenCalledWith(
       "agent-a",
@@ -246,14 +245,15 @@ describe("createAppShellAgentHandlers.handleRenameSession", () => {
     expect(notify).toHaveBeenCalledWith("Session renamed.");
   });
 
-  it("does not rename when the prompt is dismissed", async () => {
-    entryNamePromptMock.mockResolvedValue(null);
+  it("does not rename to an empty or unchanged title", async () => {
+    chatStoreMock.getSessionTitle.mockReturnValue("Current");
     const handlers = createAppShellAgentHandlers({
       getCurrentWindowId: () => "main",
       notify: vi.fn(),
     });
 
-    await handlers.handleRenameSession("agent-a");
+    await handlers.handleRenameSession("agent-a", "  ");
+    await handlers.handleRenameSession("agent-a", "Current ");
 
     expect(chatStoreMock.renameSession).not.toHaveBeenCalled();
   });

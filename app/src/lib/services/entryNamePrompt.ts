@@ -1,7 +1,11 @@
+import type { PromptAnchor } from "./promptAnchor";
+
 export interface EntryNamePromptRequest {
   title: string;
   defaultValue: string;
   confirmLabel?: string;
+  /** Open as a bubble beside this rect (e.g. the button that asked). */
+  anchor?: PromptAnchor;
 }
 
 type EntryNamePromptRunner = (request: EntryNamePromptRequest) => Promise<string | null>;

@@ -98,3 +98,37 @@ it("requests viewport metadata rather than every expanded file", async () => {
   expect(host.querySelectorAll("[data-path]").length).toBeLessThan(100);
   document.body.style.overflowY = overflow;
 });
+
+describe("project tree inline rename", () => {
+  const nodes = [{ name: "notes.md", path: "/project/notes.md", kind: "file" as const }];
+
+  function keydown(input: HTMLInputElement, key: string): void {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  }
+
+  it("edits the row in place with the name selected up to its extension", async () => {
+    const onCommitRename = vi.fn(async () => true);
+    const { host } = mountComponent(ProjectTreeView, { nodes, renamingPath: "/project/notes.md", onCommitRename });
+    flushSync();
+    await Promise.resolve();
+    const input = host.querySelector<HTMLInputElement>("input")!;
+    expect(host.querySelector('[data-path="/project/notes.md"]')).toBeNull();
+    expect(input.value).toBe("notes.md");
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 5]);
+    input.value = "todo.md";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    keydown(input, "Enter");
+    await tick();
+    expect(onCommitRename).toHaveBeenCalledExactlyOnceWith("todo.md");
+  });
+
+  it("cancels on Escape without committing", async () => {
+    const onCommitRename = vi.fn(async () => true);
+    const onCancelRename = vi.fn();
+    const { host } = mountComponent(ProjectTreeView, { nodes, renamingPath: "/project/notes.md", onCommitRename, onCancelRename });
+    flushSync();
+    keydown(host.querySelector<HTMLInputElement>("input")!, "Escape");
+    expect(onCancelRename).toHaveBeenCalledOnce();
+    expect(onCommitRename).not.toHaveBeenCalled();
+  });
+});

@@ -15,6 +15,7 @@
   import type { BranchSummary } from "../git/types";
   import type { VersionControlMutationScope } from "../git/versionControlRefresh";
   import { promptEntryName } from "../services/entryNamePrompt";
+  import { anchorFromEvent } from "../services/promptAnchor";
   import { promptLocalChangesCheckout } from "../services/localChangesCheckoutPrompt";
   import type { SaveDocumentDeps } from "../services/documentSave";
   import { prepareWorkspaceForGitOperation } from "../services/preGitOperationGuard";
@@ -105,7 +106,8 @@
     }
   }
 
-  async function handleCheckout(): Promise<void> {
+  async function handleCheckout(event?: MouseEvent): Promise<void> {
+    const anchor = anchorFromEvent(event);
     if (!selectedSummary || selectedSummary.isCurrent || actionBusy) {
       return;
     }
@@ -127,7 +129,7 @@
 
       const dirty = await isWorkingTreeDirty(repoRoot);
       if (dirty) {
-        const choice = await promptLocalChangesCheckout({ branchName });
+        const choice = await promptLocalChangesCheckout({ branchName, anchor });
         if (!choice || choice.type === "cancel") {
           return;
         }
@@ -192,13 +194,15 @@
     }
   }
 
-  async function handleCreateBranch(): Promise<void> {
+  async function handleCreateBranch(event?: MouseEvent): Promise<void> {
+    const anchor = anchorFromEvent(event);
     if (actionBusy || readOnly) {
       return;
     }
 
     const name = await promptEntryName({
       title: "Create branch",
+      anchor,
       defaultValue: "",
       confirmLabel: "Create",
     });

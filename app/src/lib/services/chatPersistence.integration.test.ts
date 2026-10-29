@@ -54,9 +54,10 @@ import { buildInfo } from '../../../host/src/version';
 import { createAgentHostClient } from '../session/host/agentHostClient';
 import { bindAgentHostClientForTests } from './agentHostRuntime';
 import { executeProviderTurn } from '../ai/chatSendPipeline';
-import { registerPermissionPromptRunner } from './permissionPrompt';
+import { setPermissionPromptAutoAnswer } from './_testSessionPrompts';
+import { pendingPermissionPrompts } from './permissionPrompt';
 const nativeRuntimes: (CodexRuntimeAdapter | OpenCodeRuntimeAdapter | ClaudeRuntimeAdapter | CursorRuntimeAdapter)[] = [];
-afterEach(() => { nativeRuntimes.splice(0).forEach(adapter => adapter.close()); bindAgentHostClientForTests(null); registerPermissionPromptRunner(null); });
+afterEach(() => { nativeRuntimes.splice(0).forEach(adapter => adapter.close()); bindAgentHostClientForTests(null); setPermissionPromptAutoAnswer(null); });
 async function nativeClient(adapter: import('../session/adapter').AgentRuntimeAdapter, generation: number) {
   const registry = new AdapterRegistry(); registry.register(adapter);
   let notification: ((payload: unknown) => void) | undefined; let id = 0;
@@ -94,7 +95,7 @@ it.each(['divergent', 'corrupt'] as const)('native fixture (%s cache) passes dis
   const fresh = new CodexRuntimeAdapter(options); nativeRuntimes.push(fresh); const freshClient = await nativeClient(fresh, 2); bindAgentHostClientForTests(() => freshClient);
   chatStore.setActiveSessionId(sessionId);
   chatStore.appendMessage({ id: 'user-next', role: 'user', content: 'approval', createdAt: 't2' }, { sessionId }); chatStore.beginTurn('next', sessionId);
-  registerPermissionPromptRunner(async () => ({ reply: 'once' }));
+  setPermissionPromptAutoAnswer(async () => ({ reply: 'once' }));
   expect(await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'next' })).toMatchObject({ ok: true });
   const messages = chatStore.getMessages(sessionId); expect(messages.filter(m => m.id === 'user-first')).toHaveLength(1); expect(messages.filter(m => m.role === 'assistant' && m.nativeTurnId === 'native-turn-0')).toHaveLength(1);
   expect(messages.some(m => m.content === 'divergent cached text' || m.id === 'duplicate-old')).toBe(false);
@@ -105,9 +106,9 @@ it.each(['divergent', 'corrupt'] as const)('native fixture (%s cache) passes dis
   expect(chatStore.getSessionLink(sessionId, root)?.nativeSessionId).toBe(binding.nativeSessionId);
   const nativeHistory = await fresh.resumeSession({ native: { ...restored, nativeSessionId: restored.nativeSessionId as never }, workspaceRootPath: root }); expect(nativeHistory.history?.filter(m => m.role === 'user').map(m => m.content)).toEqual(['hello', 'approval']);
   const requests = await readFile(join(fresh.store.home(profile.id), 'fixture-requests.jsonl'), 'utf8'); expect(requests.match(/thread\/start/g)).toHaveLength(1);
-  let dismissed = false; registerPermissionPromptRunner(request => new Promise(() => { request.signal?.addEventListener('abort', () => { dismissed = true; }, { once: true }); }));
+  setPermissionPromptAutoAnswer(null); let shown = false; let dismissed = false; const stopWatching = pendingPermissionPrompts.subscribe(entries => { const count = Object.keys(entries).length; if (count) shown = true; else if (shown) dismissed = true; });
   chatStore.appendMessage({ id: 'user-child-loss', role: 'user', content: 'approval-child-failure', createdAt: 't3' }, { sessionId }); chatStore.beginTurn('lost-child', sessionId);
-  const before = Date.now(); const failure = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'lost-child' }); expect(failure.ok).toBe(false); expect(dismissed).toBe(true); expect(Date.now() - before).toBeLessThan(1500); expect(chatStore.getRuntimeState(sessionId).isGenerating).toBe(false);
+  const before = Date.now(); const failure = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'lost-child' }); expect(failure.ok).toBe(false); expect(dismissed).toBe(true); stopWatching(); expect(Date.now() - before).toBeLessThan(1500); expect(chatStore.getRuntimeState(sessionId).isGenerating).toBe(false);
   const nativePath = join(fresh.store.home(profile.id), 'fixture-history.json'); const nativeDb = JSON.parse(await readFile(nativePath, 'utf8')); delete nativeDb[binding.nativeSessionId]; await writeFile(nativePath, JSON.stringify(nativeDb)); fresh.close();
   chatStore.appendMessage({ id: 'user-missing', role: 'user', content: 'new continuation', createdAt: 't4' }, { sessionId }); chatStore.beginTurn('missing', sessionId);
   const missing = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'missing' }); expect(missing.ok).toBe(false);
@@ -193,7 +194,7 @@ it.each(["divergent", "corrupt"] as const)(
       { sessionId },
     );
     chatStore.beginTurn("next", sessionId);
-    registerPermissionPromptRunner(async () => ({ reply: "once" }));
+    setPermissionPromptAutoAnswer(async () => ({ reply: "once" }));
     expect(
       await executeProviderTurn({
         root,
@@ -448,7 +449,7 @@ it.each(['divergent', 'corrupt'] as const)('rich activity (%s cache) passes disp
   const fresh = new CodexRuntimeAdapter(options); nativeRuntimes.push(fresh); const freshClient = await nativeClient(fresh, 2); bindAgentHostClientForTests(() => freshClient);
   chatStore.setActiveSessionId(sessionId);
   chatStore.appendMessage({ id: 'user-next', role: 'user', content: 'approval', createdAt: 't2' }, { sessionId }); chatStore.beginTurn('next', sessionId);
-  registerPermissionPromptRunner(async () => ({ reply: 'once' }));
+  setPermissionPromptAutoAnswer(async () => ({ reply: 'once' }));
   expect(await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'next' })).toMatchObject({ ok: true });
   const messages = chatStore.getMessages(sessionId); expect(messages.filter(m => m.id === 'user-first')).toHaveLength(1); expect(messages.filter(m => m.role === 'assistant' && m.nativeTurnId === 'native-turn-0')).toHaveLength(1);
   expect(messages.some(m => m.content === 'divergent cached text' || m.id === 'duplicate-old')).toBe(false);
@@ -463,9 +464,9 @@ it.each(['divergent', 'corrupt'] as const)('rich activity (%s cache) passes disp
   expect(restoredParts.find(p => p.type === 'subtask' && p.category === 'agent')).toMatchObject({ status:'completed', nativeThreadId:'child', agentPath:'workers/[redacted]', output:'Result [redacted] [redacted]' });
   expect(JSON.stringify({ saved, messages })).not.toContain('opaque-mcp-canary-value');
   const requests = await readFile(join(fresh.store.home(profile.id), 'fixture-requests.jsonl'), 'utf8'); expect(requests.match(/thread\/start/g)).toHaveLength(1);
-  let dismissed = false; registerPermissionPromptRunner(request => new Promise(() => { request.signal?.addEventListener('abort', () => { dismissed = true; }, { once: true }); }));
+  setPermissionPromptAutoAnswer(null); let shown = false; let dismissed = false; const stopWatching = pendingPermissionPrompts.subscribe(entries => { const count = Object.keys(entries).length; if (count) shown = true; else if (shown) dismissed = true; });
   chatStore.appendMessage({ id: 'user-child-loss', role: 'user', content: 'approval-child-failure', createdAt: 't3' }, { sessionId }); chatStore.beginTurn('lost-child', sessionId);
-  const before = Date.now(); const failure = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'lost-child' }); expect(failure.ok).toBe(false); expect(dismissed).toBe(true); expect(Date.now() - before).toBeLessThan(1500); expect(chatStore.getRuntimeState(sessionId).isGenerating).toBe(false);
+  const before = Date.now(); const failure = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'lost-child' }); expect(failure.ok).toBe(false); expect(dismissed).toBe(true); stopWatching(); expect(Date.now() - before).toBeLessThan(1500); expect(chatStore.getRuntimeState(sessionId).isGenerating).toBe(false);
   const nativePath = join(fresh.store.home(profile.id), 'fixture-history.json'); const nativeDb = JSON.parse(await readFile(nativePath, 'utf8')); delete nativeDb[binding.nativeSessionId]; await writeFile(nativePath, JSON.stringify(nativeDb)); fresh.close();
   chatStore.appendMessage({ id: 'user-missing', role: 'user', content: 'new continuation', createdAt: 't4' }, { sessionId }); chatStore.beginTurn('missing', sessionId);
   const missing = await executeProviderTurn({ root, activeSessionId: sessionId, turnId: 'missing' }); expect(missing.ok).toBe(false);

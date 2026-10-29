@@ -1,9 +1,12 @@
+import type { PromptAnchor } from "./promptAnchor";
 import type { GitRemote } from "../git/types";
 import { resolveDefaultRemote } from "../git/gitParse";
 
 export interface TagDeletePromptRequest {
   tagName: string;
   remotes: GitRemote[];
+  /** Open as a bubble beside this rect (e.g. the button that asked). */
+  anchor?: PromptAnchor;
 }
 
 export interface TagDeletePromptResult {

@@ -92,7 +92,7 @@ describe("ConfirmDialog", () => {
     await tick();
 
     expect(document.querySelector(".dialog-shell-backdrop")).toBeNull();
-    const confirmButton = document.querySelector<HTMLButtonElement>(".confirm-popover button.btn-danger");
+    const confirmButton = document.querySelector<HTMLButtonElement>(".dialog-shell-anchored button.btn-danger");
     expect(confirmButton?.textContent?.trim()).toBe("Delete");
     confirmButton!.click();
     await expect(confirmed).resolves.toBe(true);
@@ -107,6 +107,6 @@ describe("ConfirmDialog", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await expect(escaped).resolves.toBe(false);
     await tick();
-    expect(document.querySelector(".confirm-popover")).toBeNull();
+    expect(document.querySelector(".dialog-shell-anchored")).toBeNull();
   });
 });

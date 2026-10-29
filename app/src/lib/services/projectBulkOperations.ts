@@ -5,7 +5,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { ProjectTreeNode } from "./projectTree";
 import { topLevelProjectEntries } from "./projectSelection";
 import { requestChoice } from "./choiceDialog";
-import { requestConfirm, type ConfirmAnchor } from "./confirmDialogUi";
+import { requestConfirm } from "./confirmDialogUi";
+import type { PromptAnchor } from "./promptAnchor";
 import { deleteProjectEntry } from "./projectFileOps";
 import { syncOpenDocumentsAfterRelocation } from "./relocateWorkspacePaths";
 import { relocateProjectFavorites } from "./projectFavorites";
@@ -60,7 +61,7 @@ export async function moveProjectEntries(root: string, entries: readonly Project
 }
 
 /** Shows the confirmation beside `anchor` (the rows being deleted) when given. */
-export async function deleteProjectEntries(root: string, entries: readonly ProjectTreeNode[], notify: (message: string) => void, anchor?: ConfirmAnchor): Promise<void> {
+export async function deleteProjectEntries(root: string, entries: readonly ProjectTreeNode[], notify: (message: string) => void, anchor?: PromptAnchor): Promise<void> {
   const targets = topLevelProjectEntries(entries);
   if (!targets.length || !(await requestConfirm({ ...deleteConfirmText(targets), confirmLabel: "Delete", danger: true, anchor }))) return;
   let deleted = 0;

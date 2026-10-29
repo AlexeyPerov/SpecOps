@@ -1,6 +1,6 @@
 /**
  * M2-T4 — registry-runner for the revert preview dialog, mirroring the
- * `entryNamePrompt` / `permissionPrompt` pattern. The handler awaits
+ * `entryNamePrompt` / `stashDropPrompt` pattern. The handler awaits
  * `promptRevertPreview(...)`; the dialog component (mounted once in AppShell)
  * resolves it when the user confirms or cancels.
  */

@@ -9,6 +9,7 @@
   import { emptyTaskBook, serializeTaskBook } from "../services/workspaceTasks";
   import TaskBookView from "./TaskBookView.svelte";
   import { requestConfirm } from "../services/confirmDialogUi";
+  import { anchorFromEvent, type PromptAnchor } from "../services/promptAnchor";
   let { root, documentId = null, kind, paneId, contextId, notify }: { root: string | null; documentId?: string | null; kind: WorkspaceDocumentKind; paneId: string; contextId: import("../domain/contracts").ContextId; notify: (message: string) => void } = $props();
   // Workspace documents are scoped by root; app-wide ones by their catalog id.
   const scope = $derived<DocumentScope | null>(root ?? (documentId ? { documentId } : null));
@@ -43,9 +44,9 @@
     editWorkspaceDocument(record, next);
   }
   function refresh(): void { if (record) void refreshDocument(record).catch((error) => notify(String(error))); }
-  async function resolveConflict(discard: boolean): Promise<void> {
+  async function resolveConflict(discard: boolean, anchor?: PromptAnchor): Promise<void> {
     if (!record) return;
-    if (!(await requestConfirm({ title: discard ? "Reload document" : "Replace disk contents", message: discard ? "Discard local edits and reload the file?" : "Replace the current file on disk with your local contents?", confirmLabel: discard ? "Reload" : "Replace", danger: true }))) return;
+    if (!(await requestConfirm({ title: discard ? "Reload document" : "Replace disk contents", message: discard ? "Discard local edits and reload the file?" : "Replace the current file on disk with your local contents?", confirmLabel: discard ? "Reload" : "Replace", danger: true, anchor }))) return;
     try { await reloadWorkspaceDocument(record, discard); } catch (error) { notify(String(error)); }
   }
 </script>
@@ -63,8 +64,8 @@
   </header>
   {#if recordView?.error}
     <div class="error" role="alert">{recordView.error}
-      <button class="btn btn-sm" type="button" onclick={() => { void resolveConflict(true); }}>Reload disk contents</button>
-      <button class="btn btn-sm" type="button" onclick={() => { void resolveConflict(false); }}>Keep local contents</button>
+      <button class="btn btn-sm" type="button" onclick={(event) => { void resolveConflict(true, anchorFromEvent(event)); }}>Reload disk contents</button>
+      <button class="btn btn-sm" type="button" onclick={(event) => { void resolveConflict(false, anchorFromEvent(event)); }}>Keep local contents</button>
     </div>
   {/if}
   {#if deleted}<p class="deleted" role="status">This document was deleted.</p>

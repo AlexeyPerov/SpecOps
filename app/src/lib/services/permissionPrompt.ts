@@ -1,38 +1,40 @@
 import type { PermissionReply } from "../session/events";
+import {
+  createSessionPromptQueue,
+  type SessionPromptEntry,
+  type SessionPromptTarget,
+} from "./sessionPromptQueue";
 
-export interface PermissionPromptRequest {
+export interface PermissionPromptRequest extends SessionPromptTarget {
   permissionId: string;
   label: string;
   payload: unknown;
-  signal?: AbortSignal;
 }
 
 export type PermissionPromptResult =
   | { reply: Exclude<PermissionReply, "reject"> }
   | { reply: "reject" };
 
-type PermissionPromptRunner = (request: PermissionPromptRequest) => Promise<PermissionPromptResult>;
+export type PendingPermissionPrompt = SessionPromptEntry<PermissionPromptRequest>;
 
-let runner: PermissionPromptRunner | null = null;
-const pending = new Map<string, { request: PermissionPromptRequest; deliver: () => void }>();
+/**
+ * Pending permission requests keyed by owning session. The session's chat
+ * renders the entry as an inline card and answers it through
+ * `answerPermissionPrompt`.
+ */
+export const pendingPermissionPrompts = createSessionPromptQueue<PermissionPromptRequest, PermissionPromptResult>({
+  reply: "reject",
+});
 
-export function registerPermissionPromptRunner(next: PermissionPromptRunner | null): void {
-  runner = next;
-  if (next) for (const entry of pending.values()) entry.deliver();
+/**
+ * Ask the user to approve an agent action in the requesting session's chat.
+ * Resolves with `reject` when the request is aborted or superseded by a newer
+ * request for the same session.
+ */
+export function promptPermission(request: PermissionPromptRequest): Promise<PermissionPromptResult> {
+  return pendingPermissionPrompts.request(request);
 }
 
-export function promptPermission(request: PermissionPromptRequest): Promise<PermissionPromptResult> {
-  if (!runner) {
-    return Promise.resolve({ reply: "reject" });
-  }
-  if (request.signal?.aborted) return Promise.resolve({ reply: "reject" });
-  return new Promise(resolve => {
-    let settled = false;
-    const finish = (value: PermissionPromptResult) => { if (settled) return; settled = true; pending.delete(request.permissionId); request.signal?.removeEventListener('abort', abort); resolve(value); };
-    const abort = () => finish({ reply: "reject" });
-    const deliver = () => { if (runner && !settled) void runner(request).then(finish, abort); };
-    pending.set(request.permissionId, { request, deliver });
-    request.signal?.addEventListener('abort', abort, { once: true });
-    deliver();
-  });
+export function answerPermissionPrompt(entry: Pick<PendingPermissionPrompt, "key" | "seq">, result: PermissionPromptResult): boolean {
+  return pendingPermissionPrompts.respond(entry, result);
 }

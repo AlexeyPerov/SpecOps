@@ -15,6 +15,7 @@
   } from "../services/sessionsSidebarController";
   import { DEFAULT_PANEL_WIDTH_PX } from "../services/panelLayout";
   import SessionSidebarRow from "./SessionSidebarRow.svelte";
+  import { anchorFromElement, anchorFromPoint, type PromptAnchor } from "../services/promptAnchor";
   import EmptyState from "./EmptyState.svelte";
   import AddIcon from "./icons/AddIcon.svelte";
 
@@ -29,8 +30,8 @@
     onSelectSession?: (sessionId: string) => void;
     onNewSession?: () => void;
     onDeleteSession?: (sessionId: string) => void;
-    /** Rename the session tab (local store only). */
-    onRenameSession?: (sessionId: string) => void | Promise<void>;
+    /** Apply a title edited inline in a row (local store only). */
+    onRenameSession?: (sessionId: string, title: string) => void | Promise<void>;
   }
 
   let {
@@ -50,7 +51,8 @@
   let searchQuery = $state("");
   let displayWidth = $state(DEFAULT_PANEL_WIDTH_PX);
   let isResizing = $state(false);
-  let contextMenu = $state<{ sessionId: string; x: number; y: number } | null>(null);
+  let contextMenu = $state<{ sessionId: string; x: number; y: number; anchor: PromptAnchor } | null>(null);
+  let renamingSessionId = $state<string | null>(null);
   let contextMenuEl = $state<HTMLDivElement | null>(null);
 
   const sidebarController = createSessionsSidebarController({
@@ -66,7 +68,7 @@
     onToggleCollapsed: (next) => onToggleCollapsed(next),
     onNewSession: () => onNewSession(),
     onDeleteSession: (id) => onDeleteSession(id),
-    onRenameSession: (id) => onRenameSession(id),
+    onRenameSession: (id, title) => onRenameSession(id, title),
   });
 
   $effect(() => {
@@ -91,7 +93,13 @@
     event.preventDefault();
     event.stopPropagation();
     closeContextMenu();
-    contextMenu = { sessionId, x: event.clientX, y: event.clientY };
+    const row = event.target instanceof Element ? event.target.closest(".sessions-row") : null;
+    contextMenu = {
+      sessionId,
+      x: event.clientX,
+      y: event.clientY,
+      anchor: anchorFromElement(row) ?? anchorFromPoint(event.clientX, event.clientY),
+    };
     window.addEventListener("pointerdown", onWindowPointerDown);
     window.addEventListener("keydown", onWindowKeydown);
   }
@@ -124,7 +132,7 @@
     }
     const entry = sessions.find((session) => session.id === contextMenu?.sessionId);
     const title = entry?.title ?? `this ${entrySingularLabel}`;
-    sidebarController.confirmDeleteSession(contextMenu.sessionId, title, entrySingularLabel);
+    sidebarController.confirmDeleteSession(contextMenu.sessionId, title, entrySingularLabel, contextMenu.anchor);
     closeContextMenu();
   }
 
@@ -132,9 +140,13 @@
     if (!contextMenu) {
       return;
     }
-    const sessionId = contextMenu.sessionId;
+    renamingSessionId = contextMenu.sessionId;
     closeContextMenu();
-    void sidebarController.renameSession(sessionId);
+  }
+
+  function commitRename(sessionId: string, title: string): void {
+    if (renamingSessionId === sessionId) renamingSessionId = null;
+    void sidebarController.renameSession(sessionId, title);
   }
 
 </script>
@@ -217,6 +229,9 @@
                   selected={session.id === activeSessionId}
                   onSelect={onSelectSession}
                   onContextMenu={openContextMenu}
+                  renaming={session.id === renamingSessionId}
+                  onRenameCommit={(title) => commitRename(session.id, title)}
+                  onRenameCancel={() => (renamingSessionId = null)}
                 />
               {/each}
             </section>

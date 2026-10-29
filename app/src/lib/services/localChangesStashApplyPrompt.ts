@@ -1,3 +1,5 @@
+import type { PromptAnchor } from "./promptAnchor";
+
 export type LocalChangesStashApplyChoice =
   | { type: "cancel" }
   | { type: "block" }
@@ -5,6 +7,8 @@ export type LocalChangesStashApplyChoice =
 
 export interface LocalChangesStashApplyPromptRequest {
   stashRef: string;
+  /** Open as a bubble beside this rect (e.g. the button that asked). */
+  anchor?: PromptAnchor;
 }
 
 type LocalChangesStashApplyPromptRunner = (

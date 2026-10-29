@@ -1,20 +1,63 @@
 import { afterEach, expect, it } from 'vitest';
 import { tick } from 'svelte';
-import PermissionPrompt from './PermissionPrompt.svelte';
-import QuestionPrompt from './QuestionPrompt.svelte';
+import SessionRequestCards from './SessionRequestCards.svelte';
 import SessionCatalogPicker from './SessionCatalogPicker.svelte';
 import { mountComponent } from './_testComponentMount';
-import { promptPermission, registerPermissionPromptRunner } from '../services/permissionPrompt';
-import { promptQuestion, registerQuestionPromptRunner } from '../services/questionPrompt';
-afterEach(() => { registerPermissionPromptRunner(null); registerQuestionPromptRunner(null); });
-it('pending native approval remains visible after prompt component remount, then abort closes and resolves once', async () => {
-  const first = mountComponent(PermissionPrompt, {}); await tick(); const controller = new AbortController();
-  const pending = promptPermission({ permissionId: 'native-approval', label: 'Run fixture command', payload: {}, signal: controller.signal }); await tick(); expect(document.querySelector('[role=dialog]')?.textContent).toContain('Run fixture command');
-  first.unmount(); mountComponent(PermissionPrompt, {}); await tick(); expect(document.querySelector('[role=dialog]')?.textContent).toContain('Run fixture command');
-  controller.abort(); await expect(pending).resolves.toEqual({ reply: 'reject' }); await tick(); expect(document.querySelector('[role=dialog]')).toBeNull();
+import { pendingPermissionPrompts, promptPermission } from '../services/permissionPrompt';
+import { pendingQuestionPrompts, promptQuestion } from '../services/questionPrompt';
+const ROOT = '/work/native';
+const target = { sessionId: 'session-a', root: ROOT };
+const card = (kind: 'permission' | 'question') => document.querySelector(`.${kind}-request-card`);
+afterEach(() => { pendingPermissionPrompts.rejectAll(); pendingQuestionPrompts.rejectAll(); });
+it('pending approval stays queued while its chat is closed, shows up when it opens, then abort removes it and resolves once', async () => {
+  const controller = new AbortController();
+  const pending = promptPermission({ ...target, permissionId: 'native-approval', label: 'Run fixture command', payload: {}, signal: controller.signal });
+  const first = mountComponent(SessionRequestCards, target); await tick(); expect(card('permission')?.textContent).toContain('Run fixture command');
+  first.unmount(); await tick(); expect(card('permission')).toBeNull();
+  mountComponent(SessionRequestCards, target); await tick(); expect(card('permission')?.textContent).toContain('Run fixture command');
+  expect(document.querySelector('[role=dialog]')).toBeNull();
+  controller.abort(); await expect(pending).resolves.toEqual({ reply: 'reject' }); await tick(); expect(card('permission')).toBeNull();
+});
+it('cards render only in the chat of the session that asked', async () => {
+  const pending = promptPermission({ ...target, permissionId: 'scoped', label: 'Scoped command', payload: {} });
+  mountComponent(SessionRequestCards, { sessionId: 'session-b', root: ROOT }); await tick(); expect(card('permission')).toBeNull();
+  mountComponent(SessionRequestCards, { sessionId: 'session-a', root: '/work/other' }); await tick(); expect(card('permission')).toBeNull();
+  mountComponent(SessionRequestCards, target); await tick(); expect(card('permission')?.getAttribute('data-session-id')).toBe('session-a');
+  (document.querySelector('.permission-always') as HTMLButtonElement).click();
+  await expect(pending).resolves.toEqual({ reply: 'always' }); await tick(); expect(card('permission')).toBeNull();
+});
+it('Escape inside the card denies the permission', async () => {
+  mountComponent(SessionRequestCards, target);
+  const pending = promptPermission({ ...target, permissionId: 'escape', label: 'Escape me', payload: {} }); await tick();
+  document.querySelector<HTMLButtonElement>('.permission-once')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await expect(pending).resolves.toEqual({ reply: 'reject' });
+});
+it('a newer request for the same session replaces the card', async () => {
+  mountComponent(SessionRequestCards, target);
+  const first = promptPermission({ ...target, permissionId: 'first', label: 'First command', payload: {} }); await tick();
+  const second = promptPermission({ ...target, permissionId: 'second', label: 'Second command', payload: {} }); await tick();
+  await expect(first).resolves.toEqual({ reply: 'reject' });
+  expect(document.querySelectorAll('.permission-request-card')).toHaveLength(1); expect(card('permission')?.textContent).toContain('Second command');
+  (document.querySelector('.permission-once') as HTMLButtonElement).click(); await expect(second).resolves.toEqual({ reply: 'once' });
 });
 it('question input appears and native interruption dismisses without leaving an unanswered UI promise', async () => {
-  mountComponent(QuestionPrompt, {}); await tick(); const controller = new AbortController(); const pending = promptQuestion({ questionId: 'native-question', prompt: 'Which?', choices: ['One'], payload: {}, signal: controller.signal }); await tick(); expect(document.querySelector('[role=dialog]')?.textContent).toContain('Which?'); controller.abort(); await expect(pending).resolves.toEqual({ type: 'reject' }); await tick(); expect(document.querySelector('[role=dialog]')).toBeNull();
+  mountComponent(SessionRequestCards, target); const controller = new AbortController(); const pending = promptQuestion({ ...target, questionId: 'native-question', prompt: 'Which?', choices: ['One'], payload: {}, signal: controller.signal }); await tick(); expect(card('question')?.textContent).toContain('Which?'); controller.abort(); await expect(pending).resolves.toEqual({ type: 'reject' }); await tick(); expect(card('question')).toBeNull();
+});
+it('question card: Escape cancels, Enter on a choice submits, Cmd/Ctrl+Enter submits the free-text answer', async () => {
+  mountComponent(SessionRequestCards, target);
+  const cancelled = promptQuestion({ ...target, questionId: 'esc', prompt: 'Cancel?', choices: ['A'], payload: {} }); await tick();
+  document.querySelector('input')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await expect(cancelled).resolves.toEqual({ type: 'reject' });
+  const chosen = promptQuestion({ ...target, questionId: 'enter', prompt: 'Pick', choices: ['A', 'B'], payload: { multiSelect: false } }); await tick();
+  const radio = document.querySelectorAll<HTMLInputElement>('input[type=radio]')[1]; radio.click(); await tick();
+  radio.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await expect(chosen).resolves.toEqual({ type: 'reply', answers: [['B']] });
+  const typed = promptQuestion({ ...target, questionId: 'typed', prompt: 'Explain', choices: [], payload: {} }); await tick();
+  const textarea = document.querySelector('textarea')!; textarea.value = 'Line'; textarea.dispatchEvent(new Event('input', { bubbles: true })); await tick();
+  textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await tick();
+  expect(card('question')).not.toBeNull();
+  textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+  await expect(typed).resolves.toEqual({ type: 'reply', answers: [['Line']] });
 });
 it('optional session controls render without vendor UI branches and absence hides unsupported fields', async () => {
   const props = { runtimeId: 'fake', runtimeLabel: 'Fixture', catalog: { status: 'ready' as const, models: [{ id: 'model' }], modes: [{ id: 'default' }] }, activeModelId: 'model', activeModeId: 'default' };
@@ -35,21 +78,21 @@ it('model-specific default effort is shown with no persisted setting', async () 
 });
 
 it('hides unsupported persistent approval and shows native operation scope', async () => {
-  mountComponent(PermissionPrompt, {}); await tick();
-  const pending = promptPermission({permissionId:'limited', label:'Write fixture', payload:{allowAlways:false,input:{file_path:'fixture-file'}}});
+  mountComponent(SessionRequestCards, target); await tick();
+  const pending = promptPermission({...target,permissionId:'limited', label:'Write fixture', payload:{allowAlways:false,input:{file_path:'fixture-file'}}});
   await tick(); expect(document.querySelector('.permission-always')).toBeNull(); expect(document.body.textContent).toContain('fixture-file');
   (document.querySelector('.permission-once') as HTMLButtonElement).click();
   await expect(pending).resolves.toEqual({reply:'once'});
 });
 it('native single and multiple selections return labels and other answers without losing format', async () => {
-  mountComponent(QuestionPrompt, {}); await tick();
-  const single = promptQuestion({questionId:'single',prompt:'Choose',choices:['A','B'],payload:{multiSelect:false,allowFreeText:true}}); await tick();
+  mountComponent(SessionRequestCards, target); await tick();
+  const single = promptQuestion({...target,questionId:'single',prompt:'Choose',choices:['A','B'],payload:{multiSelect:false,allowFreeText:true}}); await tick();
   const radios = [...document.querySelectorAll<HTMLInputElement>('input[type=radio]')]; radios[0].click(); radios[1].click(); await tick();
   (document.querySelector('.question-submit') as HTMLButtonElement).click(); await expect(single).resolves.toEqual({type:'reply',answers:[['B']]});
-  const multi = promptQuestion({questionId:'multi',prompt:'Choose several',choices:['A','B'],payload:{multiSelect:true,allowFreeText:true}}); await tick();
+  const multi = promptQuestion({...target,questionId:'multi',prompt:'Choose several',choices:['A','B'],payload:{multiSelect:true,allowFreeText:true}}); await tick();
   const checks = [...document.querySelectorAll<HTMLInputElement>('input[type=checkbox]')]; checks[0].click(); checks[1].click(); await tick();
   (document.querySelector('.question-submit') as HTMLButtonElement).click(); await expect(multi).resolves.toEqual({type:'reply',answers:[['A','B']]});
-  const other = promptQuestion({questionId:'other',prompt:'Choose or explain',choices:['A'],payload:{multiSelect:false,allowFreeText:true}}); await tick();
+  const other = promptQuestion({...target,questionId:'other',prompt:'Choose or explain',choices:['A'],payload:{multiSelect:false,allowFreeText:true}}); await tick();
   const textarea = document.querySelector('textarea')!; textarea.value='Custom'; textarea.dispatchEvent(new Event('input',{bubbles:true})); await tick();
   (document.querySelector('.question-submit') as HTMLButtonElement).click(); await expect(other).resolves.toEqual({type:'reply',answers:[['Custom']]});
 });

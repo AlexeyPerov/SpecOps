@@ -60,7 +60,9 @@
   import DialogShell from "./DialogShell.svelte";
   import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import { openSettingsDialog } from "../services/settingsDialogUi";
-  import { confirm, message } from "@tauri-apps/plugin-dialog";
+  import { message } from "@tauri-apps/plugin-dialog";
+  import { requestConfirm } from "../services/confirmDialogUi";
+  import { anchorFromEvent } from "../services/promptAnchor";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import GitWorkspaceSplit from "./GitWorkspaceSplit.svelte";
   import GitCommitDetailPanel from "./GitCommitDetailPanel.svelte";
@@ -926,20 +928,18 @@
     await openUrl(installHint.installUrl);
   }
 
-  async function handleInitRepository(): Promise<void> {
+  async function handleInitRepository(event?: MouseEvent): Promise<void> {
+    const anchor = anchorFromEvent(event);
     if (!workspaceRootPath || initBusy || probeStatus !== "notARepository") {
       return;
     }
 
-    const confirmed = await confirm(
-      `Initialize a new git repository at "${workspaceName}"? This creates a .git folder at the workspace root.`,
-      {
-        title: "Init repository",
-        okLabel: "Init repository",
-        cancelLabel: "Cancel",
-        kind: "warning",
-      },
-    );
+    const confirmed = await requestConfirm({
+      title: "Init repository",
+      message: `Initialize a new git repository at "${workspaceName}"? This creates a .git folder at the workspace root.`,
+      confirmLabel: "Init repository",
+      anchor,
+    });
     if (!confirmed) {
       return;
     }

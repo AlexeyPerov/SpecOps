@@ -4,6 +4,7 @@ import {
   activePane,
   createFileTab,
   createSinglePaneLayout,
+  createViewTab,
   getSessionSelectedTabId,
   getSessionTabs,
 } from "../domain/contracts";
@@ -256,6 +257,31 @@ describe("sanitizeWindowSnapshot — split-view persistence (Phase 7)", () => {
     expect(restored.panes[0].tabs.map((t) => t.id)).toEqual(["tab-a"]);
     expect(restored.panes[1].tabs.map((t) => t.id)).toEqual(["tab-b"]);
     expect(restored.activePaneId).toBe("pane-1");
+  });
+
+  it("restores Tasks/Notes view tabs but drops ephemeral ones", async () => {
+    sessionMock.diskFiles.set("/tmp/a.txt", "x");
+    const snapshot = windowSnapshot({
+      tabGroups: [{ id: "tabs-default", name: "Tabs", snapshot: {
+        documents: [doc("doc-a", "/tmp/a.txt")],
+        session: {
+          editorLayout: createSinglePaneLayout([
+            createFileTab("tab-a", "doc-a"),
+            createViewTab("tab-tasks", "workspace-tasks"),
+            createViewTab("tab-settings", "settings"),
+            createViewTab("tab-notes", "workspace-notes", false, undefined, "gdoc-1"),
+          ], "tab-notes"),
+          lastActiveWindowId: "win-a",
+          windowBounds: null,
+        },
+      } }],
+    });
+
+    const sanitized = await sessionManager.sanitizeWindowSnapshot(snapshot);
+    const session = sanitized.tabGroups[0].snapshot.session;
+    expect(getSessionTabs(session).map((t) => t.id)).toEqual(["tab-a", "tab-tasks", "tab-notes"]);
+    expect(getSessionTabs(session)[2]).toMatchObject({ view: "workspace-notes", globalDocumentId: "gdoc-1" });
+    expect(getSessionSelectedTabId(session)).toBe("tab-notes");
   });
 
   it("prunes per-pane tabs whose document is missing from the snapshot (per-pane)", async () => {

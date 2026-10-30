@@ -1,5 +1,5 @@
 import type { ContextSnapshot, DocumentState, WindowSessionSnapshot } from "../domain/contracts";
-import { isViewTab, removeMatchingTabsFromAllPanes } from "../domain/contracts";
+import { isEphemeralViewTab, removeMatchingTabsFromAllPanes } from "../domain/contracts";
 import { isImageFilePath } from "./fileContentKind";
 import { statDiskFingerprint } from "./diskFingerprint";
 import { shouldGateFileOpenBySize } from "./largeFileOpen";
@@ -59,13 +59,13 @@ export function documentForSessionPersistence(doc: DocumentState): DocumentState
 
 /**
  * Drop ephemeral view tabs (Settings/Themes) from a context before it is
- * serialized to session.json. View tabs are session-only affordances — they
- * must never reopen after a restart. Strips them from **every** pane (a view
+ * serialized to session.json. Those are session-only affordances — they must
+ * never reopen after a restart; Tasks/Notes tabs are kept like file tabs. Strips them from **every** pane (a view
  * tab may live in a non-active pane in a split layout); each affected pane's
  * `selectedTabId` falls back to its first remaining tab (or null when emptied).
  */
 function stripViewTabs(context: ContextSnapshot): ContextSnapshot {
-  const stripped = removeMatchingTabsFromAllPanes(context.session.editorLayout, isViewTab);
+  const stripped = removeMatchingTabsFromAllPanes(context.session.editorLayout, isEphemeralViewTab);
   if (stripped === context.session.editorLayout) {
     return context;
   }

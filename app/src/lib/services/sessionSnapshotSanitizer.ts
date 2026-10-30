@@ -12,9 +12,9 @@ import {
   allTabs,
   createFileTab,
   DEFAULT_TAB_GROUP_ID,
+  isEphemeralViewTab,
   isFileTab,
   isSessionTab,
-  isViewTab,
   layoutFromFlatTabs,
   nextPaneId,
   tryNormalizeTabState,
@@ -119,13 +119,14 @@ async function sanitizeContext(
 
   // File tabs whose document has gone missing on disk are kept (and flagged
   // `fileMissing`), but file tabs whose document isn't in the snapshot at all
-  // are pruned. View tabs (Settings/Themes) are ephemeral and never restored.
+  // are pruned. Ephemeral view tabs (Settings/Themes) are never restored;
+  // Tasks/Notes tabs are.
   const retainTab = (tab: TabState): boolean => {
-    if (isSessionTab(tab)) {
-      return true;
-    }
-    if (isViewTab(tab)) {
+    if (isEphemeralViewTab(tab)) {
       return false;
+    }
+    if (isSessionTab(tab) || tab.kind === "view") {
+      return true;
     }
     return isFileTab(tab) && documentsById.has(tab.documentId);
   };
@@ -183,11 +184,11 @@ async function sanitizeContext(
     if (!tab) {
       continue;
     }
-    if (isSessionTab(tab)) {
-      openTabs.push(tab);
+    if (isEphemeralViewTab(tab)) {
       continue;
     }
-    if (isViewTab(tab)) {
+    if (isSessionTab(tab) || tab.kind === "view") {
+      openTabs.push(tab);
       continue;
     }
     const linkedDocument = documentsById.get(tab.documentId);

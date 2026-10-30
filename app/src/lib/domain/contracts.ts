@@ -13,6 +13,7 @@ export {
   createFileTab,
   createSessionTab,
   createViewTab,
+  isEphemeralViewTab,
   isFileTab,
   isSessionTab,
   isViewTab,

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-30 16:18 MSK — Tasks and Notes tabs survive restarts
+
+- Tasks/Notes tabs (workspace and app-wide documents) were dropped from session.json and skipped on restore together with Settings/Themes and other view tabs, so they never reopened after relaunching the app. They are now saved and restored like file tabs, including pane placement and selection; Settings, Themes, Workspace Settings, Workspace Manager and Version Control tabs stay session-only. Switching between workspaces already kept them open.
+- Validation: Svelte/type checks report no errors or warnings; full Vitest suite passes (344 files), including new save and restore tests for Tasks/Notes tabs. The desktop application was not rebuilt or relaunched to check this on screen.
+
 ## 2026-10-30 07:59 MSK — Release 0.4.4
 
 - Bumped application version from 0.4.3 to 0.4.4.

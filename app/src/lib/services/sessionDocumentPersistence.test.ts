@@ -179,6 +179,34 @@ describe("stripWindowSnapshotForSession", () => {
     // Selection fell back to the remaining file tab.
     expect(getSessionSelectedTabId(stripped.tabGroups[0].snapshot.session)).toBe("tab-file");
   });
+
+  it("keeps Tasks and Notes view tabs and their selection", () => {
+    const stripped = stripWindowSnapshotForSession({
+      activeContextId: "ws-1",
+      tabGroups: [],
+      workspaces: [{ id: "ws-1", rootPath: "/tmp/project", snapshot: {
+        documents: [baseDocument()],
+        session: {
+          editorLayout: createSinglePaneLayout(
+            [
+              createFileTab("tab-file", "doc-1"),
+              createViewTab("tab-tasks", "workspace-tasks"),
+              createViewTab("tab-notes", "workspace-notes", false, undefined, "gdoc-1"),
+              createViewTab("tab-settings", "settings"),
+            ],
+            "tab-notes",
+          ),
+          lastActiveWindowId: "main",
+          windowBounds: null,
+        },
+      } }],
+      editorPreferences: { zoomPercent: 100, wrapLines: true },
+    });
+
+    const session = stripped.workspaces[0].snapshot.session;
+    expect(getSessionTabs(session).map((tab) => tab.id)).toEqual(["tab-file", "tab-tasks", "tab-notes"]);
+    expect(getSessionSelectedTabId(session)).toBe("tab-notes");
+  });
 });
 
 describe("refreshDocumentFromDiskIfNeeded", () => {

@@ -134,6 +134,14 @@ export function isViewTab(tab: TabState): tab is ViewTabState {
   return tab.kind === "view";
 }
 
+/**
+ * Tasks/Notes tabs show persisted documents, so they survive restarts like file
+ * tabs; every other view tab (Settings, Themes, …) is session-only.
+ */
+export function isEphemeralViewTab(tab: TabState): boolean {
+  return isViewTab(tab) && tab.view !== "workspace-tasks" && tab.view !== "workspace-notes";
+}
+
 export function createFileTab(
   id: string,
   documentId: string,

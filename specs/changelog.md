@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-30 07:59 MSK — Release 0.4.4
+
+- Bumped application version from 0.4.3 to 0.4.4.
+
 ## 2026-10-29 19:59 MSK — Image previews pick up files changed on disk
 
 - An image tab kept showing the first version of the file it opened: external-change checks skipped image tabs, so their disk fingerprint never moved, and the preview always loaded the same asset URL, which the webview answered from its cache — even after closing and reopening the tab.

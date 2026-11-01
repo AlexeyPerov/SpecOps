@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-01 12:20 MSK — Release 0.4.5
+
+- Bumped application version from 0.4.4 to 0.4.5.
+
 ## 2026-11-01 12:19 MSK — Stop cross-window file routing loops
 
 - Scope addressed file activation, owner-tab selection, tab/workspace transfers, quit preparation, Finder deliveries and window-destroyed listeners to their destination window. Application-wide listeners also received events sent to another window, allowing file ownership redirects to loop, repeatedly steal focus and flood persistence/menu work while a window close waited to flush.

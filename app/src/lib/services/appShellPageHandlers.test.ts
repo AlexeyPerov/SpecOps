@@ -141,6 +141,7 @@ describe("setupAppShellMount", () => {
     expect(handler).toBeTypeOf('function');
     await handler!({ payload: { initiatorWindowId: 'main' } } as never);
     expect(deps.confirmWindowClose).toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledWith(WINDOW_EVENT_PREPARE_QUIT, expect.any(Function), { target: 'window-saved' });
     expect(remove).not.toHaveBeenCalled();
     expect(emitTo).toHaveBeenCalledWith('window-saved', WINDOW_EVENT_PREPARE_QUIT_ACK, { windowId: 'window-saved', mayQuit: true });
     unmount();
@@ -155,6 +156,7 @@ describe("setupAppShellMount", () => {
     window.dispatchEvent(new Event('pagehide'));
     expect(flush).not.toHaveBeenCalled();
     unmount();
+    expect(flush).not.toHaveBeenCalled();
   });
 
   it("cleans up runtime when unmount races the async start", async () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-01 12:19 MSK — Stop cross-window file routing loops
+
+- Scope addressed file activation, owner-tab selection, tab/workspace transfers, quit preparation, Finder deliveries and window-destroyed listeners to their destination window. Application-wide listeners also received events sent to another window, allowing file ownership redirects to loop, repeatedly steal focus and flood persistence/menu work while a window close waited to flush.
+- Handle Dock commands once in the main window, and skip the unmount persistence backstop after a confirmed close so a removed secondary-window session is not recreated.
+- Add two-window routing regressions for owner selection without redirect loops, destination-only opens, listener cleanup and missing-tab recovery; extend close tests for scoped quit preparation and no session rewrite after teardown.
+- Validation: all 345 frontend test files / 3442 tests pass; Svelte/type checks report zero errors and warnings; production frontend build passes. Reproduced the unresponsive empty-window close in the installed app before the change. The installed native app was not rebuilt or replaced; native close/focus behavior with this change has not been checked on screen.
+
 ## 2026-10-30 16:18 MSK — Tasks and Notes tabs survive restarts
 
 - Tasks/Notes tabs (workspace and app-wide documents) were dropped from session.json and skipped on restore together with Settings/Themes and other view tabs, so they never reopened after relaunching the app. They are now saved and restored like file tabs, including pane placement and selection; Settings, Themes, Workspace Settings, Workspace Manager and Version Control tabs stay session-only. Switching between workspaces already kept them open.

@@ -206,6 +206,6 @@ export async function listenWorkspaceWindowTransfers(): Promise<() => void> {
     } catch (caught) { error = String(caught); }
     if (finishCommit) { outcomes.set(request.source, { root: request.root!, error }); finishCommit(); }
     await emitTo(request.source, REPLY, { id: request.id, windowId, info, error });
-  });
+  }, { target: windowId });
   return () => { release(); for (const pending of prepared.values()) { clearTimeout(pending.timer); pending.observers.forEach(observer => observer.dispose()); } };
 }

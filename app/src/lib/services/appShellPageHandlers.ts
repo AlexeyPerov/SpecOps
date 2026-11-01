@@ -574,7 +574,7 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
       // If the ack itself can't be delivered the initiator will time out and
       // abort; better than silently proceeding past a possibly-cancelled quit.
     }
-  }).then((unlisten) => {
+  }, { target: deps.getCurrentWebviewWindowLabel() }).then((unlisten) => {
     if (disposed) {
       unlisten();
       return;
@@ -599,6 +599,6 @@ export function setupAppShellMount(deps: AppShellMountDeps): () => void {
     unlistenCloseRequested = null;
     unlistenPrepareQuit?.();
     unlistenPrepareQuit = null;
-    void deps.flushSessionBeforeUnload();
+    if (!closeConfirmed) void deps.flushSessionBeforeUnload();
   };
 }

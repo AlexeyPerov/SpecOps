@@ -24,8 +24,6 @@ import { queueOpenRecentPath } from "./appMenu";
 import { refreshDockMenu } from "./dockMenu";
 import { getErrorMessage } from "../commands/commandErrors";
 import {
-  WINDOW_EVENT_ACTIVATE_FILE,
-  WINDOW_EVENT_SELECT_TAB_FOR_PATH,
   WINDOW_EVENT_MERGE_TAB,
   WINDOW_EVENT_MERGE_TAB_ACK,
   WINDOW_EVENT_TRANSFER_TAB,
@@ -70,7 +68,7 @@ import {
   FILE_WATCHER_ERROR_EVENT,
   type FileWatcherEventKind,
 } from "./fileWatcher";
-import { selectTabForNormalizedPath } from "./openFileGate";
+import { listenForWindowFileCommands } from "./windowFileCommands";
 import { normalizePathSync } from "./diskFingerprint";
 import { ensureWorkspaceReadAccess } from "./fileSystem";
 import { readConsoleHeightPreference } from "./consoleTabPrefs";
@@ -302,6 +300,7 @@ async function startAppShellRuntimeInner(
           await initializeDocumentDiskState(documentId, event.payload.filePath);
         }
       },
+      { target: windowId },
     ),
   );
   cleanupCallbacks.push(
@@ -336,21 +335,21 @@ async function startAppShellRuntimeInner(
           // Source will time out and keep the tab.
         }
       }
-    }),
+    }, { target: windowId }),
   );
   cleanupCallbacks.push(
     await listen(DOCK_NEW_WINDOW_EVENT, () => {
-      options.runCommand("app.newWindow");
+      if (windowId === MAIN_WINDOW_ID) options.runCommand("app.newWindow");
     }),
   );
   cleanupCallbacks.push(
     await listen<{ path: string }>(DOCK_OPEN_RECENT_EVENT, (event) => {
-      queueOpenRecentPath(event.payload.path);
+      if (windowId === MAIN_WINDOW_ID) queueOpenRecentPath(event.payload.path);
     }),
   );
   cleanupCallbacks.push(
     await listen(DOCK_CLEAR_RECENT_EVENT, () => {
-      options.runCommand("file.clearRecentFiles");
+      if (windowId === MAIN_WINDOW_ID) options.runCommand("file.clearRecentFiles");
     }),
   );
   await logPerfTiming("register window listeners", {
@@ -617,43 +616,17 @@ async function startAppShellRuntimeInner(
   });
   cleanupCallbacks.push(unlistenRecentFiles);
 
-  const unlistenActivate = await listen<{ path: string }>(WINDOW_EVENT_ACTIVATE_FILE, async (event) => {
-    try {
-      await options.openAndActivatePath(event.payload.path);
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      options.notify(`Failed to open routed file: ${message}`);
-    }
-  });
-  cleanupCallbacks.push(unlistenActivate);
+  cleanupCallbacks.push(await listenForWindowFileCommands(windowId, options));
 
   const unlistenOpenedPaths = await listen<{ paths: string[] }>(APP_EVENT_OPENED_PATHS, async (event) => {
     await options.consumeOpenedPaths(event.payload.paths);
-  });
+  }, { target: windowId });
   cleanupCallbacks.push(unlistenOpenedPaths);
 
   const initialOpenedPaths = await invoke<string[]>("take_pending_opened_paths");
   if (initialOpenedPaths.length > 0) {
     await options.consumeOpenedPaths(initialOpenedPaths);
   }
-
-  const unlistenSelectTab = await listen<{ path: string }>(
-    WINDOW_EVENT_SELECT_TAB_FOR_PATH,
-    async (event) => {
-      if (selectTabForNormalizedPath(event.payload.path)) {
-        return;
-      }
-      // Registry desync: this window owns the claim but no longer has the tab
-      // (e.g. it was closed without releasing). Open the file here instead of
-      // letting the routed open vanish without any feedback.
-      try {
-        await options.openAndActivatePath(event.payload.path);
-      } catch (error: unknown) {
-        options.notify(`Failed to open routed file: ${getErrorMessage(error)}`);
-      }
-    },
-  );
-  cleanupCallbacks.push(unlistenSelectTab);
 
   const unlistenDestroyed = await listen(TauriEvent.WINDOW_DESTROYED, async (event) => {
     const destroyedWindowId = typeof event.payload === "string" ? event.payload : windowId;
@@ -667,7 +640,7 @@ async function startAppShellRuntimeInner(
       message: "window destroyed",
       metadata: { windowId },
     });
-  });
+  }, { target: windowId });
   cleanupCallbacks.push(unlistenDestroyed);
 
   const unlistenWindowResized = await currentWindow.onResized(() => {

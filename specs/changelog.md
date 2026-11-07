@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-07 23:34 MSK — Keep the last project-tree rows clickable
+
+- Prevent the project tree from shrinking inside the scrollable panel. Its trailing rows could overflow into the empty creation area, which intercepted right-clicks and stopped their context menus from opening.
+- Validation: reproduced the overlapping hit target in a browser fixture using the tree component and panel styles; after the fix, real right-clicks reach the last file in both 8-row and 250-row (virtualized) trees with no overlap. All 16 panel/tree component tests pass; Svelte/type checks report zero errors and warnings. The installed desktop app was not rebuilt.
+
 ## 2026-11-01 12:20 MSK — Release 0.4.5
 
 - Bumped application version from 0.4.4 to 0.4.5.

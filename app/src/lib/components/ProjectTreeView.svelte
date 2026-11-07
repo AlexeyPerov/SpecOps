@@ -735,6 +735,9 @@
 
   .project-tree-row-selected { background: var(--color-hover); outline: 1px solid var(--color-border-subtle); outline-offset: -1px; }
   .project-tree-view {
+    /* Keep trailing rows inside the tree's box so the panel's empty area
+       cannot overlap them and intercept pointer events. */
+    flex-shrink: 0;
     min-height: 0;
     padding: var(--project-tree-padding);
   }

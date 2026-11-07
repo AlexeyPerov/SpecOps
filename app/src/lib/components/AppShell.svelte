@@ -219,6 +219,7 @@
 
   /** Props driving the Find-in-Project bottom panel (console-style local state). */
   export interface AppShellProjectSearchProps {
+    workspaceRoot?: string | null;
     open: boolean;
     heightPx: number;
     focusNonce: number;
@@ -728,6 +729,7 @@
   <div class="bottom-panel">
     {#if projectSearch?.open}
       <ProjectSearchPanel
+        workspaceRoot={projectSearch.workspaceRoot}
         heightPx={projectSearch.heightPx}
         onHeightCommit={projectSearch.onHeightCommit}
         onHeightChange={projectSearch.onHeightChange}

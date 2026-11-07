@@ -177,10 +177,9 @@ describe("createOverlayHostHandlers.runProjectSearch", () => {
     );
     await handlers.runProjectSearch(QUERY);
     expect(searchInProjectMock).not.toHaveBeenCalled();
-    // Only the initial `true` — the run returns before try/finally, leaving
-    // the running flag to whoever owns the newer generation.
-    expect(setProjectSearchRunning.mock.calls).toEqual([[true]]);
-    expect(setProjectSearchResults).not.toHaveBeenCalled();
+    // Clear the old results, but leave the newer generation in control.
+    expect(setProjectSearchRunning.mock.calls).toEqual([[false], [true]]);
+    expect(setProjectSearchResults.mock.calls).toEqual([[[]]]);
   });
 
   it("reports scanned/unreadable counts when the search finds nothing", async () => {
@@ -338,4 +337,59 @@ describe("createOverlayHostHandlers.replaceAllInProjectWithResults", () => {
     const { replaceInProjectFile } = await import("../../services/projectFileOps");
     expect(vi.mocked(replaceInProjectFile)).not.toHaveBeenCalled();
   });
+});
+
+
+describe("search failure recovery", () => {
+  const query = { text: "foo", replacement: "", caseSensitive: false, wholeWord: false, regex: false };
+  it("clears running when preparing the catalog throws", async () => {
+    const deps = makeDeps({ getWorkspaceFileCatalogRegistry: () => { throw new Error("catalog unavailable"); } });
+    await createOverlayHostHandlers(deps).runProjectSearch(query);
+    expect(deps.setProjectSearchStatus).toHaveBeenLastCalledWith("Search failed: catalog unavailable");
+    expect(deps.setProjectSearchRunning).toHaveBeenLastCalledWith(false);
+  });
+  it("times out a stuck catalog and allows retry", async () => {
+    vi.useFakeTimers();
+    try {
+      const deps = makeDeps({ getWorkspaceFileCatalogRegistry: () => ({
+        getActive: () => null, ensureReady: () => {}, waitForReady: () => new Promise(() => {}),
+      }) as never });
+      const pending = createOverlayHostHandlers(deps).runProjectSearch(query);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await pending;
+      expect(deps.setProjectSearchStatus).toHaveBeenLastCalledWith(expect.stringContaining("timed out"));
+      expect(deps.setProjectSearchRunning).toHaveBeenLastCalledWith(false);
+    } finally { vi.useRealTimers(); }
+  });
+  it("rejects expressions that are invalid in Unicode mode", () => {
+    expect(computeProjectSearchQueryError("\\q", true)).not.toBe("");
+  });
+  it("does not publish progress from a cancelled scan", async () => {
+    let generation = 0;
+    const deps = makeDeps({ bumpProjectSearchGeneration: () => ++generation, getProjectSearchGeneration: () => generation });
+    vi.mocked(searchInProject).mockImplementationOnce(async (_root, _query, options) => {
+      generation++;
+      vi.mocked(deps.setProjectSearchStatus).mockClear();
+      for (let i = 0; i < 250; i++) expect(options?.onProgress?.("a")).toBe(false);
+      return { ok: true, results: [], scannedFiles: 0, unreadableFiles: 0 };
+    });
+    await createOverlayHostHandlers(deps).runProjectSearch(query);
+    expect(deps.setProjectSearchStatus).not.toHaveBeenCalled();
+  });
+});
+
+it("does not replace after the workspace changes during confirmation", async () => {
+  const { requestConfirm } = await import("../../services/confirmDialogUi");
+  const { replaceInProjectFile } = await import("../../services/projectFileOps");
+  vi.mocked(replaceInProjectFile).mockClear();
+  let root = "/ws";
+  vi.mocked(requestConfirm).mockImplementationOnce(async () => { root = "/other"; return true; });
+  const deps = makeDeps({ getActiveWorkspaceRoot: () => root });
+  await createOverlayHostHandlers(deps).replaceAllInProjectWithResults(
+    { text: "foo", replacement: "bar", caseSensitive: false, wholeWord: false, regex: false },
+    [{ path: "/ws/a.ts", matches: [{ from: 0, to: 3, length: 3, line: 1, column: 1, lineText: "foo" }] }],
+    async () => {},
+  );
+  expect(replaceInProjectFile).not.toHaveBeenCalled();
+  expect(deps.setProjectSearchRunning).not.toHaveBeenCalled();
 });

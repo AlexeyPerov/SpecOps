@@ -561,6 +561,7 @@
   compactNotepad={currentWindowId !== "main" && isTabGroupId(activeContextId)}
   onConsoleHeightCommit={layoutHandlers.persistConsoleHeightNow}
   projectSearch={{
+    workspaceRoot: activeWorkspaceRoot,
     open: psPanel.open,
     heightPx: psPanel.heightPx,
     focusNonce: psPanel.focusNonce,

@@ -61,6 +61,18 @@ export const MAX_SEARCH_TOTAL_MATCHES = 10_000;
  */
 const PROJECT_SEARCH_CONCURRENCY = 12;
 
+/** A disconnected filesystem must not leave all scan workers waiting forever. */
+async function withFileTimeout<T>(operation: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([operation, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("File read timed out")), 10_000);
+    })]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** A single match inside a file. */
 export interface ProjectSearchMatch {
   /** 1-based line number. */
@@ -87,6 +99,7 @@ export interface ProjectSearchResult {
 export interface SearchInProjectOptions {
   /** Invoked once per file as it is scanned; return false to abort early. */
   onProgress?: (path: string) => boolean;
+  isCancelled?: () => boolean;
   /**
    * Precomputed openable-file list (e.g. workspace catalog snapshot).
    * When provided, skips a duplicate workspace walk.
@@ -121,6 +134,7 @@ export type ProjectSearchOutcome =
 export function computeFileMatches(
   content: string,
   query: SearchQuery,
+  limit = MAX_SEARCH_TOTAL_MATCHES,
 ): ProjectSearchMatch[] {
   if (!query.text) {
     return [];
@@ -132,7 +146,7 @@ export function computeFileMatches(
   // One split → Text tree; RegExpCursor + lineAt reuse that structure (no second
   // full-document char scan for line starts/ends).
   const text = Text.of(content.split("\n"));
-  const offsets = findAllRangesInText(text, query);
+  const offsets = findAllRangesInText(text, query, undefined, limit);
   if (offsets.length === 0) {
     return [];
   }
@@ -196,7 +210,7 @@ export async function searchInProject(
   let skippedUnreadable = 0;
 
   await mapWithConcurrency(files, PROJECT_SEARCH_CONCURRENCY, async (path) => {
-    if (aborted) {
+    if (aborted || options.isCancelled?.()) {
       return;
     }
     if (options.onProgress?.(path) === false) {
@@ -209,7 +223,11 @@ export async function searchInProject(
       return;
     }
     try {
-      const info = await stat(path);
+      const info = await withFileTimeout(stat(path));
+      if (!info.isFile) {
+        skippedUnreadable += 1;
+        return;
+      }
       if (Number(info.size) > MAX_SEARCH_FILE_BYTES) {
         skippedLarge += 1;
         return;
@@ -218,21 +236,27 @@ export async function searchInProject(
       skippedUnreadable += 1;
       return;
     }
-    if (aborted) {
+    if (aborted || options.isCancelled?.()) {
       return;
     }
     let content: string;
     try {
-      content = await readTextFile(path);
+      content = await withFileTimeout(readTextFile(path));
     } catch {
       skippedUnreadable += 1;
       return;
     }
-    if (aborted) {
+    if (aborted || options.isCancelled?.()) {
+      return;
+    }
+    // Match the editor's LF/BOM normalization and avoid binary previews.
+    if (content.includes("\0")) {
+      skippedUnreadable += 1;
       return;
     }
     scannedFiles += 1;
-    const matches = computeFileMatches(content, query);
+    content = content.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+    const matches = computeFileMatches(content, query, MAX_SEARCH_TOTAL_MATCHES - totalMatches);
     if (matches.length === 0) {
       return;
     }

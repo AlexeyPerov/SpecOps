@@ -447,12 +447,12 @@ export function createWorkspaceFileCatalog(
     },
 
     waitForReady() {
-      if (disposed || !workspaceRoot || status === "ready" || status === "error") {
+      if (disposed || !workspaceRoot || status !== "loading") {
         return Promise.resolve();
       }
       return new Promise<void>((resolve) => {
         const unsub = this.subscribe(() => {
-          if (disposed || status === "ready" || status === "error" || !workspaceRoot) {
+          if (disposed || status !== "loading" || !workspaceRoot) {
             unsub();
             resolve();
           }

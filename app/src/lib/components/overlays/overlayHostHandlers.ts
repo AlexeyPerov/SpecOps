@@ -22,6 +22,7 @@ import type { WorkspaceFileCatalogRegistry } from "../../services/workspaceFileC
 import {
   searchInProject,
   totalMatchCount,
+  MAX_SEARCH_TOTAL_MATCHES,
   type ProjectSearchResult,
 } from "../../services/projectSearch";
 import { replaceInProjectFile } from "../../services/projectFileOps";
@@ -127,6 +128,9 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
   }
 
   async function runProjectSearch(state: ProjectSearchQueryState): Promise<void> {
+    const generation = deps.bumpProjectSearchGeneration();
+    deps.setProjectSearchRunning(false);
+    deps.setProjectSearchResults([]);
     const root = deps.getActiveWorkspaceRoot();
     const query = buildProjectSearchQuery(state);
     const validation = validateSearchQuery(query);
@@ -141,33 +145,48 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       return;
     }
     deps.setProjectSearchRunning(true);
-    deps.setProjectSearchStatus("Searching…");
-    // Invalidate any in-flight search — including during the catalog wait — so
-    // a newer search, panel close, or workspace switch always wins.
-    const generation = deps.bumpProjectSearchGeneration();
-    const registry = deps.getWorkspaceFileCatalogRegistry();
-    registry.ensureReady();
-    await registry.waitForReady();
-    if (generation !== deps.getProjectSearchGeneration()) {
-      return;
-    }
-    // Live progress so a long scan over a big workspace shows liveness instead
-    // of a frozen "Searching…" (the per-file match work runs on the main
-    // thread). Counted inside onProgress, which fires once per file.
-    let scannedCount = 0;
-    const PROGRESS_EVERY_FILES = 200;
+    deps.setProjectSearchStatus("Preparing workspace files…");
+    const isCurrent = () => generation === deps.getProjectSearchGeneration()
+      && root === deps.getActiveWorkspaceRoot();
+    let catalogTimer: ReturnType<typeof setTimeout> | undefined;
     try {
+      const registry = deps.getWorkspaceFileCatalogRegistry();
+      const catalog = registry.getActive();
+      registry.ensureReady();
+      await Promise.race([
+        registry.waitForReady(),
+        new Promise<never>((_, reject) => {
+          catalogTimer = setTimeout(() => reject(new Error("File listing timed out. Retry the search.")), 30_000);
+        }),
+      ]);
+      clearTimeout(catalogTimer);
+      if (!isCurrent()) return;
+      const snapshot = catalog?.getSnapshot();
+      if (snapshot?.status === "error") {
+        throw new Error(snapshot.errorMessage ?? "Could not list workspace files.");
+      }
+      // Capture entries rather than asking the active registry again after an await.
+      // A watcher may already have started rebuilding this same catalog.
+      const paths = snapshot?.entries.map(entry => entry.absolutePath);
+      const directorySuffix = snapshot?.partialErrors.length
+        ? `, ${snapshot.partialErrors.length} folders unreadable` : "";
+      let scannedCount = 0;
+      let lastProgress = 0;
+      deps.setProjectSearchStatus(`Searching… 0/${paths?.length ?? "?"} files`);
       const outcome = await searchInProject(root, query, {
-        files: registry.getActive()?.getOpenablePaths() ?? undefined,
+        files: paths,
+        isCancelled: () => !isCurrent(),
         onProgress: () => {
+          if (!isCurrent()) return false;
           scannedCount += 1;
-          if (scannedCount % PROGRESS_EVERY_FILES === 0) {
+          if (scannedCount % 200 === 0 || Date.now() - lastProgress > 100) {
+            lastProgress = Date.now();
             deps.setProjectSearchStatus(`Searching… ${scannedCount} files`);
           }
-          return generation === deps.getProjectSearchGeneration();
+          return isCurrent();
         },
       });
-      if (generation !== deps.getProjectSearchGeneration()) {
+      if (!isCurrent()) {
         return;
       }
       if (!outcome.ok) {
@@ -184,16 +203,17 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       const largeSuffix = outcome.skippedLarge ? `, ${outcome.skippedLarge} oversized skipped` : "";
       deps.setProjectSearchStatus(
         matches === 0
-          ? `No results (${outcome.scannedFiles} files scanned${unreadableSuffix}${largeSuffix})`
+          ? `No results (${outcome.scannedFiles} files scanned${unreadableSuffix}${largeSuffix}${directorySuffix})`
           : `${matches} result${matches === 1 ? "" : "s"} in ${files} file${files === 1 ? "" : "s"}${
               outcome.truncated ? " (capped — refine the search to see all matches)" : ""
-            }${unreadableSuffix}${largeSuffix}`,
+            }${unreadableSuffix}${largeSuffix}${directorySuffix}`,
       );
     } catch (error: unknown) {
       if (generation === deps.getProjectSearchGeneration()) {
         deps.setProjectSearchStatus(`Search failed: ${getErrorMessage(error)}`);
       }
     } finally {
+      clearTimeout(catalogTimer);
       if (generation === deps.getProjectSearchGeneration()) {
         deps.setProjectSearchRunning(false);
       }
@@ -214,6 +234,10 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       deps.notify("Nothing to replace.");
       return;
     }
+    if (totalMatchCount(results) >= MAX_SEARCH_TOTAL_MATCHES) {
+      deps.notify("Refine the search before replacing: the result limit was reached.");
+      return;
+    }
     const query = buildProjectSearchQuery(state);
     const validation = validateSearchQuery(query);
     if (!validation.ok) {
@@ -222,6 +246,7 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
     }
     const totalFiles = results.length;
     const totalMatches = totalMatchCount(results);
+    const confirmationGeneration = deps.getProjectSearchGeneration();
     const confirmed = await requestConfirm({
       title: "Replace in Project",
       message: `Replace ${totalMatches} match${totalMatches === 1 ? "" : "es"} in ${totalFiles} file${totalFiles === 1 ? "" : "s"}?`,
@@ -231,7 +256,8 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
       // command can also run from the keyboard).
       anchor: anchorFromElement(document.querySelector("[data-project-replace-all]")),
     });
-    if (!confirmed) {
+    if (!confirmed || confirmationGeneration !== deps.getProjectSearchGeneration()
+      || root !== deps.getActiveWorkspaceRoot()) {
       return;
     }
     deps.setProjectSearchRunning(true);
@@ -250,16 +276,15 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
     const progressInterval = Math.max(1, Math.floor(totalFiles / 20));
     try {
       for (let index = 0; index < results.length; index += 1) {
-        if (index % progressInterval === 0 && index > 0) {
-          deps.setProjectSearchStatus(
-            `Replacing… ${index}/${totalFiles} file${index === 1 ? "" : "s"}`,
-          );
-        }
-        // Cancel check: a newer search generation means the user moved on
-        // (new query, closed the panel, switched workspace).
-        if (replaceGeneration !== deps.getProjectSearchGeneration()) {
+        if (replaceGeneration !== deps.getProjectSearchGeneration()
+          || root !== deps.getActiveWorkspaceRoot()) {
           cancelled = true;
           break;
+        }
+        if (index % progressInterval === 0 && index > 0) {
+          deps.setProjectSearchStatus(
+            `Replacing… ${index}/${totalFiles} files`,
+          );
         }
         const result = results[index]!;
         // Never silently clobber an unsaved buffer: skip files whose open
@@ -287,10 +312,7 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
           failures += 1;
         }
       }
-      if (cancelled) {
-        deps.setProjectSearchStatus(
-          `Replace cancelled after ${files} file${files === 1 ? "" : "s"}.`,
-        );
+      if (cancelled || replaceGeneration !== deps.getProjectSearchGeneration()) {
         deps.notify(`Replace cancelled — ${replaced} occurrence(s) replaced before cancel.`);
         return;
       }
@@ -311,8 +333,14 @@ export function createOverlayHostHandlers(deps: OverlayHostHandlersDeps) {
           .join(" "),
       );
       await rerunSearch();
+    } catch (error: unknown) {
+      if (replaceGeneration === deps.getProjectSearchGeneration()) {
+        deps.setProjectSearchStatus(`Replace failed: ${getErrorMessage(error)}`);
+      }
     } finally {
-      deps.setProjectSearchRunning(false);
+      if (replaceGeneration === deps.getProjectSearchGeneration()) {
+        deps.setProjectSearchRunning(false);
+      }
     }
   }
 
@@ -507,7 +535,7 @@ export function computeProjectSearchQueryError(query: string, regex: boolean): s
     return "";
   }
   try {
-    void new RegExp(query);
+    void new RegExp(query, "mu");
     return "";
   } catch (error: unknown) {
     return error instanceof Error ? error.message : "Invalid regular expression.";

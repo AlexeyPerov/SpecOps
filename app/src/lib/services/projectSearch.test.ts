@@ -250,3 +250,44 @@ describe("searchInProject (P03-08-30 concurrency)", () => {
     expect(outcome.results.map((r) => r.path)).toEqual(["/ws/a.ts"]);
   });
 });
+
+
+describe("workspace scan safety", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    statMock.mockResolvedValue({ size: 10, isFile: true } as never);
+  });
+  it("does not read special files such as pipes", async () => {
+    statMock.mockResolvedValue({ size: 0, isFile: false } as never);
+    await searchInProject("/ws", lit("foo"), { files: ["/ws/pipe"] });
+    expect(readTextFileMock).not.toHaveBeenCalled();
+  });
+  it("stops after an in-flight stat when cancelled", async () => {
+    let cancelled = false;
+    statMock.mockImplementationOnce(async () => { cancelled = true; return { size: 10, isFile: true } as never; });
+    await searchInProject("/ws", lit("foo"), { files: ["/ws/a"], isCancelled: () => cancelled });
+    expect(readTextFileMock).not.toHaveBeenCalled();
+  });
+  it("normalizes BOM and CRLF to the editor's match coordinates", async () => {
+    readTextFileMock.mockResolvedValue("\uFEFFfoo\r\nfoo\rbar");
+    const result = await searchInProject("/ws", lit("foo"), { files: ["/ws/a"] });
+    expect(result.ok && result.results[0]?.matches.map(m => [m.line, m.column, m.from])).toEqual([[1, 1, 0], [2, 1, 4]]);
+  });
+  it("bounds match construction within one large file", () => {
+    expect(computeFileMatches("x".repeat(100_000), lit("x"), 20)).toHaveLength(20);
+  });
+  it("skips NUL-containing binary files", async () => {
+    readTextFileMock.mockResolvedValue("foo\0bar");
+    const outcome = await searchInProject("/ws", lit("foo"), { files: ["/ws/a"] });
+    expect(outcome).toMatchObject({ ok: true, results: [], unreadableFiles: 1, scannedFiles: 0 });
+  });
+  it("finishes when a file read never resolves", async () => {
+    vi.useFakeTimers();
+    try {
+      readTextFileMock.mockImplementationOnce(() => new Promise(() => {}));
+      const pending = searchInProject("/ws", lit("foo"), { files: ["/ws/a"] });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await pending).toMatchObject({ ok: true, unreadableFiles: 1 });
+    } finally { vi.useRealTimers(); }
+  });
+});

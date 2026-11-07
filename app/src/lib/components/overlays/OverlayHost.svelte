@@ -615,13 +615,19 @@
   // instance surface.)
   // -------------------------------------------------------------------------
   async function runProjectSearch(): Promise<void> {
+    if (projectSearchRunning) {
+      projectSearchGeneration += 1;
+      projectSearchRunning = false;
+      projectSearchStatus = "Stopped. Press Search to try again.";
+      return;
+    }
     await handlers.runProjectSearch(projectSearchQueryState());
   }
   async function replaceAllInProject(): Promise<void> {
     await handlers.replaceAllInProjectWithResults(
       projectSearchQueryState(),
       projectSearchResults,
-      runProjectSearch,
+      () => handlers.runProjectSearch(projectSearchQueryState()),
     );
   }
   async function openProjectSearchResult(path: string, line: number): Promise<void> {

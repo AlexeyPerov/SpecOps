@@ -96,7 +96,8 @@ export function validateSearchQuery(query: SearchQuery): SearchQueryValidation {
   if (query.regexp) {
     try {
       // Validate the user's raw pattern (wrapping for whole-word is safe syntactically).
-      void new RegExp(query.text);
+      const compiled = compileQuery(query)!;
+      void new RegExp(compiled.source, `mu${compiled.ignoreCase ? "i" : ""}`);
     } catch (error: unknown) {
       const reason = error instanceof Error ? error.message : "Invalid regular expression.";
       return { ok: false, reason };
@@ -136,6 +137,7 @@ export function findAllRangesInText(
    * scanning the whole document there costs a full `RegExpCursor` sweep per update.
    */
   range?: { from: number; to: number },
+  limit = Infinity,
 ): MatchRange[] {
   const compiled = compileQuery(query);
   if (!compiled) {
@@ -155,7 +157,7 @@ export function findAllRangesInText(
       from,
       to,
     );
-    while (!cursor.next().done) {
+    while (ranges.length < limit && !cursor.next().done) {
       ranges.push({ from: cursor.value.from, to: cursor.value.to });
     }
   } catch {

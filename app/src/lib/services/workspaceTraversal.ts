@@ -185,6 +185,7 @@ export async function enumerateWorkspaceFiles(
       if (options.showHidden ? entryIsHidden(entry) : shouldSkipFileEntry(entry)) {
         continue;
       }
+      if (!entry.isFile) continue;
       const path = joinDirectoryPath(directoryPath, entry.name);
       if ((options.acceptsPath ?? isOpenableFilePath)(path)) {
         paths.push(path);

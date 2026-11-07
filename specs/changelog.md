@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-07 23:37 MSK — Workspace search recovery and clearer results
+
+- Put catalog preparation inside search error handling, bound catalog/file waits, release idle catalog waiters, clear stale results before a new run, and check cancellation after filesystem awaits. Report preparation, early scan progress, unreadable folders/files and failures instead of leaving an unexplained running state.
+- Exclude special files such as pipes from traversal and scanning; skip NUL-containing binary content, normalize BOM/line endings to editor coordinates, and enforce the result budget while collecting matches rather than after allocating an unbounded match list. Validate regular expressions using the matching engine's Unicode flags.
+- Replace duplicate searching labels with one live status, add a Stop action, explain Enter/Search submission and saved-file scope, show workspace-relative paths, and highlight bounded excerpts around matches even on very long lines.
+- Prevent obsolete replacement confirmations and cancelled replacement operations from affecting newer searches. Block Replace All when the match limit makes the displayed result set incomplete.
+- Add regressions for stuck catalog/file operations, special files, cancellation, Unicode regex validation, CRLF/BOM coordinates, long-line previews, single progress status and workspace changes during replacement confirmation. All 346 frontend test files / 3459 tests pass on the final full run; Svelte/type checks report zero errors and warnings, and the production frontend build passes. An initial concurrent test/build run hit temporary disk exhaustion and a session-recovery test failure; both passed on isolated retry and the final full run. The installed desktop app was not rebuilt or visually verified.
+
 ## 2026-11-07 23:34 MSK — Keep the last project-tree rows clickable
 
 - Prevent the project tree from shrinking inside the scrollable panel. Its trailing rows could overflow into the empty creation area, which intercepted right-clicks and stopped their context menus from opening.

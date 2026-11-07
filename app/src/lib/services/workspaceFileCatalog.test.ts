@@ -562,3 +562,21 @@ describe("createWorkspaceFileCatalog", () => {
     catalog.dispose();
   });
 });
+
+describe("catalog idle waits", () => {
+  it("resolves an idle catalog without waiting for an event that may never occur", async () => {
+    const catalog = createWorkspaceFileCatalog();
+    catalog.setWorkspaceRoot("/ws");
+    await catalog.waitForReady();
+    catalog.dispose();
+  });
+  it("releases a pending wait when retargeted to an idle root", async () => {
+    const catalog = createWorkspaceFileCatalog({ enumerate: () => new Promise(() => {}) });
+    catalog.setWorkspaceRoot("/ws");
+    catalog.ensureReady();
+    const pending = catalog.waitForReady();
+    catalog.setWorkspaceRoot("/other");
+    await pending;
+    catalog.dispose();
+  });
+});

@@ -84,3 +84,11 @@ describe("enumerateOpenableWorkspaceFiles", () => {
     expect(reads).toEqual(["/ws"]);
   });
 });
+
+it("excludes pipes and sockets from the searchable file catalog", async () => {
+  const result = await enumerateOpenableWorkspaceFiles("/ws", { readDir: async () => [
+    { name: "pipe", isFile: false, isDirectory: false },
+    { name: "a.ts", isFile: true, isDirectory: false },
+  ] });
+  expect(result.paths).toEqual(["/ws/a.ts"]);
+});

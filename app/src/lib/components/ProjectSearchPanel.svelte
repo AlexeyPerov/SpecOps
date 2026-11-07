@@ -7,9 +7,11 @@
   } from "../services/consoleTabPrefs";
   import type { ProjectSearchMatch, ProjectSearchResult } from "../services/projectSearch";
   import { startPointerDrag } from "./pointerDrag";
+  import { relativePathFromRoot } from "../services/workspaceTraversal";
   import { emptySet } from "../collections/emptyCollections";
 
   interface Props {
+    workspaceRoot?: string | null;
     heightPx?: number;
     onHeightChange?: (heightPx: number) => void;
     onHeightCommit?: () => void;
@@ -38,6 +40,7 @@
   }
 
   let {
+    workspaceRoot = null,
     heightPx = DEFAULT_CONSOLE_HEIGHT_PX,
     onHeightChange,
     onHeightCommit,
@@ -162,12 +165,16 @@
     expandedMatchFiles = next;
   }
 
-  function totalMatches(): number {
-    let total = 0;
-    for (const result of results) {
-      total += result.matches.length;
-    }
-    return total;
+  function preview(match: ProjectSearchMatch) {
+    const start = match.column - 1;
+    const left = Math.max(0, start - 60);
+    const end = Math.min(match.lineText.length, start + match.length);
+    return {
+      before: (left ? "…" : "") + match.lineText.slice(left, start),
+      hit: match.lineText.slice(start, Math.min(end, start + 160)) || "▏",
+      after: (end > start + 160 ? "…" : "") + match.lineText.slice(end, end + 100)
+        + (match.lineText.length > end + 100 ? "…" : ""),
+    };
   }
 
   async function focusField(): Promise<void> {
@@ -212,7 +219,7 @@
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
-      if (canSearch) {
+      if (canSearch && !running && !event.isComposing) {
         onRunSearch?.();
       }
     }
@@ -222,7 +229,7 @@
 <section
   class="project-search-panel"
   class:project-search-panel-resizing={isResizing}
-  aria-label="Find in Project"
+  aria-label="Find in Workspace"
   style={`--panel-height: ${heightPx}px;`}
 >
   <div
@@ -252,12 +259,12 @@
           type="text"
           class="ps-input"
           class:ps-input-error={Boolean(queryError)}
-          placeholder="Search in project…"
+          placeholder="Search workspace files — Enter to search"
           value={query}
           oninput={(e) => onQueryChange?.((e.currentTarget as HTMLInputElement).value)}
           onkeydown={handleKeydown}
           aria-invalid={Boolean(queryError)}
-          aria-label="Search in project"
+          aria-label="Search workspace files"
         />
         <button
           type="button"
@@ -292,11 +299,11 @@
         <button
           type="button"
           class="search-control-btn search-control-btn-primary"
-          disabled={running || !canSearch}
-          title="Search (Enter)"
+          disabled={!running && !canSearch}
+          title={running ? "Stop the current operation" : "Search (Enter)"}
           onclick={() => onRunSearch?.()}
         >
-          {running ? "…" : "Search"}
+          {running ? "Stop" : "Search"}
         </button>
         <button
           type="button"
@@ -337,9 +344,12 @@
       <div class="ps-query-error" role="alert">{queryError}</div>
     {/if}
 
-    <div class="ps-status">{status}</div>
+    <div class="ps-status" role="status" aria-live="polite">{status || "Enter a query, then press Enter or Search."}</div>
+    <div class="ps-scope" title={workspaceRoot ?? undefined}>
+      {workspaceRoot ? `Workspace: ${workspaceRoot} · ` : ""}Saved text files · excludes hidden files, dependencies and build folders
+    </div>
 
-    <div class="ps-results" role="list">
+    <div class="ps-results" role="list" aria-busy={running}>
       {#each results as result (result.path)}
         {@const collapsed = isFileCollapsed(result.path)}
         <div class="ps-file" role="listitem">
@@ -347,16 +357,18 @@
             type="button"
             class="ps-file-toggle"
             title={collapsed ? "Expand" : "Collapse"}
+            aria-expanded={!collapsed}
             onclick={() => toggleFile(result.path)}
           >
             {collapsed ? "▸" : "▾"}
           </button>
-          <span class="ps-file-path" title={result.path}>{result.path}</span>
+          <span class="ps-file-path" title={result.path}>{workspaceRoot ? relativePathFromRoot(result.path, workspaceRoot) : result.path}</span>
           <span class="ps-file-count">{result.matches.length}</span>
         </div>
         {#if !collapsed}
           <ul class="ps-matches">
             {#each visibleMatchesFor(result) as match (match.from)}
+              {@const snippet = preview(match)}
               <li>
                 <button
                   type="button"
@@ -365,7 +377,7 @@
                   onclick={() => onOpenResult?.(result.path, match.line)}
                 >
                   <span class="ps-match-line">L{match.line}:{match.column}</span>
-                  <span class="ps-match-text">{match.lineText.trim()}</span>
+                  <span class="ps-match-text">{snippet.before}<mark>{snippet.hit}</mark>{snippet.after}</span>
                 </button>
               </li>
             {/each}
@@ -384,10 +396,7 @@
             </div>
           {/if}
         {/if}
-      {:else}
-        <div class="ps-empty">
-          {running ? "Searching…" : status ? "" : "No results yet — enter a query and press Enter."}
-        </div>
+
       {/each}
     </div>
   </div>
@@ -515,7 +524,7 @@
     overflow-x: hidden;
   }
 
-  .ps-empty {
+  .ps-scope {
     padding: var(--space-4) 0;
     font-size: var(--font-size-status);
     color: var(--color-text-secondary);
@@ -601,6 +610,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  }
+
+  .ps-match-text mark {
+    background: var(--color-accent);
+    color: var(--color-bg-root);
+    border-radius: 2px;
   }
 
   .ps-show-more {
